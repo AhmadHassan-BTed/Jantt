@@ -1,26 +1,43 @@
-# Dependencies
+# Dependencies & Package Managers
+**/node_modules/
 node_modules/
 .pnp/
 .pnp.js
+.pnpm-store/
+.yarn/
 
 # Build Outputs & Bundles
+**/dist/
 dist/
-dist-ssr/
+**/dist-ssr/
+**/build/
 build/
-packages/*/dist/
-apps/*/dist/
-*.tsbuildinfo
+**/*.tsbuildinfo
 
-# Local Environment Variables & Private Data
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Caches & Temporary Files
+**/.vite/
+.vite/
+**/.cache/
+.cache/
+.parcel-cache/
+.turbo/
+**/.turbo/
+tmp/
+*.tmp
+.temp/
+
+# Private data & local prototypes
 application-ops-plan/
+**/application-ops-plan/
 god-plan-scheduler.jsx
-*.private.json
 plan-data.json
+*.private.json
+*.local.json
+
+# Environment files
+.env
+.env.*
+!.env.example
 
 # Logs
 logs/
@@ -31,7 +48,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Editor & OS files
+# Test & Coverage
+coverage/
+**/coverage/
+.nyc_output/
+*.lcov
+
+# IDE & System Files
 .DS_Store
 Thumbs.db
 .idea/
@@ -40,15 +63,5 @@ Thumbs.db
 !.vscode/settings.json
 *.sublime-project
 *.sublime-workspace
-
-# Test & Coverage
-coverage/
-.nyc_output/
-*.lcov
-
-# Cache & Temporary files
-.cache/
-.vite/
-tmp/
-*.tmp
-.temp/
+.gemini/
+.agents/
