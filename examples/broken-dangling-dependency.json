@@ -1,0 +1,21 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Broken: Dangling Dependency",
+    "start": "2026-09-01",
+    "end": "2026-11-01"
+  },
+  "categories": {
+    "gated": { "label": "Gated", "color": "#8B7EC8" }
+  },
+  "tasks": [
+    {
+      "id": "anu",
+      "label": "ANU Application",
+      "category": "gated",
+      "start": "2026-10-22",
+      "end": "2026-10-24",
+      "dependsOn": "ielts-exam-2"
+    }
+  ]
+}

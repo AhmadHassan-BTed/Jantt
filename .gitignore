@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build Outputs & Bundles
+dist/
+dist-ssr/
+build/
+packages/*/dist/
+apps/*/dist/
+*.tsbuildinfo
+
+# Local Environment Variables & Private Data
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+application-ops-plan/
+god-plan-scheduler.jsx
+*.private.json
+plan-data.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.sublime-project
+*.sublime-workspace
+
+# Test & Coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Cache & Temporary files
+.cache/
+.vite/
+tmp/
+*.tmp
+.temp/

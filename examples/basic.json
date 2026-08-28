@@ -1,0 +1,110 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Acme Platform v2.0 Launch",
+    "start": "2026-09-01",
+    "end": "2026-11-15",
+    "defaultGapDays": 2
+  },
+  "categories": {
+    "arch": { "label": "Architecture & Specs", "color": "#3B82F6", "soft": "#1E293B" },
+    "backend": { "label": "Backend Services", "color": "#10B981", "soft": "#064E3B" },
+    "frontend": { "label": "Frontend & UI", "color": "#8B5CF6", "soft": "#312E81" },
+    "qa": { "label": "QA & Security Audit", "color": "#F59E0B", "soft": "#78350F" },
+    "deploy": { "label": "Deployment & Release", "color": "#EC4899", "soft": "#831843" }
+  },
+  "tasks": [
+    {
+      "id": "spec-design",
+      "label": "API Schema & DB Architecture",
+      "category": "arch",
+      "start": "2026-09-01",
+      "end": "2026-09-12",
+      "dependsOn": null,
+      "locked": true,
+      "progress": 1.0,
+      "fields": {
+        "lead": "Sarah Chen",
+        "deliverable": "OpenAPI 3.1 & Prisma Schema",
+        "priority": "Critical"
+      }
+    },
+    {
+      "id": "core-api",
+      "label": "Core Engine & Auth Microservice",
+      "category": "backend",
+      "start": "2026-09-14",
+      "end": "2026-10-02",
+      "dependsOn": "spec-design",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.6,
+      "fields": {
+        "lead": "Alex Rivera",
+        "repo": "github.com/acme/engine",
+        "coverageTarget": "90%"
+      }
+    },
+    {
+      "id": "ui-scaffold",
+      "label": "Design System & Dashboard Scaffold",
+      "category": "frontend",
+      "start": "2026-09-14",
+      "end": "2026-09-28",
+      "dependsOn": "spec-design",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.75,
+      "fields": {
+        "lead": "Elena Rostova",
+        "figma": "figma.com/@acme/v2",
+        "framework": "React + Tailwind"
+      }
+    },
+    {
+      "id": "ui-integration",
+      "label": "Interactive Gantt & Data Grid Integration",
+      "category": "frontend",
+      "start": "2026-09-30",
+      "end": "2026-10-15",
+      "dependsOn": "ui-scaffold",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.3,
+      "fields": {
+        "lead": "Elena Rostova",
+        "components": "Jantt Chart, Virtual Table"
+      }
+    },
+    {
+      "id": "e2e-testing",
+      "label": "End-to-End Test Suite & Security Scan",
+      "category": "qa",
+      "start": "2026-10-17",
+      "end": "2026-10-28",
+      "dependsOn": "ui-integration",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "fields": {
+        "lead": "Marcus Brody",
+        "suite": "Playwright + OWASP ZAP"
+      }
+    },
+    {
+      "id": "prod-rollout",
+      "label": "Canary Rollout & GA Release",
+      "category": "deploy",
+      "start": "2026-10-30",
+      "end": "2026-11-06",
+      "dependsOn": "e2e-testing",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "fields": {
+        "lead": "DevOps Team",
+        "infra": "AWS ECS + Cloudflare Workers"
+      }
+    }
+  ]
+}
