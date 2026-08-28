@@ -1,0 +1,17 @@
+services:
+  playground:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jantt-playground:latest
+    container_name: jantt-playground
+    restart: unless-stopped
+    ports:
+      - "${VITE_PLAYGROUND_PORT:-5173}:80"
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

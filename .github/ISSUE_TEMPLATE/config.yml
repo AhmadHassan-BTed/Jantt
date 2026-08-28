@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Community Discussions & Q&A
+    url: https://github.com/AhmadHassan-BTed/Jantt/discussions
+    about: Ask questions, share ideas, and showcase what you built with Jantt.
+  - name: 🔒 Security Vulnerability Reporting
+    url: https://github.com/AhmadHassan-BTed/Jantt/security/advisories/new
+    about: Privately report potential security vulnerabilities.

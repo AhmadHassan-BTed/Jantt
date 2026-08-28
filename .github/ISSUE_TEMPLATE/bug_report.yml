@@ -1,0 +1,58 @@
+name: 🐛 Bug Report
+description: Create a report to help us reproduce and fix a bug
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue in Jantt!
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal Reproduction JSON Payload
+      description: Provide the minimal JSON data payload that reproduces the issue.
+      render: json
+      placeholder: |
+        {
+          "tasks": [
+            { "id": "A", "category": "dev", "start": "2026-09-01", "end": "2026-09-05" }
+          ]
+        }
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package & Version
+      description: Which Jantt package and version are you using (e.g., `@jantt/core@1.1.0`, `<Jantt /> React`)?
+      placeholder: "@jantt/core@1.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Browser / Runtime
+      options:
+        - Chrome / Chromium
+        - Firefox
+        - Safari
+        - Node.js (CLI)
+        - React / Next.js / Vite
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
