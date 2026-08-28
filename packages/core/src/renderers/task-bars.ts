@@ -1,4 +1,4 @@
-import { TaskLayout, Task, DependencyLine } from "../types";
+import { TaskLayout, DependencyLine } from "../types";
 import { InteractionController } from "../controller";
 import { TooltipController } from "./tooltip";
 import { formatHumanDate } from "../date-math";
