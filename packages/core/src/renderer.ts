@@ -133,7 +133,8 @@ export function renderJantt(
           if (!wire) {
             previewWireSvg.setAttribute("d", "");
           } else {
-            const pathStr = `M ${wire.fromX} ${wire.fromY} L ${wire.toX} ${wire.toY}`;
+            const midX = wire.fromX + Math.round((wire.toX - wire.fromX) / 2);
+            const pathStr = `M ${wire.fromX} ${wire.fromY} L ${midX} ${wire.fromY} L ${midX} ${wire.toY} L ${wire.toX} ${wire.toY}`;
             previewWireSvg.setAttribute("d", pathStr);
           }
         },

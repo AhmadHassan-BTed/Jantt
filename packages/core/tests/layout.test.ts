@@ -37,14 +37,14 @@ describe("Layout Engine", () => {
     expect(t2.rowIndex).toBe(1);
   });
 
-  it("computes SVG dependency connector paths", () => {
+  it("computes SVG dependency connector paths with 90-degree orthogonal turns", () => {
     const res = layout(sampleData, { dayWidth: 30, rowHeight: 40 });
     expect(res.dependencies).toHaveLength(1);
     const dep = res.dependencies[0];
     expect(dep.fromTaskId).toBe("task-1");
     expect(dep.toTaskId).toBe("task-2");
     expect(dep.path).toContain("M 120"); // Prereq right edge (0 + 120)
-    expect(dep.path).toContain("C"); // Forward bezier curve
+    expect(dep.path).toContain("L"); // 90-degree orthogonal path
   });
 
   it("generates grid header ticks for months and days", () => {

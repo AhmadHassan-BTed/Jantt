@@ -180,16 +180,19 @@ export function layout(
     const toY = curr.y + curr.height / 2;
 
     let path = "";
-    const gap = toX - fromX;
+    const minStep = 14;
 
-    if (gap >= 16) {
-      const c1X = fromX + Math.min(gap / 2, 32);
-      const c2X = toX - Math.min(gap / 2, 32);
-      path = `M ${fromX} ${fromY} C ${c1X} ${fromY}, ${c2X} ${toY}, ${toX} ${toY}`;
+    if (toX >= fromX + minStep * 2) {
+      // Direct forward step with 90-degree right angles:
+      // (fromX, fromY) -> (midX, fromY) -> (midX, toY) -> (toX, toY)
+      const midX = fromX + Math.round((toX - fromX) / 2);
+      path = `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
     } else {
-      const stepOutX = fromX + 12;
-      const stepInX = toX - 12;
-      const midY = fromY + (toY > fromY ? 1 : -1) * (viewport.rowHeight / 2);
+      // Reverse or tight-gap bypass with 90-degree turns:
+      // out right -> down/up into lane gap -> left -> down/up -> into target
+      const stepOutX = fromX + minStep;
+      const stepInX = toX - minStep;
+      const midY = Math.round(fromY + (toY >= fromY ? 1 : -1) * (viewport.rowHeight / 2));
       path = `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
     }
 
