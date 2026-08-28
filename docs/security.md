@@ -4,7 +4,7 @@ Jantt is designed with a defense-in-depth security model to ensure safe parsing,
 
 ---
 
-## 🛡️ Core Security Architecture
+## Core Security Architecture
 
 ### 1. Declarative Data Sandbox (Zero Script Execution)
 Jantt treats all inputs strictly as declarative JSON state.
@@ -12,7 +12,7 @@ Jantt treats all inputs strictly as declarative JSON state.
 - No script tags or executable event handlers are parsed or executed.
 - Custom field payloads (`fields`) are treated as opaque key-value data.
 
-### 2. Aggressive DOM Sanitization
+### 2. DOM Sanitization
 All user-controlled strings (task titles, notes, category names, custom field values) pass through standard HTML escaping before DOM insertion:
 
 ```typescript

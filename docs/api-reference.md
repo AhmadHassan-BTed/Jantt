@@ -4,7 +4,7 @@ Comprehensive reference for all packages in the Jantt ecosystem.
 
 ---
 
-## 📦 `@jantt/core`
+## `@jantt/core`
 
 Zero-dependency TypeScript engine.
 
@@ -68,7 +68,7 @@ Pure function that computes early/late start float and returns sets of critical 
 
 ---
 
-## ⚛️ `@jantt/react`
+## `@jantt/react`
 
 Official React component wrapper.
 
@@ -94,7 +94,7 @@ function App() {
 
 ---
 
-## 📜 `@jantt/standalone`
+## `@jantt/standalone`
 
 Drop-in `<script>` tag bundle for vanilla HTML/JS applications.
 
@@ -117,7 +117,7 @@ Drop-in `<script>` tag bundle for vanilla HTML/JS applications.
 
 ---
 
-## 💻 CLI Runner (`jantt`)
+## CLI Runner (`jantt`)
 
 ```bash
 # Open any local JSON file with live two-way disk saving

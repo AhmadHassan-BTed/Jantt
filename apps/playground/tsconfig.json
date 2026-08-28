@@ -14,7 +14,12 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@jantt/core": ["../../packages/core/src"],
+      "@jantt/react": ["../../packages/react/src"]
+    }
   },
   "include": ["src"]
 }

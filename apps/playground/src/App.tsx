@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { JanttData, validate, ValidationResult, resolveSchedule, TimeScale } from "@jantt/core";
+import { JanttData, validate, ValidationResult, ValidationError, resolveSchedule, TimeScale } from "@jantt/core";
 import { Jantt } from "@jantt/react";
 import {
   Sparkles,
@@ -23,12 +23,12 @@ import brokenBadDateFixture from "../../../examples/broken-bad-date.json";
 import brokenDanglingDepFixture from "../../../examples/broken-dangling-dependency.json";
 
 const PRESETS: Record<string, { label: string; data: any }> = {
-  construction: { label: "🏗️ High-Rise Construction (Enterprise)", data: constructionFixture },
-  basic: { label: "🚀 Acme Platform v2 Launch", data: basicFixture },
-  academic: { label: "🎓 Graduate Admissions Roadmap", data: academicFixture },
-  brokenMissingId: { label: "⚠️ Broken: Missing ID", data: brokenMissingIdFixture },
-  brokenBadDate: { label: "⚠️ Broken: Bad Date Range", data: brokenBadDateFixture },
-  brokenDangling: { label: "⚠️ Broken: Dangling Dep", data: brokenDanglingDepFixture }
+  construction: { label: "High-Rise Construction (Enterprise)", data: constructionFixture },
+  basic: { label: "Acme Platform v2 Launch", data: basicFixture },
+  academic: { label: "Graduate Admissions Roadmap", data: academicFixture },
+  brokenMissingId: { label: "Diagnostic: Missing ID", data: brokenMissingIdFixture },
+  brokenBadDate: { label: "Diagnostic: Bad Date Range", data: brokenBadDateFixture },
+  brokenDangling: { label: "Diagnostic: Dangling Dep", data: brokenDanglingDepFixture }
 };
 
 const THEMES: Record<string, { label: string; className: string; vars: Record<string, string> }> = {
@@ -331,7 +331,7 @@ Rules:
 
             {!validationResult.valid && (
               <div className="error-list">
-                {validationResult.errors.map((err, idx) => (
+                {validationResult.errors.map((err: ValidationError, idx: number) => (
                   <div key={idx} className="error-card">
                     <div className="error-msg">
                       <strong>[{err.code}]</strong> {err.message}

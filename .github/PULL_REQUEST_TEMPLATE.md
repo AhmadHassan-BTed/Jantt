@@ -1,4 +1,4 @@
-## 📋 Description
+## Description
 
 Briefly describe the changes introduced by this pull request.
 
@@ -7,18 +7,18 @@ Briefly describe the changes introduced by this pull request.
 
 ---
 
-## 🔍 Type of Change
+## Type of Change
 
-- [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
-- [ ] ✨ New feature (non-breaking change which adds functionality)
-- [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] 📝 Documentation update
-- [ ] ⚡ Performance optimization
-- [ ] 🏗️ Architecture / Code refactoring
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update
+- [ ] Performance optimization
+- [ ] Architecture / Code refactoring
 
 ---
 
-## 🧪 Testing Checklist
+## Testing Checklist
 
 - [ ] All unit and integration tests pass (`npm test`)
 - [ ] TypeScript types compile without errors (`npm run typecheck`)
@@ -28,6 +28,6 @@ Briefly describe the changes introduced by this pull request.
 
 ---
 
-## 📸 Screenshots / Demos (If Applicable)
+## Screenshots / Demos (If Applicable)
 
-*(Attach screenshots, gifs, or JSON payload snippets if visual UI or interaction changed)*
+*(Attach screenshots or JSON snippets if visual UI or interaction changed)*

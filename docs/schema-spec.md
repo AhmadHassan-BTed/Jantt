@@ -5,7 +5,7 @@
 
 ---
 
-## 📋 Schema Overview
+## Schema Overview
 
 A valid Jantt JSON document is a single object containing metadata, category configurations, document checklists, and an array of task objects.
 

@@ -12,7 +12,7 @@
     "dev": "npm run dev --workspace=@jantt/playground",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "tsc -b packages/core packages/react apps/playground",
+    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/react/tsconfig.json && tsc --noEmit -p apps/playground/tsconfig.json",
     "clean": "rm -rf packages/*/dist apps/*/dist packages/*/.vite apps/*/.vite **/*.tsbuildinfo",
     "lint": "echo 'All packages passed linting.'"
   },
