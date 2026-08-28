@@ -1,0 +1,16 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Force binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+*.pdf binary
+
+# GitHub Linguist overrides
+packages/core/src/theme.css linguist-language=CSS
+schema/jantt.schema.json linguist-language=JSON
+examples/*.json linguist-language=JSON

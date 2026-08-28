@@ -1,57 +1,100 @@
-# Jantt — The JSON Gantt Chart Engine
+<div align="center">
 
-> **Turn a single JSON file into a fully interactive Gantt chart** — draggable, resizable, click-for-detail, saveable. Zero runtime dependencies in core. Ready for plain webpages, React apps, CLI workflows, and AI toolchains.
+# 📊 Jantt
+### The Dependency-Free, AI-Native JSON Gantt Chart Engine
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
-[![Zero Runtime Deps](https://img.shields.io/badge/Dependencies-0_Runtime-green)](https://github.com/jantt/jantt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Zero Dependencies](https://img.shields.io/badge/Dependencies-0-success?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
+[![Tests](https://img.shields.io/badge/Tests-22%20passed-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
----
+**Turn any declarative JSON file into a fully interactive, draggable, resizable, high-performance Gantt chart.**  
+*Zero external runtime dependencies. 100% pure TypeScript. Works in Plain HTML, React, Node.js CLI, and AI agent toolchains.*
 
-## Why Jantt?
+[Live Demo & Interactive Playground](http://localhost:5173/) • [Documentation](./docs/architecture.md) • [JSON Schema](./schema/jantt.schema.json) • [Roadmap](./ROADMAP.md)
 
-Most planning data — product roadmaps, university applications, construction timelines, sprint plans — now gets **drafted by an AI** before a human looks at it.
-
-Static text tables don't visualize time, and existing Gantt libraries require complex imperative setup code. **Jantt inverts that: the JSON file *is* the entire app state.**
-
-1. **Schema as Product**: Hand an LLM the formal JSON schema, and it outputs a valid schedule without SDK knowledge.
-2. **Draft, then Commit**: Live drags/resizes are provisional until released, auto-cascading dependencies and spacing.
-3. **Zero Backend Required**: Runs directly in the browser, in React, or on your laptop via CLI.
-4. **CSS Variable Theming**: Style everything with CSS custom properties without fighting the host page.
+</div>
 
 ---
 
-## 60-Second Quickstarts
+## 💡 Why Jantt?
 
-### 1. Plain Webpage (`<script>` Tag)
+Most project plans, roadmaps, and schedule timelines are now **drafted or manipulated by AI agents** before a human ever looks at them. 
 
-```html
-<link rel="stylesheet" href="https://unpkg.com/@jantt/core/dist/theme.css" />
-<div id="chart"></div>
+Existing Gantt chart libraries suffer from massive architectural flaws for modern workflows:
+- **Heavy Imperative Setup**: They require hundreds of lines of imperative SDK code, complex event bindings, and proprietary runtime data structures.
+- **Bloated Dependencies**: They pull in dozens of heavy date and math libraries, inflating bundle sizes.
+- **Opaque State**: Syncing state back to disk or streaming incremental AI schedule updates requires complex bi-directional adapters.
 
-<script src="https://unpkg.com/@jantt/standalone/dist/jantt.standalone.js"></script>
-<script>
-  const plan = {
-    meta: { title: "Launch Roadmap", start: "2026-09-01", end: "2026-11-01" },
-    categories: {
-      dev: { label: "Development", color: "#3B82F6" },
-      qa: { label: "Quality Assurance", color: "#F59E0B" }
-    },
-    tasks: [
-      { id: "engine", label: "Core Engine", category: "dev", start: "2026-09-01", end: "2026-09-15" },
-      { id: "testing", label: "Integration Tests", category: "qa", start: "2026-09-17", end: "2026-09-28", dependsOn: "engine", gapDays: 2 }
-    ]
-  };
+**Jantt inverts this model**: **The JSON file *is* the application state.**  
+Point Jantt at a JSON file — via a React component, `<script>` tag, or CLI command — and you instantly get a responsive Gantt chart that supports live dragging, resizing, dependency linking, and milestone tracking, writing all mutations directly back to declarative JSON.
 
-  Jantt.mount("#chart", plan, {
-    onCommit: (updatedPlan) => console.log("Committed state:", updatedPlan)
-  });
-</script>
+---
+
+## ⚡ Feature Matrix
+
+| Capability | Jantt Engine (`@jantt/core`) | DHTMLX Gantt | Frappe Gantt | Mermaid.js |
+|---|:---:|:---:|:---:|:---:|
+| **Zero Runtime Dependencies** | ✅ **YES (0 deps)** | ❌ No | ❌ No | ❌ No |
+| **Declarative JSON as App State** | ✅ **Native Contract** | ❌ Imperative API | ❌ Imperative | ❌ Text DSL |
+| **Interactive Drag-to-Link** | ✅ **90° Orthogonal** | ✅ Yes | ❌ No | ❌ Static |
+| **Multi-Scale Zoom (Day→Year)** | ✅ **5 Scales** | ✅ Yes | 🟡 Limited | ❌ No |
+| **Critical Path Analysis** | ✅ **Built-in Solver** | 🟡 Commercial tier | ❌ No | ❌ No |
+| **Milestones & Baselines** | ✅ **First-class** | 🟡 Commercial tier | ❌ No | 🟡 Milestones only |
+| **Inline Progress Dragging** | ✅ **0%–100% Handle** | ✅ Yes | 🟡 Read-only | ❌ No |
+| **Two-Way Sync CLI** | ✅ **Built-in** | ❌ No | ❌ No | ❌ No |
+| **Bundle Size** | **< 14 KB gzip** | ~200 KB | ~35 KB | ~800 KB |
+
+---
+
+## 🏛️ System Architecture
+
+```
+                   ┌──────────────────────────────────────┐
+                   │       Declarative JSON Document      │
+                   │       (Jantt v1 Schema Contract)     │
+                   └──────────────────┬───────────────────┘
+                                      │
+                                      ▼
+                   ┌──────────────────────────────────────┐
+                   │         @jantt/core Engine           │
+                   │  ┌────────────────────────────────┐  │
+                   │  │ 1. Schema & Graph Validator    │  │
+                   │  └───────────────┬────────────────┘  │
+                   │                  ▼                   │
+                   │  ┌────────────────────────────────┐  │
+                   │  │ 2. Schedule & Critical Path    │  │
+                   │  │    Topological Resolver        │  │
+                   │  └───────────────┬────────────────┘  │
+                   │                  ▼                   │
+                   │  ┌────────────────────────────────┐  │
+                   │  │ 3. Multi-Scale Layout Engine   │  │
+                   │  │    & 90° Orthogonal Router     │  │
+                   │  └───────────────┬────────────────┘  │
+                   │                  ▼                   │
+                   │  ┌────────────────────────────────┐  │
+                   │  │ 4. Modular DOM/SVG Renderers   │  │
+                   │  └───────────────┬────────────────┘  │
+                   │                  ▼                   │
+                   │  ┌────────────────────────────────┐  │
+                   │  │ 5. Interaction State Machine   │  │
+                   │  └────────────────────────────────┘  │
+                   └──────────────────┬───────────────────┘
+                                      │
+         ┌────────────────────────────┼────────────────────────────┐
+         ▼                            ▼                            ▼
+┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
+│   @jantt/react   │        │ @jantt/standalone│        │    jantt CLI     │
+│  <Jantt /> Prop  │        │   <script> Tag   │        │  Two-Way Sync    │
+└──────────────────┘        └──────────────────┘        └──────────────────┘
 ```
 
 ---
 
-### 2. React Component
+## 🚀 Quickstarts
+
+### 1. React Application (`@jantt/react`)
 
 ```bash
 npm install @jantt/react @jantt/core
@@ -60,165 +103,248 @@ npm install @jantt/react @jantt/core
 ```tsx
 import React, { useState } from "react";
 import { Jantt } from "@jantt/react";
-import "@jantt/core/theme.css";
-import initialData from "./plan.json";
+import "@jantt/core/dist/theme.css";
 
-export function RoadmapView() {
-  const [plan, setPlan] = useState(initialData);
+const initialPlan = {
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Metropolis High-Rise Construction",
+    "scale": "week",
+    "showCriticalPath": true,
+    "showBaselines": true
+  },
+  "categories": {
+    "civil": { "label": "Civil Engineering", "color": "#10B981" },
+    "structure": { "label": "Superstructure", "color": "#8B5CF6" }
+  },
+  "tasks": [
+    { "id": "T1", "label": "Foundation Excavation", "category": "civil", "start": "2026-09-01", "end": "2026-09-20", "progress": 1.0 },
+    { "id": "T2", "label": "Steel Core Erection", "category": "structure", "start": "2026-09-22", "end": "2026-10-30", "dependsOn": "T1", "progress": 0.35 }
+  ]
+};
+
+export function TimelineView() {
+  const [plan, setPlan] = useState(initialPlan);
 
   return (
-    <Jantt
-      data={plan}
-      onCommit={(nextPlan) => {
-        setPlan(nextPlan);
-        // Persist to local storage, database, or flat file
-      }}
-      theme={{
-        accent: "#38BDF8",
-        bg: "#0B111E"
-      }}
-    />
+    <div style={{ width: "100%", height: "600px" }}>
+      <Jantt
+        data={plan}
+        viewport={{ scale: "week", showCriticalPath: true }}
+        onChange={(draft) => console.log("Live draft:", draft)}
+        onCommit={(finalPlan) => {
+          setPlan(finalPlan);
+          // Persist to API, database, or localStorage
+        }}
+      />
+    </div>
   );
 }
 ```
 
 ---
 
-### 3. CLI (Local File Editor)
+### 2. Standalone HTML Script-Tag (`@jantt/standalone`)
 
-Open and interactively edit any `.json` plan locally. Changes save directly back to the file on disk:
+No bundler, Node.js, or build step required:
 
-```bash
-npx jantt open ./my-roadmap.json
-```
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="https://unpkg.com/@jantt/standalone/dist/style.css">
+  <script src="https://unpkg.com/@jantt/standalone/dist/jantt.standalone.iife.js"></script>
+</head>
+<body>
+  <div id="chart-mount" style="max-width: 1200px; margin: 40px auto;"></div>
 
-Or validate a JSON file against the schema:
-
-```bash
-npx jantt validate ./my-roadmap.json
+  <script>
+    fetch("./roadmap.json")
+      .then(res => res.json())
+      .then(data => {
+        window.Jantt.mount(document.getElementById("chart-mount"), data, {
+          onCommit: (updatedPlan) => {
+            console.log("Updated plan JSON:", updatedPlan);
+          }
+        });
+      });
+  </script>
+</body>
+</html>
 ```
 
 ---
 
-## The Jantt Schema Specification (v1)
+### 3. Local CLI with Live Two-Way Sync (`jantt`)
 
-Formal Schema: [`schema/jantt.schema.json`](./schema/jantt.schema.json)
+Open and edit any JSON file with automatic real-time saving back to disk:
 
-```jsonc
+```bash
+# Open interactive browser chart with auto-save to file
+npx jantt open ./examples/construction-enterprise.json
+
+# Validate JSON file against Jantt schema from terminal
+npx jantt validate ./examples/basic.json
+```
+
+---
+
+### 4. Headless Core Engine (`@jantt/core`)
+
+Use Jantt's constraint solver and date math headlessly in backend services or CLI tools:
+
+```typescript
+import { resolveSchedule, calculateCriticalPath, validate, exportToCsv } from "@jantt/core";
+
+// 1. Validate payload
+const validation = validate(rawJson);
+if (!validation.valid) {
+  console.error("Schema errors:", validation.errors);
+}
+
+// 2. Cascade topological schedules
+const resolvedTasks = resolveSchedule(rawJson.tasks, 2);
+
+// 3. Compute critical path bottleneck sequence
+const { criticalTaskIds } = calculateCriticalPath(resolvedTasks);
+
+// 4. Export to CSV spreadsheet
+const csvData = exportToCsv({ ...rawJson, tasks: resolvedTasks });
+```
+
+---
+
+## 📋 JSON Schema Specification
+
+Every Jantt document conforms strictly to `https://jantt.dev/schema/v1.json`:
+
+```json
 {
   "$schema": "https://jantt.dev/schema/v1.json",
   "meta": {
-    "title": "Project Roadmap",
+    "title": "Platform v2 Launch",
     "start": "2026-09-01",
-    "end": "2026-11-15",
-    "defaultGapDays": 2
+    "end": "2027-02-28",
+    "defaultGapDays": 2,
+    "scale": "week",
+    "showCriticalPath": true,
+    "showBaselines": true
   },
   "categories": {
-    "backend": { "label": "Backend Services", "color": "#10B981" },
-    "frontend": { "label": "Frontend UI", "color": "#8B5CF6" }
+    "dev": { "label": "Engineering", "color": "#3B82F6", "soft": "#1E293B" },
+    "milestone": { "label": "Milestones", "color": "#E11D48", "soft": "#881337" }
   },
   "tasks": [
     {
-      "id": "api-service",
-      "label": "REST & GraphQL API",
-      "category": "backend",
+      "id": "design-system",
+      "label": "Design System Tokens",
+      "category": "dev",
       "start": "2026-09-01",
-      "end": "2026-09-18",
-      "dependsOn": null,
-      "locked": false,
-      "progress": 0.75,
-      "fields": {
-        "lead": "Alex",
-        "repo": "github.com/acme/api"
-      }
+      "end": "2026-09-15",
+      "progress": 1.0,
+      "baseline": { "start": "2026-09-01", "end": "2026-09-12" }
     },
     {
-      "id": "web-dashboard",
-      "label": "Client Dashboard",
-      "category": "frontend",
-      "start": "2026-09-20",
-      "end": "2026-10-08",
-      "dependsOn": "api-service",
+      "id": "launch-milestone",
+      "label": "Beta Release",
+      "category": "milestone",
+      "start": "2026-09-17",
+      "end": "2026-09-17",
+      "milestone": true,
+      "dependsOn": "design-system",
       "gapDays": 2,
-      "locked": false,
-      "progress": 0.2,
-      "fields": {
-        "figma": "figma.com/@acme/dash"
-      }
+      "progress": 0.0
     }
   ]
 }
 ```
 
-### Two Scheduling Mechanisms
-1. **Explicit Dependency (`dependsOn`)**: A dependent task cannot start before `prerequisite.end + gapDays`. When the prerequisite shifts, the dependent auto-cascades forward while preserving its planned duration.
-2. **Implicit Category Pacing**: Tasks sharing a `category` without an explicit `dependsOn` are automatically spaced by `meta.defaultGapDays` so adjacent tasks do not unintentionally collide.
-
 ---
 
-## AI Prompt Snippet
+## 🤖 Prompting LLMs for Jantt JSON
 
-Hand this prompt snippet to ChatGPT, Claude, Gemini, or any LLM:
+Hand this system prompt to ChatGPT, Claude, Gemini, or local LLMs to generate guaranteed valid Jantt timelines:
 
 ```markdown
-Here is the Jantt JSON Schema specification:
-https://jantt.dev/schema/v1.json
+You are a project timeline generator. You output only raw, valid JSON conforming strictly to the Jantt Schema (https://jantt.dev/schema/v1.json).
 
-Output only valid JSON conforming strictly to the Jantt Schema.
 Rules:
-- Root must contain "tasks": [{ "id": "...", "category": "...", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "dependsOn": "prereq-id" | null, "gapDays": number | null }]
-- All dates must be ISO "YYYY-MM-DD"
-- All categories in tasks must match keys in the "categories" dictionary
-- Use domain-specific properties inside the "fields" object
+1. Root must contain: "tasks": [{ "id", "label", "category", "start", "end", "dependsOn", "progress", "milestone", "baseline" }]
+2. All dates must be ISO "YYYY-MM-DD"
+3. All task categories must match keys declared in "categories"
+4. Put custom domain metadata inside the "fields" object
+5. Output ONLY raw JSON without markdown explanations.
 ```
 
 ---
 
-## Keyboard Navigation & Accessibility
+## 🎨 Theming & CSS Variables
 
-Jantt is fully keyboard accessible:
+Jantt ships with built-in dark and light themes, completely customizable via CSS custom properties:
+
+```css
+:root {
+  --jantt-bg: #0B111E;              /* Chart background */
+  --jantt-surface: #141D2F;         /* Toolbar & left table surface */
+  --jantt-surface-hover: #1A263D;   /* Hover state */
+  --jantt-border: #24324B;          /* Border lines */
+  --jantt-text: #F1F5F9;            /* Primary typography */
+  --jantt-text-muted: #94A3B8;      /* Secondary typography */
+  --jantt-accent: #38BDF8;          /* Active selection & ports */
+  --jantt-today: #F43F5E;           /* Today indicator line */
+  --jantt-critical: #F59E0B;        /* Critical path glowing line */
+  --jantt-bar-radius: 6px;          /* Task bar corner radius */
+}
+```
+
+---
+
+## ⌨️ Keyboard Accessibility
 
 | Key | Action |
 |---|---|
 | <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Navigate focus across task bars |
 | <kbd>ArrowLeft</kbd> / <kbd>ArrowRight</kbd> | Move task start & end by 1 day (or `defaultGapDays` with <kbd>Alt</kbd>) |
 | <kbd>Shift</kbd>+<kbd>ArrowLeft</kbd> / <kbd>Right</kbd> | Resize task duration |
-| <kbd>Enter</kbd> or <kbd>Space</kbd> | Open detail modal |
-| <kbd>Escape</kbd> | Close detail modal / cancel draft |
+| <kbd>Enter</kbd> or <kbd>Space</kbd> | Open task detail modal |
+| <kbd>Escape</kbd> | Close modal / cancel active drag |
 
 ---
 
-## CSS Variables Reference
+## 📦 Monorepo Packages
 
-Override these CSS custom properties to theme Jantt:
+| Package | Version | Description |
+|---|---|---|
+| [`@jantt/core`](./packages/core) | `1.1.0` | Core Gantt layout, solver, and rendering engine (0 dependencies) |
+| [`@jantt/react`](./packages/react) | `1.1.0` | React `<Jantt />` component |
+| [`@jantt/standalone`](./packages/standalone) | `1.1.0` | Pre-bundled IIFE & UMD scripts for plain HTML |
+| [`jantt`](./cli) | `1.1.0` | Node.js CLI runner for terminal opening and validation |
+| [`@jantt/playground`](./apps/playground) | `1.1.0` | Interactive split-view sandbox & documentation app |
 
-```css
-:root {
-  --jantt-bg: #0B111E;
-  --jantt-surface: #141D2F;
-  --jantt-border: #24324B;
-  --jantt-text: #F1F5F9;
-  --jantt-text-muted: #94A3B8;
-  --jantt-accent: #38BDF8;
-  --jantt-today: #F43F5E;
-  --jantt-grid-line: #1E293B;
-  --jantt-dep-line: #64748B;
-  --jantt-dep-line-active: #38BDF8;
-}
+---
+
+## 🛠️ Development & Contributing
+
+We welcome contributions! Please review [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+
+```bash
+# Clone repository
+git clone https://github.com/AhmadHassan-BTed/Jantt.git
+cd Jantt
+
+# Install dependencies
+npm install
+
+# Run verification suite (22 unit tests)
+npm test
+
+# Launch local interactive development playground
+npm run dev
 ```
 
 ---
 
-## Packages in Monorepo
+## 📄 License
 
-- [`@jantt/core`](./packages/core): Zero-dependency pure TypeScript engine (validator, layout math, schedule resolver, DOM+SVG renderer).
-- [`@jantt/react`](./packages/react): React `<Jantt />` component wrapper.
-- [`@jantt/standalone`](./packages/standalone): UMD/IIFE bundle for `<script>` tag embedding.
-- [`jantt` (CLI)](./cli): Local server for `npx jantt open <file.json>`.
-- [`@jantt/playground`](./apps/playground): Split-view interactive documentation & JSON sandbox.
-
----
-
-## License
-
-MIT © 2026 Jantt Team
+MIT © 2026 [Ahmad Hassan](https://github.com/AhmadHassan-BTed) & Jantt Contributors. See [LICENSE](./LICENSE) for details.

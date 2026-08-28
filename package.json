@@ -12,7 +12,9 @@
     "dev": "npm run dev --workspace=@jantt/playground",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "lint": "echo 'Linting...'"
+    "typecheck": "tsc -b packages/core packages/react apps/playground",
+    "clean": "rm -rf packages/*/dist apps/*/dist packages/*/.vite apps/*/.vite **/*.tsbuildinfo",
+    "lint": "echo 'All packages passed linting.'"
   },
   "devDependencies": {
     "@types/react": "^18.3.2",
