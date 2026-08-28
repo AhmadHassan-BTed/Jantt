@@ -1,32 +1,29 @@
-# Dependencies & Package Managers
-**/node_modules/
+# Dependencies
 node_modules/
+**/node_modules/
 .pnp/
 .pnp.js
-.pnpm-store/
-.yarn/
 
-# Build Outputs & Bundles
-**/dist/
+# Build Outputs
 dist/
-**/dist-ssr/
-**/build/
+**/dist/
 build/
+**/build/
 **/*.tsbuildinfo
 
 # Caches & Temporary Files
-**/.vite/
 .vite/
-**/.cache/
+**/.vite/
 .cache/
-.parcel-cache/
+**/.cache/
 .turbo/
 **/.turbo/
-tmp/
-*.tmp
-.temp/
+*.log
 
-# Private data & local prototypes
+# Environment & Private Files
+.env
+.env.*
+!.env.example
 application-ops-plan/
 **/application-ops-plan/
 god-plan-scheduler.jsx
@@ -34,34 +31,10 @@ plan-data.json
 *.private.json
 *.local.json
 
-# Environment files
-.env
-.env.*
-!.env.example
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Test & Coverage
-coverage/
-**/coverage/
-.nyc_output/
-*.lcov
-
-# IDE & System Files
+# System & IDE
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/*
-!.vscode/extensions.json
 !.vscode/settings.json
-*.sublime-project
-*.sublime-workspace
-.gemini/
-.agents/
+!.vscode/extensions.json
