@@ -1,0 +1,21 @@
+{
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.git": true,
+    "**/.vite": true,
+    "**/.turbo": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.git": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/dist/**": true
+  },
+  "git.ignoreLimitWarning": true
+}
