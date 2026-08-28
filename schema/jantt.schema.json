@@ -1,0 +1,187 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jantt.dev/schema/v1.json",
+  "title": "Jantt Plan Specification v1",
+  "description": "The JSON Gantt chart specification for Jantt.",
+  "type": "object",
+  "required": ["tasks"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URI reference to the Jantt JSON Schema."
+    },
+    "meta": {
+      "type": "object",
+      "description": "Chart metadata, global bounding dates, and pacing defaults.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Human-readable title of the project or schedule."
+        },
+        "person": {
+          "type": "string",
+          "description": "Owner, assignee, or subject of the plan."
+        },
+        "start": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "The earliest date visible on the chart timeline (YYYY-MM-DD)."
+        },
+        "end": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "The latest date visible on the chart timeline (YYYY-MM-DD)."
+        },
+        "chartStart": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Alias for meta.start."
+        },
+        "chartEnd": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Alias for meta.end."
+        },
+        "defaultGapDays": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2,
+          "description": "Default spacing (in days) between tasks sharing a category without explicit dependencies."
+        },
+        "generatedAt": {
+          "type": "string",
+          "description": "ISO timestamp or date string of when this plan was created."
+        }
+      },
+      "additionalProperties": true
+    },
+    "categories": {
+      "type": "object",
+      "description": "Open map of category keys to presentation styling and human labels.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["label", "color"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Category display label (e.g. 'Documentation', 'Ready to Apply')."
+          },
+          "color": {
+            "type": "string",
+            "description": "Hex or CSS color code for the task bar fill and theme highlights (e.g. '#4FAE93')."
+          },
+          "soft": {
+            "type": "string",
+            "description": "Optional softer/darker accent color for badges or background tints."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "documents": {
+      "type": "array",
+      "description": "Optional list of prerequisite documents or artifacts tracked across tasks.",
+      "items": {
+        "type": "object",
+        "required": ["id", "label"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["have", "pending", "missing"]
+          },
+          "note": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "description": "List of scheduled tasks/milestones displayed in the Gantt chart.",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "start", "end"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the task, referenced in dependsOn."
+          },
+          "label": {
+            "type": "string",
+            "description": "Display name of the task."
+          },
+          "name": {
+            "type": "string",
+            "description": "Alias for task.label."
+          },
+          "category": {
+            "type": "string",
+            "description": "Category key matching one of the keys defined in top-level 'categories'."
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Start date in ISO format YYYY-MM-DD."
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "End date (inclusive / exclusive range) in ISO format YYYY-MM-DD."
+          },
+          "dependsOn": {
+            "type": ["string", "null"],
+            "description": "ID of prerequisite task that must conclude before this task begins."
+          },
+          "gapDays": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Minimum days required between the dependsOn task end and this task start."
+          },
+          "minGapDays": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Alias for gapDays."
+          },
+          "locked": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, prevents moving or resizing this task in the interactive UI."
+          },
+          "progress": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Completion ratio between 0.0 and 1.0 (rendered as progress fill inside the bar)."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["not-started", "in-progress", "submitted", "completed", "blocked"],
+            "description": "Execution status."
+          },
+          "urgent": {
+            "type": "boolean",
+            "description": "Visual urgency badge/indicator."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Detailed notes or task description."
+          },
+          "fields": {
+            "type": "object",
+            "description": "Arbitrary domain-specific key-value pairs rendered in the detail panel.",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

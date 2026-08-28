@@ -1,0 +1,475 @@
+/* ==========================================================================
+   Jantt Theme System & CSS Custom Properties
+   Modern, dependency-free CSS design system with Dark & Light presets
+   ========================================================================== */
+
+:root,
+.jantt-theme-dark {
+  --jantt-bg: #0B111E;
+  --jantt-surface: #141D2F;
+  --jantt-surface-hover: #1A263D;
+  --jantt-border: #24324B;
+  --jantt-border-subtle: #1B283E;
+  --jantt-text: #F1F5F9;
+  --jantt-text-muted: #94A3B8;
+  --jantt-text-dim: #64748B;
+  --jantt-accent: #38BDF8;
+  --jantt-accent-glow: rgba(56, 189, 248, 0.25);
+  --jantt-today: #F43F5E;
+  --jantt-weekend-bg: rgba(15, 23, 42, 0.45);
+  --jantt-grid-line: #1E293B;
+  --jantt-dep-line: #64748B;
+  --jantt-dep-line-active: #38BDF8;
+  --jantt-bar-radius: 6px;
+  --jantt-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --jantt-font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --jantt-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.jantt-theme-light {
+  --jantt-bg: #FFFFFF;
+  --jantt-surface: #F8FAFC;
+  --jantt-surface-hover: #F1F5F9;
+  --jantt-border: #E2E8F0;
+  --jantt-border-subtle: #EDF2F7;
+  --jantt-text: #0F172A;
+  --jantt-text-muted: #475569;
+  --jantt-text-dim: #94A3B8;
+  --jantt-accent: #0284C7;
+  --jantt-accent-glow: rgba(2, 132, 199, 0.18);
+  --jantt-today: #E11D48;
+  --jantt-weekend-bg: rgba(241, 245, 249, 0.6);
+  --jantt-grid-line: #E2E8F0;
+  --jantt-dep-line: #94A3B8;
+  --jantt-dep-line-active: #0284C7;
+  --jantt-bar-radius: 6px;
+  --jantt-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+/* Base Root Container */
+.jantt-container {
+  display: flex;
+  flex-direction: column;
+  background: var(--jantt-bg);
+  color: var(--jantt-text);
+  font-family: var(--jantt-font-sans);
+  border: 1px solid var(--jantt-border);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+  box-shadow: var(--jantt-shadow);
+  width: 100%;
+}
+
+/* Toolbar & Header Bar */
+.jantt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--jantt-surface);
+  border-bottom: 1px solid var(--jantt-border);
+}
+
+.jantt-title-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.jantt-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--jantt-text);
+  letter-spacing: -0.01em;
+}
+
+.jantt-badge {
+  font-size: 11px;
+  font-family: var(--jantt-font-mono);
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--jantt-accent-glow);
+  color: var(--jantt-accent);
+  border: 1px solid currentColor;
+}
+
+.jantt-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Chart Main Body (Scroll Container) */
+.jantt-body-wrap {
+  display: flex;
+  position: relative;
+  overflow: auto;
+  max-height: 700px;
+}
+
+/* Sticky Label Column */
+.jantt-label-column {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: var(--jantt-surface);
+  border-right: 1px solid var(--jantt-border);
+  flex-shrink: 0;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+}
+
+.jantt-label-header {
+  border-bottom: 1px solid var(--jantt-border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jantt-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--jantt-surface);
+}
+
+.jantt-label-row {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--jantt-border-subtle);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  font-size: 13px;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jantt-label-row:hover {
+  background: var(--jantt-surface-hover);
+}
+
+.jantt-label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.jantt-label-text {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--jantt-text);
+}
+
+/* Timeline Grid & SVG Overlay Area */
+.jantt-timeline-area {
+  position: relative;
+  flex-grow: 1;
+}
+
+/* Timeline Header */
+.jantt-timeline-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--jantt-surface);
+  border-bottom: 1px solid var(--jantt-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.jantt-header-months {
+  display: flex;
+  border-bottom: 1px solid var(--jantt-border-subtle);
+  height: 28px;
+}
+
+.jantt-month-cell {
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jantt-text);
+  border-right: 1px solid var(--jantt-border-subtle);
+  box-sizing: border-box;
+}
+
+.jantt-header-days {
+  display: flex;
+  height: 28px;
+}
+
+.jantt-day-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-family: var(--jantt-font-mono);
+  color: var(--jantt-text-muted);
+  border-right: 1px solid var(--jantt-grid-line);
+  box-sizing: border-box;
+}
+
+.jantt-day-cell.is-weekend {
+  background: var(--jantt-weekend-bg);
+  color: var(--jantt-text-dim);
+}
+
+.jantt-day-cell.is-today {
+  color: var(--jantt-today);
+  font-weight: bold;
+}
+
+/* Timeline Rows & Background Grid */
+.jantt-grid-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.jantt-grid-row {
+  border-bottom: 1px solid var(--jantt-border-subtle);
+  box-sizing: border-box;
+}
+
+.jantt-grid-day-col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid var(--jantt-grid-line);
+  box-sizing: border-box;
+}
+
+.jantt-grid-day-col.is-weekend {
+  background: var(--jantt-weekend-bg);
+}
+
+/* Today Marker Line */
+.jantt-today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--jantt-today);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.jantt-today-badge {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #FFF;
+  background: var(--jantt-today);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* SVG Connector Overlay */
+.jantt-svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.jantt-dep-path {
+  fill: none;
+  stroke: var(--jantt-dep-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 2;
+  transition: stroke 0.2s, stroke-width 0.2s;
+}
+
+.jantt-dep-path.is-active {
+  stroke: var(--jantt-dep-line-active);
+  stroke-width: 2.2;
+  stroke-dasharray: none;
+}
+
+/* Task Bar */
+.jantt-task-bar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  border-radius: var(--jantt-bar-radius);
+  color: #FFFFFF;
+  cursor: grab;
+  z-index: 6;
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  outline: none;
+}
+
+.jantt-task-bar:focus-visible {
+  box-shadow: 0 0 0 2px var(--jantt-bg), 0 0 0 4px var(--jantt-accent);
+}
+
+.jantt-task-bar.is-dragging {
+  cursor: grabbing;
+  opacity: 0.9;
+  z-index: 15;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.jantt-task-bar.is-locked {
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.jantt-task-progress {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  border-radius: var(--jantt-bar-radius) 0 0 var(--jantt-bar-radius);
+}
+
+.jantt-bar-content {
+  position: relative;
+  z-index: 2;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Resize Handle */
+.jantt-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.15s;
+}
+
+.jantt-resize-handle:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Detail Modal */
+.jantt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: jantt-fade-in 0.15s ease-out;
+}
+
+.jantt-modal-card {
+  background: var(--jantt-surface);
+  border: 1px solid var(--jantt-border);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  animation: jantt-scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.jantt-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--jantt-border);
+}
+
+.jantt-modal-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.jantt-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--jantt-border);
+  background: var(--jantt-bg);
+}
+
+.jantt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.jantt-btn-secondary {
+  background: var(--jantt-surface-hover);
+  color: var(--jantt-text);
+  border-color: var(--jantt-border);
+}
+
+.jantt-btn-secondary:hover {
+  background: var(--jantt-border);
+}
+
+.jantt-btn-primary {
+  background: var(--jantt-accent);
+  color: #000000;
+  font-weight: 600;
+}
+
+.jantt-btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* Animations */
+@keyframes jantt-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes jantt-scale-up {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}

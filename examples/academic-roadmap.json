@@ -1,0 +1,106 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Graduate Admissions & Research Roadmap",
+    "person": "Sample Student",
+    "start": "2026-09-01",
+    "end": "2027-01-15",
+    "defaultGapDays": 2
+  },
+  "categories": {
+    "prep": { "label": "Prep & Testing", "color": "#C9A64D", "soft": "#3A331E" },
+    "apps": { "label": "Applications", "color": "#4FAE93", "soft": "#1B3630" },
+    "fellowships": { "label": "Fellowships & Grants", "color": "#8B7EC8", "soft": "#2A2640" },
+    "done": { "label": "Submitted", "color": "#5B6479", "soft": "#232838" }
+  },
+  "tasks": [
+    {
+      "id": "gre-exam",
+      "label": "GRE General Exam Prep & Test",
+      "category": "prep",
+      "start": "2026-09-01",
+      "end": "2026-09-25",
+      "dependsOn": null,
+      "locked": false,
+      "progress": 0.8,
+      "fields": {
+        "scoreGoal": "330+",
+        "materials": "Official ETS Guide"
+      }
+    },
+    {
+      "id": "transcripts",
+      "label": "Official Transcripts & Evaluation",
+      "category": "prep",
+      "start": "2026-09-05",
+      "end": "2026-09-20",
+      "dependsOn": null,
+      "locked": false,
+      "progress": 0.5,
+      "fields": {
+        "office": "Registrar",
+        "service": "WES / ECE"
+      }
+    },
+    {
+      "id": "rec-letters",
+      "label": "Faculty Recommendation Letters",
+      "category": "prep",
+      "start": "2026-09-20",
+      "end": "2026-10-10",
+      "dependsOn": "gre-exam",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.3,
+      "fields": {
+        "referees": "3 Faculty Advisors",
+        "status": "Drafts shared"
+      }
+    },
+    {
+      "id": "univ-a",
+      "label": "University Alpha — MS CS Application",
+      "category": "apps",
+      "start": "2026-10-15",
+      "end": "2026-10-25",
+      "dependsOn": "rec-letters",
+      "gapDays": 3,
+      "locked": false,
+      "progress": 0.0,
+      "fields": {
+        "portal": "https://admissions.example.edu",
+        "deadline": "Nov 1, 2026"
+      }
+    },
+    {
+      "id": "univ-b",
+      "label": "University Beta — PhD Application",
+      "category": "apps",
+      "start": "2026-10-28",
+      "end": "2026-11-08",
+      "dependsOn": "univ-a",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "fields": {
+        "portal": "https://grad.example.edu",
+        "deadline": "Dec 1, 2026"
+      }
+    },
+    {
+      "id": "fellowship-stem",
+      "label": "National STEM Graduate Fellowship",
+      "category": "fellowships",
+      "start": "2026-11-10",
+      "end": "2026-11-24",
+      "dependsOn": "univ-b",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "fields": {
+        "award": "Full Tuition + Stipend",
+        "portal": "https://fellowships.example.org"
+      }
+    }
+  ]
+}

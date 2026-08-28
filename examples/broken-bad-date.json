@@ -1,0 +1,20 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Broken: Bad Date / Inverted Start and End",
+    "start": "2026-09-01",
+    "end": "2026-10-01"
+  },
+  "categories": {
+    "general": { "label": "General", "color": "#3B82F6" }
+  },
+  "tasks": [
+    {
+      "id": "postech",
+      "label": "POSTECH Application",
+      "category": "general",
+      "start": "2026-09-15",
+      "end": "2026-09-05"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "jantt",
+  "version": "1.0.0",
+  "description": "CLI tool for opening and editing Jantt JSON Gantt charts locally",
+  "type": "module",
+  "bin": {
+    "jantt": "./bin/jantt.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

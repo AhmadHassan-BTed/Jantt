@@ -1,0 +1,26 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Broken: Missing Task ID",
+    "start": "2026-09-01",
+    "end": "2026-10-01"
+  },
+  "categories": {
+    "general": { "label": "General", "color": "#3B82F6" }
+  },
+  "tasks": [
+    {
+      "id": "task-1",
+      "label": "Valid First Task",
+      "category": "general",
+      "start": "2026-09-01",
+      "end": "2026-09-10"
+    },
+    {
+      "label": "Invalid Task Missing ID",
+      "category": "general",
+      "start": "2026-09-12",
+      "end": "2026-09-20"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@jantt/standalone",
+  "version": "1.0.0",
+  "description": "Standalone UMD/IIFE bundle for Jantt JSON Gantt chart engine",
+  "type": "module",
+  "main": "./dist/jantt.standalone.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@jantt/core": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  }
+}
