@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📊 Jantt
+# Jantt
 ### The JSON Gantt Chart Engine
 
 **Where human intuition meets declarative AI planning.**
@@ -20,36 +20,36 @@ Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI tool
 
 <br />
 
-[🚀 Live Sandbox](http://localhost:5173/) • [🏛️ Architecture](./docs/architecture.md) • [📋 Schema Specification](./docs/schema-spec.md) • [📚 API Docs](./docs/api-reference.md) • [🗺️ Roadmap](./ROADMAP.md)
+[Live Sandbox](http://localhost:5173/) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md)
 
 </div>
 
 ---
 
-## 🎯 The Vision
+## The Vision
 
-Planning is deeply human. Our milestones, deadlines, and project roadmaps represent real effort, real coordination, and real aspirations. Yet in modern engineering, schedules are increasingly drafted, refined, and reorganized by **AI models** before any human touches them.
+Planning is deeply human. Milestones, deadlines, and project roadmaps represent real effort, coordination, and aspirations. In modern software engineering, schedules are increasingly drafted, refined, and reorganized by **AI models** before human review.
 
 There has long been a gap between AI-generated plans and visual human intuition:
-- **Static text & markdown tables** fail to communicate time, overlaps, or bottlenecks.
-- **Legacy Gantt libraries** demand hundreds of lines of imperative setup code, complex SDK APIs, and heavy runtime dependencies.
-- **State synchronization is brittle**: syncing visual adjustments back to disk or piping incremental AI edits into a UI is historically painful.
+- **Static text and markdown tables** fail to communicate temporal relationships, overlaps, or bottlenecks.
+- **Legacy Gantt libraries** require hundreds of lines of imperative setup code, proprietary SDK APIs, and heavy runtime dependencies.
+- **State synchronization is brittle**: syncing visual adjustments back to disk or piping incremental AI edits into a UI is historically complex.
 
 **Jantt bridges this divide.**
 
-> **The JSON file *is* the application state.**  
+> **The JSON file is the application state.**  
 > What an AI outputs, Jantt renders immediately. What a human drags, resizes, or links on screen, Jantt writes straight back to clean, portable JSON.
 
 ---
 
-## ⚡ Comparison Matrix
+## Comparison Matrix
 
 | Capability | Jantt Engine (`@jantt/core`) | DHTMLX Gantt | Frappe Gantt | Mermaid.js |
 |---|:---:|:---:|:---:|:---:|
 | **Runtime Dependencies** | **0 (Zero)** | Multiple | Multiple | Multiple |
 | **State Paradigm** | **100% Declarative JSON** | Imperative JS API | Imperative JS API | Text-based DSL |
 | **Interactive Drag-to-Link** | **90° Orthogonal Step** | Supported | Not Supported | Static only |
-| **Timeline Zoom Scales** | **5 (Day → Year)** | Supported | Limited | Not Supported |
+| **Timeline Zoom Scales** | **5 (Day to Year)** | Supported | Limited | Not Supported |
 | **Critical Path Analysis** | **Built-in Solver** | Commercial tier | Not Supported | Not Supported |
 | **Milestones & Baselines** | **Native in Schema** | Commercial tier | Not Supported | Milestones only |
 | **Inline Progress Dragging** | **Interactive Handle** | Supported | Read-only | Not Supported |
@@ -58,7 +58,7 @@ There has long been a gap between AI-generated plans and visual human intuition:
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 Jantt operates on a strictly decoupled, unidirectional data flow. Raw JSON is validated, topologically solved, mapped into coordinate space, and presented via modular DOM and SVG layers.
 
@@ -70,7 +70,7 @@ flowchart TD
     classDef render fill:#1A263D,stroke:#F59E0B,stroke-width:1px,color:#FFFBEB;
     classDef target fill:#0F172A,stroke:#EC4899,stroke-width:1px,color:#FFF1F2;
 
-    JSON["📄 Declarative JSON Document<br/>(Jantt v1 Schema)"]:::input
+    JSON["Declarative JSON Document<br/>(Jantt v1 Schema)"]:::input
     
     subgraph CoreEngine ["@jantt/core (Zero Runtime Dependencies)"]
         VAL["1. Schema & Graph Validator<br/>(Cycle & Integrity Diagnostics)"]:::core
@@ -98,9 +98,9 @@ flowchart TD
     CTRL -- "Immutable Commit" --> JSON
 
     subgraph Targets ["Deployment Surfaces"]
-        T_REACT["⚛️ @jantt/react<br/>(<Jantt /> Component)"]:::target
-        T_STAND["📜 @jantt/standalone<br/>(UMD / IIFE Script Tag)"]:::target
-        T_CLI["💻 jantt CLI<br/>(Two-Way Live Sync)"]:::target
+        T_REACT["@jantt/react<br/>(<Jantt /> Component)"]:::target
+        T_STAND["@jantt/standalone<br/>(UMD / IIFE Script Tag)"]:::target
+        T_CLI["jantt CLI<br/>(Two-Way Live Sync)"]:::target
     end
 
     Renderers --> Targets
@@ -108,19 +108,19 @@ flowchart TD
 
 ---
 
-## 🔄 Interaction & Request Lifecycle
+## Interaction & Request Lifecycle
 
-When a user interacts with the canvas—dragging a task bar, resizing duration, connecting dependency handles, or adjusting progress—the event cycle flows cleanly through the state machine:
+When interacting with the canvas (dragging a task bar, resizing duration, connecting dependency handles, or adjusting progress), the event cycle flows cleanly through the state machine:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as 👤 Human / Contributor
-    participant DOM as 🖥️ DOM / SVG Canvas
-    participant Controller as 🕹️ Interaction Controller
-    participant Resolver as ⚡ Topological Resolver
-    participant AppState as 📄 JSON State
-    participant Callback as 🔔 onCommit / Disk
+    actor User as User / Contributor
+    participant DOM as DOM / SVG Canvas
+    participant Controller as Interaction Controller
+    participant Resolver as Topological Resolver
+    participant AppState as JSON State
+    participant Callback as onCommit / Disk
 
     User->>DOM: PointerDown on Drag Port / Task Bar
     DOM->>Controller: startDrag(mode: move | resize | progress | link | split)
@@ -132,7 +132,7 @@ sequenceDiagram
 
     User->>DOM: PointerUp (Release)
     Controller->>Resolver: resolveSchedule(mutatedTasks, defaultGapDays)
-    Resolver-->>Controller: Return pure schedule-consistent tasks
+    Resolver-->>Controller: Return schedule-consistent tasks
     Controller->>AppState: Generate new immutable JanttData state
     Controller->>DOM: Re-render layout with updated constraints
     Controller->>Callback: Emit onCommit(finalData) / Write to file on disk
@@ -140,18 +140,18 @@ sequenceDiagram
 
 ---
 
-## ✨ Key Capabilities
+## Key Capabilities
 
 <details open>
-<summary><b>1. 🔗 Interactive Drag-to-Link (90° Orthogonal Step Routing)</b></summary>
+<summary><b>1. Interactive Drag-to-Link (90° Orthogonal Step Routing)</b></summary>
 <br />
-Hovering any task bar or milestone reveals circular connector anchor ports on its edges. Dragging an anchor draws an interactive live wire. Dropping it onto another task establishes a <code>dependsOn</code> relationship, immediately triggering a topological schedule cascade. All connectors route with crisp, right-angle turns matching professional CAD and MS Project standards.
+Hovering any task bar or milestone reveals circular connector anchor ports on its edges. Dragging an anchor draws an interactive live wire. Dropping it onto another task establishes a <code>dependsOn</code> relationship, immediately triggering a topological schedule cascade. All connectors route with right-angle turns matching professional CAD and MS Project standards.
 </details>
 
 <details open>
-<summary><b>2. 🔍 Multi-Scale Timeline Zoom (Day → Year)</b></summary>
+<summary><b>2. Multi-Scale Timeline Zoom (Day to Year)</b></summary>
 <br />
-Seamlessly switch between 5 zoom tiers on the fly:
+Switch between 5 zoom tiers on the fly:
 <ul>
   <li><b>Day View</b> (36px/day): Granular day-by-day scheduling.</li>
   <li><b>Week View</b> (18px/day): 7-day sprint blocks with month indicators.</li>
@@ -162,57 +162,57 @@ Seamlessly switch between 5 zoom tiers on the fly:
 </details>
 
 <details open>
-<summary><b>3. ⚡ Algorithmic Critical Path Calculation</b></summary>
+<summary><b>3. Algorithmic Critical Path Calculation</b></summary>
 <br />
-The core engine executes forward and backward passes to compute Early Start/Finish and Late Start/Finish float values. Tasks with zero total float—the bottleneck sequence that directly dictates project completion—are automatically calculated and illuminated in glowing amber when the <b>Critical Path</b> toggle is activated.
+The core engine executes forward and backward passes to compute Early Start/Finish and Late Start/Finish float values. Tasks with zero total float—the bottleneck sequence that directly dictates project completion—are automatically calculated and illuminated when the <b>Critical Path</b> toggle is activated.
 </details>
 
 <details>
-<summary><b>4. 💎 Milestones & Baseline Ghost Bars</b></summary>
+<summary><b>4. Milestones & Baseline Ghost Bars</b></summary>
 <br />
 <ul>
-  <li><b>Milestones</b> (<code>milestone: true</code> or duration <code>0</code>): Render as rotated 45° diamond pins with radiant status borders.</li>
+  <li><b>Milestones</b> (<code>milestone: true</code> or duration <code>0</code>): Render as rotated 45° diamond pins with status borders.</li>
   <li><b>Baselines</b> (<code>baseline: { start, end }</code>): Render subtle ghost comparison bars beneath active bars, allowing instant visual tracking of original planned vs revised actual dates.</li>
 </ul>
 </details>
 
 <details>
-<summary><b>5. 📈 Inline Progress Slider</b></summary>
+<summary><b>5. Inline Progress Slider</b></summary>
 <br />
 Inside each task bar, a dedicated progress drag handle enables intuitive adjustment of completion percentage (0% to 100%) directly on the chart canvas without opening modals.
 </details>
 
 <details>
-<summary><b>6. 🎚️ Draggable Grid-Timeline Splitter</b></summary>
+<summary><b>6. Draggable Grid-Timeline Splitter</b></summary>
 <br />
-A smooth vertical splitter bar separates the left data grid from the right timeline area. Drag to reveal more column data or maximize timeline visibility (180px to 600px).
+A vertical splitter bar separates the left data grid from the right timeline area. Drag to reveal more column data or maximize timeline visibility (180px to 600px).
 </details>
 
 <details>
-<summary><b>7. 📅 Multi-Tier Hierarchical Date Header</b></summary>
+<summary><b>7. Multi-Tier Hierarchical Date Header</b></summary>
 <br />
-The timeline header adapts intelligently to the time span:
+The timeline header adapts to the time span:
 <ul>
-  <li><b>Top Year Banner</b>: Renders automatically whenever the schedule crosses multiple calendar years (e.g. <code>2026</code> → <code>2027</code>).</li>
-  <li><b>Month Bar</b>: Displays full, localized month names.</li>
+  <li><b>Top Year Banner</b>: Renders automatically whenever the schedule crosses multiple calendar years (e.g., <code>2026</code> to <code>2027</code>).</li>
+  <li><b>Month Bar</b>: Displays localized month names.</li>
   <li><b>Days Row</b>: Structured dual-line cells displaying uppercase weekday names (<code>Mo</code>, <code>Tu</code>...) and padded date numbers (<code>01</code>, <code>02</code>...).</li>
 </ul>
 </details>
 
 <details>
-<summary><b>8. 📤 Client-Side Exporters</b></summary>
+<summary><b>8. Client-Side Exporters</b></summary>
 <br />
 Export schedule data straight from the browser without server dependencies:
 <ul>
   <li><b>CSV Spreadsheet</b>: RFC-4180 compliant CSV export via <code>exportToCsv(data)</code>.</li>
-  <li><b>Vector SVG</b>: Clean standalone SVG extraction via <code>exportSvgString(container)</code>.</li>
+  <li><b>Vector SVG</b>: Standalone SVG extraction via <code>exportSvgString(container)</code>.</li>
   <li><b>JSON State</b>: Formatted JSON download via <code>downloadJson(data)</code>.</li>
 </ul>
 </details>
 
 ---
 
-## 📦 Monorepo Directory Topology
+## Monorepo Directory Structure
 
 ```
 Jantt/
@@ -228,7 +228,7 @@ Jantt/
 │   │   │   ├── exporter.ts    # Client-side CSV, SVG, and JSON exporters
 │   │   │   ├── renderers/     # Modular DOM presentation subsystems
 │   │   │   └── index.ts       # Public package exports
-│   │   └── tests/             # Comprehensive Vitest test suites (22/22 passing)
+│   │   └── tests/             # Vitest test suites (22/22 passing)
 │   ├── react/                 # Official React component (<Jantt />)
 │   └── standalone/            # UMD & IIFE script-tag bundles for plain HTML
 ├── cli/                       # Standalone Node.js CLI runner (npx jantt open)
@@ -236,13 +236,13 @@ Jantt/
 │   └── playground/            # Split-view interactive documentation sandbox
 ├── schema/
 │   └── jantt.schema.json      # Formal JSON Schema v1 specification
-├── examples/                  # Canonical, validated JSON planning fixtures
+├── examples/                  # Validated JSON planning fixtures
 └── docs/                      # Technical specifications & architectural guides
 ```
 
 ---
 
-## 🚀 Quickstarts
+## Quickstarts
 
 ### 1. React Application (`@jantt/react`)
 
@@ -284,7 +284,6 @@ export function RoadmapView() {
         onChange={(draft) => console.log("Draft state:", draft)}
         onCommit={(finalPlan) => {
           setPlan(finalPlan);
-          // Persist to REST API, GraphQL, or database
         }}
       />
     </div>
@@ -363,7 +362,7 @@ const csvData = exportToCsv({ ...rawJson, tasks: resolvedTasks });
 
 ---
 
-## 📋 JSON Schema Contract
+## JSON Schema Contract
 
 Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/jantt.schema.json):
 
@@ -410,12 +409,12 @@ Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/
 
 ---
 
-## 🤖 AI Prompting Specification
+## AI Prompting Specification
 
-Hand this system prompt to ChatGPT, Claude, Gemini, or local LLMs to generate guaranteed valid Jantt timelines:
+Use this system prompt with ChatGPT, Claude, Gemini, or local LLMs to generate valid Jantt timelines:
 
 ```markdown
-You are a project timeline generator. You output only raw, valid JSON conforming strictly to the Jantt Schema (https://jantt.dev/schema/v1.json).
+You are a project timeline generator. Output only raw, valid JSON conforming strictly to the Jantt Schema (https://jantt.dev/schema/v1.json).
 
 Rules:
 1. Root must contain: "tasks": [{ "id", "label", "category", "start", "end", "dependsOn", "progress", "milestone", "baseline" }]
@@ -427,7 +426,7 @@ Rules:
 
 ---
 
-## 🎨 Theming & CSS Variables Reference
+## Theming & CSS Variables Reference
 
 ```css
 :root {
@@ -446,7 +445,7 @@ Rules:
 
 ---
 
-## ⌨️ Keyboard Accessibility
+## Keyboard Accessibility
 
 | Key | Action |
 |---|---|
@@ -458,9 +457,9 @@ Rules:
 
 ---
 
-## 🛠️ Local Development & Contributing
+## Local Development & Contributing
 
-New contributors are warmly welcomed. Please review [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
+New contributors are welcomed. Please review [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
 
 ```bash
 # Clone the repository
@@ -473,13 +472,16 @@ npm install
 # Run verification test suite (22/22 passing)
 npm test
 
+# Typecheck all packages
+npm run typecheck
+
 # Launch local interactive development playground
 npm run dev
 ```
 
 ---
 
-## 👤 Author & Maintainer
+## Author & Maintainer
 
 **Ahmad Hassan (B-Ted)**  
 - GitHub: [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed)
@@ -487,6 +489,6 @@ npm run dev
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** — see the [`LICENSE`](./LICENSE) file for details.

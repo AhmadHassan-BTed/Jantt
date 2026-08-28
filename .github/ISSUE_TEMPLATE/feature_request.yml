@@ -1,17 +1,17 @@
-name: 💡 Feature Request / RFC
+name: Feature Request / RFC
 description: Suggest a new capability or architectural enhancement for Jantt
 labels: ["enhancement", "rfc"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for suggesting an enhancement to make Jantt even better!
+        Suggest an enhancement or new feature for Jantt.
   - type: textarea
     id: problem
     attributes:
       label: Problem or Use Case
-      description: Is your feature request related to a specific problem or planning workflow?
-      placeholder: I am building an app where...
+      description: Is this feature request related to a specific problem or planning workflow?
+      placeholder: Describe the use case...
     validations:
       required: true
   - type: textarea
@@ -19,11 +19,11 @@ body:
     attributes:
       label: Proposed Solution & Schema Design
       description: How should the feature work, and what would the JSON schema additions look like?
-      placeholder: Describe your proposed solution...
+      placeholder: Describe the proposed solution...
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives Considered
-      description: Describe any alternative solutions or workarounds you've considered.
+      description: Describe any alternative solutions or workarounds considered.

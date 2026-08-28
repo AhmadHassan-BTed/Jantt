@@ -4,7 +4,7 @@ This document details the software architecture, design principles, module bound
 
 ---
 
-## 🏛️ Architectural Principles
+## Architectural Principles
 
 1. **JSON as the Single Source of Truth**:
    The entire application state is a single, serializable JSON document conforming to `https://jantt.dev/schema/v1.json`. There is no hidden internal runtime state that cannot be persisted back to the JSON file.
@@ -22,7 +22,7 @@ This document details the software architecture, design principles, module bound
 
 ---
 
-## 📐 System Overview & Monorepo Topology
+## System Overview & Monorepo Topology
 
 ```
                    ┌──────────────────────────────────────┐
@@ -66,7 +66,7 @@ This document details the software architecture, design principles, module bound
 
 ---
 
-## 🧩 Subsystem Breakdown
+## Subsystem Breakdown
 
 ### 1. Date Math Subsystem (`date-math.ts`)
 - **Isolation**: Pure UTC calendar manipulation.
@@ -113,7 +113,7 @@ This document details the software architecture, design principles, module bound
 
 ---
 
-## 🔒 Security Architecture
+## Security Architecture
 
 - **Zero Script Execution**: Jantt does not use `eval()`, `new Function()`, or dynamic template engines.
 - **HTML Sanitization**: All user strings (task labels, notes, category names) are aggressively HTML-escaped before insertion into the DOM.

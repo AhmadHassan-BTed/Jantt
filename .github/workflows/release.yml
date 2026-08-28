@@ -1,4 +1,4 @@
-name: 📦 Publish & Release
+name: Publish & Release
 
 on:
   push:
@@ -7,37 +7,37 @@ on:
 
 jobs:
   publish:
-    name: 🚀 Publish Packages to npm
+    name: Publish Packages to npm
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
 
     steps:
-      - name: 📥 Checkout Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Node.js (v20)
+      - name: Setup Node.js (v20)
         uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
 
-      - name: 📦 Install Dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: 🧪 Run Verification Suite
+      - name: Run Verification Suite
         run: npm test
 
-      - name: 🏗️ Compile Production Bundles
+      - name: Compile Production Bundles
         run: npm run build
 
-      - name: 🚀 Publish Workspaces to NPM
+      - name: Publish Workspaces to NPM
         run: npm publish --workspaces --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: 🎉 Create GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

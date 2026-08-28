@@ -1,4 +1,4 @@
-name: 🚀 CI Pipeline
+name: CI Pipeline
 
 on:
   push:
@@ -12,30 +12,30 @@ concurrency:
 
 jobs:
   validate:
-    name: 🧪 Test & Typecheck (Node ${{ matrix.node-version }})
+    name: Test & Typecheck (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         node-version: [18.x, 20.x, 22.x]
 
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
 
-      - name: 📦 Install Dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: 🔍 TypeScript Typecheck
+      - name: TypeScript Typecheck
         run: npm run typecheck
 
-      - name: 🧪 Run Test Suite
+      - name: Run Test Suite
         run: npm test
 
-      - name: 🏗️ Build All Packages
+      - name: Build All Packages
         run: npm run build
