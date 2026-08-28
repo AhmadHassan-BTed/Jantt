@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveSchedule } from "../src/resolver";
+import { resolveSchedule, calculateCriticalPath } from "../src/resolver";
 import { Task } from "../src/types";
 
 describe("Schedule Resolver", () => {
@@ -72,5 +72,17 @@ describe("Schedule Resolver", () => {
     const lockedTask = resolved.find((t) => t.id === "locked-app")!;
     expect(lockedTask.start).toBe("2026-09-02");
     expect(lockedTask.end).toBe("2026-09-06");
+  });
+
+  it("calculates critical path correctly", () => {
+    const tasks: Task[] = [
+      { id: "A", category: "dev", start: "2026-09-01", end: "2026-09-10" },
+      { id: "B", category: "dev", start: "2026-09-10", end: "2026-09-20", dependsOn: "A" },
+      { id: "C", category: "qa", start: "2026-09-01", end: "2026-09-05" } // Non-critical parallel task
+    ];
+
+    const { criticalTaskIds } = calculateCriticalPath(tasks);
+    expect(criticalTaskIds.has("A")).toBe(true);
+    expect(criticalTaskIds.has("B")).toBe(true);
   });
 });

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Metropolis High-Rise Construction",
+    "start": "2026-09-01",
+    "end": "2027-02-28",
+    "defaultGapDays": 2,
+    "scale": "week",
+    "showCriticalPath": true,
+    "showBaselines": true
+  },
+  "categories": {
+    "permits": { "label": "Permits & Architectural", "color": "#3B82F6", "soft": "#1E293B" },
+    "civil": { "label": "Civil & Foundation", "color": "#10B981", "soft": "#064E3B" },
+    "structure": { "label": "Superstructure & Core", "color": "#8B5CF6", "soft": "#312E81" },
+    "mep": { "label": "MEP & Utilities", "color": "#F59E0B", "soft": "#78350F" },
+    "interior": { "label": "Interior Fit-Out", "color": "#EC4899", "soft": "#831843" },
+    "milestone": { "label": "Project Milestones", "color": "#E11D48", "soft": "#881337" }
+  },
+  "tasks": [
+    {
+      "id": "permit-zoning",
+      "label": "Zoning & Environmental Clearance",
+      "category": "permits",
+      "start": "2026-09-01",
+      "end": "2026-09-20",
+      "locked": true,
+      "progress": 1.0,
+      "baseline": { "start": "2026-09-01", "end": "2026-09-20" },
+      "fields": { "agency": "City Planning", "permitId": "ENV-2026-99" }
+    },
+    {
+      "id": "groundbreak",
+      "label": "Official Groundbreaking Ceremony",
+      "category": "milestone",
+      "start": "2026-09-21",
+      "end": "2026-09-21",
+      "milestone": true,
+      "dependsOn": "permit-zoning",
+      "progress": 1.0,
+      "fields": { "attendees": "Mayor & Stakeholders" }
+    },
+    {
+      "id": "excavation",
+      "label": "Deep Foundation Excavation & Shoring",
+      "category": "civil",
+      "start": "2026-09-23",
+      "end": "2026-10-20",
+      "dependsOn": "groundbreak",
+      "gapDays": 2,
+      "progress": 0.85,
+      "baseline": { "start": "2026-09-23", "end": "2026-10-15" },
+      "fields": { "contractor": "Apex Heavy Civil", "depth": "24m" }
+    },
+    {
+      "id": "piling-pour",
+      "label": "Concrete Raft Foundation Pour",
+      "category": "civil",
+      "start": "2026-10-22",
+      "end": "2026-11-12",
+      "dependsOn": "excavation",
+      "gapDays": 2,
+      "progress": 0.4,
+      "baseline": { "start": "2026-10-18", "end": "2026-11-05" },
+      "fields": { "concreteGrade": "C50/60 High-Strength", "volume": "8,400 m³" }
+    },
+    {
+      "id": "structural-steel",
+      "label": "Structural Steel Core (Floors 1-25)",
+      "category": "structure",
+      "start": "2026-11-14",
+      "end": "2027-01-10",
+      "dependsOn": "piling-pour",
+      "gapDays": 2,
+      "progress": 0.15,
+      "baseline": { "start": "2026-11-08", "end": "2026-12-30" },
+      "fields": { "steelTonnage": "4,200 metric tons", "craneUnits": "3 Liebherr Tower Cranes" }
+    },
+    {
+      "id": "mep-roughin",
+      "label": "HVAC & Electrical Risers Installation",
+      "category": "mep",
+      "start": "2026-12-01",
+      "end": "2027-01-25",
+      "dependsOn": "piling-pour",
+      "gapDays": 18,
+      "progress": 0.0,
+      "baseline": { "start": "2026-11-20", "end": "2027-01-15" },
+      "fields": { "leadEngineer": "David Vance", "subcontractor": "VoltTech MEP" }
+    },
+    {
+      "id": "topping-out",
+      "label": "Structural Topping Out Milestone",
+      "category": "milestone",
+      "start": "2027-01-12",
+      "end": "2027-01-12",
+      "milestone": true,
+      "dependsOn": "structural-steel",
+      "gapDays": 2,
+      "progress": 0.0,
+      "fields": { "targetFloor": "Level 25 Roof Beam" }
+    },
+    {
+      "id": "curtain-wall",
+      "label": "Glazed Curtain Wall Facade Cladding",
+      "category": "structure",
+      "start": "2027-01-14",
+      "end": "2027-02-15",
+      "dependsOn": "topping-out",
+      "gapDays": 2,
+      "progress": 0.0,
+      "baseline": { "start": "2027-01-05", "end": "2027-02-05" },
+      "fields": { "panels": "Triple-Glazed Low-E Glass", "coverage": "18,000 m²" }
+    },
+    {
+      "id": "interior-fitout",
+      "label": "Commercial Interior Fit-Out & Finishes",
+      "category": "interior",
+      "start": "2027-01-28",
+      "end": "2027-02-26",
+      "dependsOn": "mep-roughin",
+      "gapDays": 3,
+      "progress": 0.0,
+      "baseline": { "start": "2027-01-20", "end": "2027-02-20" },
+      "fields": { "designFirm": "Gensler Architects", "floors": "L1-L15" }
+    },
+    {
+      "id": "occupancy-cert",
+      "label": "Certificate of Occupancy Handover",
+      "category": "milestone",
+      "start": "2027-02-28",
+      "end": "2027-02-28",
+      "milestone": true,
+      "dependsOn": "curtain-wall",
+      "gapDays": 13,
+      "progress": 0.0,
+      "fields": { "inspections": "Fire, Building, Structural Safety passed" }
+    }
+  ]
+}

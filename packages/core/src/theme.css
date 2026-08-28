@@ -1,6 +1,6 @@
 /* ==========================================================================
    Jantt Theme System & CSS Custom Properties
-   Modern, dependency-free CSS design system with Dark & Light presets
+   Supercharged DHTMLX-grade styling, interactive ports, glassmorphic tooltips
    ========================================================================== */
 
 :root,
@@ -16,6 +16,8 @@
   --jantt-accent: #38BDF8;
   --jantt-accent-glow: rgba(56, 189, 248, 0.25);
   --jantt-today: #F43F5E;
+  --jantt-critical: #F59E0B;
+  --jantt-critical-glow: rgba(245, 158, 11, 0.4);
   --jantt-weekend-bg: rgba(15, 23, 42, 0.45);
   --jantt-grid-line: #1E293B;
   --jantt-dep-line: #64748B;
@@ -38,6 +40,8 @@
   --jantt-accent: #0284C7;
   --jantt-accent-glow: rgba(2, 132, 199, 0.18);
   --jantt-today: #E11D48;
+  --jantt-critical: #D97706;
+  --jantt-critical-glow: rgba(217, 119, 6, 0.3);
   --jantt-weekend-bg: rgba(241, 245, 249, 0.6);
   --jantt-grid-line: #E2E8F0;
   --jantt-dep-line: #94A3B8;
@@ -67,15 +71,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 18px;
+  padding: 10px 18px;
   background: var(--jantt-surface);
   border-bottom: 1px solid var(--jantt-border);
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .jantt-title-block {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .jantt-title {
@@ -95,10 +101,86 @@
   border: 1px solid currentColor;
 }
 
-.jantt-actions {
+.jantt-toolbar-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+/* Scale Segmented Control */
+.jantt-scale-group {
+  display: flex;
+  background: var(--jantt-bg);
+  border: 1px solid var(--jantt-border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.jantt-scale-btn {
+  background: transparent;
+  border: none;
+  color: var(--jantt-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: capitalize;
+}
+
+.jantt-scale-btn:hover {
+  color: var(--jantt-text);
+}
+
+.jantt-scale-btn.is-active {
+  background: var(--jantt-accent);
+  color: #000000;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Critical Path Toggle */
+.jantt-critical-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--jantt-bg);
+  border: 1px solid var(--jantt-border);
+  color: var(--jantt-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.jantt-critical-btn.is-active {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--jantt-critical);
+  border-color: var(--jantt-critical);
+  box-shadow: 0 0 10px var(--jantt-critical-glow);
+}
+
+/* Search Bar */
+.jantt-search-box {
+  display: flex;
+  align-items: center;
+  background: var(--jantt-bg);
+  border: 1px solid var(--jantt-border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  gap: 6px;
+}
+
+.jantt-search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--jantt-text);
+  font-size: 12px;
+  width: 130px;
 }
 
 /* Chart Main Body (Scroll Container) */
@@ -106,49 +188,62 @@
   display: flex;
   position: relative;
   overflow: auto;
-  max-height: 700px;
+  max-height: 720px;
 }
 
-/* Sticky Label Column */
+/* Sticky Multi-Column Data Grid */
 .jantt-label-column {
   position: sticky;
   left: 0;
-  z-index: 20;
+  z-index: 25;
   background: var(--jantt-surface);
   border-right: 1px solid var(--jantt-border);
   flex-shrink: 0;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 3px 0 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
 }
 
 .jantt-label-header {
   border-bottom: 1px solid var(--jantt-border);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 65px 55px;
   align-items: center;
-  padding: 0 14px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 700;
   color: var(--jantt-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   background: var(--jantt-surface);
+  box-sizing: border-box;
 }
 
 .jantt-label-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 65px 55px;
   align-items: center;
-  padding: 0 14px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--jantt-border-subtle);
   cursor: pointer;
   transition: background 0.15s ease;
-  font-size: 13px;
+  font-size: 12.5px;
   gap: 8px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  box-sizing: border-box;
 }
 
-.jantt-label-row:hover {
+.jantt-label-row:hover,
+.jantt-label-row.is-row-highlighted {
   background: var(--jantt-surface-hover);
+}
+
+.jantt-col-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .jantt-label-dot {
@@ -165,13 +260,47 @@
   color: var(--jantt-text);
 }
 
-/* Timeline Grid & SVG Overlay Area */
+.jantt-col-meta {
+  font-size: 11px;
+  font-family: var(--jantt-font-mono);
+  color: var(--jantt-text-dim);
+  text-align: center;
+}
+
+.jantt-col-progress-pill {
+  font-size: 10.5px;
+  font-family: var(--jantt-font-mono);
+  font-weight: 600;
+  color: var(--jantt-accent);
+  background: var(--jantt-accent-glow);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* Draggable Splitter */
+.jantt-splitter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 30;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.jantt-splitter:hover,
+.jantt-splitter.is-dragging {
+  background: var(--jantt-accent);
+}
+
+/* Timeline Grid & Area */
 .jantt-timeline-area {
   position: relative;
   flex-grow: 1;
 }
 
-/* Timeline Header */
 .jantt-timeline-header {
   position: sticky;
   top: 0;
@@ -191,8 +320,8 @@
 .jantt-month-cell {
   display: flex;
   align-items: center;
-  padding-left: 10px;
-  font-size: 12px;
+  padding-left: 8px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--jantt-text);
   border-right: 1px solid var(--jantt-border-subtle);
@@ -226,7 +355,7 @@
   font-weight: bold;
 }
 
-/* Timeline Rows & Background Grid */
+/* Timeline Rows & Grid Lines */
 .jantt-grid-layer {
   position: absolute;
   top: 0;
@@ -239,6 +368,11 @@
 .jantt-grid-row {
   border-bottom: 1px solid var(--jantt-border-subtle);
   box-sizing: border-box;
+  transition: background 0.15s ease;
+}
+
+.jantt-grid-row.is-row-highlighted {
+  background: rgba(56, 189, 248, 0.04);
 }
 
 .jantt-grid-day-col {
@@ -253,7 +387,7 @@
   background: var(--jantt-weekend-bg);
 }
 
-/* Today Marker Line */
+/* Today Line */
 .jantt-today-line {
   position: absolute;
   top: 0;
@@ -277,7 +411,7 @@
   border-radius: 3px;
 }
 
-/* SVG Connector Overlay */
+/* SVG Dependency Overlay */
 .jantt-svg-overlay {
   position: absolute;
   top: 0;
@@ -291,15 +425,33 @@
 .jantt-dep-path {
   fill: none;
   stroke: var(--jantt-dep-line);
-  stroke-width: 1.5;
+  stroke-width: 1.6;
   stroke-dasharray: 4 2;
   transition: stroke 0.2s, stroke-width 0.2s;
+  pointer-events: stroke;
+  cursor: pointer;
 }
 
+.jantt-dep-path:hover,
 .jantt-dep-path.is-active {
   stroke: var(--jantt-dep-line-active);
-  stroke-width: 2.2;
+  stroke-width: 2.4;
   stroke-dasharray: none;
+}
+
+.jantt-dep-path.is-critical {
+  stroke: var(--jantt-critical);
+  stroke-width: 2.6;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 4px var(--jantt-critical-glow));
+}
+
+.jantt-link-preview-line {
+  fill: none;
+  stroke: var(--jantt-accent);
+  stroke-width: 2.2;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
 }
 
 /* Task Bar */
@@ -312,8 +464,7 @@
   cursor: grab;
   z-index: 6;
   transition: transform 0.08s ease, box-shadow 0.15s ease;
-  overflow: hidden;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
   outline: none;
 }
 
@@ -325,29 +476,79 @@
   cursor: grabbing;
   opacity: 0.9;
   z-index: 15;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
 }
 
-.jantt-task-bar.is-locked {
-  cursor: pointer;
-  opacity: 0.85;
+.jantt-task-bar.is-critical {
+  border: 1.5px solid var(--jantt-critical);
+  box-shadow: 0 0 12px var(--jantt-critical-glow);
 }
 
+/* Milestone Diamond Pin */
+.jantt-milestone {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  transform: rotate(45deg);
+  border-radius: 3px;
+  cursor: grab;
+  z-index: 7;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  border: 2px solid #FFFFFF;
+}
+
+.jantt-milestone.is-critical {
+  border-color: var(--jantt-critical);
+  box-shadow: 0 0 12px var(--jantt-critical-glow);
+}
+
+/* Baseline Ghost Bar */
+.jantt-baseline-bar {
+  position: absolute;
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Progress Fill & Drag Handle */
 .jantt-task-progress {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.24);
   pointer-events: none;
   border-radius: var(--jantt-bar-radius) 0 0 var(--jantt-bar-radius);
 }
 
+.jantt-progress-handle {
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 2px solid var(--jantt-accent);
+  cursor: ew-resize;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 4;
+}
+
+.jantt-task-bar:hover .jantt-progress-handle {
+  opacity: 1;
+}
+
+/* Content */
 .jantt-bar-content {
   position: relative;
   z-index: 2;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -356,31 +557,93 @@
   align-items: center;
   gap: 6px;
   pointer-events: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* Resize Handle */
+/* Resize Handle (Right edge) */
 .jantt-resize-handle {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 10px;
+  width: 9px;
   cursor: col-resize;
   z-index: 3;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   transition: background 0.15s;
 }
 
 .jantt-resize-handle:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Interactive Drag-to-Link Ports */
+.jantt-link-port {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--jantt-accent);
+  border: 2px solid #FFFFFF;
+  cursor: crosshair;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.jantt-link-port-left {
+  left: -6px;
+}
+
+.jantt-link-port-right {
+  right: -6px;
+}
+
+.jantt-task-bar:hover .jantt-link-port,
+.jantt-milestone:hover .jantt-link-port {
+  opacity: 1;
+}
+
+.jantt-link-port:hover {
+  transform: translateY(-50%) scale(1.3);
+  box-shadow: 0 0 8px var(--jantt-accent);
+}
+
+/* Glassmorphic Floating Tooltip */
+.jantt-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: rgba(20, 29, 47, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--jantt-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  font-size: 12px;
+  max-width: 280px;
+  animation: jantt-fade-in 0.12s ease-out;
+}
+
+.jantt-tooltip-title {
+  font-weight: 700;
+  color: var(--jantt-text);
+  margin-bottom: 4px;
+}
+
+.jantt-tooltip-meta {
+  color: var(--jantt-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* Detail Modal */
 .jantt-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(4px);
   z-index: 1000;
   display: flex;
@@ -463,7 +726,6 @@
   opacity: 0.9;
 }
 
-/* Animations */
 @keyframes jantt-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
