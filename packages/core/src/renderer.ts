@@ -218,7 +218,7 @@ export function renderJantt(
 
     const labelHeader = document.createElement("div");
     labelHeader.className = "jantt-label-header";
-    labelHeader.style.height = `${viewport.headerHeight}px`;
+    labelHeader.style.height = `${header.totalHeight}px`;
     labelHeader.innerHTML = `
       <div>Task & Category</div>
       <div style="text-align: center;">Duration</div>
@@ -285,7 +285,21 @@ export function renderJantt(
     // 4a. Timeline Header
     const timelineHeader = document.createElement("div");
     timelineHeader.className = "jantt-timeline-header";
-    timelineHeader.style.height = `${viewport.headerHeight}px`;
+    timelineHeader.style.height = `${header.totalHeight}px`;
+
+    // Years row (rendered when timeline spans across multiple years)
+    if (header.spansMultipleYears && header.years.length > 0) {
+      const yearsRow = document.createElement("div");
+      yearsRow.className = "jantt-header-years";
+      header.years.forEach((y) => {
+        const yCell = document.createElement("div");
+        yCell.className = "jantt-year-cell";
+        yCell.style.width = `${y.width}px`;
+        yCell.textContent = y.label;
+        yearsRow.appendChild(yCell);
+      });
+      timelineHeader.appendChild(yearsRow);
+    }
 
     // Months row
     const monthsRow = document.createElement("div");
@@ -307,7 +321,10 @@ export function renderJantt(
       dCell.className = `jantt-day-cell ${d.isWeekend ? "is-weekend" : ""} ${d.isToday ? "is-today" : ""}`;
       dCell.style.width = `${d.width}px`;
       dCell.title = d.dateStr;
-      dCell.innerHTML = `<span>${d.label}</span>`;
+      dCell.innerHTML = `
+        <span class="jantt-day-name">${d.dayName}</span>
+        <span class="jantt-day-num">${d.label}</span>
+      `;
       daysRow.appendChild(dCell);
     });
     timelineHeader.appendChild(daysRow);

@@ -151,6 +151,12 @@ export interface DependencyLine {
   isCritical: boolean;
 }
 
+export interface HeaderYear {
+  label: string;
+  x: number;
+  width: number;
+}
+
 export interface HeaderMonth {
   label: string;
   x: number;
@@ -165,6 +171,7 @@ export interface HeaderWeek {
 
 export interface HeaderDay {
   label: string;
+  dayName: string;
   dateStr: string;
   dayOfMonth: number;
   dayOfWeek: number;
@@ -175,9 +182,11 @@ export interface HeaderDay {
 }
 
 export interface GridHeader {
+  years: HeaderYear[];
   months: HeaderMonth[];
   weeks: HeaderWeek[];
   days: HeaderDay[];
+  spansMultipleYears: boolean;
   todayX: number | null;
   totalWidth: number;
   totalHeight: number;

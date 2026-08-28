@@ -113,6 +113,15 @@ export function getTodayISODate(): string {
 }
 
 /**
+ * Returns the month name alone (e.g. 'September' or 'Sep')
+ */
+export function getMonthNameOnly(dateStr: string, full = true): string {
+  const d = parseISODate(dateStr);
+  const m = d.getUTCMonth();
+  return full ? MONTH_NAMES_FULL[m] : MONTH_NAMES_SHORT[m];
+}
+
+/**
  * Returns the short month name (e.g. 'Sep 2026')
  */
 export function formatMonthYear(dateStr: string, full = false): string {

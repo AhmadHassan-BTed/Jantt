@@ -4,6 +4,7 @@ import {
   TaskLayout,
   DependencyLine,
   GridHeader,
+  HeaderYear,
   HeaderMonth,
   HeaderWeek,
   HeaderDay,
@@ -14,7 +15,6 @@ import {
 import {
   addDays,
   diffDays,
-  formatMonthYear,
   getTodayISODate,
   isWeekend,
   maxISODate,
@@ -211,12 +211,20 @@ export function layout(
   });
 
   // Compute Header Ticks
+  const startYear = parseISODate(chartStart).getUTCFullYear();
+  const endYear = parseISODate(chartEnd).getUTCFullYear();
+  const spansMultipleYears = startYear !== endYear;
+
+  const years: HeaderYear[] = [];
   const months: HeaderMonth[] = [];
   const weeks: HeaderWeek[] = [];
   const days: HeaderDay[] = [];
 
   const todayStr = getTodayISODate();
   let todayX: number | null = null;
+
+  let currentYearKey = -1;
+  let currentYearStartX = 0;
 
   let currentMonthKey = "";
   let currentMonthStartX = 0;
@@ -236,18 +244,38 @@ export function layout(
       todayX = dayX + viewport.dayWidth / 2;
     }
 
+    const dayNumber = dObj.getUTCDate();
+    const dayOfWeek = dObj.getUTCDay();
+    const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
     days.push({
-      label: String(dObj.getUTCDate()),
+      label: String(dayNumber).padStart(2, "0"),
+      dayName: dayNames[dayOfWeek],
       dateStr: dStr,
-      dayOfMonth: dObj.getUTCDate(),
-      dayOfWeek: dObj.getUTCDay(),
+      dayOfMonth: dayNumber,
+      dayOfWeek,
       x: dayX,
       width: viewport.dayWidth,
       isWeekend: isWeekendDay,
       isToday: isTodayDay
     });
 
-    const monthKey = `${dObj.getUTCFullYear()}-${dObj.getUTCMonth()}`;
+    // Year tier tracking
+    const yNum = dObj.getUTCFullYear();
+    if (yNum !== currentYearKey) {
+      if (currentYearKey !== -1) {
+        years.push({
+          label: String(currentYearKey),
+          x: currentYearStartX,
+          width: dayX - currentYearStartX
+        });
+      }
+      currentYearKey = yNum;
+      currentYearStartX = dayX;
+    }
+
+    // Month tier tracking
+    const monthKey = `${yNum}-${dObj.getUTCMonth()}`;
     if (monthKey !== currentMonthKey) {
       if (currentMonthKey !== "") {
         months.push({
@@ -258,10 +286,15 @@ export function layout(
       }
       currentMonthKey = monthKey;
       currentMonthStartX = dayX;
-      currentMonthLabel = formatMonthYear(dStr, scale === "month" || scale === "quarter");
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      const mName = monthNames[dObj.getUTCMonth()];
+      currentMonthLabel = spansMultipleYears ? mName : `${mName} ${yNum}`;
     }
 
-    const dayOfWeek = dObj.getUTCDay();
+    // Week tier tracking
     if (dayOfWeek === 1 || i === 0) {
       if (currentWeekNum !== -1) {
         weeks.push({
@@ -273,6 +306,14 @@ export function layout(
       currentWeekNum = getWeekNumber(dObj);
       currentWeekStartX = dayX;
     }
+  }
+
+  if (currentYearKey !== -1) {
+    years.push({
+      label: String(currentYearKey),
+      x: currentYearStartX,
+      width: canvasWidth - currentYearStartX
+    });
   }
 
   if (currentMonthKey !== "") {
@@ -291,13 +332,17 @@ export function layout(
     });
   }
 
+  const computedHeaderHeight = spansMultipleYears ? 78 : 58;
+
   const header: GridHeader = {
+    years,
     months,
     weeks,
     days,
+    spansMultipleYears,
     todayX,
     totalWidth: canvasWidth,
-    totalHeight: viewport.headerHeight,
+    totalHeight: computedHeaderHeight,
     startDate: chartStart,
     endDate: chartEnd,
     totalDays,
