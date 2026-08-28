@@ -8,7 +8,8 @@ import {
   HeaderWeek,
   HeaderDay,
   JanttLayoutResult,
-  Category
+  Category,
+  TimeScale
 } from "./types";
 import {
   addDays,
@@ -20,6 +21,7 @@ import {
   minISODate,
   parseISODate
 } from "./date-math";
+import { calculateCriticalPath } from "./resolver";
 
 const DEFAULT_CATEGORY: Category = {
   label: "General",
@@ -27,19 +29,30 @@ const DEFAULT_CATEGORY: Category = {
   soft: "#1E293B"
 };
 
-const DEFAULT_VIEWPORT: Required<ViewportOptions> = {
+const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
+  day: 36,
+  week: 18,
+  month: 7,
+  quarter: 3,
+  year: 1.5
+};
+
+const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns">> = {
   dayWidth: 32,
   rowHeight: 46,
-  labelWidth: 240,
+  labelWidth: 340,
   headerHeight: 58,
   startDate: "",
   endDate: "",
+  scale: "day",
   showToday: true,
-  showWeekends: true
+  showWeekends: true,
+  showCriticalPath: false,
+  showBaselines: true
 };
 
 /**
- * Computes exact pixel coordinates and layout geometry for bars, header ticks, and SVG lines.
+ * Computes exact pixel coordinates, scale metrics, milestones, baselines, and critical paths.
  */
 export function layout(
   data: JanttData,
@@ -48,8 +61,17 @@ export function layout(
   const tasks = data.tasks || [];
   const categories = data.categories || {};
 
-  const viewport: Required<ViewportOptions> = {
+  const scale: TimeScale =
+    viewportOptions.scale || data.meta?.scale || "day";
+
+  const defaultDayWidth = SCALE_DAY_WIDTHS[scale] || 32;
+
+  const viewport: Required<Omit<ViewportOptions, "columns">> & { columns?: ViewportOptions["columns"] } = {
     ...DEFAULT_VIEWPORT,
+    dayWidth: viewportOptions.dayWidth || defaultDayWidth,
+    scale,
+    showCriticalPath: viewportOptions.showCriticalPath ?? (data.meta?.showCriticalPath ?? false),
+    showBaselines: viewportOptions.showBaselines ?? (data.meta?.showBaselines ?? true),
     ...viewportOptions
   };
 
@@ -65,14 +87,16 @@ export function layout(
       tasks.forEach((t) => {
         if (t.start) minStart = minISODate(minStart, t.start);
         if (t.end) maxEnd = maxISODate(maxEnd, t.end);
+        if (t.baseline?.start) minStart = minISODate(minStart, t.baseline.start);
+        if (t.baseline?.end) maxEnd = maxISODate(maxEnd, t.baseline.end);
       });
 
       // Add generous margin
-      if (!chartStart) chartStart = addDays(minStart, -3);
-      if (!chartEnd) chartEnd = addDays(maxEnd, 5);
+      if (!chartStart) chartStart = addDays(minStart, -4);
+      if (!chartEnd) chartEnd = addDays(maxEnd, 8);
     } else {
-      chartStart = addDays(getTodayISODate(), -3);
-      chartEnd = addDays(getTodayISODate(), 30);
+      chartStart = addDays(getTodayISODate(), -4);
+      chartEnd = addDays(getTodayISODate(), 40);
     }
   }
 
@@ -85,11 +109,14 @@ export function layout(
   viewport.endDate = chartEnd;
 
   const totalDays = Math.max(diffDays(chartStart, chartEnd), 1);
-  const canvasWidth = totalDays * viewport.dayWidth;
+  const canvasWidth = Math.max(totalDays * viewport.dayWidth, 600);
   const canvasHeight = Math.max(tasks.length * viewport.rowHeight, viewport.rowHeight);
 
+  // Critical path calculation
+  const { criticalTaskIds, criticalDepKeys } = calculateCriticalPath(tasks);
+
   // Compute TaskLayouts
-  const barHeight = Math.min(32, viewport.rowHeight - 12);
+  const barHeight = Math.min(28, viewport.rowHeight - 14);
   const barYOffset = (viewport.rowHeight - barHeight) / 2;
 
   const taskLayouts: TaskLayout[] = [];
@@ -97,12 +124,27 @@ export function layout(
 
   tasks.forEach((task, rowIndex) => {
     const x = diffDays(chartStart, task.start) * viewport.dayWidth;
-    const durationDays = Math.max(diffDays(task.start, task.end), 1);
-    const width = Math.max(durationDays * viewport.dayWidth, 16);
+    const durationDays = diffDays(task.start, task.end);
+    const isMilestone = Boolean(task.milestone || durationDays === 0);
+    const width = isMilestone ? 24 : Math.max(durationDays * viewport.dayWidth, 14);
     const y = rowIndex * viewport.rowHeight + barYOffset;
 
     const cat = categories[task.category] || DEFAULT_CATEGORY;
     const displayLabel = task.label || task.name || task.id;
+    const isCritical = criticalTaskIds.has(task.id);
+
+    let baselineLayout: TaskLayout["baselineLayout"] | undefined;
+    if (task.baseline && viewport.showBaselines) {
+      const bx = diffDays(chartStart, task.baseline.start) * viewport.dayWidth;
+      const bDuration = Math.max(diffDays(task.baseline.start, task.baseline.end), 1);
+      const bWidth = Math.max(bDuration * viewport.dayWidth, 12);
+      baselineLayout = {
+        x: bx,
+        y: y + barHeight + 2,
+        width: bWidth,
+        height: 4
+      };
+    }
 
     const item: TaskLayout = {
       task,
@@ -113,7 +155,10 @@ export function layout(
       rowIndex,
       category: cat,
       displayLabel,
-      durationDays
+      durationDays: Math.max(durationDays, 0),
+      isMilestone,
+      isCritical,
+      baselineLayout
     };
 
     taskLayouts.push(item);
@@ -129,7 +174,7 @@ export function layout(
     const curr = layoutById.get(task.id);
     if (!prereq || !curr) return;
 
-    const fromX = prereq.x + prereq.width;
+    const fromX = prereq.isMilestone ? prereq.x + 12 : prereq.x + prereq.width;
     const fromY = prereq.y + prereq.height / 2;
     const toX = curr.x;
     const toY = curr.y + curr.height / 2;
@@ -138,17 +183,17 @@ export function layout(
     const gap = toX - fromX;
 
     if (gap >= 16) {
-      // Standard forward stepped bezier
       const c1X = fromX + Math.min(gap / 2, 32);
       const c2X = toX - Math.min(gap / 2, 32);
       path = `M ${fromX} ${fromY} C ${c1X} ${fromY}, ${c2X} ${toY}, ${toX} ${toY}`;
     } else {
-      // Backward or tight jump: step out and route cleanly
       const stepOutX = fromX + 12;
       const stepInX = toX - 12;
       const midY = fromY + (toY > fromY ? 1 : -1) * (viewport.rowHeight / 2);
       path = `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
     }
+
+    const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
 
     dependencies.push({
       fromTaskId: prereq.task.id,
@@ -157,11 +202,12 @@ export function layout(
       fromY,
       toX,
       toY,
-      path
+      path,
+      isCritical
     });
   });
 
-  // Compute Grid Header ticks
+  // Compute Header Ticks
   const months: HeaderMonth[] = [];
   const weeks: HeaderWeek[] = [];
   const days: HeaderDay[] = [];
@@ -187,7 +233,6 @@ export function layout(
       todayX = dayX + viewport.dayWidth / 2;
     }
 
-    // Days row
     days.push({
       label: String(dObj.getUTCDate()),
       dateStr: dStr,
@@ -199,7 +244,6 @@ export function layout(
       isToday: isTodayDay
     });
 
-    // Months tracking
     const monthKey = `${dObj.getUTCFullYear()}-${dObj.getUTCMonth()}`;
     if (monthKey !== currentMonthKey) {
       if (currentMonthKey !== "") {
@@ -211,10 +255,9 @@ export function layout(
       }
       currentMonthKey = monthKey;
       currentMonthStartX = dayX;
-      currentMonthLabel = formatMonthYear(dStr, false);
+      currentMonthLabel = formatMonthYear(dStr, scale === "month" || scale === "quarter");
     }
 
-    // Weeks tracking (starting on Monday: day === 1)
     const dayOfWeek = dObj.getUTCDay();
     if (dayOfWeek === 1 || i === 0) {
       if (currentWeekNum !== -1) {
@@ -229,7 +272,6 @@ export function layout(
     }
   }
 
-  // Push trailing month
   if (currentMonthKey !== "") {
     months.push({
       label: currentMonthLabel,
@@ -238,7 +280,6 @@ export function layout(
     });
   }
 
-  // Push trailing week
   if (currentWeekNum !== -1) {
     weeks.push({
       label: `Wk ${currentWeekNum}`,
@@ -256,7 +297,8 @@ export function layout(
     totalHeight: viewport.headerHeight,
     startDate: chartStart,
     endDate: chartEnd,
-    totalDays
+    totalDays,
+    scale
   };
 
   return {
@@ -265,7 +307,8 @@ export function layout(
     header,
     viewport,
     canvasWidth,
-    canvasHeight
+    canvasHeight,
+    criticalTaskIds
   };
 }
 

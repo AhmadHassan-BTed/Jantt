@@ -2,17 +2,21 @@ import { JanttData, Task, JanttOptions } from "./types";
 import { addDays, diffDays } from "./date-math";
 import { resolveSchedule } from "./resolver";
 
-export type DragMode = "move" | "resize";
+export type DragMode = "move" | "resize" | "progress" | "link" | "split";
 
 export interface DragState {
-  taskId: string;
+  taskId?: string;
   mode: DragMode;
   startX: number;
-  origStart: string;
-  origEnd: string;
+  startY: number;
+  origStart?: string;
+  origEnd?: string;
+  origProgress?: number;
+  origLabelWidth?: number;
   moved: boolean;
-  element: HTMLElement;
-  pointerId: number;
+  element?: HTMLElement;
+  pointerId?: number;
+  linkFromTaskId?: string;
 }
 
 export class InteractionController {
@@ -23,13 +27,17 @@ export class InteractionController {
   private defaultGapDays: number;
   private onRenderRequest: () => void;
   private openModalHandler: (task: Task) => void;
+  private onLiveLinkUpdate?: (wireData: { fromX: number; fromY: number; toX: number; toY: number } | null) => void;
+  private onSplitResize?: (newWidth: number) => void;
 
   constructor(
     data: JanttData,
     options: JanttOptions,
     dayWidth: number,
     onRenderRequest: () => void,
-    openModalHandler: (task: Task) => void
+    openModalHandler: (task: Task) => void,
+    onLiveLinkUpdate?: (wireData: { fromX: number; fromY: number; toX: number; toY: number } | null) => void,
+    onSplitResize?: (newWidth: number) => void
   ) {
     this.data = data;
     this.options = options;
@@ -37,6 +45,8 @@ export class InteractionController {
     this.defaultGapDays = data.meta?.defaultGapDays ?? 2;
     this.onRenderRequest = onRenderRequest;
     this.openModalHandler = openModalHandler;
+    this.onLiveLinkUpdate = onLiveLinkUpdate;
+    this.onSplitResize = onSplitResize;
 
     this.onPointerMove = this.onPointerMove.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
@@ -48,10 +58,9 @@ export class InteractionController {
     this.defaultGapDays = newData.meta?.defaultGapDays ?? 2;
   }
 
-  public startDrag(e: PointerEvent, task: Task, mode: DragMode, el: HTMLElement) {
-    if (this.options.readOnly || task.locked) {
-      if (e.button === 0) {
-        // Locked task click
+  public startDrag(e: PointerEvent, task: Task, mode: DragMode, el?: HTMLElement) {
+    if (this.options.readOnly || (task.locked && (mode === "move" || mode === "resize" || mode === "progress"))) {
+      if (e.button === 0 && (mode === "move" || mode === "resize")) {
         this.openModalHandler(task);
       }
       return;
@@ -60,20 +69,47 @@ export class InteractionController {
     e.preventDefault();
     e.stopPropagation();
 
-    el.setPointerCapture?.(e.pointerId);
+    if (el && e.pointerId !== undefined) {
+      try {
+        el.setPointerCapture?.(e.pointerId);
+      } catch {
+        // Ignore
+      }
+    }
 
     this.dragState = {
       taskId: task.id,
       mode,
       startX: e.clientX,
+      startY: e.clientY,
       origStart: task.start,
       origEnd: task.end,
+      origProgress: task.progress ?? 0,
       moved: false,
       element: el,
-      pointerId: e.pointerId
+      pointerId: e.pointerId,
+      linkFromTaskId: mode === "link" ? task.id : undefined
     };
 
-    el.classList.add("is-dragging");
+    el?.classList.add("is-dragging");
+
+    window.addEventListener("pointermove", this.onPointerMove);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
+  }
+
+  public startSplitterDrag(e: PointerEvent, currentWidth: number) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    this.dragState = {
+      mode: "split",
+      startX: e.clientX,
+      startY: e.clientY,
+      origLabelWidth: currentWidth,
+      moved: false,
+      pointerId: e.pointerId
+    };
 
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
@@ -83,58 +119,107 @@ export class InteractionController {
   private onPointerMove(e: PointerEvent) {
     if (!this.dragState) return;
 
-    const deltaPx = e.clientX - this.dragState.startX;
-    if (Math.abs(deltaPx) >= 4) {
+    const deltaX = e.clientX - this.dragState.startX;
+    if (Math.abs(deltaX) >= 3) {
       this.dragState.moved = true;
     }
 
-    const deltaDays = Math.round(deltaPx / this.dayWidth);
+    if (this.dragState.mode === "split") {
+      const newWidth = Math.max(180, Math.min(600, (this.dragState.origLabelWidth || 320) + deltaX));
+      this.onSplitResize?.(newWidth);
+      return;
+    }
+
+    if (this.dragState.mode === "link") {
+      if (this.onLiveLinkUpdate && this.dragState.element) {
+        const rect = this.dragState.element.getBoundingClientRect();
+        this.onLiveLinkUpdate({
+          fromX: rect.right,
+          fromY: rect.top + rect.height / 2,
+          toX: e.clientX,
+          toY: e.clientY
+        });
+      }
+      return;
+    }
+
+    const deltaDays = Math.round(deltaX / this.dayWidth);
     const task = this.data.tasks.find((t) => t.id === this.dragState!.taskId);
     if (!task) return;
 
     if (this.dragState.mode === "move") {
-      const origDuration = Math.max(diffDays(this.dragState.origStart, this.dragState.origEnd), 1);
-      const newStart = addDays(this.dragState.origStart, deltaDays);
+      const origDuration = Math.max(diffDays(this.dragState.origStart!, this.dragState.origEnd!), 0);
+      const newStart = addDays(this.dragState.origStart!, deltaDays);
       task.start = newStart;
       task.end = addDays(newStart, origDuration);
     } else if (this.dragState.mode === "resize") {
-      const newEnd = addDays(this.dragState.origEnd, deltaDays);
-      if (diffDays(this.dragState.origStart, newEnd) >= 1) {
+      const newEnd = addDays(this.dragState.origEnd!, deltaDays);
+      if (diffDays(this.dragState.origStart!, newEnd) >= (task.milestone ? 0 : 1)) {
         task.end = newEnd;
       }
+    } else if (this.dragState.mode === "progress") {
+      const barWidth = Math.max(diffDays(task.start, task.end) * this.dayWidth, 30);
+      const deltaRatio = deltaX / barWidth;
+      const newProgress = Math.max(0, Math.min(1, (this.dragState.origProgress || 0) + deltaRatio));
+      task.progress = Math.round(newProgress * 100) / 100;
     }
 
     this.onRenderRequest();
     this.options.onChange?.(this.data);
   }
 
-  private onPointerUp() {
+  private onPointerUp(e: PointerEvent) {
     if (!this.dragState) return;
 
-    const { element, taskId, moved, pointerId } = this.dragState;
+    const { element, taskId, mode, moved, pointerId, linkFromTaskId } = this.dragState;
 
-    try {
-      element.releasePointerCapture?.(pointerId);
-    } catch {
-      // Ignore pointer release errors
+    if (element && pointerId !== undefined) {
+      try {
+        element.releasePointerCapture?.(pointerId);
+      } catch {
+        // Ignore
+      }
+      element.classList.remove("is-dragging");
     }
 
-    element.classList.remove("is-dragging");
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("pointercancel", this.onPointerUp);
 
-    const task = this.data.tasks.find((t) => t.id === taskId);
     this.dragState = null;
 
+    if (mode === "split") {
+      return;
+    }
+
+    if (mode === "link") {
+      this.onLiveLinkUpdate?.(null);
+      // Determine target task under pointer
+      const targetElement = document.elementFromPoint(e.clientX, e.clientY);
+      const targetBar = targetElement?.closest<HTMLElement>("[data-task-id]");
+      const targetTaskId = targetBar?.dataset.taskId;
+
+      if (linkFromTaskId && targetTaskId && targetTaskId !== linkFromTaskId) {
+        const targetTask = this.data.tasks.find((t) => t.id === targetTaskId);
+        if (targetTask) {
+          targetTask.dependsOn = linkFromTaskId;
+          const resolvedTasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
+          this.data = { ...this.data, tasks: resolvedTasks };
+          this.onRenderRequest();
+          this.options.onLinkCreate?.(linkFromTaskId, targetTaskId);
+          this.options.onCommit?.(this.data);
+        }
+      }
+      return;
+    }
+
+    const task = this.data.tasks.find((t) => t.id === taskId);
     if (!task) return;
 
-    if (!moved) {
-      // Click event
+    if (!moved && (mode === "move" || mode === "resize")) {
       this.options.onTaskClick?.(task);
       this.openModalHandler(task);
     } else {
-      // Drag/resize commit with dependency cascade
       const resolvedTasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
       this.data = {
         ...this.data,
@@ -145,9 +230,6 @@ export class InteractionController {
     }
   }
 
-  /**
-   * Keyboard accessible bar manipulation
-   */
   public handleKeyDown(e: KeyboardEvent, task: Task) {
     if (this.options.readOnly || task.locked) {
       if (e.key === "Enter" || e.key === " ") {
@@ -157,20 +239,18 @@ export class InteractionController {
       return;
     }
 
-    const origDuration = Math.max(diffDays(task.start, task.end), 1);
+    const origDuration = Math.max(diffDays(task.start, task.end), 0);
     let modified = false;
 
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       const step = e.altKey ? this.defaultGapDays : 1;
       if (e.shiftKey) {
-        // Resize shrink
-        if (origDuration > 1) {
+        if (origDuration > 0) {
           task.end = addDays(task.end, -1);
           modified = true;
         }
       } else {
-        // Move left
         task.start = addDays(task.start, -step);
         task.end = addDays(task.end, -step);
         modified = true;
@@ -179,11 +259,9 @@ export class InteractionController {
       e.preventDefault();
       const step = e.altKey ? this.defaultGapDays : 1;
       if (e.shiftKey) {
-        // Resize grow
         task.end = addDays(task.end, 1);
         modified = true;
       } else {
-        // Move right
         task.start = addDays(task.start, step);
         task.end = addDays(task.end, step);
         modified = true;

@@ -7,11 +7,31 @@
     "defaultGapDays": 2
   },
   "categories": {
-    "arch": { "label": "Architecture & Specs", "color": "#3B82F6", "soft": "#1E293B" },
-    "backend": { "label": "Backend Services", "color": "#10B981", "soft": "#064E3B" },
-    "frontend": { "label": "Frontend & UI", "color": "#8B5CF6", "soft": "#312E81" },
-    "qa": { "label": "QA & Security Audit", "color": "#F59E0B", "soft": "#78350F" },
-    "deploy": { "label": "Deployment & Release", "color": "#EC4899", "soft": "#831843" }
+    "arch": {
+      "label": "Architecture & Specs",
+      "color": "#3B82F6",
+      "soft": "#1E293B"
+    },
+    "backend": {
+      "label": "Backend Services",
+      "color": "#10B981",
+      "soft": "#064E3B"
+    },
+    "frontend": {
+      "label": "Frontend & UI",
+      "color": "#8B5CF6",
+      "soft": "#312E81"
+    },
+    "qa": {
+      "label": "QA & Security Audit",
+      "color": "#F59E0B",
+      "soft": "#78350F"
+    },
+    "deploy": {
+      "label": "Deployment & Release",
+      "color": "#EC4899",
+      "soft": "#831843"
+    }
   },
   "tasks": [
     {
@@ -22,7 +42,7 @@
       "end": "2026-09-12",
       "dependsOn": null,
       "locked": true,
-      "progress": 1.0,
+      "progress": 1,
       "fields": {
         "lead": "Sarah Chen",
         "deliverable": "OpenAPI 3.1 & Prisma Schema",
@@ -85,7 +105,7 @@
       "dependsOn": "ui-integration",
       "gapDays": 2,
       "locked": false,
-      "progress": 0.0,
+      "progress": 0,
       "fields": {
         "lead": "Marcus Brody",
         "suite": "Playwright + OWASP ZAP"
@@ -100,7 +120,7 @@
       "dependsOn": "e2e-testing",
       "gapDays": 2,
       "locked": false,
-      "progress": 0.0,
+      "progress": 0,
       "fields": {
         "lead": "DevOps Team",
         "infra": "AWS ECS + Cloudflare Workers"

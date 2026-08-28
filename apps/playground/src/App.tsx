@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { JanttData, validate, ValidationResult, resolveSchedule } from "@jantt/core";
+import { JanttData, validate, ValidationResult, resolveSchedule, TimeScale } from "@jantt/core";
 import { Jantt } from "@jantt/react";
 import {
   Sparkles,
@@ -10,18 +10,22 @@ import {
   Download,
   Sliders,
   X,
-  FileJson
+  FileJson,
+  Layers,
+  Zap
 } from "lucide-react";
 
 import basicFixture from "../../../examples/basic.json";
+import constructionFixture from "../../../examples/construction-enterprise.json";
 import academicFixture from "../../../examples/academic-roadmap.json";
 import brokenMissingIdFixture from "../../../examples/broken-missing-id.json";
 import brokenBadDateFixture from "../../../examples/broken-bad-date.json";
 import brokenDanglingDepFixture from "../../../examples/broken-dangling-dependency.json";
 
 const PRESETS: Record<string, { label: string; data: any }> = {
-  basic: { label: "Acme v2 Launch", data: basicFixture },
-  academic: { label: "Academic Roadmap", data: academicFixture },
+  construction: { label: "🏗️ High-Rise Construction (Enterprise)", data: constructionFixture },
+  basic: { label: "🚀 Acme Platform v2 Launch", data: basicFixture },
+  academic: { label: "🎓 Graduate Admissions Roadmap", data: academicFixture },
   brokenMissingId: { label: "⚠️ Broken: Missing ID", data: brokenMissingIdFixture },
   brokenBadDate: { label: "⚠️ Broken: Bad Date Range", data: brokenBadDateFixture },
   brokenDangling: { label: "⚠️ Broken: Dangling Dep", data: brokenDanglingDepFixture }
@@ -72,15 +76,18 @@ const THEMES: Record<string, { label: string; className: string; vars: Record<st
 };
 
 export function App() {
-  const [selectedPreset, setSelectedPreset] = useState("basic");
+  const [selectedPreset, setSelectedPreset] = useState("construction");
   const [selectedTheme, setSelectedTheme] = useState("dark");
-  const [jsonText, setJsonText] = useState(() => JSON.stringify(basicFixture, null, 2));
-  const [parsedData, setParsedData] = useState<JanttData | null>(basicFixture as JanttData);
-  const [validationResult, setValidationResult] = useState<ValidationResult>(() => validate(basicFixture));
+  const [jsonText, setJsonText] = useState(() => JSON.stringify(constructionFixture, null, 2));
+  const [parsedData, setParsedData] = useState<JanttData | null>(constructionFixture as JanttData);
+  const [validationResult, setValidationResult] = useState<ValidationResult>(() => validate(constructionFixture));
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [defaultGap, setDefaultGap] = useState(2);
+  const [currentScale, setCurrentScale] = useState<TimeScale>("week");
+  const [showCriticalPath, setShowCriticalPath] = useState(true);
+  const [showBaselines, setShowBaselines] = useState(true);
 
   // Handle preset selection
   const handleSelectPreset = (key: string) => {
@@ -95,6 +102,9 @@ export function App() {
       if (val.valid) {
         setParsedData(parsed);
         setDefaultGap(parsed.meta?.defaultGapDays ?? 2);
+        if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
+        if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
+        if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
       } else {
         setParsedData(null);
       }
@@ -132,7 +142,7 @@ export function App() {
     }
   };
 
-  // Handle live commit from interactive Gantt drag/resize/modal
+  // Handle live commit from interactive Gantt drag/resize/modal/link
   const handleChartCommit = useCallback((updated: JanttData) => {
     setParsedData(updated);
     const formatted = JSON.stringify(updated, null, 2);
@@ -191,7 +201,7 @@ https://jantt.dev/schema/v1.json
 
 Output only valid JSON conforming strictly to the Jantt Schema.
 Rules:
-- Root must contain "tasks": [{ "id": "...", "category": "...", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "dependsOn": "prereq-id" | null, "gapDays": number | null }]
+- Root must contain "tasks": [{ "id": "...", "category": "...", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "dependsOn": "prereq-id" | null, "milestone": boolean, "baseline": { "start": "...", "end": "..." } }]
 - All dates must be ISO "YYYY-MM-DD"
 - All categories in tasks must match keys in the "categories" dictionary
 - Use domain-specific properties inside the "fields" object`;
@@ -215,7 +225,7 @@ Rules:
             <div className="brand-icon-box">J</div>
             <span>Jantt</span>
           </div>
-          <span className="brand-badge">v1.0.0</span>
+          <span className="brand-badge">v1.1.0</span>
           <span style={{ fontSize: "13px", color: "#94A3B8", marginLeft: "8px" }}>The JSON Gantt Engine</span>
         </div>
 
@@ -337,26 +347,61 @@ Rules:
         {/* Right Pane: Live Chart Render */}
         <section className="chart-pane">
           <div className="chart-controls-bar">
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px" }}>
-                <Sliders size={14} color="#38BDF8" />
-                <span style={{ fontWeight: 600 }}>Pacing Gap:</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+              {/* Pacing Gap Slider */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+                <Sliders size={13} color="#38BDF8" />
+                <span style={{ fontWeight: 600 }}>Pacing:</span>
                 <input
                   type="range"
                   min="0"
                   max="7"
                   value={defaultGap}
                   onChange={(e) => handleGapChange(parseInt(e.target.value, 10))}
-                  style={{ accentColor: "#38BDF8", cursor: "pointer" }}
+                  style={{ accentColor: "#38BDF8", cursor: "pointer", width: "70px" }}
                 />
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#38BDF8", fontWeight: 600 }}>
                   {defaultGap}d
                 </span>
               </div>
+
+              {/* TimeScale Switcher */}
+              <div className="jantt-scale-group" style={{ margin: 0 }}>
+                {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((scaleKey) => (
+                  <button
+                    key={scaleKey}
+                    className={`jantt-scale-btn ${currentScale === scaleKey ? "is-active" : ""}`}
+                    onClick={() => setCurrentScale(scaleKey)}
+                  >
+                    {scaleKey}
+                  </button>
+                ))}
+              </div>
+
+              {/* Critical Path Toggle */}
+              <button
+                className={`jantt-critical-btn ${showCriticalPath ? "is-active" : ""}`}
+                onClick={() => setShowCriticalPath(!showCriticalPath)}
+                title="Calculate and illuminate the project critical bottleneck chain"
+              >
+                <Zap size={13} />
+                <span>Critical Path</span>
+              </button>
+
+              {/* Baselines Toggle */}
+              <button
+                className={`jantt-critical-btn ${showBaselines ? "is-active" : ""}`}
+                style={showBaselines ? { borderColor: "#38BDF8", color: "#38BDF8", background: "rgba(56, 189, 248, 0.15)" } : {}}
+                onClick={() => setShowBaselines(!showBaselines)}
+                title="Show original baseline plan ghost bars"
+              >
+                <Layers size={13} />
+                <span>Baselines</span>
+              </button>
             </div>
 
-            <div style={{ fontSize: "12px", color: "#94A3B8" }}>
-              💡 Drag body to move • Drag right edge to resize • Click for details • Tab/Arrows for keyboard
+            <div style={{ fontSize: "11px", color: "#94A3B8" }}>
+              💡 Drag edge to link • Drag progress handle • Drag bar to move • Drag splitter to resize table
             </div>
           </div>
 
@@ -365,6 +410,11 @@ Rules:
               <Jantt
                 data={parsedData}
                 onCommit={handleChartCommit}
+                viewport={{
+                  scale: currentScale,
+                  showCriticalPath,
+                  showBaselines
+                }}
                 theme={THEMES[selectedTheme].vars}
               />
             ) : (
@@ -418,7 +468,7 @@ Rules:
             <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: "12px" }}>
               <p style={{ fontSize: "13px", color: "#94A3B8", lineHeight: "1.5" }}>
                 Hand this prompt snippet to ChatGPT, Claude, Gemini, or any LLM to generate guaranteed valid Jantt JSON
-                schedules:
+                schedules with milestones, baselines, and dependencies:
               </p>
               <textarea
                 readOnly
