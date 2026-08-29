@@ -12,6 +12,7 @@ import {
   midnightRoseTheme,
   sunsetCrimsonTheme,
   nordicFrostTheme,
+  InteractionController,
   Task,
   JanttData
 } from "../src";
@@ -174,7 +175,7 @@ describe("Theme Architecture & ThemeManager Subsystem", () => {
 
     const light = themeManager.getTheme("swiss-light");
     expect(light).toBeDefined();
-    expect(light?.vars["--jantt-bg"]).toBe("#F8FAFC");
+    expect(light?.vars["--jantt-bg"]).toBe("#FFFFFF");
     expect(light?.vars["--jantt-accent"]).toBe("#0284C7");
   });
 
@@ -203,5 +204,90 @@ describe("Theme Architecture & ThemeManager Subsystem", () => {
     expect(div.getAttribute("data-theme")).toBe("cyber-emerald");
     expect(div.style.getPropertyValue("--jantt-bg")).toBe("#041410");
     expect(div.style.getPropertyValue("--jantt-accent")).toBe("#10B981");
+  });
+});
+
+describe("Multi-Task Selection & Synchronized Multi-Shift Engine", () => {
+  it("tracks and manages multiple task selections", () => {
+    const data: JanttData = {
+      tasks: [
+        { id: "t1", category: "c1", start: "2026-09-01", end: "2026-09-05" },
+        { id: "t2", category: "c1", start: "2026-09-06", end: "2026-09-10" },
+        { id: "t3", category: "c1", start: "2026-09-11", end: "2026-09-15" }
+      ]
+    };
+
+    let rendered = false;
+    const ctrl = new InteractionController(
+      data,
+      {},
+      30,
+      () => {
+        rendered = true;
+      },
+      () => {}
+    );
+
+    expect(ctrl.getSelectedTaskIds().size).toBe(0);
+
+    // Select t1
+    ctrl.selectTask("t1", false);
+    expect(ctrl.isSelected("t1")).toBe(true);
+    expect(ctrl.getSelectedTaskIds().size).toBe(1);
+
+    // Multi-select t2
+    ctrl.selectTask("t2", true);
+    expect(ctrl.isSelected("t1")).toBe(true);
+    expect(ctrl.isSelected("t2")).toBe(true);
+    expect(ctrl.getSelectedTaskIds().size).toBe(2);
+
+    // Toggle off t1
+    ctrl.selectTask("t1", true);
+    expect(ctrl.isSelected("t1")).toBe(false);
+    expect(ctrl.isSelected("t2")).toBe(true);
+
+    // Clear all
+    ctrl.clearSelection();
+    expect(ctrl.getSelectedTaskIds().size).toBe(0);
+  });
+
+  it("toggles task lock and preserves locked tasks as immovable anchors", () => {
+    const data: JanttData = {
+      tasks: [
+        { id: "t1", category: "c1", start: "2026-09-01", end: "2026-09-05" },
+        { id: "t2", category: "c1", start: "2026-09-07", end: "2026-09-10", dependsOn: "t1" }
+      ]
+    };
+
+    const ctrl = new InteractionController(data, {}, 30, () => {}, () => {});
+    expect(data.tasks[0].locked).toBeUndefined();
+
+    // Toggle lock on t1
+    ctrl.toggleTaskLock("t1");
+    expect(data.tasks[0].locked).toBe(true);
+
+    // Toggle lock off
+    ctrl.toggleTaskLock("t1");
+    expect(data.tasks[0].locked).toBe(false);
+  });
+
+  it("supports switching between Auto-Cascade and Strict Limit modes", () => {
+    const data: JanttData = {
+      tasks: [
+        { id: "t1", category: "c1", start: "2026-09-01", end: "2026-09-05" },
+        { id: "t2", category: "c1", start: "2026-09-07", end: "2026-09-10", dependsOn: "t1" }
+      ]
+    };
+
+    const ctrl = new InteractionController(data, {}, 30, () => {}, () => {});
+    expect(ctrl.isAutoCascade()).toBe(true);
+
+    // Toggle to strict limits mode
+    ctrl.toggleAutoCascade();
+    expect(ctrl.isAutoCascade()).toBe(false);
+
+    // Toggle back to auto-cascade
+    ctrl.toggleAutoCascade();
+    expect(ctrl.isAutoCascade()).toBe(true);
   });
 });

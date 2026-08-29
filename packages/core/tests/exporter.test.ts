@@ -35,15 +35,15 @@ describe("Exporter Engine", () => {
 
   it("exports valid RFC-4180 CSV with headers and task rows", () => {
     const csv = exportToCsv(mockData);
-    expect(csv).toContain("Task ID,Label / Name,Category,Start Date,End Date,Duration (Days),Progress (%),Milestone,Depends On,Status,Notes");
-    expect(csv).toContain("T1,Architecture Setup,dev,2026-09-01,2026-09-05,4,75%,FALSE,,in-progress,Clean modular architecture");
-    expect(csv).toContain("M1,Launch Alpha,dev,2026-09-06,2026-09-06,0,,TRUE,T1,,");
+    expect(csv).toContain("Task ID,WBS,Label / Name,Category,Assignee,Priority,Start Date,End Date,Duration (Days),Estimated Budget ($),Progress (%),Milestone,Depends On,Status,Notes");
+    expect(csv).toContain("T1,,Architecture Setup,dev,,,2026-09-01,2026-09-05,4,,75%,FALSE,,in-progress,Clean modular architecture");
+    expect(csv).toContain("M1,,Launch Alpha,dev,,,2026-09-06,2026-09-06,0,,,TRUE,T1,,");
   });
 
   it("first line is always the header", () => {
     const csv = exportToCsv(mockData);
     const lines = csv.split("\r\n");
-    expect(lines[0]).toBe("Task ID,Label / Name,Category,Start Date,End Date,Duration (Days),Progress (%),Milestone,Depends On,Status,Notes");
+    expect(lines[0]).toBe("Task ID,WBS,Label / Name,Category,Assignee,Priority,Start Date,End Date,Duration (Days),Estimated Budget ($),Progress (%),Milestone,Depends On,Status,Notes");
   });
 
   it("row count matches task count (header + N rows)", () => {
@@ -124,7 +124,7 @@ describe("Exporter Engine", () => {
       ]
     };
     const csv = exportToCsv(noNameData);
-    expect(csv).toContain("fallback-id,fallback-id");
+    expect(csv).toContain("fallback-id,,fallback-id");
   });
 
   // ─── Milestone detection ──────────────────────────────────────────────
@@ -164,10 +164,10 @@ describe("Exporter Engine", () => {
     };
     const csv = exportToCsv(noProg);
     const lines = csv.split("\r\n");
-    // The progress column (index 6) should be empty for these tasks
+    // The progress column (index 10) should be empty for these tasks
     for (let i = 1; i <= 2; i++) {
       const cols = lines[i].split(",");
-      expect(cols[6]).toBe(""); // Empty progress
+      expect(cols[10]).toBe(""); // Empty progress
     }
   });
 

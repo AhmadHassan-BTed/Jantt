@@ -59,7 +59,14 @@ export interface Task {
   baseline?: TaskBaseline;
   status?: "not-started" | "in-progress" | "submitted" | "completed" | "blocked" | string;
   urgent?: boolean;
+  priority?: "low" | "medium" | "high" | "urgent" | string;
+  assignee?: string;
+  wbs?: string;
+  phase?: string;
+  estimatedCost?: number;
+  actualCost?: number;
   notes?: string;
+  description?: string;
   fields?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -222,6 +229,7 @@ export interface JanttOptions {
   sidebarContainer?: HTMLElement | string;
   onChange?: (draft: JanttData) => void;
   onCommit?: (final: JanttData) => void;
+  onViewportChange?: (viewport: ViewportOptions) => void;
   onTaskClick?: (task: Task) => void;
   onTaskDelete?: (taskId: string) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;

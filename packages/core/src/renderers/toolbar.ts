@@ -8,15 +8,17 @@ export interface ToolbarProps {
   showCritical: boolean;
   criticalCount: number;
   searchQuery: string;
+  autoCascade: boolean;
   onScaleChange: (scale: TimeScale) => void;
   onRoutingChange: (routing: LinkRoutingStyle) => void;
   onCriticalToggle: () => void;
+  onAutoCascadeToggle: () => void;
   onSearchChange: (query: string) => void;
 }
 
 /**
  * Renders the top toolbar containing title, badge, zoom scale switcher, link routing switcher,
- * critical path toggle, and search box.
+ * auto-cascade / strict lock switcher, critical path toggle, and search box.
  */
 export function renderToolbar(props: ToolbarProps): HTMLElement {
   const toolbar = document.createElement("div");
@@ -48,6 +50,18 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     scaleGroup.appendChild(btn);
   });
   controls.appendChild(scaleGroup);
+
+  // Auto-Cascade / Lock Limits Toggle Button
+  const cascadeBtn = document.createElement("button");
+  cascadeBtn.className = `jantt-scale-btn ${props.autoCascade ? "is-active" : ""}`;
+  cascadeBtn.title = props.autoCascade
+    ? "Auto-Adjust ON: Downstream tasks automatically cascade and adjust (Click to lock limits)"
+    : "Strict Limits: Schedule is locked against cascading (Click to auto-adjust)";
+  cascadeBtn.innerHTML = props.autoCascade
+    ? `<span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg> Auto-Cascade</span>`
+    : `<span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Limits Locked</span>`;
+  cascadeBtn.addEventListener("click", () => props.onAutoCascadeToggle());
+  controls.appendChild(cascadeBtn);
 
   // Link Routing Style Segmented Control
   const routingGroup = document.createElement("div");

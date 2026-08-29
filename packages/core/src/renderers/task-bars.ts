@@ -32,9 +32,10 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     }
 
     // 2. Milestone Diamond Pin
+    const isSelected = props.controller.isSelected(item.task.id);
     if (item.isMilestone) {
       const mStone = document.createElement("div");
-      mStone.className = `jantt-milestone ${props.showCritical && item.isCritical ? "is-critical" : ""}`;
+      mStone.className = `jantt-milestone ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
       mStone.style.left = `${item.x}px`;
       mStone.style.top = `${item.y + (item.height - 20) / 2}px`;
       mStone.style.background = item.category.color;
@@ -66,7 +67,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
     // 3. Standard Task Bar
     const bar = document.createElement("div");
-    bar.className = `jantt-task-bar ${item.task.locked ? "is-locked" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""}`;
+    bar.className = `jantt-task-bar ${item.task.locked ? "is-locked" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
     bar.style.left = `${item.x}px`;
     bar.style.top = `${item.y}px`;
     bar.style.width = `${item.width}px`;
@@ -98,14 +99,53 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     }
     bar.appendChild(progressFill);
 
-    // Content Text
+    // Content Text & Quick Lock Toggle Button
     const content = document.createElement("div");
     content.className = "jantt-bar-content";
-    content.innerHTML = `
-      <span>${escapeHtml(item.displayLabel)}</span>
-      ${item.task.locked ? '<span class="jantt-hover-type-pill is-locked" style="font-size: 8.5px; padding: 1px 4px;">Locked</span>' : ""}
-      ${item.task.urgent ? '<span class="jantt-hover-type-pill is-urgent" style="font-size: 8.5px; padding: 1px 4px;">Urgent</span>' : ""}
-    `;
+
+    const titleSpan = document.createElement("span");
+    titleSpan.textContent = item.displayLabel;
+    content.appendChild(titleSpan);
+
+    if (item.task.assignee) {
+      const aPill = document.createElement("span");
+      aPill.className = "jantt-hover-type-pill";
+      aPill.style.fontSize = "8.5px";
+      aPill.style.padding = "0 4px";
+      aPill.style.background = "rgba(0, 0, 0, 0.25)";
+      aPill.style.color = "#FFFFFF";
+      aPill.style.borderRadius = "3px";
+      aPill.textContent = item.task.assignee;
+      content.appendChild(aPill);
+    }
+
+    if (item.task.urgent) {
+      const uPill = document.createElement("span");
+      uPill.className = "jantt-hover-type-pill is-urgent";
+      uPill.style.fontSize = "8.5px";
+      uPill.style.padding = "1px 4px";
+      uPill.textContent = "Urgent";
+      content.appendChild(uPill);
+    }
+
+    if (!props.readOnly) {
+      const lockBtn = document.createElement("button");
+      lockBtn.className = `jantt-task-lock-btn ${item.task.locked ? "is-locked" : ""}`;
+      lockBtn.title = item.task.locked ? "Locked in place (Click to unlock)" : "Unlocked (Click to lock in place)";
+      lockBtn.setAttribute("type", "button");
+      lockBtn.innerHTML = item.task.locked
+        ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`
+        : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.6"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>`;
+
+      lockBtn.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+      });
+      lockBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        props.controller.toggleTaskLock(item.task.id);
+      });
+      content.appendChild(lockBtn);
+    }
     bar.appendChild(content);
 
     // Resize Handle & Dependency Ports
@@ -181,11 +221,3 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
   });
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}

@@ -53,7 +53,10 @@ export function renderJantt(
     });
   }
 
-  const tooltip = createTooltipController();
+  const tooltip = createTooltipController({
+    theme: currentOptions.theme,
+    themeClassName: currentOptions.themeClassName
+  });
   let controller: InteractionController;
   let previewWireSvg: SVGPathElement | null = null;
   let activeSidebarInstance: { close: () => void } | null = null;
@@ -196,16 +199,39 @@ export function renderJantt(
       showCritical,
       criticalCount: criticalTaskIds.size,
       searchQuery: filterQuery,
+      autoCascade: controller.isAutoCascade(),
       onScaleChange: (scale) => {
         currentScale = scale;
+        currentOptions.onViewportChange?.({
+          scale: currentScale,
+          linkRouting: currentRouting,
+          showCriticalPath: showCritical,
+          showBaselines
+        });
         render();
       },
       onRoutingChange: (routing) => {
         currentRouting = routing;
+        currentOptions.onViewportChange?.({
+          scale: currentScale,
+          linkRouting: currentRouting,
+          showCriticalPath: showCritical,
+          showBaselines
+        });
         render();
       },
       onCriticalToggle: () => {
         showCritical = !showCritical;
+        currentOptions.onViewportChange?.({
+          scale: currentScale,
+          linkRouting: currentRouting,
+          showCriticalPath: showCritical,
+          showBaselines
+        });
+        render();
+      },
+      onAutoCascadeToggle: () => {
+        controller.toggleAutoCascade();
         render();
       },
       onSearchChange: (q) => {
@@ -302,6 +328,25 @@ export function renderJantt(
       gridContainer
     );
 
+    // Canvas background Marquee / Lasso selection handler
+    gridContainer.addEventListener("pointerdown", (e) => {
+      const target = e.target as HTMLElement;
+      if (
+        !target.closest(".jantt-task-bar") &&
+        !target.closest(".jantt-milestone") &&
+        !target.closest(".jantt-progress-handle") &&
+        !target.closest(".jantt-resize-handle") &&
+        !target.closest(".jantt-link-port")
+      ) {
+        controller.startMarqueeSelection(e, gridContainer, taskLayouts);
+      }
+    });
+
+    gridContainer.addEventListener("contextmenu", (e) => {
+      // Prevent browser context menu so right-click lasso works smoothly
+      e.preventDefault();
+    });
+
     timelineArea.appendChild(gridContainer);
     bodyWrap.appendChild(timelineArea);
 
@@ -333,6 +378,7 @@ export function renderJantt(
         if (newOpts.viewport?.linkRouting) currentRouting = newOpts.viewport.linkRouting;
         if (newOpts.viewport?.showCriticalPath !== undefined) showCritical = newOpts.viewport.showCriticalPath;
         if (newOpts.viewport?.showBaselines !== undefined) showBaselines = newOpts.viewport.showBaselines;
+        tooltip.updateTheme(currentOptions.theme, currentOptions.themeClassName);
       }
       render();
     },

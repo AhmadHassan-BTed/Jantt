@@ -1,16 +1,29 @@
 import { Task, Category } from "../types";
 import { formatHumanDate, diffDays } from "../date-math";
 
+export interface TooltipOptions {
+  theme?: Record<string, string>;
+  themeClassName?: string;
+}
+
 export interface TooltipController {
   show: (task: Task, category: Category, e: MouseEvent) => void;
   hide: () => void;
+  updateTheme: (theme?: Record<string, string>, themeClassName?: string) => void;
 }
 
 /**
  * Creates and manages floating glassmorphic hover cards for tasks and milestones.
  */
-export function createTooltipController(): TooltipController {
+export function createTooltipController(initialOptions: TooltipOptions = {}): TooltipController {
   let activeCard: HTMLElement | null = null;
+  let currentTheme = initialOptions.theme;
+  let currentThemeClassName = initialOptions.themeClassName;
+
+  const updateTheme = (theme?: Record<string, string>, themeClassName?: string) => {
+    currentTheme = theme;
+    currentThemeClassName = themeClassName;
+  };
 
   const hide = () => {
     if (activeCard && activeCard.parentNode) {
@@ -25,7 +38,15 @@ export function createTooltipController(): TooltipController {
     const progressPercent = Math.round((task.progress || 0) * 100);
 
     const card = document.createElement("div");
-    card.className = "jantt-hover-card";
+    card.className = `jantt-hover-card ${currentThemeClassName || ""}`.trim();
+
+    // Apply custom theme CSS variables if supplied
+    if (currentTheme) {
+      Object.entries(currentTheme).forEach(([k, v]) => {
+        const varName = k.startsWith("--") ? k : `--jantt-${k}`;
+        card.style.setProperty(varName, v);
+      });
+    }
 
     const title = escapeHtml(task.label || task.name || task.id);
     const catLabel = escapeHtml(category.label || task.category || "General");
@@ -68,6 +89,45 @@ export function createTooltipController(): TooltipController {
           <div class="jantt-hover-progress-track">
             <div class="jantt-hover-progress-bar" style="width: ${progressPercent}%; background: ${catColor};"></div>
           </div>
+        </div>
+        `
+            : ""
+        }
+
+        ${
+          task.assignee
+            ? `
+        <div class="jantt-hover-stat-row">
+          <span class="jantt-hover-stat-label">Assignee / Owner</span>
+          <span class="jantt-hover-stat-value" style="font-weight: 600; color: var(--jantt-text);">
+            ${escapeHtml(task.assignee)}
+          </span>
+        </div>
+        `
+            : ""
+        }
+
+        ${
+          task.priority
+            ? `
+        <div class="jantt-hover-stat-row">
+          <span class="jantt-hover-stat-label">Priority Level</span>
+          <span class="jantt-hover-stat-value" style="font-weight: 700; text-transform: uppercase; font-size: 11px; color: ${task.priority === "urgent" ? "#E11D48" : task.priority === "high" ? "#D97706" : "var(--jantt-accent)"};">
+            ${escapeHtml(task.priority)}
+          </span>
+        </div>
+        `
+            : ""
+        }
+
+        ${
+          task.estimatedCost !== undefined && task.estimatedCost !== null
+            ? `
+        <div class="jantt-hover-stat-row">
+          <span class="jantt-hover-stat-label">Planned Budget</span>
+          <span class="jantt-hover-stat-value" style="font-family: var(--jantt-font-mono); font-weight: 600;">
+            $${task.estimatedCost.toLocaleString()}
+          </span>
         </div>
         `
             : ""
@@ -122,7 +182,7 @@ export function createTooltipController(): TooltipController {
     card.style.top = `${top}px`;
   };
 
-  return { show, hide };
+  return { show, hide, updateTheme };
 }
 
 function escapeHtml(str: string): string {

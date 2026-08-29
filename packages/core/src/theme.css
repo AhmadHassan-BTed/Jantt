@@ -1,9 +1,38 @@
 /* ==========================================================================
    Jantt Theme System — Swiss Modernism 2.0
-   Precision typography, glassmorphism, rounded geometry, and multi-tier blur
+   Precision typography, porcelain canvas, razor-sharp hairlines, and flat geometry
    ========================================================================== */
 
 :root,
+.jantt-theme-light {
+  --jantt-bg: #FFFFFF;
+  --jantt-surface: #F8FAFC;
+  --jantt-surface-hover: #F1F5F9;
+  --jantt-surface-solid: #FFFFFF;
+  --jantt-border: #E2E8F0;
+  --jantt-border-subtle: #F1F5F9;
+  --jantt-border-strong: #CBD5E1;
+  --jantt-text: #0F172A;
+  --jantt-text-muted: #475569;
+  --jantt-text-dim: #94A3B8;
+  --jantt-accent: #0284C7;
+  --jantt-accent-glow: rgba(2, 132, 199, 0.14);
+  --jantt-accent-contrast: #FFFFFF;
+  --jantt-today: #E11D48;
+  --jantt-critical: #D97706;
+  --jantt-critical-glow: rgba(217, 119, 6, 0.18);
+  --jantt-weekend-bg: transparent;
+  --jantt-grid-line: #F1F5F9;
+  --jantt-grid-row-line: #F1F5F9;
+  --jantt-dep-line: #94A3B8;
+  --jantt-dep-line-active: #0284C7;
+  --jantt-bar-radius: 6px;
+  --jantt-glass-blur: 16px;
+  --jantt-shadow: none;
+  --jantt-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --jantt-font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+}
+
 .jantt-theme-dark {
   --jantt-bg: #090E1A;
   --jantt-surface: rgba(18, 26, 44, 0.88);
@@ -17,45 +46,18 @@
   --jantt-text-dim: #64748B;
   --jantt-accent: #38BDF8;
   --jantt-accent-glow: rgba(56, 189, 248, 0.25);
+  --jantt-accent-contrast: #090E1A;
   --jantt-today: #FB7185;
   --jantt-critical: #F59E0B;
   --jantt-critical-glow: rgba(245, 158, 11, 0.35);
-  --jantt-weekend-bg: rgba(15, 23, 42, 0.55);
+  --jantt-weekend-bg: transparent;
   --jantt-grid-line: rgba(255, 255, 255, 0.045);
   --jantt-grid-row-line: rgba(255, 255, 255, 0.065);
   --jantt-dep-line: #64748B;
   --jantt-dep-line-active: #38BDF8;
-  --jantt-bar-radius: 8px;
+  --jantt-bar-radius: 6px;
   --jantt-glass-blur: 16px;
-  --jantt-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.07);
-  --jantt-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --jantt-font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
-}
-
-.jantt-theme-light {
-  --jantt-bg: #F8FAFC;
-  --jantt-surface: rgba(255, 255, 255, 0.9);
-  --jantt-surface-hover: rgba(241, 245, 249, 0.92);
-  --jantt-surface-solid: #FFFFFF;
-  --jantt-border: rgba(15, 23, 42, 0.08);
-  --jantt-border-subtle: rgba(15, 23, 42, 0.04);
-  --jantt-border-strong: rgba(15, 23, 42, 0.16);
-  --jantt-text: #0F172A;
-  --jantt-text-muted: #475569;
-  --jantt-text-dim: #94A3B8;
-  --jantt-accent: #0284C7;
-  --jantt-accent-glow: rgba(2, 132, 199, 0.18);
-  --jantt-today: #E11D48;
-  --jantt-critical: #D97706;
-  --jantt-critical-glow: rgba(217, 119, 6, 0.25);
-  --jantt-weekend-bg: rgba(241, 245, 249, 0.7);
-  --jantt-grid-line: rgba(15, 23, 42, 0.05);
-  --jantt-grid-row-line: rgba(15, 23, 42, 0.06);
-  --jantt-dep-line: #94A3B8;
-  --jantt-dep-line-active: #0284C7;
-  --jantt-bar-radius: 8px;
-  --jantt-glass-blur: 16px;
-  --jantt-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.06);
+  --jantt-shadow: none;
 }
 
 /* Base Root Container */
@@ -301,14 +303,19 @@
   gap: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  padding-left: 2px;
 }
 
 .jantt-label-dot {
   width: 8px;
   height: 8px;
+  min-width: 8px;
+  min-height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 6px currentColor;
+  box-shadow: none;
+  display: inline-block;
 }
 
 .jantt-label-text {
@@ -642,6 +649,13 @@
   box-shadow: 0 0 10px var(--jantt-critical-glow);
 }
 
+.jantt-task-bar.is-selected {
+  outline: 2px solid var(--jantt-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 12px var(--jantt-accent-glow);
+  z-index: 12;
+}
+
 /* Milestone Diamond Pin */
 .jantt-milestone {
   position: absolute;
@@ -663,6 +677,23 @@
 .jantt-milestone.is-critical {
   border-color: var(--jantt-critical);
   box-shadow: 0 0 14px var(--jantt-critical-glow);
+}
+
+.jantt-milestone.is-selected {
+  outline: 2px solid var(--jantt-accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 12px var(--jantt-accent-glow);
+  z-index: 12;
+}
+
+/* Lasso / Rectangle Marquee Selection Box */
+.jantt-selection-box {
+  position: absolute;
+  border: 1.5px dashed var(--jantt-accent);
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
+  pointer-events: none;
+  z-index: 50;
+  border-radius: 4px;
 }
 
 /* Baseline Ghost Bar */
@@ -710,7 +741,6 @@
   opacity: 1;
 }
 
-/* Content */
 .jantt-bar-content {
   position: relative;
   z-index: 2;
@@ -726,6 +756,32 @@
   pointer-events: none;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   letter-spacing: -0.01em;
+}
+
+.jantt-task-lock-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 3px;
+  border-radius: 4px;
+  pointer-events: auto;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.jantt-task-lock-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.jantt-task-lock-btn.is-locked {
+  opacity: 0.95;
+  background: rgba(0, 0, 0, 0.25);
+  color: #F8FAFC;
 }
 
 /* Resize Handle (Right edge) */
@@ -784,13 +840,13 @@
 .jantt-hover-card {
   position: fixed;
   z-index: 1000;
-  background: rgba(15, 23, 42, 0.82);
+  background: var(--jantt-surface, #FFFFFF);
   backdrop-filter: blur(20px) saturate(190%);
   -webkit-backdrop-filter: blur(20px) saturate(190%);
-  border: 1px solid var(--jantt-border-strong);
+  border: 1px solid var(--jantt-border-strong, #CBD5E1);
   border-radius: 14px;
   padding: 15px 18px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--jantt-border-subtle, rgba(0, 0, 0, 0.05));
   pointer-events: none;
   font-size: 12px;
   width: 310px;
@@ -799,12 +855,55 @@
   display: flex;
   flex-direction: column;
   gap: 11px;
-  color: var(--jantt-text);
+  color: var(--jantt-text, #0F172A);
 }
 
+.jantt-theme-light.jantt-hover-card,
 .jantt-theme-light .jantt-hover-card {
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.95);
+  color: #0F172A;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(15, 23, 42, 0.06);
+}
+
+.jantt-theme-dark.jantt-hover-card,
+.jantt-theme-dark .jantt-hover-card {
+  background: rgba(15, 23, 42, 0.92);
+  color: #F8FAFC;
+  border: 1px solid #334155;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.jantt-theme-cyber-emerald.jantt-hover-card,
+.jantt-theme-cyber-emerald .jantt-hover-card {
+  background: rgba(8, 20, 18, 0.94);
+  color: #E6FAF6;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(16, 185, 129, 0.15);
+}
+
+.jantt-theme-midnight-rose.jantt-hover-card,
+.jantt-theme-midnight-rose .jantt-hover-card {
+  background: rgba(24, 13, 29, 0.94);
+  color: #FCE7F3;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(244, 63, 94, 0.15);
+}
+
+.jantt-theme-sunset-crimson.jantt-hover-card,
+.jantt-theme-sunset-crimson .jantt-hover-card {
+  background: rgba(28, 14, 16, 0.94);
+  color: #FFE4E6;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(244, 63, 94, 0.15);
+}
+
+.jantt-theme-nordic-frost.jantt-hover-card,
+.jantt-theme-nordic-frost .jantt-hover-card {
+  background: rgba(11, 23, 38, 0.94);
+  color: #E2E8F0;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(56, 189, 248, 0.15);
 }
 
 .jantt-hover-card-header {

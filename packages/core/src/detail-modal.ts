@@ -4,6 +4,8 @@ import { diffDays } from "./date-math";
 export interface DetailModalOptions {
   task: Task;
   categories: CategoriesMap;
+  theme?: Record<string, string>;
+  themeClassName?: string;
   onSave: (updatedTask: Task) => void;
   onClose: () => void;
   customRenderer?: (
@@ -20,17 +22,26 @@ export interface DetailModalOptions {
  * Creates and mounts an accessible, interactive detail modal dialog.
  */
 export function createDetailModal(options: DetailModalOptions): { close: () => void } {
-  const { task, categories, onSave, onClose, customRenderer } = options;
+  const { task, categories, theme, themeClassName, onSave, onClose, customRenderer } = options;
 
   const backdrop = document.createElement("div");
-  backdrop.className = "jantt-modal-backdrop";
+  backdrop.className = `jantt-modal-backdrop ${themeClassName || ""}`.trim();
   backdrop.setAttribute("role", "dialog");
   backdrop.setAttribute("aria-modal", "true");
   backdrop.setAttribute("aria-label", `Task details: ${task.label || task.name || task.id}`);
 
   const card = document.createElement("div");
-  card.className = "jantt-modal-card";
+  card.className = `jantt-modal-card ${themeClassName || ""}`.trim();
   backdrop.appendChild(card);
+
+  // Apply custom theme CSS variables if supplied
+  if (theme) {
+    Object.entries(theme).forEach(([k, v]) => {
+      const varName = k.startsWith("--") ? k : `--jantt-${k}`;
+      backdrop.style.setProperty(varName, v);
+      card.style.setProperty(varName, v);
+    });
+  }
 
   let currentTask: Task = {
     ...task,
