@@ -33,23 +33,14 @@ const PRESETS: Record<string, { label: string; data: any }> = {
 
 const THEMES: Record<string, { label: string; className: string; vars: Record<string, string> }> = {
   dark: {
-    label: "Obsidian Dark",
+    label: "Swiss Dark 2.0",
     className: "jantt-theme-dark",
     vars: {}
   },
   light: {
-    label: "Clean Slate",
+    label: "Swiss Light 2.0 (Alpine Glass)",
     className: "jantt-theme-light",
-    vars: {
-      "--jantt-bg": "#FFFFFF",
-      "--jantt-surface": "#F8FAFC",
-      "--jantt-surface-hover": "#F1F5F9",
-      "--jantt-border": "#E2E8F0",
-      "--jantt-text": "#0F172A",
-      "--jantt-text-muted": "#64748B",
-      "--jantt-accent": "#2563EB",
-      "--jantt-accent-glow": "rgba(37, 99, 235, 0.15)"
-    }
+    vars: {}
   },
   emerald: {
     label: "Cyber Emerald",
