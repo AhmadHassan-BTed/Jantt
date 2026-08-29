@@ -5,6 +5,7 @@ import {
   ValidationResult,
   TimeScale,
   LinkRoutingStyle,
+  RowHeightMode,
   themeManager,
   ThemeDefinition,
   downloadCsv
@@ -41,7 +42,7 @@ import brokenBadDateFixture from "../../../examples/broken-bad-date.json";
 import brokenDanglingDepFixture from "../../../examples/broken-dangling-dependency.json";
 
 const PRESETS: Record<string, { label: string; data: any }> = {
-  master: { label: "Master Kitchen-Sink (All Features)", data: masterFixture },
+  master: { label: "CheatSheet/MasterTemplate", data: masterFixture },
   construction: { label: "High-Rise Construction (Enterprise)", data: constructionFixture },
   basic: { label: "Acme Platform v2 Launch", data: basicFixture },
   academic: { label: "Graduate Admissions Roadmap", data: academicFixture },
@@ -64,6 +65,8 @@ export function App() {
   const [copiedJson, setCopiedJson] = useState(false);
   const [currentScale, setCurrentScale] = useState<TimeScale>("week");
   const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>("orthogonal");
+  const [rowHeightMode, setRowHeightMode] = useState<RowHeightMode>("custom");
+  const [rowHeight, setRowHeight] = useState<number>(46);
   const [showCriticalPath, setShowCriticalPath] = useState(true);
   const [showBaselines, setShowBaselines] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -210,15 +213,94 @@ export function App() {
     }
   };
 
-  const llmPromptSnippet = `Here is the Jantt JSON Schema specification:
-https://jantt.dev/schema/v1.json
+  const llmPromptSnippet = `You are a precision project management schedule generator.
+Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
 
-Output only valid JSON conforming strictly to the Jantt Schema.
-Rules:
-- Root must contain "tasks": [{ "id": "...", "category": "...", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "dependsOn": "prereq-id" | null, "milestone": boolean, "baseline": { "start": "...", "end": "..." } }]
-- All dates must be ISO "YYYY-MM-DD"
-- All categories in tasks must match keys in the "categories" dictionary
-- Use domain-specific properties inside the "fields" object`;
+# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET
+
+## 1. Top-Level Root Structure
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "<Project Title>",
+    "description": "<Project narrative and objectives>",
+    "person": "<Lead Program Manager / Owner>",
+    "organization": "<Enterprise / Organization Name>",
+    "start": "YYYY-MM-DD",
+    "end": "YYYY-MM-DD",
+    "defaultGapDays": 2,
+    "scale": "day" | "week" | "month" | "quarter" | "year",
+    "linkRouting": "orthogonal" | "curved" | "direct",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "currency": "USD",
+    "budget": 385000,
+    "version": "1.2.0"
+  },
+  "categories": {
+    "<category_id>": {
+      "label": "<Category Display Name>",
+      "color": "#HEX_COLOR",
+      "soft": "#BG_TINT_HEX",
+      "icon": "<lucide_icon_name>"
+    }
+  },
+  "documents": [
+    {
+      "id": "doc-unique-id",
+      "label": "<Document or Deliverable Title>",
+      "status": "have" | "pending" | "missing",
+      "owner": "<Owner Name>",
+      "url": "<Documentation Link>",
+      "note": "<Review notes / status>"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-unique-id",
+      "wbs": "1.1",
+      "label": "Task Name / Title",
+      "category": "<matching_category_id>",
+      "start": "YYYY-MM-DD",
+      "end": "YYYY-MM-DD",
+      "assignee": "Team Member Name",
+      "priority": "low" | "medium" | "high" | "urgent",
+      "estimatedCost": 28000,
+      "actualCost": 15000,
+      "dependsOn": "prereq-id" | ["prereq-1", "prereq-2"] | null,
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.75,
+      "milestone": false,
+      "status": "not-started" | "in-progress" | "completed" | "blocked",
+      "urgent": false,
+      "baseline": {
+        "start": "YYYY-MM-DD",
+        "end": "YYYY-MM-DD"
+      },
+      "notes": "Detailed task description, acceptance criteria, and technical specs.",
+      "fields": {
+        "jira": "JANTT-101",
+        "storyPoints": 13,
+        "repo": "github.com/org/repo",
+        "deliverable": "schemas/v1.json"
+      }
+    }
+  ]
+}
+
+## 2. Critical Constraints & Validation Rules:
+1. DATES: All dates must be ISO "YYYY-MM-DD" format. "end" must be >= "start".
+2. CATEGORIES: Every task "category" must match an existing key in the "categories" dictionary.
+3. DEPENDENCIES (DAG):
+   - "dependsOn" can be a single task ID string, an array of strings ["t1", "t2"], or null.
+   - All referenced dependency IDs must exist in the "tasks" list (no dangling references).
+   - Strict Directed Acyclic Graph: NO circular dependency loops (e.g. A -> B -> C -> A).
+   - Timing Sanity: A task's "start" must be on or after prerequisite "end" + gapDays.
+4. MILESTONES: For zero-duration milestone gates, set "milestone": true and "start" equal to "end".
+5. PROGRESS: Must be a decimal float from 0.0 (0%) to 1.0 (100%).
+6. BASELINES: Optional planned timeframe object { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } for baseline variance tracking.
+7. LOCKED: Set "locked": true on fixed gates or hard-deadline milestones to prevent accidental drag shifts.`;
 
   const handleCopyPrompt = async () => {
     try {
@@ -445,12 +527,16 @@ Rules:
                   onViewportChange={(vp) => {
                     if (vp.scale) setCurrentScale(vp.scale);
                     if (vp.linkRouting) setLinkRouting(vp.linkRouting);
+                    if (vp.rowHeight !== undefined) setRowHeight(vp.rowHeight);
+                    if (vp.rowHeightMode !== undefined) setRowHeightMode(vp.rowHeightMode);
                     if (vp.showCriticalPath !== undefined) setShowCriticalPath(vp.showCriticalPath);
                     if (vp.showBaselines !== undefined) setShowBaselines(vp.showBaselines);
                   }}
                   viewport={{
                     scale: currentScale,
                     linkRouting,
+                    rowHeight,
+                    rowHeightMode,
                     showCriticalPath,
                     showBaselines
                   }}
@@ -562,7 +648,7 @@ Rules:
                           {Math.round(
                             (parsedData.tasks.reduce((sum, t) => sum + (t.progress || 0), 0) /
                               Math.max(parsedData.tasks.length, 1)) *
-                              100
+                            100
                           )}%
                         </span>
                       </div>
@@ -660,74 +746,51 @@ Rules:
         </section>
       </main>
 
-      {/* AI Prompt Generator Modal */}
+      {/* AI Prompt Generator & Cheatsheet Modal */}
       {showPromptModal && (
         <div className="prompt-modal-backdrop" onClick={() => setShowPromptModal(false)}>
           <div className="prompt-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "18px 22px",
-                borderBottom: "1px solid #243656"
-              }}
-            >
+            <div className="prompt-modal-header">
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Sparkles size={18} color="#38BDF8" />
-                <h3 style={{ margin: 0, fontSize: "16px", color: "#FFFFFF" }}>AI-Native System Prompt</h3>
+                <Sparkles size={18} color="var(--jantt-accent)" />
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                  AI System Prompt & Benchmark Cheatsheet
+                </h3>
               </div>
               <button
+                className="prompt-modal-close-btn"
                 onClick={() => setShowPromptModal(false)}
-                style={{ background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer" }}
+                title="Close"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: "12px" }}>
-              <p style={{ fontSize: "13px", color: "#94A3B8", lineHeight: "1.5" }}>
-                Hand this prompt snippet to ChatGPT, Claude, Gemini, or any LLM to generate guaranteed valid Jantt JSON
-                schedules with milestones, baselines, and dependencies:
+            <div className="prompt-modal-body">
+              <p className="prompt-modal-desc">
+                Hand this prompt snippet to ChatGPT, Claude, Gemini, or any LLM to generate guaranteed valid, constraint-checked Jantt JSON schedules with full WBS, milestones, baselines, and multi-dependencies:
               </p>
               <textarea
+                className="prompt-modal-textarea"
                 readOnly
                 value={llmPromptSnippet}
-                rows={9}
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  background: "#070B14",
-                  border: "1px solid #1E2D4A",
-                  borderRadius: "8px",
-                  padding: "12px",
-                  color: "#E2E8F0",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: "12px",
-                  lineHeight: "1.5",
-                  resize: "none"
-                }}
+                rows={16}
               />
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                gap: "10px",
-                padding: "14px 22px",
-                borderTop: "1px solid #243656",
-                background: "#080E1C"
-              }}
-            >
-              <button className="btn-nav" onClick={() => setShowPromptModal(false)}>
-                Close
-              </button>
-              <button className="btn-nav btn-nav-primary" onClick={handleCopyPrompt}>
-                {copiedPrompt ? <Check size={14} /> : <Copy size={14} />}
-                {copiedPrompt ? "Copied to Clipboard" : "Copy Prompt Snippet"}
-              </button>
+            <div className="prompt-modal-footer">
+              <span style={{ fontSize: "11.5px", color: "var(--jantt-text-dim)", fontFamily: "var(--jantt-font-mono)" }}>
+                Schema: https://jantt.dev/schema/v1.json (v1.2.0)
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button className="btn-nav" onClick={() => setShowPromptModal(false)}>
+                  Close
+                </button>
+                <button className="btn-nav btn-nav-primary" onClick={handleCopyPrompt}>
+                  {copiedPrompt ? <Check size={14} /> : <Copy size={14} />}
+                  {copiedPrompt ? "Copied to Clipboard" : "Copy Prompt Snippet"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

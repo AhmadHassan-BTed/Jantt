@@ -493,18 +493,102 @@ body {
 }
 
 .prompt-modal-card {
-  background: var(--jantt-surface-solid, #FFFFFF);
+  background: var(--jantt-surface, #FFFFFF);
   backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--jantt-border, #E2E8F0);
+  border: 1px solid var(--jantt-border-strong, #CBD5E1);
   color: var(--jantt-text, #0F172A);
   border-radius: 16px;
   width: 100%;
-  max-width: 620px;
-  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.15);
+  max-width: 760px;
+  max-height: calc(100vh - 40px);
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--jantt-border-subtle, rgba(0, 0, 0, 0.05));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: jantt-scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.prompt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--jantt-border, #E2E8F0);
+  background: var(--jantt-surface, #F8FAFC);
+}
+
+.prompt-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--jantt-text, #0F172A);
+  letter-spacing: -0.01em;
+}
+
+.prompt-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--jantt-text-muted, #64748B);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.prompt-modal-close-btn:hover {
+  background: var(--jantt-surface-hover, #F1F5F9);
+  color: var(--jantt-text, #0F172A);
+}
+
+.prompt-modal-body {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.prompt-modal-desc {
+  font-size: 13px;
+  color: var(--jantt-text-muted, #64748B);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.prompt-modal-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--jantt-bg, #FFFFFF);
+  border: 1px solid var(--jantt-border-strong, #CBD5E1);
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: var(--jantt-text, #0F172A);
+  font-family: var(--jantt-font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+  min-height: 340px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.prompt-modal-textarea:focus {
+  border-color: var(--jantt-accent, #0284C7);
+  box-shadow: 0 0 0 3px var(--jantt-accent-glow, rgba(2, 132, 199, 0.14));
+}
+
+.prompt-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--jantt-border, #E2E8F0);
+  background: var(--jantt-surface, #F8FAFC);
 }
 
 /* ==========================================================================

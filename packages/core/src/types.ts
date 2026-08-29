@@ -116,9 +116,12 @@ export interface GridColumn {
   render?: (task: Task) => string;
 }
 
+export type RowHeightMode = "custom" | "fit";
+
 export interface ViewportOptions {
   dayWidth?: number; // Override day pixel width (auto-calculated per scale if omitted)
-  rowHeight?: number; // Default 46px
+  rowHeight?: number; // Default 46px (when in custom mode)
+  rowHeightMode?: RowHeightMode; // "custom" (default) or "fit" (dynamically fits all rows in canvas)
   labelWidth?: number; // Default 320px
   headerHeight?: number; // Default 58px
   startDate?: string;
