@@ -1,7 +1,7 @@
 import { JanttData, JanttOptions, Task, TimeScale, LinkRoutingStyle } from "./types";
 import { layout, computeDependencyPath } from "./layout";
 import { InteractionController } from "./controller";
-import { createDetailModal } from "./detail-modal";
+import { createTaskSidebar } from "./sidebar";
 import { resolveSchedule } from "./resolver";
 import {
   renderToolbar,
@@ -56,14 +56,30 @@ export function renderJantt(
   const tooltip = createTooltipController();
   let controller: InteractionController;
   let previewWireSvg: SVGPathElement | null = null;
+  let activeSidebarInstance: { close: () => void } | null = null;
 
-  const openTaskModal = (task: Task) => {
+  const openTaskSidebar = (task: Task) => {
     tooltip.hide();
-    createDetailModal({
+    activeSidebarInstance?.close();
+
+    // Check if custom sidebar container was configured
+    let customContainer: HTMLElement | undefined;
+    if (typeof currentOptions.sidebarContainer === "string") {
+      customContainer = document.querySelector<HTMLElement>(currentOptions.sidebarContainer) || undefined;
+    } else if (currentOptions.sidebarContainer instanceof HTMLElement) {
+      customContainer = currentOptions.sidebarContainer;
+    }
+
+    activeSidebarInstance = createTaskSidebar({
       task,
+      allTasks: currentData.tasks,
       categories: currentData.categories || {},
+      container: customContainer,
+      readOnly: currentOptions.readOnly,
       customRenderer: currentOptions.renderDetail,
-      onClose: () => {},
+      onClose: () => {
+        activeSidebarInstance = null;
+      },
       onSave: (updatedTask) => {
         const nextTasks = currentData.tasks.map((t) =>
           t.id === updatedTask.id ? updatedTask : t
@@ -71,6 +87,17 @@ export function renderJantt(
         const resolved = resolveSchedule(nextTasks, currentData.meta?.defaultGapDays ?? 2);
         currentData = { ...currentData, tasks: resolved };
         render();
+        currentOptions.onCommit?.(currentData);
+      },
+      onDelete: (taskId) => {
+        const nextTasks = currentData.tasks.filter((t) => t.id !== taskId);
+        nextTasks.forEach((t) => {
+          if (t.dependsOn === taskId) t.dependsOn = null;
+        });
+        const resolved = resolveSchedule(nextTasks, currentData.meta?.defaultGapDays ?? 2);
+        currentData = { ...currentData, tasks: resolved };
+        render();
+        currentOptions.onTaskDelete?.(taskId);
         currentOptions.onCommit?.(currentData);
       }
     });
@@ -123,7 +150,7 @@ export function renderJantt(
         currentOptions,
         viewport.dayWidth,
         render,
-        openTaskModal,
+        openTaskSidebar,
         (wire) => {
           if (!previewWireSvg) return;
           if (!wire) {
@@ -208,7 +235,7 @@ export function renderJantt(
       rowHeight: viewport.rowHeight,
       gridContainer,
       controller,
-      onTaskClick: openTaskModal
+      onTaskClick: openTaskSidebar
     });
     bodyWrap.appendChild(labelCol);
     bodyWrap.appendChild(splitter);
@@ -286,6 +313,7 @@ export function renderJantt(
     },
     destroy: () => {
       tooltip.hide();
+      activeSidebarInstance?.close();
       container.innerHTML = "";
     },
     getData: () => currentData

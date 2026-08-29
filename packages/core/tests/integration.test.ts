@@ -1,8 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { validate } from "../src/validator";
 import { resolveSchedule, calculateCriticalPath } from "../src/resolver";
 import { layout } from "../src/layout";
 import { exportToCsv } from "../src/exporter";
+import { createTaskSidebar } from "../src/sidebar";
+import { createTooltipController } from "../src/renderers/tooltip";
 import { JanttData, Task } from "../src/types";
 import basicJson from "../../../examples/basic.json";
 import academicJson from "../../../examples/academic-roadmap.json";
@@ -233,5 +235,76 @@ describe("Stress & Boundary Tests", () => {
     const csv1 = exportToCsv(basicJson as JanttData);
     const csv2 = exportToCsv(basicJson as JanttData);
     expect(csv1).toBe(csv2);
+  });
+
+  it("creates and mounts rich task details sidebar with interactive fields", () => {
+    const task: Task = {
+      id: "task-100",
+      label: "Architectural Design Phase",
+      category: "planning",
+      start: "2026-09-01",
+      end: "2026-09-15",
+      progress: 0.65,
+      notes: "Reviewed with stakeholders"
+    };
+
+    const categories = {
+      planning: { label: "Planning & Architecture", color: "#38BDF8" }
+    };
+
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    const sidebar = createTaskSidebar({
+      task,
+      allTasks: [task],
+      categories,
+      onSave,
+      onClose
+    });
+
+    expect(sidebar.element).toBeDefined();
+    const titleEl = sidebar.element.querySelector(".jantt-sidebar-title");
+    expect(titleEl?.textContent).toBe("Architectural Design Phase");
+
+    const labelInput = sidebar.element.querySelector<HTMLInputElement>("#jantt-sidebar-label");
+    expect(labelInput?.value).toBe("Architectural Design Phase");
+
+    const saveBtn = sidebar.element.querySelector<HTMLButtonElement>("#jantt-sidebar-save");
+    saveBtn?.click();
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      id: "task-100",
+      label: "Architectural Design Phase"
+    }));
+
+    sidebar.close();
+  });
+
+  it("creates and renders styled hover card controller", () => {
+    const tooltip = createTooltipController();
+    const task: Task = {
+      id: "task-test",
+      label: "Test Task",
+      category: "dev",
+      start: "2026-09-01",
+      end: "2026-09-10",
+      progress: 0.5
+    };
+
+    tooltip.show(task, { label: "Development", color: "#3B82F6" }, {
+      clientX: 100,
+      clientY: 100
+    } as MouseEvent);
+
+    const card = document.querySelector(".jantt-hover-card");
+    expect(card).not.toBeNull();
+    expect(card?.textContent).toContain("Test Task");
+    expect(card?.textContent).toContain("Development");
+    expect(card?.textContent).toContain("50%");
+
+    tooltip.hide();
+    expect(document.querySelector(".jantt-hover-card")).toBeNull();
   });
 });
