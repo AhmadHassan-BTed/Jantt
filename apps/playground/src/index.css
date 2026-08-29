@@ -42,14 +42,16 @@ body {
   overflow: hidden;
 }
 
-/* Header Navbar */
+/* Header Navbar — Swiss Glassmorphism */
 .navbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
-  background: #0D1527;
-  border-bottom: 1px solid #1E2D4A;
+  background: rgba(13, 21, 39, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 100;
   flex-shrink: 0;
 }
@@ -63,8 +65,8 @@ body {
 .brand-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: 'Space Grotesk', sans-serif;
+  gap: 10px;
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
   font-size: 20px;
   font-weight: 700;
   color: #FFFFFF;
@@ -72,9 +74,9 @@ body {
 }
 
 .brand-icon-box {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #38BDF8 0%, #3B82F6 100%);
   display: flex;
   align-items: center;
@@ -82,16 +84,17 @@ body {
   color: #000;
   font-weight: 800;
   font-size: 16px;
-  box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
 }
 
 .brand-badge {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
+  font-weight: 600;
   background: rgba(56, 189, 248, 0.12);
   color: #38BDF8;
   border: 1px solid rgba(56, 189, 248, 0.3);
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 100px;
 }
 
@@ -110,39 +113,43 @@ body {
 }
 
 .select-input {
-  background: #152238;
-  border: 1px solid #243656;
-  color: #F1F5F9;
-  border-radius: 8px;
-  padding: 6px 12px;
+  background: rgba(21, 34, 56, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #F8FAFC;
+  border-radius: 10px;
+  padding: 7px 14px;
   font-size: 13px;
+  font-weight: 500;
   outline: none;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .select-input:hover,
 .select-input:focus {
   border-color: #38BDF8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
 }
 
 .btn-nav {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #152238;
-  border: 1px solid #243656;
+  background: rgba(21, 34, 56, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #E2E8F0;
-  padding: 6px 14px;
-  border-radius: 8px;
+  padding: 7px 15px;
+  border-radius: 10px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .btn-nav:hover {
-  background: #1C2D4B;
+  background: rgba(28, 45, 75, 0.9);
   border-color: #38BDF8;
   color: #FFFFFF;
 }
@@ -151,12 +158,12 @@ body {
   background: #38BDF8;
   color: #030712;
   border-color: #38BDF8;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .btn-nav-primary:hover {
   background: #7DD3FC;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.45);
 }
 
 /* Main Split View */
@@ -272,54 +279,62 @@ body {
 /* Right Pane: Live Chart */
 .chart-pane {
   flex-grow: 1;
-  background: #070B14;
-  padding: 20px;
+  background: #080D18;
+  padding: 24px;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .chart-controls-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #0D1527;
-  border: 1px solid #1E2D4A;
-  border-radius: 10px;
-  padding: 10px 18px;
+  background: rgba(13, 21, 39, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px 20px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
 }
 
 .chart-container-card {
   flex-grow: 1;
-  background: #0B111E;
-  border-radius: 12px;
+  background: transparent;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.5);
 }
 
 /* Modal for Prompt Generator */
 .prompt-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(5px);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  animation: jantt-fade-in 0.2s ease-out;
 }
 
 .prompt-modal-card {
-  background: #0D1527;
-  border: 1px solid #243656;
-  border-radius: 16px;
+  background: rgba(13, 21, 39, 0.95);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
   width: 100%;
   max-width: 620px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.8);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: jantt-scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
