@@ -1,4 +1,4 @@
-import { JanttData, JanttOptions, Task, TimeScale, LinkRoutingStyle } from "./types";
+import { JanttData, JanttOptions, Task, TimeScale, LinkRoutingStyle, RowHeightMode } from "./types";
 import { layout, computeDependencyPath } from "./layout";
 import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
@@ -35,6 +35,8 @@ export function renderJantt(
   let currentOptions: JanttOptions = { ...options };
   let currentScale: TimeScale = currentOptions.viewport?.scale || currentData.meta?.scale || "day";
   let currentRouting: LinkRoutingStyle = currentOptions.viewport?.linkRouting || currentData.meta?.linkRouting || "orthogonal";
+  let rowHeightMode: RowHeightMode = currentOptions.viewport?.rowHeightMode || "custom";
+  let customRowHeight: number = currentOptions.viewport?.rowHeight || 46;
   let showCritical = currentOptions.viewport?.showCriticalPath ?? (currentData.meta?.showCriticalPath ?? false);
   let showBaselines = currentOptions.viewport?.showBaselines ?? (currentData.meta?.showBaselines ?? true);
   let labelWidth = currentOptions.viewport?.labelWidth || 340;
@@ -132,13 +134,26 @@ export function renderJantt(
       );
     }
 
-    // 2. Coordinate Layout Calculation
+    // 2. Dynamic Row Height Calculation
+    let effectiveRowHeight = customRowHeight;
+    if (rowHeightMode === "fit") {
+      const containerH = container.clientHeight || root.clientHeight || 550;
+      const headerH = currentOptions.viewport?.headerHeight || 58;
+      const toolbarH = 48;
+      const availH = Math.max(containerH - headerH - toolbarH - 12, 100);
+      const count = Math.max(displayTasks.length, 1);
+      effectiveRowHeight = Math.max(26, Math.min(140, Math.floor(availH / count)));
+    }
+
+    // 3. Coordinate Layout Calculation
     const layoutResult = layout(
       { ...currentData, tasks: displayTasks },
       {
         ...currentOptions.viewport,
         scale: currentScale,
         linkRouting: currentRouting,
+        rowHeight: effectiveRowHeight,
+        rowHeightMode,
         showCriticalPath: showCritical,
         showBaselines,
         labelWidth
@@ -196,25 +211,56 @@ export function renderJantt(
       taskCount: displayTasks.length,
       currentScale,
       currentRouting,
+      rowHeightMode,
+      rowHeight: customRowHeight,
       showCritical,
       criticalCount: criticalTaskIds.size,
       searchQuery: filterQuery,
-      autoCascade: controller.isAutoCascade(),
-      onScaleChange: (scale) => {
-        currentScale = scale;
+      autoCascade: controller ? controller.isAutoCascade() : true,
+      onScaleChange: (s) => {
+        currentScale = s;
         currentOptions.onViewportChange?.({
           scale: currentScale,
           linkRouting: currentRouting,
+          rowHeight: customRowHeight,
+          rowHeightMode,
           showCriticalPath: showCritical,
           showBaselines
         });
         render();
       },
-      onRoutingChange: (routing) => {
-        currentRouting = routing;
+      onRoutingChange: (r) => {
+        currentRouting = r;
         currentOptions.onViewportChange?.({
           scale: currentScale,
           linkRouting: currentRouting,
+          rowHeight: customRowHeight,
+          rowHeightMode,
+          showCriticalPath: showCritical,
+          showBaselines
+        });
+        render();
+      },
+      onRowHeightModeChange: (mode) => {
+        rowHeightMode = mode;
+        currentOptions.onViewportChange?.({
+          scale: currentScale,
+          linkRouting: currentRouting,
+          rowHeight: customRowHeight,
+          rowHeightMode: mode,
+          showCriticalPath: showCritical,
+          showBaselines
+        });
+        render();
+      },
+      onRowHeightChange: (h) => {
+        customRowHeight = h;
+        rowHeightMode = "custom";
+        currentOptions.onViewportChange?.({
+          scale: currentScale,
+          linkRouting: currentRouting,
+          rowHeight: h,
+          rowHeightMode: "custom",
           showCriticalPath: showCritical,
           showBaselines
         });
@@ -225,6 +271,8 @@ export function renderJantt(
         currentOptions.onViewportChange?.({
           scale: currentScale,
           linkRouting: currentRouting,
+          rowHeight: customRowHeight,
+          rowHeightMode,
           showCriticalPath: showCritical,
           showBaselines
         });
@@ -355,6 +403,16 @@ export function renderJantt(
     if (savedScrollTop > 0) bodyWrap.scrollTop = savedScrollTop;
   };
 
+  let resizeObserver: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => {
+      if (rowHeightMode === "fit") {
+        render();
+      }
+    });
+    resizeObserver.observe(container);
+  }
+
   render();
 
   return {
@@ -376,6 +434,8 @@ export function renderJantt(
         }
         if (newOpts.viewport?.scale) currentScale = newOpts.viewport.scale;
         if (newOpts.viewport?.linkRouting) currentRouting = newOpts.viewport.linkRouting;
+        if (newOpts.viewport?.rowHeight !== undefined) customRowHeight = newOpts.viewport.rowHeight;
+        if (newOpts.viewport?.rowHeightMode !== undefined) rowHeightMode = newOpts.viewport.rowHeightMode;
         if (newOpts.viewport?.showCriticalPath !== undefined) showCritical = newOpts.viewport.showCriticalPath;
         if (newOpts.viewport?.showBaselines !== undefined) showBaselines = newOpts.viewport.showBaselines;
         tooltip.updateTheme(currentOptions.theme, currentOptions.themeClassName);
@@ -383,6 +443,7 @@ export function renderJantt(
       render();
     },
     destroy: () => {
+      resizeObserver?.disconnect();
       tooltip.hide();
       activeSidebarInstance?.close();
       container.innerHTML = "";
