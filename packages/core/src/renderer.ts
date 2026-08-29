@@ -77,6 +77,11 @@ export function renderJantt(
   };
 
   const render = () => {
+    // 0. Capture scroll positions before re-render so viewport never resets to beginning
+    const prevBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
+    const savedScrollLeft = prevBodyWrap ? prevBodyWrap.scrollLeft : 0;
+    const savedScrollTop = prevBodyWrap ? prevBodyWrap.scrollTop : 0;
+
     // 1. Task Search / Filtering
     let displayTasks = currentData.tasks;
     if (filterQuery.trim()) {
@@ -256,6 +261,10 @@ export function renderJantt(
 
     timelineArea.appendChild(gridContainer);
     bodyWrap.appendChild(timelineArea);
+
+    // Restore scroll positions so moving/editing tasks never jumps scrollbars to the beginning
+    if (savedScrollLeft > 0) bodyWrap.scrollLeft = savedScrollLeft;
+    if (savedScrollTop > 0) bodyWrap.scrollTop = savedScrollTop;
   };
 
   render();
