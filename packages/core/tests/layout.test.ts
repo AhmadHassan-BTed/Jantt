@@ -109,6 +109,36 @@ describe("Layout Engine", () => {
     expect(res.header.days[0].dateStr).toBe("2026-09-01");
   });
 
+  it("dynamically shows top year bar only when timeline spans multiple years", () => {
+    // 1. Single-year schedule (2026 only)
+    const singleYearData: JanttData = {
+      meta: { start: "2026-09-01", end: "2026-11-15" },
+      tasks: [
+        { id: "t1", category: "dev", start: "2026-09-01", end: "2026-11-15" }
+      ]
+    };
+    const singleRes = layout(singleYearData, { dayWidth: 30 });
+    expect(singleRes.header.spansMultipleYears).toBe(false);
+    expect(singleRes.header.totalHeight).toBe(58);
+    expect(singleRes.header.months[0].label).toContain("September");
+
+    // 2. Multi-year schedule spanning across year boundary (2026 to 2027)
+    const multiYearData: JanttData = {
+      meta: { start: "2026-11-01", end: "2027-02-28" },
+      tasks: [
+        { id: "t1", category: "dev", start: "2026-11-01", end: "2027-02-28" }
+      ]
+    };
+    const multiRes = layout(multiYearData, { dayWidth: 30 });
+    expect(multiRes.header.spansMultipleYears).toBe(true);
+    expect(multiRes.header.totalHeight).toBe(78);
+    expect(multiRes.header.years.length).toBe(2);
+    expect(multiRes.header.years[0].label).toBe("2026");
+    expect(multiRes.header.years[1].label).toBe("2027");
+    expect(multiRes.header.months.length).toBe(4); // Nov, Dec, Jan, Feb
+    expect(multiRes.header.days.length).toBe(multiRes.header.totalDays);
+  });
+
   it("header days have consistent width matching dayWidth", () => {
     const dayWidth = 25;
     const res = layout(sampleData, { dayWidth });

@@ -49,8 +49,8 @@ export function renderGridTable(props: GridTableProps): {
       <div class="jantt-col-name">
         <span class="jantt-label-dot" style="background: ${item.category.color};"></span>
         <span class="jantt-label-text">${escapeHtml(item.displayLabel)}</span>
-        ${item.isMilestone ? '<span style="font-size: 10px;" title="Milestone">💎</span>' : ""}
-        ${item.task.locked ? '<span style="font-size: 10px;" title="Locked">🔒</span>' : ""}
+        ${item.isMilestone ? '<span class="jantt-hover-type-pill is-milestone" style="font-size: 9px; padding: 0 4px;">Milestone</span>' : ""}
+        ${item.task.locked ? '<span class="jantt-hover-type-pill is-locked" style="font-size: 9px; padding: 0 4px;">Locked</span>' : ""}
       </div>
       <div class="jantt-col-meta">${item.durationDays}d</div>
       <div class="jantt-col-progress-pill">${progressPct}</div>
