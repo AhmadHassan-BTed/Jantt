@@ -7,11 +7,15 @@ import { diffDays } from "./date-math";
 export function exportToCsv(data: JanttData): string {
   const headers = [
     "Task ID",
+    "WBS",
     "Label / Name",
     "Category",
+    "Assignee",
+    "Priority",
     "Start Date",
     "End Date",
     "Duration (Days)",
+    "Estimated Budget ($)",
     "Progress (%)",
     "Milestone",
     "Depends On",
@@ -26,11 +30,15 @@ export function exportToCsv(data: JanttData): string {
 
     return [
       escapeCsv(t.id),
+      escapeCsv(t.wbs || ""),
       escapeCsv(t.label || t.name || t.id),
       escapeCsv(t.category || ""),
+      escapeCsv(t.assignee || ""),
+      escapeCsv(t.priority || ""),
       escapeCsv(t.start || ""),
       escapeCsv(t.end || ""),
       String(duration),
+      t.estimatedCost !== undefined && t.estimatedCost !== null ? String(t.estimatedCost) : "",
       escapeCsv(progressPct),
       isMilestone ? "TRUE" : "FALSE",
       escapeCsv(Array.isArray(t.dependsOn) ? t.dependsOn.join("; ") : (t.dependsOn || "")),

@@ -253,6 +253,37 @@ function renderDefaultSidebarContent(
         </div>
       </div>
 
+      <!-- Assignee & Priority -->
+      <div class="jantt-form-grid-2">
+        <div class="jantt-form-group">
+          <label class="jantt-form-label">Assignee / Owner</label>
+          <input type="text" id="jantt-sidebar-assignee" class="jantt-input" placeholder="e.g. Sarah Chen" value="${escapeHtml(task.assignee || "")}" ${readOnly || task.locked ? "disabled" : ""} />
+        </div>
+
+        <div class="jantt-form-group">
+          <label class="jantt-form-label">Priority</label>
+          <select id="jantt-sidebar-priority" class="jantt-select" ${readOnly || task.locked ? "disabled" : ""}>
+            <option value="low" ${task.priority === "low" ? "selected" : ""}>Low</option>
+            <option value="medium" ${!task.priority || task.priority === "medium" ? "selected" : ""}>Medium</option>
+            <option value="high" ${task.priority === "high" ? "selected" : ""}>High</option>
+            <option value="urgent" ${task.priority === "urgent" || task.urgent ? "selected" : ""}>Urgent (Critical)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- WBS & Estimated Cost -->
+      <div class="jantt-form-grid-2">
+        <div class="jantt-form-group">
+          <label class="jantt-form-label">WBS Code</label>
+          <input type="text" id="jantt-sidebar-wbs" class="jantt-input" placeholder="e.g. 1.2" value="${escapeHtml(task.wbs || "")}" ${readOnly || task.locked ? "disabled" : ""} />
+        </div>
+
+        <div class="jantt-form-group">
+          <label class="jantt-form-label">Estimated Budget / Cost ($)</label>
+          <input type="number" id="jantt-sidebar-cost" class="jantt-input" placeholder="0" value="${task.estimatedCost ?? ""}" ${readOnly || task.locked ? "disabled" : ""} />
+        </div>
+      </div>
+
       <!-- Status & Progress -->
       <div class="jantt-form-grid-2">
         <div class="jantt-form-group">
@@ -472,6 +503,11 @@ function renderDefaultSidebarContent(
     const start = startInput?.value || task.start;
     const end = endInput?.value || task.end;
     const status = (container.querySelector("#jantt-sidebar-status") as HTMLSelectElement)?.value || task.status;
+    const assignee = (container.querySelector("#jantt-sidebar-assignee") as HTMLInputElement)?.value || undefined;
+    const priority = (container.querySelector("#jantt-sidebar-priority") as HTMLSelectElement)?.value || undefined;
+    const wbs = (container.querySelector("#jantt-sidebar-wbs") as HTMLInputElement)?.value || undefined;
+    const costVal = (container.querySelector("#jantt-sidebar-cost") as HTMLInputElement)?.value;
+    const estimatedCost = costVal && costVal.trim() !== "" ? parseFloat(costVal) : undefined;
     const notes = (container.querySelector("#jantt-sidebar-notes") as HTMLTextAreaElement)?.value || "";
     const progress = progInput ? parseInt(progInput.value, 10) / 100 : task.progress;
 
@@ -493,6 +529,10 @@ function renderDefaultSidebarContent(
       start,
       end,
       status,
+      assignee,
+      priority,
+      wbs,
+      estimatedCost,
       dependsOn: finalDependsOn,
       progress,
       notes,

@@ -3,12 +3,11 @@ import {
   JanttData,
   validate,
   ValidationResult,
-  ValidationError,
-  resolveSchedule,
   TimeScale,
   LinkRoutingStyle,
   themeManager,
-  ThemeDefinition
+  ThemeDefinition,
+  downloadCsv
 } from "@jantt/core";
 import { Jantt } from "@jantt/react";
 import {
@@ -18,13 +17,19 @@ import {
   Copy,
   Check,
   Download,
-  Sliders,
   X,
   FileJson,
   Layers,
   Zap,
   ChevronLeft,
-  ChevronRight
+  Kanban,
+  PieChart,
+  DollarSign,
+  Calendar,
+  TrendingUp,
+  User,
+  Clock,
+  FileSpreadsheet
 } from "lucide-react";
 
 import basicFixture from "../../../examples/basic.json";
@@ -49,7 +54,7 @@ const AVAILABLE_THEMES = themeManager.getAllThemes();
 
 export function App() {
   const [selectedPreset, setSelectedPreset] = useState("construction");
-  const [selectedThemeId, setSelectedThemeId] = useState("swiss-dark");
+  const [selectedThemeId, setSelectedThemeId] = useState("swiss-light");
   const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
   const [jsonText, setJsonText] = useState(() => JSON.stringify(constructionFixture, null, 2));
   const [parsedData, setParsedData] = useState<JanttData | null>(constructionFixture as JanttData);
@@ -57,12 +62,12 @@ export function App() {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
-  const [defaultGap, setDefaultGap] = useState(2);
   const [currentScale, setCurrentScale] = useState<TimeScale>("week");
   const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>("orthogonal");
   const [showCriticalPath, setShowCriticalPath] = useState(true);
   const [showBaselines, setShowBaselines] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [activeView, setActiveView] = useState<"gantt" | "kanban" | "summary">("gantt");
 
   // Sidebar width resize state
   const [sidebarWidth, setSidebarWidth] = useState(480);
@@ -109,7 +114,6 @@ export function App() {
       setValidationResult(val);
       if (val.valid) {
         setParsedData(parsed);
-        setDefaultGap(parsed.meta?.defaultGapDays ?? 2);
         if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
         if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
         if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
@@ -130,7 +134,6 @@ export function App() {
       setValidationResult(val);
       if (val.valid) {
         setParsedData(parsed);
-        setDefaultGap(parsed.meta?.defaultGapDays ?? 2);
       } else {
         setParsedData(null);
       }
@@ -150,27 +153,23 @@ export function App() {
     }
   };
 
-  // Handle live commit from interactive Gantt drag/resize/modal/link
+  const [isLiveSyncing, setIsLiveSyncing] = useState(false);
+  const syncTimerRef = useRef<number | null>(null);
+
+  // Handle live commit from interactive Gantt drag/resize/modal/link/multi-shift
   const handleChartCommit = useCallback((updated: JanttData) => {
     setParsedData(updated);
     const formatted = JSON.stringify(updated, null, 2);
     setJsonText(formatted);
     setValidationResult(validate(updated));
-  }, []);
 
-  // Handle gap slider adjustment
-  const handleGapChange = (gap: number) => {
-    setDefaultGap(gap);
-    if (parsedData) {
-      const updated: JanttData = {
-        ...parsedData,
-        meta: { ...parsedData.meta, defaultGapDays: gap },
-        tasks: resolveSchedule(parsedData.tasks, gap)
-      };
-      setParsedData(updated);
-      setJsonText(JSON.stringify(updated, null, 2));
-    }
-  };
+    // Trigger visual sync flash / glow in JSON editor
+    setIsLiveSyncing(true);
+    if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = window.setTimeout(() => {
+      setIsLiveSyncing(false);
+    }, 1300);
+  }, []);
 
   // Format JSON in editor
   const formatJson = () => {
@@ -202,6 +201,13 @@ export function App() {
     a.download = `jantt-plan-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Export CSV file
+  const handleExportCsv = () => {
+    if (parsedData) {
+      downloadCsv(parsedData, `jantt-schedule-${Date.now()}.csv`);
+    }
   };
 
   const llmPromptSnippet = `Here is the Jantt JSON Schema specification:
@@ -237,10 +243,48 @@ Rules:
             <span>Jantt</span>
           </div>
           <span className="brand-badge">v1.1.0</span>
-          <span style={{ fontSize: "13px", color: "var(--jantt-text-muted)", marginLeft: "8px" }}>The JSON Gantt Engine</span>
+          {isSidebarCollapsed && (
+            <button
+              className="btn-nav btn-restore-sidebar"
+              onClick={() => setIsSidebarCollapsed(false)}
+              title="Expand JSON Editor Sidebar"
+              style={{ marginLeft: "8px" }}
+            >
+              <FileJson size={13} />
+              <span>Show JSON Editor</span>
+            </button>
+          )}
         </div>
 
         <div className="nav-controls">
+          {/* View Switcher: Gantt Timeline, Kanban Board, Budget & Analytics */}
+          <div className="jantt-scale-group" style={{ margin: "0 6px" }}>
+            <button
+              className={`jantt-scale-btn ${activeView === "gantt" ? "is-active" : ""}`}
+              onClick={() => setActiveView("gantt")}
+              title="Gantt Timeline Schedule"
+            >
+              <Layers size={13} />
+              <span>Gantt</span>
+            </button>
+            <button
+              className={`jantt-scale-btn ${activeView === "kanban" ? "is-active" : ""}`}
+              onClick={() => setActiveView("kanban")}
+              title="Kanban Task Board"
+            >
+              <Kanban size={13} />
+              <span>Kanban</span>
+            </button>
+            <button
+              className={`jantt-scale-btn ${activeView === "summary" ? "is-active" : ""}`}
+              onClick={() => setActiveView("summary")}
+              title="Project Budget & Performance Analytics"
+            >
+              <PieChart size={13} />
+              <span>Budget & KPI</span>
+            </button>
+          </div>
+
           {/* Preset Selector */}
           <div className="nav-select-group">
             <label htmlFor="preset-select">Preset:</label>
@@ -277,26 +321,33 @@ Rules:
 
           {/* Prompt AI Button */}
           <button
-            className="btn-nav btn-nav-primary"
+            className="btn-prompt"
             onClick={() => setShowPromptModal(true)}
-            title="Get LLM system prompt for generating Jantt JSON"
+            title="Generate AI Prompt for LLM output"
           >
             <Sparkles size={14} />
             <span>AI Prompt</span>
           </button>
 
-          {/* Download Button */}
-          <button className="btn-nav" onClick={handleDownloadJson} title="Download plan as JSON">
+          {/* Download JSON Button */}
+          <button className="btn-nav" onClick={handleDownloadJson} title="Download Jantt JSON file">
             <Download size={14} />
-            <span>Export</span>
+            <span>JSON</span>
+          </button>
+
+          {/* Export CSV Button */}
+          <button className="btn-nav" onClick={handleExportCsv} title="Export RFC-4180 CSV / Excel spreadsheet">
+            <FileSpreadsheet size={14} />
+            <span>CSV</span>
           </button>
         </div>
       </header>
 
-      {/* Main Workspace */}
-      <main className="main-workspace">
-        {/* Left Pane: Code Editor & Schema Diagnostics (Adjustable Width & Collapsible) */}
+      {/* Main Workspace Layout */}
+      <main className="workspace-main">
+        {/* Left Pane: Collapsible JSON Editor */}
         <section
+          id="editor-pane"
           className={`editor-pane ${isSidebarCollapsed ? "is-collapsed" : ""}`}
           style={isSidebarCollapsed ? undefined : { width: `${sidebarWidth}px`, flexShrink: 0 }}
         >
@@ -304,6 +355,12 @@ Rules:
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <FileJson size={15} />
               <span>JSON State (Source of Truth)</span>
+              {isLiveSyncing && (
+                <span className="sync-pulse-badge">
+                  <Zap size={11} />
+                  <span>Live Synced</span>
+                </span>
+              )}
             </div>
             <div className="pane-actions">
               <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
@@ -324,10 +381,10 @@ Rules:
             </div>
           </div>
 
-          <div className="editor-wrapper">
+          <div className={`editor-wrapper ${isLiveSyncing ? "is-live-updating" : ""}`}>
             <textarea
               id="json-editor-textarea"
-              className="code-textarea"
+              className={`code-textarea ${isLiveSyncing ? "is-live-glowing" : ""}`}
               value={jsonText}
               onChange={(e) => handleEditorChange(e.target.value)}
               spellCheck={false}
@@ -353,12 +410,12 @@ Rules:
 
             {!validationResult.valid && (
               <div className="error-list">
-                {validationResult.errors.map((err: ValidationError, idx: number) => (
+                {validationResult.errors.map((err, idx) => (
                   <div key={idx} className="error-card">
                     <div className="error-msg">
-                      <strong>[{err.code}]</strong> {err.message}
+                      <strong>{err.path}:</strong> {err.message}
                     </div>
-                    {err.suggestion && <div className="error-suggestion">Suggestion: {err.suggestion}</div>}
+                    {err.suggestion && <div className="error-suggestion">💡 {err.suggestion}</div>}
                   </div>
                 ))}
               </div>
@@ -377,111 +434,208 @@ Rules:
           </div>
         )}
 
-        {/* Right Pane: Live Full-Space Chart Render */}
+        {/* Right Pane: Live Full-Space Chart / Kanban / Analytics Render */}
         <section className="chart-pane">
-          <div className="chart-controls-bar">
-            <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
-              {/* Expand JSON Sidebar Button when Collapsed */}
-              {isSidebarCollapsed && (
-                <button
-                  className="btn-nav btn-restore-sidebar"
-                  onClick={() => setIsSidebarCollapsed(false)}
-                  title="Expand JSON Editor Sidebar"
-                >
-                  <FileJson size={13} />
-                  <span>JSON State</span>
-                  <ChevronRight size={13} />
-                </button>
-              )}
-
-              {/* Pacing Gap Slider */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--jantt-text)" }}>
-                <Sliders size={13} color="var(--jantt-accent)" />
-                <span style={{ fontWeight: 600 }}>Pacing:</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="7"
-                  value={defaultGap}
-                  onChange={(e) => handleGapChange(parseInt(e.target.value, 10))}
-                  style={{ accentColor: "var(--jantt-accent)", cursor: "pointer", width: "70px" }}
-                />
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--jantt-accent)", fontWeight: 600 }}>
-                  {defaultGap}d
-                </span>
-              </div>
-
-              {/* TimeScale Switcher */}
-              <div className="jantt-scale-group" style={{ margin: 0 }}>
-                {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((scaleKey) => (
-                  <button
-                    key={scaleKey}
-                    className={`jantt-scale-btn ${currentScale === scaleKey ? "is-active" : ""}`}
-                    onClick={() => setCurrentScale(scaleKey)}
-                  >
-                    {scaleKey}
-                  </button>
-                ))}
-              </div>
-
-              {/* Link Routing Style Switcher */}
-              <div className="jantt-scale-group" style={{ margin: 0 }} title="Dependency line routing style">
-                {([
-                  { id: "orthogonal", label: "90° Turn" },
-                  { id: "curved", label: "Curved" },
-                  { id: "direct", label: "Direct" }
-                ] as { id: LinkRoutingStyle; label: string }[]).map((r) => (
-                  <button
-                    key={r.id}
-                    className={`jantt-scale-btn ${linkRouting === r.id ? "is-active" : ""}`}
-                    onClick={() => setLinkRouting(r.id)}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Critical Path Toggle */}
-              <button
-                className={`jantt-critical-btn ${showCriticalPath ? "is-active" : ""}`}
-                onClick={() => setShowCriticalPath(!showCriticalPath)}
-                title="Calculate and illuminate the project critical bottleneck chain"
-              >
-                <Zap size={13} />
-                <span>Critical Path</span>
-              </button>
-
-              {/* Baselines Toggle */}
-              <button
-                className={`jantt-critical-btn ${showBaselines ? "is-active" : ""}`}
-                style={showBaselines ? { borderColor: "var(--jantt-accent)", color: "var(--jantt-accent)", background: "var(--jantt-accent-glow)" } : {}}
-                onClick={() => setShowBaselines(!showBaselines)}
-                title="Show original baseline plan ghost bars"
-              >
-                <Layers size={13} />
-                <span>Baselines</span>
-              </button>
-            </div>
-
-            <div style={{ fontSize: "11px", color: "var(--jantt-text-dim)" }}>
-              Drag edge anchor to link • Drag progress handle • Drag bar to move • Drag splitter to resize
-            </div>
-          </div>
-
           <div className="chart-container-card">
             {parsedData ? (
-              <Jantt
-                data={parsedData}
-                onCommit={handleChartCommit}
-                viewport={{
-                  scale: currentScale,
-                  linkRouting,
-                  showCriticalPath,
-                  showBaselines
-                }}
-                theme={activeTheme.vars}
-                themeClassName={activeTheme.className}
-              />
+              activeView === "gantt" ? (
+                <Jantt
+                  data={parsedData}
+                  onCommit={handleChartCommit}
+                  onViewportChange={(vp) => {
+                    if (vp.scale) setCurrentScale(vp.scale);
+                    if (vp.linkRouting) setLinkRouting(vp.linkRouting);
+                    if (vp.showCriticalPath !== undefined) setShowCriticalPath(vp.showCriticalPath);
+                    if (vp.showBaselines !== undefined) setShowBaselines(vp.showBaselines);
+                  }}
+                  viewport={{
+                    scale: currentScale,
+                    linkRouting,
+                    showCriticalPath,
+                    showBaselines
+                  }}
+                  theme={activeTheme.vars}
+                  themeClassName={activeTheme.className}
+                />
+              ) : activeView === "kanban" ? (
+                <div className="kanban-view-container">
+                  {(
+                    [
+                      { id: "not-started", label: "To Do / Not Started" },
+                      { id: "in-progress", label: "In Progress" },
+                      { id: "submitted", label: "In Review / Submitted" },
+                      { id: "completed", label: "Completed" }
+                    ] as const
+                  ).map((col) => {
+                    const colTasks = parsedData.tasks.filter((t) => {
+                      if (col.id === "not-started") return !t.status || t.status === "not-started";
+                      return t.status === col.id;
+                    });
+                    return (
+                      <div key={col.id} className="kanban-column">
+                        <div className="kanban-col-header">
+                          <span className="kanban-col-title">{col.label}</span>
+                          <span className="kanban-col-count">{colTasks.length}</span>
+                        </div>
+                        <div className="kanban-card-list">
+                          {colTasks.map((t) => {
+                            const cat = parsedData.categories?.[t.category];
+                            const catColor = cat?.color || "var(--jantt-accent)";
+                            return (
+                              <div key={t.id} className="kanban-card">
+                                <div className="kanban-card-top">
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span className="kanban-cat-dot" style={{ background: catColor }} />
+                                    <span className="kanban-cat-label">{cat?.label || t.category}</span>
+                                  </div>
+                                  {t.priority && (
+                                    <span className={`kanban-prio-badge is-${t.priority}`}>
+                                      {t.priority}
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="kanban-card-title">{t.label || t.name || t.id}</h4>
+                                <div className="kanban-card-meta">
+                                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Calendar size={11} />
+                                    <span>{t.start} → {t.end}</span>
+                                  </div>
+                                  {t.assignee && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                      <User size={11} />
+                                      <span>{t.assignee}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {t.progress !== undefined && t.progress !== null && (
+                                  <div className="kanban-card-prog-wrap">
+                                    <div className="kanban-card-prog-bar" style={{ width: `${Math.round(t.progress * 100)}%` }} />
+                                  </div>
+                                )}
+                                <div className="kanban-card-footer">
+                                  <select
+                                    className="kanban-status-select"
+                                    value={t.status || "not-started"}
+                                    onChange={(e) => {
+                                      const updatedTasks = parsedData.tasks.map((item) =>
+                                        item.id === t.id ? { ...item, status: e.target.value } : item
+                                      );
+                                      handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                                    }}
+                                  >
+                                    <option value="not-started">Move to: To Do</option>
+                                    <option value="in-progress">Move to: In Progress</option>
+                                    <option value="submitted">Move to: In Review</option>
+                                    <option value="completed">Move to: Completed</option>
+                                  </select>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="summary-view-container">
+                  <div className="summary-kpi-grid">
+                    <div className="summary-kpi-card">
+                      <div className="kpi-icon-wrap" style={{ color: "var(--jantt-accent)" }}>
+                        <DollarSign size={20} />
+                      </div>
+                      <div className="kpi-data">
+                        <span className="kpi-label">Total Estimated Budget</span>
+                        <span className="kpi-value">
+                          ${parsedData.tasks.reduce((sum, t) => sum + (t.estimatedCost || 0), 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="summary-kpi-card">
+                      <div className="kpi-icon-wrap" style={{ color: "#10B981" }}>
+                        <TrendingUp size={20} />
+                      </div>
+                      <div className="kpi-data">
+                        <span className="kpi-label">Project Progress</span>
+                        <span className="kpi-value">
+                          {Math.round(
+                            (parsedData.tasks.reduce((sum, t) => sum + (t.progress || 0), 0) /
+                              Math.max(parsedData.tasks.length, 1)) *
+                              100
+                          )}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="summary-kpi-card">
+                      <div className="kpi-icon-wrap" style={{ color: "var(--jantt-today)" }}>
+                        <Zap size={20} />
+                      </div>
+                      <div className="kpi-data">
+                        <span className="kpi-label">Total Active Tasks</span>
+                        <span className="kpi-value">{parsedData.tasks.length}</span>
+                      </div>
+                    </div>
+
+                    <div className="summary-kpi-card">
+                      <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical)" }}>
+                        <Clock size={20} />
+                      </div>
+                      <div className="kpi-data">
+                        <span className="kpi-label">Milestones Tracked</span>
+                        <span className="kpi-value">{parsedData.tasks.filter((t) => t.milestone).length}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="summary-breakdown-card">
+                    <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px" }}>
+                      Work Breakdown & Category Distribution
+                    </h3>
+                    <table className="summary-table">
+                      <thead>
+                        <tr>
+                          <th>WBS</th>
+                          <th>Task Name</th>
+                          <th>Category</th>
+                          <th>Assignee</th>
+                          <th>Dates</th>
+                          <th>Budget ($)</th>
+                          <th>Status</th>
+                          <th>Progress</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedData.tasks.map((t) => {
+                          const cat = parsedData.categories?.[t.category];
+                          return (
+                            <tr key={t.id}>
+                              <td style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 700 }}>{t.wbs || "-"}</td>
+                              <td style={{ fontWeight: 600 }}>{t.label || t.name || t.id}</td>
+                              <td>
+                                <span className="jantt-label-dot" style={{ background: cat?.color || "var(--jantt-accent)", display: "inline-block", marginRight: "6px" }} />
+                                {cat?.label || t.category}
+                              </td>
+                              <td>{t.assignee || "-"}</td>
+                              <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.start} → {t.end}</td>
+                              <td style={{ fontFamily: "var(--jantt-font-mono)" }}>
+                                {t.estimatedCost ? `$${t.estimatedCost.toLocaleString()}` : "-"}
+                              </td>
+                              <td>
+                                <span className={`kanban-prio-badge is-${t.status || "not-started"}`}>
+                                  {t.status || "not-started"}
+                                </span>
+                              </td>
+                              <td>{t.progress !== undefined && t.progress !== null ? `${Math.round(t.progress * 100)}%` : "-"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
             ) : (
               <div
                 style={{

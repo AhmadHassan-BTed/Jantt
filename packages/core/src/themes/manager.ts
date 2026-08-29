@@ -12,7 +12,7 @@ import { nordicFrostTheme } from "./nordic-frost";
  */
 export class ThemeManager {
   private themes: Map<string, ThemeDefinition> = new Map();
-  private currentThemeId: string = "swiss-dark";
+  private currentThemeId: string = "swiss-light";
 
   constructor() {
     // Register standard out-of-the-box themes

@@ -70,10 +70,15 @@
   "tasks": [
     {
       "id": "task-spec",
+      "wbs": "1.1",
       "label": "API Contracts & Data Schema Definition",
       "category": "specs",
       "start": "2026-09-01",
       "end": "2026-09-15",
+      "assignee": "Sarah Chen",
+      "priority": "high",
+      "estimatedCost": 28000,
+      "actualCost": 27500,
       "dependsOn": null,
       "locked": true,
       "progress": 1.0,
@@ -86,8 +91,6 @@
       },
       "notes": "Define OpenAPI 3.1 specs, TypeScript interfaces, and JSON schema validation rules.",
       "fields": {
-        "lead": "Sarah Chen",
-        "priority": "P0",
         "deliverable": "schemas/v1.json",
         "jira": "JANTT-101",
         "estimatedHours": 80
@@ -95,10 +98,15 @@
     },
     {
       "id": "task-core-services",
+      "wbs": "2.1",
       "label": "Core Engine & High-Performance Pipeline",
       "category": "core",
       "start": "2026-09-17",
       "end": "2026-10-15",
+      "assignee": "Alex Rivera",
+      "priority": "urgent",
+      "estimatedCost": 64000,
+      "actualCost": 42000,
       "dependsOn": "task-spec",
       "gapDays": 2,
       "locked": false,
@@ -112,19 +120,22 @@
       },
       "notes": "Zero-dependency pure TypeScript constraint solver and DAG scheduler engine.",
       "fields": {
-        "lead": "Alex Rivera",
         "repo": "github.com/acme/core-engine",
-        "priority": "P0",
         "coverageTarget": "95%",
         "jira": "JANTT-102"
       }
     },
     {
       "id": "task-ui-components",
+      "wbs": "2.2",
       "label": "Interactive Grid & Timeline Canvas Subsystem",
       "category": "ui",
       "start": "2026-09-17",
       "end": "2026-10-05",
+      "assignee": "Elena Rostova",
+      "priority": "high",
+      "estimatedCost": 45000,
+      "actualCost": 36000,
       "dependsOn": "task-spec",
       "gapDays": 2,
       "locked": false,
@@ -138,7 +149,6 @@
       },
       "notes": "Implement virtualized DOM, drag-and-drop handles, and multi-tier timeline headers.",
       "fields": {
-        "lead": "Elena Rostova",
         "figma": "figma.com/@acme/jantt-ui",
         "framework": "React + Vanilla CSS",
         "jira": "JANTT-103"
@@ -146,10 +156,15 @@
     },
     {
       "id": "task-alpha-milestone",
+      "wbs": "3.0",
       "label": "Alpha Feature Freeze & Internal Review",
       "category": "specs",
       "start": "2026-10-16",
       "end": "2026-10-16",
+      "assignee": "Marcus Brody",
+      "priority": "urgent",
+      "estimatedCost": 5000,
+      "actualCost": 5000,
       "dependsOn": "task-core-services",
       "gapDays": 1,
       "locked": true,
@@ -165,10 +180,15 @@
     },
     {
       "id": "task-security-qa",
+      "wbs": "3.1",
       "label": "Penetration Testing & Security Certification",
       "category": "qa",
       "start": "2026-10-18",
       "end": "2026-11-10",
+      "assignee": "Marcus Brody",
+      "priority": "urgent",
+      "estimatedCost": 35000,
+      "actualCost": 0,
       "dependsOn": "task-alpha-milestone",
       "gapDays": 2,
       "locked": false,
@@ -182,7 +202,6 @@
       },
       "notes": "Third-party audit of data encryption, token validation, and OWASP Top 10 vulnerabilities.",
       "fields": {
-        "lead": "Marcus Brody",
         "auditor": "SecOps Labs",
         "compliance": "SOC2 Type II",
         "jira": "JANTT-104"
@@ -190,10 +209,15 @@
     },
     {
       "id": "task-prod-deployment",
+      "wbs": "4.1",
       "label": "Global Production Rollout & GA Launch",
       "category": "release",
       "start": "2026-11-12",
       "end": "2026-11-20",
+      "assignee": "DevOps Operations",
+      "priority": "high",
+      "estimatedCost": 22000,
+      "actualCost": 0,
       "dependsOn": "task-security-qa",
       "gapDays": 2,
       "locked": false,
@@ -207,7 +231,6 @@
       },
       "notes": "Zero-downtime canary deployment across multi-region edge clusters.",
       "fields": {
-        "lead": "DevOps Operations",
         "infra": "AWS ECS + Cloudflare Workers",
         "releaseTag": "v1.0.0-GA",
         "jira": "JANTT-105"

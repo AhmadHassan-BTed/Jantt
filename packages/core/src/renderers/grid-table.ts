@@ -45,10 +45,20 @@ export function renderGridTable(props: GridTableProps): {
         ? `${Math.round(item.task.progress * 100)}%`
         : "-";
 
+    const wbsBadge = item.task.wbs
+      ? `<span class="jantt-wbs-pill" style="font-family: var(--jantt-font-mono); font-size: 10px; font-weight: 700; color: var(--jantt-text-muted); opacity: 0.8; margin-right: 4px;">${escapeHtml(item.task.wbs)}</span>`
+      : "";
+
+    const assigneeBadge = item.task.assignee
+      ? `<span class="jantt-hover-type-pill" style="font-size: 8.5px; padding: 0 4px; background: rgba(2, 132, 199, 0.08); color: var(--jantt-accent); border: 1px solid rgba(2, 132, 199, 0.2);">${escapeHtml(item.task.assignee)}</span>`
+      : "";
+
     row.innerHTML = `
       <div class="jantt-col-name">
         <span class="jantt-label-dot" style="background: ${item.category.color};"></span>
+        ${wbsBadge}
         <span class="jantt-label-text">${escapeHtml(item.displayLabel)}</span>
+        ${assigneeBadge}
         ${item.isMilestone ? '<span class="jantt-hover-type-pill is-milestone" style="font-size: 9px; padding: 0 4px;">Milestone</span>' : ""}
         ${item.task.locked ? '<span class="jantt-hover-type-pill is-locked" style="font-size: 9px; padding: 0 4px;">Locked</span>' : ""}
       </div>
