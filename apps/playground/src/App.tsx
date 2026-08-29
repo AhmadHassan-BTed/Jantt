@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { JanttData, validate, ValidationResult, ValidationError, resolveSchedule, TimeScale } from "@jantt/core";
+import { JanttData, validate, ValidationResult, ValidationError, resolveSchedule, TimeScale, LinkRoutingStyle } from "@jantt/core";
 import { Jantt } from "@jantt/react";
 import {
   Sparkles,
@@ -43,10 +43,12 @@ const THEMES: Record<string, { label: string; className: string; vars: Record<st
     vars: {
       "--jantt-bg": "#FFFFFF",
       "--jantt-surface": "#F8FAFC",
+      "--jantt-surface-hover": "#F1F5F9",
       "--jantt-border": "#E2E8F0",
       "--jantt-text": "#0F172A",
       "--jantt-text-muted": "#64748B",
-      "--jantt-accent": "#0284C7"
+      "--jantt-accent": "#2563EB",
+      "--jantt-accent-glow": "rgba(37, 99, 235, 0.15)"
     }
   },
   emerald: {
@@ -59,6 +61,19 @@ const THEMES: Record<string, { label: string; className: string; vars: Record<st
       "--jantt-text": "#ECFDF5",
       "--jantt-accent": "#10B981",
       "--jantt-accent-glow": "rgba(16, 185, 129, 0.3)"
+    }
+  },
+  rose: {
+    label: "Midnight Rose",
+    className: "jantt-theme-rose",
+    vars: {
+      "--jantt-bg": "#12070E",
+      "--jantt-surface": "#1E0D18",
+      "--jantt-surface-hover": "#2D1424",
+      "--jantt-border": "#4C1D36",
+      "--jantt-text": "#FFF1F2",
+      "--jantt-accent": "#F43F5E",
+      "--jantt-accent-glow": "rgba(244, 63, 94, 0.3)"
     }
   },
   sunset: {
@@ -86,6 +101,7 @@ export function App() {
   const [copiedJson, setCopiedJson] = useState(false);
   const [defaultGap, setDefaultGap] = useState(2);
   const [currentScale, setCurrentScale] = useState<TimeScale>("week");
+  const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>("orthogonal");
   const [showCriticalPath, setShowCriticalPath] = useState(true);
   const [showBaselines, setShowBaselines] = useState(true);
 
@@ -378,6 +394,23 @@ Rules:
                 ))}
               </div>
 
+              {/* Link Routing Style Switcher */}
+              <div className="jantt-scale-group" style={{ margin: 0 }} title="Dependency line routing style">
+                {([
+                  { id: "orthogonal", label: "90° Turn" },
+                  { id: "curved", label: "Curved" },
+                  { id: "direct", label: "Direct" }
+                ] as { id: LinkRoutingStyle; label: string }[]).map((r) => (
+                  <button
+                    key={r.id}
+                    className={`jantt-scale-btn ${linkRouting === r.id ? "is-active" : ""}`}
+                    onClick={() => setLinkRouting(r.id)}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Critical Path Toggle */}
               <button
                 className={`jantt-critical-btn ${showCriticalPath ? "is-active" : ""}`}
@@ -401,7 +434,7 @@ Rules:
             </div>
 
             <div style={{ fontSize: "11px", color: "#94A3B8" }}>
-              💡 Drag edge to link • Drag progress handle • Drag bar to move • Drag splitter to resize table
+              Drag edge anchor to link • Drag progress handle • Drag bar to move • Drag splitter to resize table
             </div>
           </div>
 
@@ -412,6 +445,7 @@ Rules:
                 onCommit={handleChartCommit}
                 viewport={{
                   scale: currentScale,
+                  linkRouting,
                   showCriticalPath,
                   showBaselines
                 }}

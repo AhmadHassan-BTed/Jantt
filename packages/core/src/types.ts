@@ -12,11 +12,14 @@ export interface JanttMeta {
   chartEnd?: string; // Backwards-compatible alias for end
   defaultGapDays?: number;
   scale?: TimeScale;
+  linkRouting?: LinkRoutingStyle;
   showCriticalPath?: boolean;
   showBaselines?: boolean;
   generatedAt?: string;
   [key: string]: unknown;
 }
+
+export type LinkRoutingStyle = "orthogonal" | "curved" | "direct";
 
 export interface Category {
   label: string;
@@ -113,6 +116,7 @@ export interface ViewportOptions {
   startDate?: string;
   endDate?: string;
   scale?: TimeScale; // "day" | "week" | "month" | "quarter" | "year"
+  linkRouting?: LinkRoutingStyle; // "orthogonal" | "curved" | "direct"
   showToday?: boolean;
   showWeekends?: boolean;
   showCriticalPath?: boolean;

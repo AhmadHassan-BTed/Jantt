@@ -10,7 +10,8 @@ import {
   HeaderDay,
   JanttLayoutResult,
   Category,
-  TimeScale
+  TimeScale,
+  LinkRoutingStyle
 } from "./types";
 import {
   addDays,
@@ -45,6 +46,7 @@ const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns">> = {
   startDate: "",
   endDate: "",
   scale: "day",
+  linkRouting: "orthogonal",
   showToday: true,
   showWeekends: true,
   showCriticalPath: false,
@@ -70,9 +72,16 @@ export function layout(
     ...DEFAULT_VIEWPORT,
     dayWidth: viewportOptions.dayWidth || defaultDayWidth,
     scale,
+    linkRouting: viewportOptions.linkRouting || data.meta?.linkRouting || "orthogonal",
     showCriticalPath: viewportOptions.showCriticalPath ?? (data.meta?.showCriticalPath ?? false),
     showBaselines: viewportOptions.showBaselines ?? (data.meta?.showBaselines ?? true),
-    ...viewportOptions
+    showToday: viewportOptions.showToday ?? true,
+    showWeekends: viewportOptions.showWeekends ?? true,
+    rowHeight: viewportOptions.rowHeight || DEFAULT_VIEWPORT.rowHeight,
+    labelWidth: viewportOptions.labelWidth || DEFAULT_VIEWPORT.labelWidth,
+    headerHeight: viewportOptions.headerHeight || DEFAULT_VIEWPORT.headerHeight,
+    startDate: viewportOptions.startDate || "",
+    endDate: viewportOptions.endDate || ""
   };
 
   // Determine overall timeline bounds
@@ -166,6 +175,7 @@ export function layout(
   });
 
   // Compute SVG Dependency Lines
+  const linkRouting: LinkRoutingStyle = viewport.linkRouting;
   const dependencies: DependencyLine[] = [];
 
   tasks.forEach((task) => {
@@ -179,23 +189,7 @@ export function layout(
     const toX = curr.x;
     const toY = curr.y + curr.height / 2;
 
-    let path = "";
-    const minStep = 14;
-
-    if (toX >= fromX + minStep * 2) {
-      // Direct forward step with 90-degree right angles:
-      // (fromX, fromY) -> (midX, fromY) -> (midX, toY) -> (toX, toY)
-      const midX = fromX + Math.round((toX - fromX) / 2);
-      path = `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
-    } else {
-      // Reverse or tight-gap bypass with 90-degree turns:
-      // out right -> down/up into lane gap -> left -> down/up -> into target
-      const stepOutX = fromX + minStep;
-      const stepInX = toX - minStep;
-      const midY = Math.round(fromY + (toY >= fromY ? 1 : -1) * (viewport.rowHeight / 2));
-      path = `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
-    }
-
+    const path = computeDependencyPath(fromX, fromY, toX, toY, viewport.rowHeight, linkRouting);
     const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
 
     dependencies.push({
@@ -366,4 +360,57 @@ function getWeekNumber(date: Date): number {
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+/**
+ * Calculates the SVG path for a dependency connection wire.
+ * Ensures a clean straight horizontal lead-in segment directly entering the target arrowhead
+ * at 0 degrees so arrowheads align perfectly without angle skew.
+ */
+export function computeDependencyPath(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  rowHeight = 46,
+  style: LinkRoutingStyle = "orthogonal"
+): string {
+  const leadOut = 14;
+  const leadIn = 16;
+
+  // 1. Forward flow with sufficient horizontal space
+  if (toX >= fromX + leadOut + leadIn) {
+    if (style === "curved") {
+      const startX = fromX + leadOut;
+      const endX = toX - leadIn;
+      const dx = Math.max(endX - startX, 20);
+      const cp1X = startX + dx * 0.5;
+      const cp2X = endX - dx * 0.5;
+      return `M ${fromX} ${fromY} L ${startX} ${fromY} C ${cp1X} ${fromY}, ${cp2X} ${toY}, ${endX} ${toY} L ${toX} ${toY}`;
+    }
+
+    if (style === "direct") {
+      const startX = fromX + leadOut;
+      const endX = toX - leadIn;
+      return `M ${fromX} ${fromY} L ${startX} ${fromY} L ${endX} ${toY} L ${toX} ${toY}`;
+    }
+
+    // Default "orthogonal" (90-degree right angles)
+    const midX = fromX + Math.round((toX - fromX) / 2);
+    return `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
+  }
+
+  // 2. Reverse flow or tight horizontal gap bypass
+  const stepOutX = fromX + leadOut;
+  const stepInX = toX - leadIn;
+  const midY = Math.round(fromY + (toY >= fromY ? 1 : -1) * (rowHeight / 2));
+
+  if (style === "curved") {
+    const cpOutX = stepOutX + 16;
+    const cpInX = stepInX - 16;
+    return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} C ${cpOutX} ${fromY}, ${cpOutX} ${midY}, ${stepOutX} ${midY} L ${stepInX} ${midY} C ${cpInX} ${midY}, ${cpInX} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
+  }
+
+  // Orthogonal & Direct reverse step
+  return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
 }
