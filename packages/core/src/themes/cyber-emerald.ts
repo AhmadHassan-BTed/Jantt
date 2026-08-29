@@ -24,7 +24,7 @@ export const cyberEmeraldTheme: ThemeDefinition = {
     "--jantt-today": "#F43F5E",
     "--jantt-critical": "#FBBF24",
     "--jantt-critical-glow": "rgba(251, 191, 36, 0.4)",
-    "--jantt-weekend-bg": "rgba(6, 78, 59, 0.3)",
+    "--jantt-weekend-bg": "transparent",
     "--jantt-grid-line": "rgba(16, 185, 129, 0.08)",
     "--jantt-grid-row-line": "rgba(16, 185, 129, 0.07)",
     "--jantt-dep-line": "#059669",

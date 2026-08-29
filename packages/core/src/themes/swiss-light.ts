@@ -24,7 +24,7 @@ export const swissLightTheme: ThemeDefinition = {
     "--jantt-today": "#E11D48",
     "--jantt-critical": "#D97706",
     "--jantt-critical-glow": "rgba(217, 119, 6, 0.25)",
-    "--jantt-weekend-bg": "rgba(241, 245, 249, 0.7)",
+    "--jantt-weekend-bg": "transparent",
     "--jantt-grid-line": "rgba(15, 23, 42, 0.05)",
     "--jantt-grid-row-line": "rgba(15, 23, 42, 0.06)",
     "--jantt-dep-line": "#94A3B8",

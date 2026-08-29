@@ -24,7 +24,7 @@ export const swissDarkTheme: ThemeDefinition = {
     "--jantt-today": "#F43F5E",
     "--jantt-critical": "#F59E0B",
     "--jantt-critical-glow": "rgba(245, 158, 11, 0.35)",
-    "--jantt-weekend-bg": "rgba(15, 23, 42, 0.45)",
+    "--jantt-weekend-bg": "transparent",
     "--jantt-grid-line": "rgba(255, 255, 255, 0.05)",
     "--jantt-grid-row-line": "rgba(255, 255, 255, 0.04)",
     "--jantt-dep-line": "#475569",

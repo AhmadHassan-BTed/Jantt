@@ -103,8 +103,8 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     content.className = "jantt-bar-content";
     content.innerHTML = `
       <span>${escapeHtml(item.displayLabel)}</span>
-      ${item.task.locked ? '<span style="font-size: 11px;">🔒</span>' : ""}
-      ${item.task.urgent ? '<span style="font-size: 11px; color: #FECDD3;">⚡</span>' : ""}
+      ${item.task.locked ? '<span class="jantt-hover-type-pill is-locked" style="font-size: 8.5px; padding: 1px 4px;">Locked</span>' : ""}
+      ${item.task.urgent ? '<span class="jantt-hover-type-pill is-urgent" style="font-size: 8.5px; padding: 1px 4px;">Urgent</span>' : ""}
     `;
     bar.appendChild(content);
 

@@ -391,7 +391,10 @@ function renderDefaultSidebarContent(
         const latestEnd = conflicts.reduce((max, c) => (diffDays(max, c.prereqEnd) > 0 ? c.prereqEnd : max), conflicts[0].prereqEnd);
         conflictBox.innerHTML = `
           <div style="background: rgba(244, 63, 94, 0.12); border-left: 3px solid #F43F5E; padding: 8px 12px; border-radius: 6px; font-size: 11.5px; margin-top: 4px;">
-            <div style="color: var(--jantt-text); font-weight: 600; margin-bottom: 4px;">⚠️ Dependency Timing Conflict:</div>
+            <div style="color: #F43F5E; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+              <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #F43F5E;"></span>
+              Dependency Timing Conflict:
+            </div>
             <div style="color: var(--jantt-text-muted);">
               Starts on <strong>${curStart}</strong> before prerequisite finish (${latestEnd}).
             </div>
