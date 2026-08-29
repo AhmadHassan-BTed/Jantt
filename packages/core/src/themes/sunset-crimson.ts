@@ -24,7 +24,7 @@ export const sunsetCrimsonTheme: ThemeDefinition = {
     "--jantt-today": "#38BDF8",
     "--jantt-critical": "#E11D48",
     "--jantt-critical-glow": "rgba(225, 29, 72, 0.4)",
-    "--jantt-weekend-bg": "rgba(124, 45, 18, 0.25)",
+    "--jantt-weekend-bg": "transparent",
     "--jantt-grid-line": "rgba(249, 115, 22, 0.08)",
     "--jantt-grid-row-line": "rgba(249, 115, 22, 0.07)",
     "--jantt-dep-line": "#C2410C",

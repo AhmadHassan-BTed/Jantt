@@ -105,8 +105,8 @@ function renderDefaultModalContent(
           <span style="font-size: 12px; font-weight: 600; color: ${cat.color}; text-transform: uppercase; letter-spacing: 0.05em;">
             ${escapeHtml(cat.label)}
           </span>
-          ${task.locked ? '<span style="font-size: 11px; color: var(--jantt-text-dim); background: var(--jantt-border); padding: 2px 6px; border-radius: 4px;">🔒 Locked</span>' : ""}
-          ${task.urgent ? '<span style="font-size: 11px; color: #EF4444; background: rgba(239, 68, 68, 0.15); padding: 2px 6px; border-radius: 4px; font-weight: 600;">⚡ Urgent</span>' : ""}
+          ${task.locked ? '<span style="font-size: 11px; color: var(--jantt-text-dim); background: var(--jantt-border); padding: 2px 6px; border-radius: 4px;">Locked</span>' : ""}
+          ${task.urgent ? '<span style="font-size: 11px; color: #EF4444; background: rgba(239, 68, 68, 0.15); padding: 2px 6px; border-radius: 4px; font-weight: 600;">Urgent</span>' : ""}
         </div>
         <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: var(--jantt-text);">
           ${escapeHtml(task.label || task.name || task.id)}
@@ -229,7 +229,7 @@ function renderFieldsBagHtml(fields?: Record<string, unknown>): string {
           <span style="font-family: var(--jantt-font-mono); color: var(--jantt-text-muted); font-weight: 500; min-width: 90px;">${escapeHtml(key)}:</span>
           <div style="flex-grow: 1; display: flex; align-items: center; gap: 6px;">
             <input type="text" data-field-key="${escapeHtml(key)}" value="${escapeHtml(valStr)}" style="flex-grow: 1; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 4px; color: var(--jantt-text); padding: 3px 8px; font-size: 12px;" />
-            ${isUrl ? `<a href="${escapeHtml(val as string)}" target="_blank" rel="noopener noreferrer" style="color: var(--jantt-accent); text-decoration: none; font-size: 13px;">🔗</a>` : ""}
+            ${isUrl ? `<a href="${escapeHtml(val as string)}" target="_blank" rel="noopener noreferrer" style="color: var(--jantt-accent); text-decoration: underline; font-size: 11.5px;">Open</a>` : ""}
           </div>
         </div>
       `;

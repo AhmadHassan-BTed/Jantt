@@ -24,7 +24,7 @@ export const nordicFrostTheme: ThemeDefinition = {
     "--jantt-today": "#E11D48",
     "--jantt-critical": "#D97706",
     "--jantt-critical-glow": "rgba(217, 119, 6, 0.3)",
-    "--jantt-weekend-bg": "rgba(226, 232, 240, 0.6)",
+    "--jantt-weekend-bg": "transparent",
     "--jantt-grid-line": "rgba(30, 58, 138, 0.06)",
     "--jantt-grid-row-line": "rgba(30, 58, 138, 0.05)",
     "--jantt-dep-line": "#64748B",

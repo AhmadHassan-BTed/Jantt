@@ -24,7 +24,7 @@ export const midnightRoseTheme: ThemeDefinition = {
     "--jantt-today": "#38BDF8",
     "--jantt-critical": "#FBBF24",
     "--jantt-critical-glow": "rgba(251, 191, 36, 0.4)",
-    "--jantt-weekend-bg": "rgba(76, 29, 149, 0.25)",
+    "--jantt-weekend-bg": "transparent",
     "--jantt-grid-line": "rgba(244, 63, 94, 0.08)",
     "--jantt-grid-row-line": "rgba(244, 63, 94, 0.07)",
     "--jantt-dep-line": "#BE185D",

@@ -22,7 +22,9 @@ import {
   X,
   FileJson,
   Layers,
-  Zap
+  Zap,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 import basicFixture from "../../../examples/basic.json";
@@ -60,6 +62,7 @@ export function App() {
   const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>("orthogonal");
   const [showCriticalPath, setShowCriticalPath] = useState(true);
   const [showBaselines, setShowBaselines] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Sidebar width resize state
   const [sidebarWidth, setSidebarWidth] = useState(480);
@@ -292,20 +295,31 @@ Rules:
 
       {/* Main Workspace */}
       <main className="main-workspace">
-        {/* Left Pane: Code Editor & Schema Diagnostics (Adjustable Width) */}
-        <section className="editor-pane" style={{ width: `${sidebarWidth}px`, flexShrink: 0 }}>
+        {/* Left Pane: Code Editor & Schema Diagnostics (Adjustable Width & Collapsible) */}
+        <section
+          className={`editor-pane ${isSidebarCollapsed ? "is-collapsed" : ""}`}
+          style={isSidebarCollapsed ? undefined : { width: `${sidebarWidth}px`, flexShrink: 0 }}
+        >
           <div className="pane-header">
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <FileJson size={15} />
               <span>JSON State (Source of Truth)</span>
             </div>
             <div className="pane-actions">
-              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson}>
+              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
                 Format
               </button>
-              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleCopyJson}>
+              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleCopyJson} title="Copy JSON">
                 {copiedJson ? <Check size={12} /> : <Copy size={12} />}
                 {copiedJson ? "Copied" : "Copy"}
+              </button>
+              <button
+                className="btn-nav"
+                style={{ padding: "3px 6px", fontSize: "11px" }}
+                onClick={() => setIsSidebarCollapsed(true)}
+                title="Collapse JSON Sidebar"
+              >
+                <ChevronLeft size={13} />
               </button>
             </div>
           </div>
@@ -344,7 +358,7 @@ Rules:
                     <div className="error-msg">
                       <strong>[{err.code}]</strong> {err.message}
                     </div>
-                    {err.suggestion && <div className="error-suggestion">💡 Suggestion: {err.suggestion}</div>}
+                    {err.suggestion && <div className="error-suggestion">Suggestion: {err.suggestion}</div>}
                   </div>
                 ))}
               </div>
@@ -353,18 +367,33 @@ Rules:
         </section>
 
         {/* Draggable Splitter Divider */}
-        <div
-          className={`workspace-splitter ${isResizing ? "is-resizing" : ""}`}
-          onPointerDown={startResizing}
-          title="Drag left/right to adjust JSON sidebar width"
-        >
-          <div className="splitter-handle" />
-        </div>
+        {!isSidebarCollapsed && (
+          <div
+            className={`workspace-splitter ${isResizing ? "is-resizing" : ""}`}
+            onPointerDown={startResizing}
+            title="Drag left/right to adjust JSON sidebar width"
+          >
+            <div className="splitter-handle" />
+          </div>
+        )}
 
         {/* Right Pane: Live Full-Space Chart Render */}
         <section className="chart-pane">
           <div className="chart-controls-bar">
             <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+              {/* Expand JSON Sidebar Button when Collapsed */}
+              {isSidebarCollapsed && (
+                <button
+                  className="btn-nav btn-restore-sidebar"
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  title="Expand JSON Editor Sidebar"
+                >
+                  <FileJson size={13} />
+                  <span>JSON State</span>
+                  <ChevronRight size={13} />
+                </button>
+              )}
+
               {/* Pacing Gap Slider */}
               <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--jantt-text)" }}>
                 <Sliders size={13} color="var(--jantt-accent)" />

@@ -205,7 +205,6 @@ body {
   position: relative;
 }
 
-/* Left Pane: Code Editor & Diagnostics (Adjustable Width) */
 .editor-pane {
   background: var(--jantt-bg, #0B111E);
   border-right: 1px solid var(--jantt-border, #1E2D4A);
@@ -216,6 +215,25 @@ body {
   max-width: 80vw;
   height: 100%;
   overflow: hidden;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.editor-pane.is-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  border-right: none !important;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.btn-restore-sidebar {
+  background: var(--jantt-surface, rgba(21, 34, 56, 0.9));
+  border: 1px solid var(--jantt-border-strong, rgba(56, 189, 248, 0.3));
+  color: var(--jantt-accent, #38BDF8);
+  font-size: 11.5px;
+  padding: 4px 10px;
 }
 
 .pane-header {
@@ -378,9 +396,10 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
   border-radius: 12px;
-  padding: 9px 16px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  padding: 8px 14px;
   flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .chart-container-card {
@@ -390,11 +409,12 @@ body {
   height: 100%;
   width: 100%;
   background: transparent;
-  border-radius: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--jantt-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: var(--jantt-shadow, 0 20px 45px -10px rgba(0, 0, 0, 0.4));
+  box-shadow: none;
 }
 
 /* Modal for Prompt Generator */

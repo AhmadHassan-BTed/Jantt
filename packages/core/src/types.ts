@@ -184,6 +184,7 @@ export interface HeaderDay {
   width: number;
   isWeekend: boolean;
   isToday: boolean;
+  isTaskBoundary?: boolean;
 }
 
 export interface GridHeader {

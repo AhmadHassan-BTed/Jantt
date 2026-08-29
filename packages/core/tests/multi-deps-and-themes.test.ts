@@ -126,6 +126,30 @@ describe("Multi-Dependency Engine & Resolution", () => {
     expect(res.dependencies.some((d) => d.fromTaskId === "t1" && d.toTaskId === "t3")).toBe(true);
     expect(res.dependencies.some((d) => d.fromTaskId === "t2" && d.toTaskId === "t3")).toBe(true);
   });
+
+  it("dynamically generates future timeframes and months when tasks are pushed far forward", () => {
+    const dataWithPushedTasks: JanttData = {
+      meta: {
+        chartStart: "2026-09-01",
+        chartEnd: "2026-10-31" // Initial narrow bounds
+      },
+      tasks: [
+        { id: "t1", category: "c1", start: "2026-09-01", end: "2026-09-10" },
+        // User pushed a task forward into next year!
+        { id: "t2-pushed", category: "c1", start: "2027-03-15", end: "2027-04-20" }
+      ]
+    };
+
+    const res = layout(dataWithPushedTasks);
+    // Verified that layout automatically expanded the timeline to encompass April 2027 + buffer!
+    expect(res.header.endDate >= "2027-04-20").toBe(true);
+    expect(res.header.months.some((m) => m.label.includes("April") || m.label.includes("2027"))).toBe(true);
+    expect(res.header.years.length).toBeGreaterThanOrEqual(2);
+
+    const pushedLayout = res.tasks.find((t) => t.task.id === "t2-pushed")!;
+    expect(pushedLayout.x).toBeGreaterThan(0);
+    expect(pushedLayout.x + pushedLayout.width).toBeLessThanOrEqual(res.canvasWidth);
+  });
 });
 
 describe("Theme Architecture & ThemeManager Subsystem", () => {

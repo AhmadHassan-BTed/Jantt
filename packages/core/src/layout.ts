@@ -84,32 +84,44 @@ export function layout(
     endDate: viewportOptions.endDate || ""
   };
 
-  // Determine overall timeline bounds
+  // Determine overall timeline bounds dynamically based on active tasks
+  let minTaskStart = getTodayISODate();
+  let maxTaskEnd = addDays(minTaskStart, 30);
+
+  if (tasks.length > 0) {
+    minTaskStart = tasks[0].start || getTodayISODate();
+    maxTaskEnd = tasks[0].end || minTaskStart;
+
+    tasks.forEach((t) => {
+      if (t.start) minTaskStart = minISODate(minTaskStart, t.start);
+      if (t.end) maxTaskEnd = maxISODate(maxTaskEnd, t.end);
+      if (t.baseline?.start) minTaskStart = minISODate(minTaskStart, t.baseline.start);
+      if (t.baseline?.end) maxTaskEnd = maxISODate(maxTaskEnd, t.baseline.end);
+    });
+  }
+
+  // Generous runway buffer (scale-dependent)
+  const bufferBefore = scale === "year" || scale === "quarter" ? 30 : scale === "month" ? 14 : 4;
+  const bufferAfter = scale === "year" || scale === "quarter" ? 90 : scale === "month" ? 30 : 14;
+
   let chartStart = viewportOptions.startDate || data.meta?.start || data.meta?.chartStart;
   let chartEnd = viewportOptions.endDate || data.meta?.end || data.meta?.chartEnd;
 
-  if (!chartStart || !chartEnd) {
-    if (tasks.length > 0) {
-      let minStart = tasks[0].start || getTodayISODate();
-      let maxEnd = tasks[0].end || minStart;
-
-      tasks.forEach((t) => {
-        if (t.start) minStart = minISODate(minStart, t.start);
-        if (t.end) maxEnd = maxISODate(maxEnd, t.end);
-        if (t.baseline?.start) minStart = minISODate(minStart, t.baseline.start);
-        if (t.baseline?.end) maxEnd = maxISODate(maxEnd, t.baseline.end);
-      });
-
-      // Add generous margin
-      if (!chartStart) chartStart = addDays(minStart, -4);
-      if (!chartEnd) chartEnd = addDays(maxEnd, 8);
-    } else {
-      chartStart = addDays(getTodayISODate(), -4);
-      chartEnd = addDays(getTodayISODate(), 40);
-    }
+  if (!chartStart) {
+    chartStart = addDays(minTaskStart, -bufferBefore);
+  } else if (diffDays(chartStart, minTaskStart) < 0) {
+    // If a task was moved BEFORE the specified chartStart, dynamically expand chartStart
+    chartStart = addDays(minTaskStart, -bufferBefore);
   }
 
-  // Ensure start is before end
+  if (!chartEnd) {
+    chartEnd = addDays(maxTaskEnd, bufferAfter);
+  } else if (diffDays(chartEnd, maxTaskEnd) > 0) {
+    // If a task was pushed forward PAST the specified chartEnd, dynamically expand chartEnd!
+    chartEnd = addDays(maxTaskEnd, bufferAfter);
+  }
+
+  // Ensure minimum span of at least 7 days
   if (diffDays(chartStart, chartEnd) < 7) {
     chartEnd = addDays(chartStart, 14);
   }
@@ -214,6 +226,15 @@ export function layout(
   const endYear = parseISODate(chartEnd).getUTCFullYear();
   const spansMultipleYears = startYear !== endYear;
 
+  // Collect all task start and end boundary dates across the project
+  const taskBoundaryDates = new Set<string>();
+  tasks.forEach((t) => {
+    if (t.start) taskBoundaryDates.add(t.start);
+    if (t.end) taskBoundaryDates.add(t.end);
+    if (t.baseline?.start) taskBoundaryDates.add(t.baseline.start);
+    if (t.baseline?.end) taskBoundaryDates.add(t.baseline.end);
+  });
+
   const years: HeaderYear[] = [];
   const months: HeaderMonth[] = [];
   const weeks: HeaderWeek[] = [];
@@ -238,6 +259,7 @@ export function layout(
     const dayX = i * viewport.dayWidth;
     const isWeekendDay = isWeekend(dStr);
     const isTodayDay = dStr === todayStr;
+    const isTaskBoundary = taskBoundaryDates.has(dStr);
 
     if (isTodayDay) {
       todayX = dayX + viewport.dayWidth / 2;
@@ -256,7 +278,8 @@ export function layout(
       x: dayX,
       width: viewport.dayWidth,
       isWeekend: isWeekendDay,
-      isToday: isTodayDay
+      isToday: isTodayDay,
+      isTaskBoundary
     });
 
     // Year tier tracking
