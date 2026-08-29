@@ -215,9 +215,11 @@ export interface JanttOptions {
   theme?: Record<string, string>;
   readOnly?: boolean;
   searchQuery?: string;
+  sidebarContainer?: HTMLElement | string;
   onChange?: (draft: JanttData) => void;
   onCommit?: (final: JanttData) => void;
   onTaskClick?: (task: Task) => void;
+  onTaskDelete?: (taskId: string) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;
   onLinkDelete?: (fromTaskId: string, toTaskId: string) => void;
   renderDetail?: (
