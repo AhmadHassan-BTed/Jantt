@@ -17,9 +17,9 @@
   --jantt-accent-glow: rgba(56, 189, 248, 0.25);
   --jantt-today: #F43F5E;
   --jantt-critical: #F59E0B;
-  --jantt-critical-glow: rgba(245, 158, 11, 0.4);
   --jantt-weekend-bg: rgba(15, 23, 42, 0.45);
-  --jantt-grid-line: #1E293B;
+  --jantt-grid-line: rgba(255, 255, 255, 0.05);
+  --jantt-grid-row-line: rgba(255, 255, 255, 0.07);
   --jantt-dep-line: #64748B;
   --jantt-dep-line-active: #38BDF8;
   --jantt-bar-radius: 6px;
@@ -43,7 +43,8 @@
   --jantt-critical: #D97706;
   --jantt-critical-glow: rgba(217, 119, 6, 0.3);
   --jantt-weekend-bg: rgba(241, 245, 249, 0.6);
-  --jantt-grid-line: #E2E8F0;
+  --jantt-grid-line: rgba(0, 0, 0, 0.06);
+  --jantt-grid-row-line: rgba(0, 0, 0, 0.07);
   --jantt-dep-line: #94A3B8;
   --jantt-dep-line-active: #0284C7;
   --jantt-bar-radius: 6px;
@@ -399,7 +400,7 @@
 }
 
 .jantt-grid-row {
-  border-bottom: 1px solid var(--jantt-border-subtle);
+  border-bottom: 1px solid var(--jantt-grid-row-line, var(--jantt-border-subtle));
   box-sizing: border-box;
   transition: background 0.15s ease;
 }
@@ -414,6 +415,7 @@
   bottom: 0;
   border-right: 1px solid var(--jantt-grid-line);
   box-sizing: border-box;
+  pointer-events: none;
 }
 
 .jantt-grid-day-col.is-weekend {
