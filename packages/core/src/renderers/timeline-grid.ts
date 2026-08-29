@@ -8,7 +8,7 @@ export interface TimelineGridProps {
 }
 
 /**
- * Renders the background grid lines, weekend columns, and today marker line.
+ * Renders the background grid lines, vertical day columns, horizontal row lines, and today marker.
  */
 export function renderTimelineGrid(props: TimelineGridProps): {
   gridLayer: HTMLElement;
@@ -17,18 +17,16 @@ export function renderTimelineGrid(props: TimelineGridProps): {
   const gridLayer = document.createElement("div");
   gridLayer.className = "jantt-grid-layer";
 
-  // Weekend column highlights
+  // 1. Vertical day column boundary grid lines extending from header day cells
   props.header.days.forEach((d) => {
-    if (d.isWeekend) {
-      const col = document.createElement("div");
-      col.className = "jantt-grid-day-col is-weekend";
-      col.style.left = `${d.x}px`;
-      col.style.width = `${d.width}px`;
-      gridLayer.appendChild(col);
-    }
+    const col = document.createElement("div");
+    col.className = `jantt-grid-day-col ${d.isWeekend ? "is-weekend" : ""}`;
+    col.style.left = `${d.x}px`;
+    col.style.width = `${d.width}px`;
+    gridLayer.appendChild(col);
   });
 
-  // Horizontal row separators
+  // 2. Low-opacity horizontal row boundary lines extending across the timeline
   props.taskLayouts.forEach((item) => {
     const rowLine = document.createElement("div");
     rowLine.className = "jantt-grid-row";
@@ -37,7 +35,7 @@ export function renderTimelineGrid(props: TimelineGridProps): {
     gridLayer.appendChild(rowLine);
   });
 
-  // Today marker line
+  // 3. Today marker line
   let todayLine: HTMLElement | undefined;
   if (props.header.todayX !== null && props.showToday) {
     todayLine = document.createElement("div");

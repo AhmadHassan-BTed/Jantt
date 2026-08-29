@@ -5,6 +5,7 @@ import { layout } from "../src/layout";
 import { exportToCsv } from "../src/exporter";
 import { createTaskSidebar } from "../src/sidebar";
 import { createTooltipController } from "../src/renderers/tooltip";
+import { renderTimelineGrid } from "../src/renderers/timeline-grid";
 import { JanttData, Task } from "../src/types";
 import basicJson from "../../../examples/basic.json";
 import academicJson from "../../../examples/academic-roadmap.json";
@@ -306,5 +307,21 @@ describe("Stress & Boundary Tests", () => {
 
     tooltip.hide();
     expect(document.querySelector(".jantt-hover-card")).toBeNull();
+  });
+
+  it("renders low-opacity horizontal row boundaries and vertical day column boundaries across the entire timeline", () => {
+    const layoutRes = layout(basicJson as JanttData, { dayWidth: 30, rowHeight: 40 });
+    const { gridLayer } = renderTimelineGrid({
+      header: layoutRes.header,
+      taskLayouts: layoutRes.tasks,
+      rowHeight: 40,
+      showToday: true
+    });
+
+    const dayCols = gridLayer.querySelectorAll(".jantt-grid-day-col");
+    expect(dayCols.length).toBe(layoutRes.header.days.length);
+
+    const rowLines = gridLayer.querySelectorAll(".jantt-grid-row");
+    expect(rowLines.length).toBe(layoutRes.tasks.length);
   });
 });
