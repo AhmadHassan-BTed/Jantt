@@ -24,44 +24,31 @@ This document details the software architecture, design principles, module bound
 
 ## System Overview & Monorepo Topology
 
-```
-                   ┌──────────────────────────────────────┐
-                   │       Declarative JSON Document      │
-                   │       (Jantt v1 Schema Contract)     │
-                   └──────────────────┬───────────────────┘
-                                      │
-                                      ▼
-                   ┌──────────────────────────────────────┐
-                   │         @jantt/core Engine           │
-                   │  ┌────────────────────────────────┐  │
-                   │  │ 1. Schema & Graph Validator    │  │
-                   │  └───────────────┬────────────────┘  │
-                   │                  ▼                   │
-                   │  ┌────────────────────────────────┐  │
-                   │  │ 2. Schedule & Critical Path    │  │
-                   │  │    Topological Resolver        │  │
-                   │  └───────────────┬────────────────┘  │
-                   │                  ▼                   │
-                   │  ┌────────────────────────────────┐  │
-                   │  │ 3. Multi-Scale Layout Engine   │  │
-                   │  │    & 90° Orthogonal Router     │  │
-                   │  └───────────────┬────────────────┘  │
-                   │                  ▼                   │
-                   │  ┌────────────────────────────────┐  │
-                   │  │ 4. Modular DOM/SVG Renderers   │  │
-                   │  └───────────────┬────────────────┘  │
-                   │                  ▼                   │
-                   │  ┌────────────────────────────────┐  │
-                   │  │ 5. Interaction State Machine   │  │
-                   │  └────────────────────────────────┘  │
-                   └──────────────────┬───────────────────┘
-                                      │
-         ┌────────────────────────────┼────────────────────────────┐
-         ▼                            ▼                            ▼
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│   @jantt/react   │        │ @jantt/standalone│        │    jantt CLI     │
-│  <Jantt /> Prop  │        │   <script> Tag   │        │  Two-Way Sync    │
-└──────────────────┘        └──────────────────┘        └──────────────────┘
+```mermaid
+flowchart TD
+    classDef input fill:#0B111E,stroke:#38BDF8,stroke-width:2px,color:#F1F5F9;
+    classDef core fill:#141D2F,stroke:#24324B,stroke-width:1px,color:#F1F5F9;
+    classDef target fill:#0F172A,stroke:#38BDF8,stroke-width:1px,color:#FFF1F2;
+
+    JSON["Declarative JSON Document<br/>(Jantt v1 Schema Contract)"]:::input
+
+    subgraph CoreEngine ["@jantt/core Engine"]
+        VAL["1. Schema & Graph Validator"]:::core
+        RES["2. Topological Schedule Resolver"]:::core
+        LAY["3. Multi-Scale Layout Engine & 90° Router"]:::core
+        REN["4. Modular DOM/SVG Renderers"]:::core
+        CTRL["5. Interaction State Machine"]:::core
+    end
+
+    JSON --> VAL
+    VAL --> RES
+    RES --> LAY
+    LAY --> REN
+    REN --> CTRL
+
+    CTRL --> T_REACT["@jantt/react<br/>(&lt;Jantt /&gt; Prop)"]:::target
+    CTRL --> T_STAND["@jantt/standalone<br/>(&lt;script&gt; Tag)"]:::target
+    CTRL --> T_CLI["jantt CLI<br/>(Two-Way Sync)"]:::target
 ```
 
 ---
