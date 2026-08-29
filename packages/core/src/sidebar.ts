@@ -1,11 +1,14 @@
 import { Task, Category, CategoriesMap } from "./types";
-import { diffDays } from "./date-math";
+import { diffDays, addDays } from "./date-math";
+import { getTaskDependencies } from "./resolver";
 
 export interface TaskSidebarOptions {
   task: Task;
   allTasks?: Task[];
   categories: CategoriesMap;
   container?: HTMLElement;
+  theme?: Record<string, string>;
+  themeClassName?: string;
   readOnly?: boolean;
   onSave: (updatedTask: Task) => void;
   onDelete?: (taskId: string) => void;
@@ -26,8 +29,7 @@ export interface TaskSidebarInstance {
 }
 
 /**
- * Creates and mounts a slide-out Task Details Sidebar / Drawer.
- * Can be mounted as an overlay inside the chart container or into any external DOM element.
+ * Creates and mounts a slide-out Task Details Sidebar / Drawer with full multi-dependency management.
  */
 export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInstance {
   const {
@@ -35,6 +37,8 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
     allTasks = [],
     categories,
     container,
+    theme,
+    themeClassName,
     readOnly = false,
     onSave,
     onDelete,
@@ -51,13 +55,24 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
 
   // Wrapper element
   const backdrop = document.createElement("div");
-  backdrop.className = isCustomContainer ? "jantt-sidebar-embedded-wrap" : "jantt-sidebar-backdrop";
+  backdrop.className = isCustomContainer
+    ? `jantt-sidebar-embedded-wrap ${themeClassName || ""}`
+    : `jantt-sidebar-backdrop ${themeClassName || ""}`;
   backdrop.setAttribute("role", "dialog");
   backdrop.setAttribute("aria-label", `Task details: ${task.label || task.name || task.id}`);
 
   const sidebarEl = document.createElement("aside");
-  sidebarEl.className = "jantt-sidebar-drawer";
+  sidebarEl.className = `jantt-sidebar-drawer ${themeClassName || ""}`;
   backdrop.appendChild(sidebarEl);
+
+  // Apply custom theme CSS variables if provided
+  if (theme) {
+    Object.entries(theme).forEach(([k, v]) => {
+      const varName = k.startsWith("--") ? k : `--jantt-${k}`;
+      backdrop.style.setProperty(varName, v);
+      sidebarEl.style.setProperty(varName, v);
+    });
+  }
 
   const close = () => {
     document.removeEventListener("keydown", onKeyDown);
@@ -101,15 +116,16 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
       categories,
       readOnly,
       (updated) => {
+        currentTask = updated;
         onSave(updated);
         close();
       },
-      onDelete
-        ? () => {
-            onDelete(task.id);
-            close();
-          }
-        : undefined,
+      () => {
+        if (onDelete) {
+          onDelete(currentTask.id);
+          close();
+        }
+      },
       close
     );
   }
@@ -117,15 +133,15 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
   const mountTarget = container || document.body;
   mountTarget.appendChild(backdrop);
 
-  // Focus for accessibility
-  setTimeout(() => {
-    const focusable = sidebarEl.querySelector<HTMLElement>("button, input, select, textarea");
-    focusable?.focus();
-  }, 40);
-
-  return { close, element: backdrop };
+  return {
+    close,
+    element: sidebarEl
+  };
 }
 
+/**
+ * Renders the full task inspector with multi-dependency management and conflict detection.
+ */
 function renderDefaultSidebarContent(
   container: HTMLElement,
   task: Task,
@@ -144,15 +160,8 @@ function renderDefaultSidebarContent(
   const initialDuration = Math.max(diffDays(task.start, task.end), task.milestone ? 0 : 1);
   const initialProgress = Math.round((task.progress || 0) * 100);
 
-  // Generate prerequisite options excluding current task to prevent self-cycles
-  const depOptions = allTasks
-    .filter((t) => t.id !== task.id)
-    .map((t) => {
-      const isSel = t.id === task.dependsOn;
-      const tLabel = escapeHtml(t.label || t.name || t.id);
-      return `<option value="${escapeHtml(t.id)}" ${isSel ? "selected" : ""}>${tLabel} (#${escapeHtml(t.id)})</option>`;
-    })
-    .join("");
+  // Active dependencies state
+  let currentDeps: string[] = getTaskDependencies(task);
 
   container.innerHTML = `
     <!-- Header -->
@@ -166,6 +175,7 @@ function renderDefaultSidebarContent(
           <span class="jantt-hover-id-badge">#${escapeHtml(task.id)}</span>
           ${task.locked ? '<span class="jantt-hover-type-pill is-locked">Locked</span>' : ""}
           ${task.urgent ? '<span class="jantt-hover-type-pill is-urgent">Urgent</span>' : ""}
+          ${task.milestone ? '<span class="jantt-hover-type-pill is-milestone">Milestone</span>' : ""}
         </div>
         <h2 class="jantt-sidebar-title">${escapeHtml(task.label || task.name || task.id)}</h2>
       </div>
@@ -216,6 +226,33 @@ function renderDefaultSidebarContent(
         </div>
       </div>
 
+      <!-- Multi-Dependency Management Section -->
+      <div class="jantt-form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <label class="jantt-form-label" style="margin: 0;">Prerequisite Dependencies (${currentDeps.length})</label>
+        </div>
+        <div id="jantt-sidebar-deps-container" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Active Dependency Chips -->
+          <div id="jantt-sidebar-dep-chips" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+
+          <!-- Add Dependency Dropdown -->
+          ${
+            !readOnly && !task.locked
+              ? `
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <select id="jantt-sidebar-add-dep-select" class="jantt-select" style="font-size: 12px;">
+              <option value="">+ Add Prerequisite Dependency...</option>
+            </select>
+          </div>
+          `
+              : ""
+          }
+
+          <!-- Timing Conflict Alert Area -->
+          <div id="jantt-sidebar-dep-conflict-box" style="display: none;"></div>
+        </div>
+      </div>
+
       <!-- Status & Progress -->
       <div class="jantt-form-grid-2">
         <div class="jantt-form-group">
@@ -236,15 +273,6 @@ function renderDefaultSidebarContent(
           </div>
           <input type="range" id="jantt-sidebar-prog-input" min="0" max="100" value="${initialProgress}" class="jantt-slider" ${readOnly ? "disabled" : ""} />
         </div>
-      </div>
-
-      <!-- Dependency Prerequisite Selector -->
-      <div class="jantt-form-group">
-        <label class="jantt-form-label">Depends On (Prerequisite)</label>
-        <select id="jantt-sidebar-dep" class="jantt-select" ${readOnly || task.locked ? "disabled" : ""}>
-          <option value="">-- None (Independent Task) --</option>
-          ${depOptions}
-        </select>
       </div>
 
       <!-- Notes Field -->
@@ -288,6 +316,118 @@ function renderDefaultSidebarContent(
   const startInput = container.querySelector<HTMLInputElement>("#jantt-sidebar-start");
   const endInput = container.querySelector<HTMLInputElement>("#jantt-sidebar-end");
   const durLabel = container.querySelector<HTMLElement>("#jantt-sidebar-duration");
+  const conflictBox = container.querySelector<HTMLElement>("#jantt-sidebar-dep-conflict-box");
+
+  const checkConflictsAndRenderDeps = () => {
+    const chipsContainer = container.querySelector<HTMLElement>("#jantt-sidebar-dep-chips");
+    const addSelect = container.querySelector<HTMLSelectElement>("#jantt-sidebar-add-dep-select");
+
+    if (chipsContainer) {
+      if (currentDeps.length === 0) {
+        chipsContainer.innerHTML =
+          '<span style="font-size: 12px; color: var(--jantt-text-muted); font-style: italic;">None (Independent Task)</span>';
+      } else {
+        chipsContainer.innerHTML = currentDeps
+          .map((depId) => {
+            const prereq = allTasks.find((t) => t.id === depId);
+            const pLabel = prereq ? prereq.label || prereq.name || prereq.id : depId;
+            return `
+            <span class="jantt-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 11.5px; background: var(--jantt-surface-solid); border: 1px solid var(--jantt-border);">
+              <span>${escapeHtml(pLabel)} (#${escapeHtml(depId)})</span>
+              ${
+                !readOnly && !task.locked
+                  ? `<button type="button" data-remove-dep="${escapeHtml(depId)}" style="background: none; border: none; color: var(--jantt-text-dim); cursor: pointer; font-size: 12px; padding: 0;" title="Remove dependency">✕</button>`
+                  : ""
+              }
+            </span>
+          `;
+          })
+          .join("");
+
+        // Attach remove buttons
+        chipsContainer.querySelectorAll<HTMLButtonElement>("[data-remove-dep]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const targetDep = btn.dataset.removeDep!;
+            currentDeps = currentDeps.filter((d) => d !== targetDep);
+            checkConflictsAndRenderDeps();
+          });
+        });
+      }
+    }
+
+    // Refresh add dropdown options
+    if (addSelect) {
+      const available = allTasks.filter((t) => t.id !== task.id && !currentDeps.includes(t.id));
+      addSelect.innerHTML =
+        '<option value="">+ Add Prerequisite Dependency...</option>' +
+        available
+          .map((t) => {
+            const tLabel = escapeHtml(t.label || t.name || t.id);
+            return `<option value="${escapeHtml(t.id)}">${tLabel} (#${escapeHtml(t.id)}) [Ends: ${t.end}]</option>`;
+          })
+          .join("");
+    }
+
+    // Check for start-date timing conflicts with any prerequisite
+    if (conflictBox && startInput) {
+      const curStart = startInput.value;
+      const conflicts: { depId: string; prereqEnd: string; prereqLabel: string }[] = [];
+
+      currentDeps.forEach((depId) => {
+        const prereq = allTasks.find((t) => t.id === depId);
+        if (prereq && prereq.end && curStart) {
+          if (diffDays(prereq.end, curStart) > 0) {
+            conflicts.push({
+              depId,
+              prereqEnd: prereq.end,
+              prereqLabel: prereq.label || prereq.name || prereq.id
+            });
+          }
+        }
+      });
+
+      if (conflicts.length > 0) {
+        conflictBox.style.display = "block";
+        const latestEnd = conflicts.reduce((max, c) => (diffDays(max, c.prereqEnd) > 0 ? c.prereqEnd : max), conflicts[0].prereqEnd);
+        conflictBox.innerHTML = `
+          <div style="background: rgba(244, 63, 94, 0.12); border-left: 3px solid #F43F5E; padding: 8px 12px; border-radius: 6px; font-size: 11.5px; margin-top: 4px;">
+            <div style="color: var(--jantt-text); font-weight: 600; margin-bottom: 4px;">⚠️ Dependency Timing Conflict:</div>
+            <div style="color: var(--jantt-text-muted);">
+              Starts on <strong>${curStart}</strong> before prerequisite finish (${latestEnd}).
+            </div>
+            ${
+              !readOnly && !task.locked
+                ? `<button type="button" id="jantt-sidebar-align-btn" class="jantt-btn jantt-btn-secondary" style="padding: 3px 8px; font-size: 11px; margin-top: 6px;">Align Start Date to ${latestEnd}</button>`
+                : ""
+            }
+          </div>
+        `;
+
+        conflictBox.querySelector("#jantt-sidebar-align-btn")?.addEventListener("click", () => {
+          if (startInput && endInput) {
+            const oldSpan = Math.max(diffDays(startInput.value, endInput.value), 0);
+            startInput.value = latestEnd;
+            endInput.value = addDays(latestEnd, oldSpan);
+            updateDuration();
+            checkConflictsAndRenderDeps();
+          }
+        });
+      } else {
+        conflictBox.style.display = "none";
+        conflictBox.innerHTML = "";
+      }
+    }
+  };
+
+  // Add dependency dropdown change
+  const addSelect = container.querySelector<HTMLSelectElement>("#jantt-sidebar-add-dep-select");
+  addSelect?.addEventListener("change", (e) => {
+    const val = (e.target as HTMLSelectElement).value;
+    if (val && !currentDeps.includes(val)) {
+      currentDeps.push(val);
+      checkConflictsAndRenderDeps();
+    }
+  });
 
   const updateDuration = () => {
     if (!startInput || !endInput || !durLabel) return;
@@ -297,10 +437,14 @@ function renderDefaultSidebarContent(
       const days = Math.max(diffDays(s, e), 0);
       durLabel.textContent = `${days} day${days === 1 ? "" : "s"}`;
     }
+    checkConflictsAndRenderDeps();
   };
 
   startInput?.addEventListener("change", updateDuration);
   endInput?.addEventListener("change", updateDuration);
+
+  // Initialize dependencies UI
+  checkConflictsAndRenderDeps();
 
   // Progress slider feedback
   const progInput = container.querySelector<HTMLInputElement>("#jantt-sidebar-prog-input");
@@ -325,7 +469,6 @@ function renderDefaultSidebarContent(
     const start = startInput?.value || task.start;
     const end = endInput?.value || task.end;
     const status = (container.querySelector("#jantt-sidebar-status") as HTMLSelectElement)?.value || task.status;
-    const depVal = (container.querySelector("#jantt-sidebar-dep") as HTMLSelectElement)?.value || null;
     const notes = (container.querySelector("#jantt-sidebar-notes") as HTMLTextAreaElement)?.value || "";
     const progress = progInput ? parseInt(progInput.value, 10) / 100 : task.progress;
 
@@ -336,6 +479,9 @@ function renderDefaultSidebarContent(
       updatedFields[k] = input.value;
     });
 
+    const finalDependsOn: string | string[] | null =
+      currentDeps.length === 0 ? null : currentDeps.length === 1 ? currentDeps[0] : currentDeps;
+
     const updatedTask: Task = {
       ...task,
       label,
@@ -344,7 +490,7 @@ function renderDefaultSidebarContent(
       start,
       end,
       status,
-      dependsOn: depVal || null,
+      dependsOn: finalDependsOn,
       progress,
       notes,
       fields: updatedFields

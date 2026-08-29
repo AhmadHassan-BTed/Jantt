@@ -1,5 +1,15 @@
-import { useState, useCallback } from "react";
-import { JanttData, validate, ValidationResult, ValidationError, resolveSchedule, TimeScale, LinkRoutingStyle } from "@jantt/core";
+import { useState, useCallback, useRef } from "react";
+import {
+  JanttData,
+  validate,
+  ValidationResult,
+  ValidationError,
+  resolveSchedule,
+  TimeScale,
+  LinkRoutingStyle,
+  themeManager,
+  ThemeDefinition
+} from "@jantt/core";
 import { Jantt } from "@jantt/react";
 import {
   Sparkles,
@@ -18,11 +28,13 @@ import {
 import basicFixture from "../../../examples/basic.json";
 import constructionFixture from "../../../examples/construction-enterprise.json";
 import academicFixture from "../../../examples/academic-roadmap.json";
+import masterFixture from "../../../examples/master-template.json";
 import brokenMissingIdFixture from "../../../examples/broken-missing-id.json";
 import brokenBadDateFixture from "../../../examples/broken-bad-date.json";
 import brokenDanglingDepFixture from "../../../examples/broken-dangling-dependency.json";
 
 const PRESETS: Record<string, { label: string; data: any }> = {
+  master: { label: "Master Kitchen-Sink (All Features)", data: masterFixture },
   construction: { label: "High-Rise Construction (Enterprise)", data: constructionFixture },
   basic: { label: "Acme Platform v2 Launch", data: basicFixture },
   academic: { label: "Graduate Admissions Roadmap", data: academicFixture },
@@ -31,59 +43,12 @@ const PRESETS: Record<string, { label: string; data: any }> = {
   brokenDangling: { label: "Diagnostic: Dangling Dep", data: brokenDanglingDepFixture }
 };
 
-const THEMES: Record<string, { label: string; className: string; vars: Record<string, string> }> = {
-  dark: {
-    label: "Swiss Dark 2.0",
-    className: "jantt-theme-dark",
-    vars: {}
-  },
-  light: {
-    label: "Swiss Light 2.0 (Alpine Glass)",
-    className: "jantt-theme-light",
-    vars: {}
-  },
-  emerald: {
-    label: "Cyber Emerald",
-    className: "jantt-theme-dark",
-    vars: {
-      "--jantt-bg": "#061A14",
-      "--jantt-surface": "#0C2E24",
-      "--jantt-border": "#164E3D",
-      "--jantt-text": "#ECFDF5",
-      "--jantt-accent": "#10B981",
-      "--jantt-accent-glow": "rgba(16, 185, 129, 0.3)"
-    }
-  },
-  rose: {
-    label: "Midnight Rose",
-    className: "jantt-theme-rose",
-    vars: {
-      "--jantt-bg": "#12070E",
-      "--jantt-surface": "#1E0D18",
-      "--jantt-surface-hover": "#2D1424",
-      "--jantt-border": "#4C1D36",
-      "--jantt-text": "#FFF1F2",
-      "--jantt-accent": "#F43F5E",
-      "--jantt-accent-glow": "rgba(244, 63, 94, 0.3)"
-    }
-  },
-  sunset: {
-    label: "Sunset Crimson",
-    className: "jantt-theme-dark",
-    vars: {
-      "--jantt-bg": "#1A0B12",
-      "--jantt-surface": "#2D1220",
-      "--jantt-border": "#4C1D36",
-      "--jantt-text": "#FFF1F2",
-      "--jantt-accent": "#F43F5E",
-      "--jantt-accent-glow": "rgba(244, 63, 94, 0.3)"
-    }
-  }
-};
+const AVAILABLE_THEMES = themeManager.getAllThemes();
 
 export function App() {
   const [selectedPreset, setSelectedPreset] = useState("construction");
-  const [selectedTheme, setSelectedTheme] = useState("dark");
+  const [selectedThemeId, setSelectedThemeId] = useState("swiss-dark");
+  const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
   const [jsonText, setJsonText] = useState(() => JSON.stringify(constructionFixture, null, 2));
   const [parsedData, setParsedData] = useState<JanttData | null>(constructionFixture as JanttData);
   const [validationResult, setValidationResult] = useState<ValidationResult>(() => validate(constructionFixture));
@@ -95,6 +60,39 @@ export function App() {
   const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>("orthogonal");
   const [showCriticalPath, setShowCriticalPath] = useState(true);
   const [showBaselines, setShowBaselines] = useState(true);
+
+  // Sidebar width resize state
+  const [sidebarWidth, setSidebarWidth] = useState(480);
+  const [isResizing, setIsResizing] = useState(false);
+  const isDraggingRef = useRef(false);
+
+  const startResizing = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (!isDraggingRef.current) return;
+      const minW = 280;
+      const maxW = Math.max(minW, window.innerWidth - 360);
+      const newWidth = Math.min(Math.max(moveEvent.clientX, minW), maxW);
+      setSidebarWidth(newWidth);
+    };
+
+    const handlePointerUp = () => {
+      isDraggingRef.current = false;
+      setIsResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }, []);
 
   // Handle preset selection
   const handleSelectPreset = (key: string) => {
@@ -224,7 +222,10 @@ Rules:
   };
 
   return (
-    <div className={`playground-app ${THEMES[selectedTheme].className}`}>
+    <div
+      className={`playground-app ${activeTheme.className}`}
+      style={{ ...(activeTheme.vars as React.CSSProperties) }}
+    >
       {/* Navbar Header */}
       <header className="navbar">
         <div className="brand-section">
@@ -233,7 +234,7 @@ Rules:
             <span>Jantt</span>
           </div>
           <span className="brand-badge">v1.1.0</span>
-          <span style={{ fontSize: "13px", color: "#94A3B8", marginLeft: "8px" }}>The JSON Gantt Engine</span>
+          <span style={{ fontSize: "13px", color: "var(--jantt-text-muted)", marginLeft: "8px" }}>The JSON Gantt Engine</span>
         </div>
 
         <div className="nav-controls">
@@ -260,11 +261,11 @@ Rules:
             <select
               id="theme-select"
               className="select-input"
-              value={selectedTheme}
-              onChange={(e) => setSelectedTheme(e.target.value)}
+              value={selectedThemeId}
+              onChange={(e) => setSelectedThemeId(e.target.value)}
             >
-              {Object.entries(THEMES).map(([k, t]) => (
-                <option key={k} value={k}>
+              {AVAILABLE_THEMES.map((t) => (
+                <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
               ))}
@@ -291,8 +292,8 @@ Rules:
 
       {/* Main Workspace */}
       <main className="main-workspace">
-        {/* Left Pane: Code Editor & Schema Diagnostics */}
-        <section className="editor-pane">
+        {/* Left Pane: Code Editor & Schema Diagnostics (Adjustable Width) */}
+        <section className="editor-pane" style={{ width: `${sidebarWidth}px`, flexShrink: 0 }}>
           <div className="pane-header">
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <FileJson size={15} />
@@ -351,13 +352,22 @@ Rules:
           </div>
         </section>
 
-        {/* Right Pane: Live Chart Render */}
+        {/* Draggable Splitter Divider */}
+        <div
+          className={`workspace-splitter ${isResizing ? "is-resizing" : ""}`}
+          onPointerDown={startResizing}
+          title="Drag left/right to adjust JSON sidebar width"
+        >
+          <div className="splitter-handle" />
+        </div>
+
+        {/* Right Pane: Live Full-Space Chart Render */}
         <section className="chart-pane">
           <div className="chart-controls-bar">
             <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
               {/* Pacing Gap Slider */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
-                <Sliders size={13} color="#38BDF8" />
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--jantt-text)" }}>
+                <Sliders size={13} color="var(--jantt-accent)" />
                 <span style={{ fontWeight: 600 }}>Pacing:</span>
                 <input
                   type="range"
@@ -365,9 +375,9 @@ Rules:
                   max="7"
                   value={defaultGap}
                   onChange={(e) => handleGapChange(parseInt(e.target.value, 10))}
-                  style={{ accentColor: "#38BDF8", cursor: "pointer", width: "70px" }}
+                  style={{ accentColor: "var(--jantt-accent)", cursor: "pointer", width: "70px" }}
                 />
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#38BDF8", fontWeight: 600 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--jantt-accent)", fontWeight: 600 }}>
                   {defaultGap}d
                 </span>
               </div>
@@ -415,7 +425,7 @@ Rules:
               {/* Baselines Toggle */}
               <button
                 className={`jantt-critical-btn ${showBaselines ? "is-active" : ""}`}
-                style={showBaselines ? { borderColor: "#38BDF8", color: "#38BDF8", background: "rgba(56, 189, 248, 0.15)" } : {}}
+                style={showBaselines ? { borderColor: "var(--jantt-accent)", color: "var(--jantt-accent)", background: "var(--jantt-accent-glow)" } : {}}
                 onClick={() => setShowBaselines(!showBaselines)}
                 title="Show original baseline plan ghost bars"
               >
@@ -424,8 +434,8 @@ Rules:
               </button>
             </div>
 
-            <div style={{ fontSize: "11px", color: "#94A3B8" }}>
-              Drag edge anchor to link • Drag progress handle • Drag bar to move • Drag splitter to resize table
+            <div style={{ fontSize: "11px", color: "var(--jantt-text-dim)" }}>
+              Drag edge anchor to link • Drag progress handle • Drag bar to move • Drag splitter to resize
             </div>
           </div>
 
@@ -440,7 +450,8 @@ Rules:
                   showCriticalPath,
                   showBaselines
                 }}
-                theme={THEMES[selectedTheme].vars}
+                theme={activeTheme.vars}
+                themeClassName={activeTheme.className}
               />
             ) : (
               <div
@@ -449,13 +460,14 @@ Rules:
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  height: "400px",
+                  height: "100%",
+                  minHeight: "350px",
                   gap: "12px",
-                  color: "#94A3B8"
+                  color: "var(--jantt-text-muted)"
                 }}
               >
                 <AlertTriangle size={36} color="#F43F5E" />
-                <h3 style={{ color: "#F1F5F9" }}>Cannot render Gantt chart</h3>
+                <h3 style={{ color: "var(--jantt-text)" }}>Cannot render Gantt chart</h3>
                 <p style={{ fontSize: "13px", maxWidth: "400px", textAlign: "center" }}>
                   Please resolve the schema diagnostic errors in the left panel to display the interactive chart.
                 </p>

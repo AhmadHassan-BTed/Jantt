@@ -2,12 +2,36 @@ import { Task } from "./types";
 import { addDays, diffDays, parseISODate } from "./date-math";
 
 /**
+ * Normalizes task dependencies into a clean string array.
+ * Supports string, string[], or comma-separated formats.
+ */
+export function getTaskDependencies(task: Task | { dependsOn?: string | string[] | null }): string[] {
+  if (!task || !task.dependsOn) return [];
+  if (Array.isArray(task.dependsOn)) {
+    return task.dependsOn
+      .map((id) => (typeof id === "string" ? id.trim() : ""))
+      .filter((id) => id.length > 0);
+  }
+  if (typeof task.dependsOn === "string") {
+    if (task.dependsOn.includes(",")) {
+      return task.dependsOn
+        .split(",")
+        .map((s) => s.trim())
+        .filter((id) => id.length > 0);
+    }
+    const trimmed = task.dependsOn.trim();
+    return trimmed.length > 0 ? [trimmed] : [];
+  }
+  return [];
+}
+
+/**
  * Resolves the scheduling cascade for a list of tasks.
  *
- * Implements two coordinated pacing mechanisms:
- * 1. Explicit dependency (`dependsOn`): A dependent task cannot start before
- *    prerequisite.end + gapDays. Preserves task duration when shifted.
- * 2. Implicit category pacing: Tasks in the same category without an explicit dependsOn
+ * Implements coordinated multi-predecessor pacing:
+ * 1. Multi-Dependency Resolution: If a task depends on multiple tasks (e.g. [A, B]),
+ *    it cannot start before max(A.end, B.end) + gapDays. Preserves task duration when shifted.
+ * 2. Implicit category pacing: Tasks in the same category without explicit dependencies
  *    are automatically spaced by defaultGapDays in chronological order.
  *
  * Locked tasks (`locked: true`) are never moved.
@@ -45,34 +69,45 @@ export function resolveSchedule(tasks: Task[], defaultGapDays = 2): Task[] {
   // Determine implicit sibling predecessor per category
   const implicitPrev: Record<string, string> = {};
   Object.values(categoryGroups).forEach((group) => {
-    const unexplicit = group.filter((t) => !t.dependsOn);
+    const unexplicit = group.filter((t) => getTaskDependencies(t).length === 0);
     unexplicit.sort((a, b) => parseISODate(a.start).getTime() - parseISODate(b.start).getTime());
     for (let i = 1; i < unexplicit.length; i++) {
       implicitPrev[unexplicit[i].id] = unexplicit[i - 1].id;
     }
   });
 
-  const MAX_PASSES = 16;
+  const MAX_PASSES = 24;
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     let changed = false;
 
     for (const t of Object.values(byId)) {
       if (t.locked) continue;
 
-      const depId = t.dependsOn || implicitPrev[t.id];
-      if (!depId || !byId[depId]) continue;
+      const explicitDeps = getTaskDependencies(t);
+      let calculatedMinStart: string | null = null;
 
-      const prereq = byId[depId];
-      const gap = t.dependsOn
-        ? (t.gapDays ?? t.minGapDays ?? defaultGapDays)
-        : defaultGapDays;
+      if (explicitDeps.length > 0) {
+        const gap = t.gapDays ?? t.minGapDays ?? defaultGapDays;
 
-      const minStart = addDays(prereq.end, gap);
+        for (const depId of explicitDeps) {
+          const prereq = byId[depId];
+          if (!prereq) continue;
+          const minForThisDep = addDays(prereq.end, gap);
+          if (!calculatedMinStart || diffDays(calculatedMinStart, minForThisDep) > 0) {
+            calculatedMinStart = minForThisDep;
+          }
+        }
+      } else if (implicitPrev[t.id]) {
+        const prereq = byId[implicitPrev[t.id]];
+        if (prereq) {
+          calculatedMinStart = addDays(prereq.end, defaultGapDays);
+        }
+      }
 
-      if (diffDays(t.start, minStart) > 0) {
+      if (calculatedMinStart && diffDays(t.start, calculatedMinStart) > 0) {
         const duration = Math.max(diffDays(t.start, t.end), 0);
-        t.start = minStart;
-        t.end = addDays(minStart, duration);
+        t.start = calculatedMinStart;
+        t.end = addDays(calculatedMinStart, duration);
         changed = true;
       }
     }
@@ -91,7 +126,7 @@ export interface CriticalPathResult {
 /**
  * Calculates the Critical Path of a task network using Early/Late start analysis.
  * Identifies the sequence of dependent tasks with zero total float that directly
- * dictates the project completion date.
+ * dictates the project completion date. Supports multi-dependency networks.
  */
 export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
   const criticalTaskIds = new Set<string>();
@@ -110,9 +145,12 @@ export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
   });
 
   tasks.forEach((t) => {
-    if (t.dependsOn && byId.has(t.dependsOn)) {
-      dependentsMap.get(t.dependsOn)!.push(t.id);
-    }
+    const depIds = getTaskDependencies(t);
+    depIds.forEach((depId) => {
+      if (byId.has(depId)) {
+        dependentsMap.get(depId)!.push(t.id);
+      }
+    });
   });
 
   // Find project max finish date
@@ -136,7 +174,7 @@ export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
   });
 
   // Backward pass propagation
-  for (let pass = 0; pass < 12; pass++) {
+  for (let pass = 0; pass < 16; pass++) {
     tasks.forEach((t) => {
       const deps = dependentsMap.get(t.id) || [];
       if (deps.length > 0) {
@@ -176,9 +214,12 @@ export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
 
   // Trace critical links
   tasks.forEach((t) => {
-    if (t.dependsOn && criticalTaskIds.has(t.id) && criticalTaskIds.has(t.dependsOn)) {
-      criticalDepKeys.add(`${t.dependsOn}->${t.id}`);
-    }
+    const depIds = getTaskDependencies(t);
+    depIds.forEach((depId) => {
+      if (criticalTaskIds.has(t.id) && criticalTaskIds.has(depId)) {
+        criticalDepKeys.add(`${depId}->${t.id}`);
+      }
+    });
   });
 
   return { criticalTaskIds, criticalDepKeys };

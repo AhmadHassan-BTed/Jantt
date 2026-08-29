@@ -22,7 +22,7 @@ import {
   minISODate,
   parseISODate
 } from "./date-math";
-import { calculateCriticalPath } from "./resolver";
+import { calculateCriticalPath, getTaskDependencies } from "./resolver";
 
 const DEFAULT_CATEGORY: Category = {
   label: "General",
@@ -179,28 +179,33 @@ export function layout(
   const dependencies: DependencyLine[] = [];
 
   tasks.forEach((task) => {
-    if (!task.dependsOn) return;
-    const prereq = layoutById.get(task.dependsOn);
+    const depIds = getTaskDependencies(task);
+    if (depIds.length === 0) return;
     const curr = layoutById.get(task.id);
-    if (!prereq || !curr) return;
+    if (!curr) return;
 
-    const fromX = prereq.isMilestone ? prereq.x + 12 : prereq.x + prereq.width;
-    const fromY = prereq.y + prereq.height / 2;
-    const toX = curr.x;
-    const toY = curr.y + curr.height / 2;
+    depIds.forEach((depId) => {
+      const prereq = layoutById.get(depId);
+      if (!prereq) return;
 
-    const path = computeDependencyPath(fromX, fromY, toX, toY, viewport.rowHeight, linkRouting);
-    const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
+      const fromX = prereq.isMilestone ? prereq.x + 12 : prereq.x + prereq.width;
+      const fromY = prereq.y + prereq.height / 2;
+      const toX = curr.x;
+      const toY = curr.y + curr.height / 2;
 
-    dependencies.push({
-      fromTaskId: prereq.task.id,
-      toTaskId: curr.task.id,
-      fromX,
-      fromY,
-      toX,
-      toY,
-      path,
-      isCritical
+      const path = computeDependencyPath(fromX, fromY, toX, toY, viewport.rowHeight, linkRouting);
+      const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
+
+      dependencies.push({
+        fromTaskId: prereq.task.id,
+        toTaskId: curr.task.id,
+        fromX,
+        fromY,
+        toX,
+        toY,
+        path,
+        isCritical
+      });
     });
   });
 
