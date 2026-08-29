@@ -72,6 +72,9 @@
   user-select: none;
   box-shadow: var(--jantt-shadow);
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -125,7 +128,7 @@
 /* Scale & Routing Segmented Controls */
 .jantt-scale-group {
   display: flex;
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--jantt-surface-solid, rgba(0, 0, 0, 0.22));
   border: 1px solid var(--jantt-border);
   border-radius: 100px;
   padding: 3px;
@@ -133,7 +136,8 @@
 }
 
 .jantt-theme-light .jantt-scale-group {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.12);
 }
 
 .jantt-scale-btn {
@@ -155,8 +159,17 @@
 
 .jantt-scale-btn.is-active {
   background: var(--jantt-accent);
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 2px 6px var(--jantt-accent-glow, rgba(0, 0, 0, 0.2));
+}
+
+.jantt-theme-dark .jantt-scale-btn.is-active {
   color: #000000;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.jantt-theme-light .jantt-scale-btn.is-active {
+  color: #FFFFFF;
 }
 
 /* Critical Path Toggle */
@@ -219,7 +232,9 @@
   display: flex;
   position: relative;
   overflow: auto;
-  max-height: 720px;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
 }
 
 /* Sticky Multi-Column Data Grid */
@@ -232,9 +247,17 @@
   -webkit-backdrop-filter: blur(16px);
   border-right: 1px solid var(--jantt-border);
   flex-shrink: 0;
-  box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 4px 0 15px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
+  min-height: 100%;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 45px,
+    var(--jantt-border-subtle) 45px,
+    var(--jantt-border-subtle) 46px
+  );
 }
 
 .jantt-label-header {
@@ -337,6 +360,11 @@
 .jantt-timeline-area {
   position: relative;
   flex-grow: 1;
+  min-height: 100%;
+  min-width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--jantt-bg);
 }
 
 .jantt-timeline-header {
@@ -430,6 +458,13 @@
   font-weight: bold;
 }
 
+.jantt-grid-container {
+  position: relative;
+  flex-grow: 1;
+  min-height: 100%;
+  min-width: 100%;
+}
+
 /* Timeline Rows & Grid Lines */
 .jantt-grid-layer {
   position: absolute;
@@ -437,7 +472,15 @@
   left: 0;
   width: 100%;
   height: 100%;
+  min-height: 100%;
   pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 45px,
+    var(--jantt-grid-row-line, var(--jantt-border-subtle)) 45px,
+    var(--jantt-grid-row-line, var(--jantt-border-subtle)) 46px
+  );
 }
 
 .jantt-grid-row {
@@ -454,6 +497,8 @@
   position: absolute;
   top: 0;
   bottom: 0;
+  height: 100%;
+  min-height: 100%;
   border-right: 1px solid var(--jantt-grid-line);
   box-sizing: border-box;
   pointer-events: none;
@@ -1129,12 +1174,31 @@
 
 .jantt-btn-primary {
   background: var(--jantt-accent);
-  color: #000000;
+  color: #FFFFFF;
   font-weight: 700;
+}
+
+.jantt-theme-dark .jantt-btn-primary {
+  color: #000000;
+}
+
+.jantt-theme-light .jantt-btn-primary {
+  color: #FFFFFF;
+}
+
+.jantt-theme-cyber-emerald .jantt-btn-primary {
+  color: #000000;
+}
+
+.jantt-theme-midnight-rose .jantt-btn-primary,
+.jantt-theme-sunset-crimson .jantt-btn-primary,
+.jantt-theme-nordic-frost .jantt-btn-primary {
+  color: #FFFFFF;
 }
 
 .jantt-btn-primary:hover {
   opacity: 0.92;
+  box-shadow: 0 0 14px var(--jantt-accent-glow);
 }
 
 .jantt-btn-danger {

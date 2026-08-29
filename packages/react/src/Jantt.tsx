@@ -18,6 +18,7 @@ export interface JanttProps {
   ) => void;
   viewport?: ViewportOptions;
   theme?: Record<string, string>;
+  themeClassName?: string;
   className?: string;
   style?: React.CSSProperties;
   readOnly?: boolean;
@@ -33,6 +34,7 @@ export const Jantt: React.FC<JanttProps> = ({
   renderDetail,
   viewport,
   theme,
+  themeClassName,
   className,
   style,
   readOnly
@@ -47,6 +49,8 @@ export const Jantt: React.FC<JanttProps> = ({
     instanceRef.current = renderJantt(containerRef.current, data, {
       viewport,
       theme,
+      themeClassName,
+      className,
       readOnly,
       sidebarContainer,
       onChange,
@@ -68,6 +72,8 @@ export const Jantt: React.FC<JanttProps> = ({
       instanceRef.current.update(data, {
         viewport,
         theme,
+        themeClassName,
+        className,
         readOnly,
         sidebarContainer,
         onChange,
@@ -77,13 +83,13 @@ export const Jantt: React.FC<JanttProps> = ({
         renderDetail
       });
     }
-  }, [data, viewport, theme, readOnly, sidebarContainer, onChange, onCommit, onTaskClick, onTaskDelete, renderDetail]);
+  }, [data, viewport, theme, themeClassName, className, readOnly, sidebarContainer, onChange, onCommit, onTaskClick, onTaskDelete, renderDetail]);
 
   return (
     <div
       ref={containerRef}
       className={`jantt-react-wrapper ${className || ""}`}
-      style={{ width: "100%", ...style }}
+      style={{ width: "100%", height: "100%", minHeight: 0, display: "flex", flexDirection: "column", flex: "1 1 auto", ...style }}
     />
   );
 };

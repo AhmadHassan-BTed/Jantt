@@ -50,7 +50,7 @@ export interface Task {
   category: string;
   start: string; // YYYY-MM-DD
   end: string; // YYYY-MM-DD
-  dependsOn?: string | null;
+  dependsOn?: string | string[] | null;
   gapDays?: number | null;
   minGapDays?: number | null; // Backwards-compatible alias for gapDays
   locked?: boolean;
@@ -89,6 +89,7 @@ export interface ValidationError {
     | "INVALID_DATE_RANGE"
     | "DANGLING_DEPENDENCY"
     | "CIRCULAR_DEPENDENCY"
+    | "DEP_TIMING_CONFLICT"
     | "INVALID_PROGRESS"
     | "SCHEMA_MISMATCH";
 }
@@ -213,6 +214,8 @@ export interface JanttLayoutResult {
 export interface JanttOptions {
   viewport?: ViewportOptions;
   theme?: Record<string, string>;
+  themeClassName?: string;
+  className?: string;
   readOnly?: boolean;
   searchQuery?: string;
   sidebarContainer?: HTMLElement | string;

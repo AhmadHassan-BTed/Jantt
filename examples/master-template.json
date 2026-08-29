@@ -1,0 +1,217 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Master Project Specification & Kitchen-Sink Template",
+    "person": "Engineering Operations Lead",
+    "start": "2026-09-01",
+    "end": "2026-12-31",
+    "defaultGapDays": 2,
+    "scale": "day",
+    "linkRouting": "orthogonal",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "generatedAt": "2026-08-29T15:30:00.000Z",
+    "version": "1.0.0",
+    "budget": "$250,000",
+    "organization": "Acme Global Infrastructure"
+  },
+  "categories": {
+    "specs": {
+      "label": "Specifications & Architecture",
+      "color": "#3B82F6",
+      "soft": "#1E293B",
+      "icon": "file-text"
+    },
+    "core": {
+      "label": "Core Engine & Services",
+      "color": "#10B981",
+      "soft": "#064E3B",
+      "icon": "cpu"
+    },
+    "ui": {
+      "label": "Frontend & Design System",
+      "color": "#8B5CF6",
+      "soft": "#312E81",
+      "icon": "layout"
+    },
+    "qa": {
+      "label": "QA & Security Audit",
+      "color": "#F59E0B",
+      "soft": "#78350F",
+      "icon": "shield-check"
+    },
+    "release": {
+      "label": "Deployment & Release",
+      "color": "#EC4899",
+      "soft": "#831843",
+      "icon": "rocket"
+    }
+  },
+  "documents": [
+    {
+      "id": "doc-architecture-rfc",
+      "label": "RFC-104: System Architecture Blueprint",
+      "status": "have",
+      "note": "Approved by Tech Council on Aug 20"
+    },
+    {
+      "id": "doc-security-compliance",
+      "label": "SOC2 & ISO 27001 Security Checklist",
+      "status": "pending",
+      "note": "Awaiting external auditor signoff"
+    },
+    {
+      "id": "doc-legal-terms",
+      "label": "Terms of Service & Privacy Policy v2",
+      "status": "missing",
+      "note": "Required before GA launch"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-spec",
+      "label": "API Contracts & Data Schema Definition",
+      "category": "specs",
+      "start": "2026-09-01",
+      "end": "2026-09-15",
+      "dependsOn": null,
+      "locked": true,
+      "progress": 1.0,
+      "milestone": false,
+      "status": "completed",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-09-01",
+        "end": "2026-09-12"
+      },
+      "notes": "Define OpenAPI 3.1 specs, TypeScript interfaces, and JSON schema validation rules.",
+      "fields": {
+        "lead": "Sarah Chen",
+        "priority": "P0",
+        "deliverable": "schemas/v1.json",
+        "jira": "JANTT-101",
+        "estimatedHours": 80
+      }
+    },
+    {
+      "id": "task-core-services",
+      "label": "Core Engine & High-Performance Pipeline",
+      "category": "core",
+      "start": "2026-09-17",
+      "end": "2026-10-15",
+      "dependsOn": "task-spec",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.65,
+      "milestone": false,
+      "status": "in-progress",
+      "urgent": true,
+      "baseline": {
+        "start": "2026-09-15",
+        "end": "2026-10-12"
+      },
+      "notes": "Zero-dependency pure TypeScript constraint solver and DAG scheduler engine.",
+      "fields": {
+        "lead": "Alex Rivera",
+        "repo": "github.com/acme/core-engine",
+        "priority": "P0",
+        "coverageTarget": "95%",
+        "jira": "JANTT-102"
+      }
+    },
+    {
+      "id": "task-ui-components",
+      "label": "Interactive Grid & Timeline Canvas Subsystem",
+      "category": "ui",
+      "start": "2026-09-17",
+      "end": "2026-10-05",
+      "dependsOn": "task-spec",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.8,
+      "milestone": false,
+      "status": "in-progress",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-09-15",
+        "end": "2026-10-02"
+      },
+      "notes": "Implement virtualized DOM, drag-and-drop handles, and multi-tier timeline headers.",
+      "fields": {
+        "lead": "Elena Rostova",
+        "figma": "figma.com/@acme/jantt-ui",
+        "framework": "React + Vanilla CSS",
+        "jira": "JANTT-103"
+      }
+    },
+    {
+      "id": "task-alpha-milestone",
+      "label": "Alpha Feature Freeze & Internal Review",
+      "category": "specs",
+      "start": "2026-10-16",
+      "end": "2026-10-16",
+      "dependsOn": "task-core-services",
+      "gapDays": 1,
+      "locked": true,
+      "progress": 0.0,
+      "milestone": true,
+      "status": "not-started",
+      "urgent": false,
+      "notes": "Executive gate review before handing over to QA and security audit.",
+      "fields": {
+        "reviewer": "VP of Product",
+        "gate": "Alpha Approval"
+      }
+    },
+    {
+      "id": "task-security-qa",
+      "label": "Penetration Testing & Security Certification",
+      "category": "qa",
+      "start": "2026-10-18",
+      "end": "2026-11-10",
+      "dependsOn": "task-alpha-milestone",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "milestone": false,
+      "status": "not-started",
+      "urgent": true,
+      "baseline": {
+        "start": "2026-10-15",
+        "end": "2026-11-05"
+      },
+      "notes": "Third-party audit of data encryption, token validation, and OWASP Top 10 vulnerabilities.",
+      "fields": {
+        "lead": "Marcus Brody",
+        "auditor": "SecOps Labs",
+        "compliance": "SOC2 Type II",
+        "jira": "JANTT-104"
+      }
+    },
+    {
+      "id": "task-prod-deployment",
+      "label": "Global Production Rollout & GA Launch",
+      "category": "release",
+      "start": "2026-11-12",
+      "end": "2026-11-20",
+      "dependsOn": "task-security-qa",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "milestone": false,
+      "status": "not-started",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-11-08",
+        "end": "2026-11-18"
+      },
+      "notes": "Zero-downtime canary deployment across multi-region edge clusters.",
+      "fields": {
+        "lead": "DevOps Operations",
+        "infra": "AWS ECS + Cloudflare Workers",
+        "releaseTag": "v1.0.0-GA",
+        "jira": "JANTT-105"
+      }
+    }
+  ]
+}

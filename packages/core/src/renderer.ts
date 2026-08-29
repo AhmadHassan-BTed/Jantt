@@ -2,7 +2,7 @@ import { JanttData, JanttOptions, Task, TimeScale, LinkRoutingStyle } from "./ty
 import { layout, computeDependencyPath } from "./layout";
 import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
-import { resolveSchedule } from "./resolver";
+import { resolveSchedule, getTaskDependencies } from "./resolver";
 import {
   renderToolbar,
   renderGridTable,
@@ -42,7 +42,7 @@ export function renderJantt(
 
   container.innerHTML = "";
   const root = document.createElement("div");
-  root.className = "jantt-container";
+  root.className = `jantt-container ${currentOptions.themeClassName || ""} ${currentOptions.className || ""}`.trim();
   container.appendChild(root);
 
   // Apply custom theme CSS variables if supplied
@@ -75,6 +75,8 @@ export function renderJantt(
       allTasks: currentData.tasks,
       categories: currentData.categories || {},
       container: customContainer,
+      theme: currentOptions.theme,
+      themeClassName: currentOptions.themeClassName,
       readOnly: currentOptions.readOnly,
       customRenderer: currentOptions.renderDetail,
       onClose: () => {
@@ -92,7 +94,14 @@ export function renderJantt(
       onDelete: (taskId) => {
         const nextTasks = currentData.tasks.filter((t) => t.id !== taskId);
         nextTasks.forEach((t) => {
-          if (t.dependsOn === taskId) t.dependsOn = null;
+          const remaining = getTaskDependencies(t).filter((id) => id !== taskId);
+          if (remaining.length === 0) {
+            t.dependsOn = null;
+          } else if (remaining.length === 1) {
+            t.dependsOn = remaining[0];
+          } else {
+            t.dependsOn = remaining;
+          }
         });
         const resolved = resolveSchedule(nextTasks, currentData.meta?.defaultGapDays ?? 2);
         currentData = { ...currentData, tasks: resolved };
@@ -259,7 +268,14 @@ export function renderJantt(
       onLinkDelete: (fromId, toId) => {
         const targetTask = currentData.tasks.find((t) => t.id === toId);
         if (targetTask) {
-          targetTask.dependsOn = null;
+          const remaining = getTaskDependencies(targetTask).filter((id) => id !== fromId);
+          if (remaining.length === 0) {
+            targetTask.dependsOn = null;
+          } else if (remaining.length === 1) {
+            targetTask.dependsOn = remaining[0];
+          } else {
+            targetTask.dependsOn = remaining;
+          }
           const resolved = resolveSchedule(currentData.tasks, currentData.meta?.defaultGapDays ?? 2);
           currentData = { ...currentData, tasks: resolved };
           render();
@@ -304,6 +320,15 @@ export function renderJantt(
       };
       if (newOpts) {
         currentOptions = { ...currentOptions, ...newOpts };
+        if (newOpts.theme) {
+          Object.entries(newOpts.theme).forEach(([k, v]) => {
+            const varName = k.startsWith("--") ? k : `--jantt-${k}`;
+            root.style.setProperty(varName, v);
+          });
+        }
+        if (newOpts.themeClassName !== undefined || newOpts.className !== undefined) {
+          root.className = `jantt-container ${currentOptions.themeClassName || ""} ${currentOptions.className || ""}`.trim();
+        }
         if (newOpts.viewport?.scale) currentScale = newOpts.viewport.scale;
         if (newOpts.viewport?.linkRouting) currentRouting = newOpts.viewport.linkRouting;
         if (newOpts.viewport?.showCriticalPath !== undefined) showCritical = newOpts.viewport.showCriticalPath;

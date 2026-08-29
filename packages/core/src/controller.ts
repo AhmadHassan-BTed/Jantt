@@ -1,6 +1,6 @@
 import { JanttData, Task, JanttOptions } from "./types";
 import { addDays, diffDays } from "./date-math";
-import { resolveSchedule } from "./resolver";
+import { resolveSchedule, getTaskDependencies } from "./resolver";
 
 export type DragMode = "move" | "resize" | "progress" | "link" | "split";
 
@@ -202,7 +202,14 @@ export class InteractionController {
       if (linkFromTaskId && targetTaskId && targetTaskId !== linkFromTaskId) {
         const targetTask = this.data.tasks.find((t) => t.id === targetTaskId);
         if (targetTask) {
-          targetTask.dependsOn = linkFromTaskId;
+          const existing = getTaskDependencies(targetTask);
+          if (!existing.includes(linkFromTaskId)) {
+            if (existing.length === 0) {
+              targetTask.dependsOn = linkFromTaskId;
+            } else {
+              targetTask.dependsOn = [...existing, linkFromTaskId];
+            }
+          }
           const resolvedTasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
           this.data = { ...this.data, tasks: resolvedTasks };
           this.onRenderRequest();

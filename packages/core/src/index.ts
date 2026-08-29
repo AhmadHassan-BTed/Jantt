@@ -16,13 +16,15 @@ export * from "./sidebar";
 export * from "./renderers";
 export * from "./renderer";
 export * from "./exporter";
+export * from "./themes";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
-import { resolveSchedule, calculateCriticalPath } from "./resolver";
+import { resolveSchedule, calculateCriticalPath, getTaskDependencies } from "./resolver";
 import { layout, computeDependencyPath } from "./layout";
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
+import { themeManager } from "./themes";
 
 export const Jantt = {
   mount: renderJantt,
@@ -30,12 +32,14 @@ export const Jantt = {
   validate,
   resolveSchedule,
   calculateCriticalPath,
+  getTaskDependencies,
   layout,
   computeDependencyPath,
   exportToCsv,
   downloadCsv,
   downloadJson,
   exportSvgString,
+  themeManager,
   version: "1.1.0"
 };
 

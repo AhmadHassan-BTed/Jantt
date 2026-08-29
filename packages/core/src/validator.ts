@@ -1,5 +1,6 @@
 import { JanttData, Task, ValidationError, ValidationResult } from "./types";
 import { isValidISODate, diffDays } from "./date-math";
+import { getTaskDependencies } from "./resolver";
 
 /**
  * Validates a Jantt data object and returns an array of LLM-friendly diagnostic errors.
@@ -164,23 +165,26 @@ export function validate(json: unknown): ValidationResult {
     }
   });
 
-  // Second pass: Dependency resolution and cycle detection
+  // Second pass: Dependency resolution, dangling check, and cycle detection
   data.tasks.forEach((task, index) => {
-    if (!task || !task.id || !task.dependsOn) return;
+    if (!task || !task.id) return;
 
-    const depId = task.dependsOn;
-    if (!idToTaskMap.has(depId)) {
-      errors.push({
-        path: `tasks[${index}].dependsOn`,
-        taskId: task.id,
-        code: "DANGLING_DEPENDENCY",
-        message: `Task '${task.id}' has dependsOn: '${depId}' but no task with id '${depId}' exists in the plan.`,
-        suggestion: `Either create a task with id '${depId}' or update '${task.id}.dependsOn' to match an existing task id.`
-      });
-    }
+    const depIds = getTaskDependencies(task);
+    depIds.forEach((depId) => {
+      // 1. Dangling dependency check
+      if (!idToTaskMap.has(depId)) {
+        errors.push({
+          path: `tasks[${index}].dependsOn`,
+          taskId: task.id,
+          code: "DANGLING_DEPENDENCY",
+          message: `Task '${task.id}' has dependsOn: '${depId}' but no task with id '${depId}' exists in the plan.`,
+          suggestion: `Either create a task with id '${depId}' or update '${task.id}.dependsOn' to match an existing task id.`
+        });
+      }
+    });
   });
 
-  // Check for circular dependencies
+  // Check for circular dependencies across arbitrary multi-dependency graphs
   const visited = new Set<string>();
   const recStack = new Set<string>();
 
@@ -190,21 +194,24 @@ export function validate(json: unknown): ValidationResult {
     pathAcc.push(currId);
 
     const task = idToTaskMap.get(currId);
-    if (task && task.dependsOn && idToTaskMap.has(task.dependsOn)) {
-      const nextId = task.dependsOn;
-      if (!visited.has(nextId)) {
-        if (checkCycle(nextId, pathAcc)) return true;
-      } else if (recStack.has(nextId)) {
-        pathAcc.push(nextId);
-        const cycleStr = pathAcc.join(" -> ");
-        errors.push({
-          path: `tasks[${data.tasks!.findIndex((t) => t.id === currId)}].dependsOn`,
-          taskId: currId,
-          code: "CIRCULAR_DEPENDENCY",
-          message: `Circular dependency detected involving tasks: ${cycleStr}. A task cannot directly or indirectly depend on itself.`,
-          suggestion: `Break the cycle by removing the dependsOn link between '${currId}' and '${nextId}'.`
-        });
-        return true;
+    if (task) {
+      const depIds = getTaskDependencies(task);
+      for (const nextId of depIds) {
+        if (!idToTaskMap.has(nextId)) continue;
+        if (!visited.has(nextId)) {
+          if (checkCycle(nextId, pathAcc)) return true;
+        } else if (recStack.has(nextId)) {
+          pathAcc.push(nextId);
+          const cycleStr = pathAcc.join(" -> ");
+          errors.push({
+            path: `tasks[${data.tasks!.findIndex((t) => t.id === currId)}].dependsOn`,
+            taskId: currId,
+            code: "CIRCULAR_DEPENDENCY",
+            message: `Circular dependency detected involving tasks: ${cycleStr}. A task cannot directly or indirectly depend on itself.`,
+            suggestion: `Break the cycle by removing the dependsOn link between '${currId}' and '${nextId}'.`
+          });
+          return true;
+        }
       }
     }
 

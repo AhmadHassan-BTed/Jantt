@@ -33,7 +33,7 @@ export function exportToCsv(data: JanttData): string {
       String(duration),
       escapeCsv(progressPct),
       isMilestone ? "TRUE" : "FALSE",
-      escapeCsv(t.dependsOn || ""),
+      escapeCsv(Array.isArray(t.dependsOn) ? t.dependsOn.join("; ") : (t.dependsOn || "")),
       escapeCsv(t.status || ""),
       escapeCsv(t.notes || "")
     ].join(",");
