@@ -1,19 +1,22 @@
-import { JanttMeta, TimeScale } from "../types";
+import { JanttMeta, TimeScale, LinkRoutingStyle } from "../types";
 
 export interface ToolbarProps {
   meta?: JanttMeta;
   taskCount: number;
   currentScale: TimeScale;
+  currentRouting: LinkRoutingStyle;
   showCritical: boolean;
   criticalCount: number;
   searchQuery: string;
   onScaleChange: (scale: TimeScale) => void;
+  onRoutingChange: (routing: LinkRoutingStyle) => void;
   onCriticalToggle: () => void;
   onSearchChange: (query: string) => void;
 }
 
 /**
- * Renders the top toolbar containing title, badge, zoom scale switcher, critical path toggle, and search box.
+ * Renders the top toolbar containing title, badge, zoom scale switcher, link routing switcher,
+ * critical path toggle, and search box.
  */
 export function renderToolbar(props: ToolbarProps): HTMLElement {
   const toolbar = document.createElement("div");
@@ -36,6 +39,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   // Scale Segmented Control
   const scaleGroup = document.createElement("div");
   scaleGroup.className = "jantt-scale-group";
+  scaleGroup.title = "Timeline Zoom Scale";
   (["day", "week", "month", "quarter", "year"] as TimeScale[]).forEach((s) => {
     const btn = document.createElement("button");
     btn.className = `jantt-scale-btn ${s === props.currentScale ? "is-active" : ""}`;
@@ -45,10 +49,28 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   });
   controls.appendChild(scaleGroup);
 
+  // Link Routing Style Segmented Control
+  const routingGroup = document.createElement("div");
+  routingGroup.className = "jantt-scale-group jantt-routing-group";
+  routingGroup.title = "Dependency Line Routing Style";
+  const routingOptions: { id: LinkRoutingStyle; label: string }[] = [
+    { id: "orthogonal", label: "90° Turn" },
+    { id: "curved", label: "Curved" },
+    { id: "direct", label: "Direct" }
+  ];
+  routingOptions.forEach((opt) => {
+    const btn = document.createElement("button");
+    btn.className = `jantt-scale-btn ${opt.id === props.currentRouting ? "is-active" : ""}`;
+    btn.textContent = opt.label;
+    btn.addEventListener("click", () => props.onRoutingChange(opt.id));
+    routingGroup.appendChild(btn);
+  });
+  controls.appendChild(routingGroup);
+
   // Critical Path Button
   const critBtn = document.createElement("button");
   critBtn.className = `jantt-critical-btn ${props.showCritical ? "is-active" : ""}`;
-  critBtn.innerHTML = `<span>⚡</span><span>Critical Path (${props.criticalCount})</span>`;
+  critBtn.innerHTML = `<span>Critical Path (${props.criticalCount})</span>`;
   critBtn.addEventListener("click", () => props.onCriticalToggle());
   controls.appendChild(critBtn);
 
@@ -56,7 +78,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   const searchBox = document.createElement("div");
   searchBox.className = "jantt-search-box";
   searchBox.innerHTML = `
-    <span style="font-size: 11px; opacity: 0.6;">🔍</span>
+    <span style="font-size: 11px; opacity: 0.7; font-weight: bold;">Filter:</span>
     <input type="text" class="jantt-search-input" placeholder="Search tasks..." value="${escapeHtml(props.searchQuery)}" />
   `;
   const sInput = searchBox.querySelector<HTMLInputElement>(".jantt-search-input")!;

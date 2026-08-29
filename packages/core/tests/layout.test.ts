@@ -68,6 +68,25 @@ describe("Layout Engine", () => {
     expect(dep.toTaskId).toBe("task-2");
     expect(dep.path).toContain("M 120"); // Prereq right edge (0 + 120)
     expect(dep.path).toContain("L"); // 90-degree orthogonal path
+    // Ensures straight horizontal approach into the arrowhead
+    expect(dep.path.endsWith(`L ${dep.toX} ${dep.toY}`)).toBe(true);
+  });
+
+  it("supports curved link routing style with straight horizontal entry into arrowhead", () => {
+    const res = layout(sampleData, { dayWidth: 30, rowHeight: 40, linkRouting: "curved" });
+    expect(res.dependencies).toHaveLength(1);
+    const dep = res.dependencies[0];
+    expect(dep.path).toContain("C");
+    // The final segment before the arrow tip is a straight horizontal line L toX toY
+    expect(dep.path.endsWith(`L ${dep.toX} ${dep.toY}`)).toBe(true);
+  });
+
+  it("supports direct link routing style with straight horizontal entry into arrowhead", () => {
+    const res = layout(sampleData, { dayWidth: 30, rowHeight: 40, linkRouting: "direct" });
+    expect(res.dependencies).toHaveLength(1);
+    const dep = res.dependencies[0];
+    // Straight diagonal has horizontal lead-out and straight horizontal lead-in
+    expect(dep.path.endsWith(`L ${dep.toX} ${dep.toY}`)).toBe(true);
   });
 
   it("generates no dependency lines when no tasks have dependsOn", () => {

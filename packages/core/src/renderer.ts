@@ -1,5 +1,5 @@
-import { JanttData, JanttOptions, Task, TimeScale } from "./types";
-import { layout } from "./layout";
+import { JanttData, JanttOptions, Task, TimeScale, LinkRoutingStyle } from "./types";
+import { layout, computeDependencyPath } from "./layout";
 import { InteractionController } from "./controller";
 import { createDetailModal } from "./detail-modal";
 import { resolveSchedule } from "./resolver";
@@ -34,6 +34,7 @@ export function renderJantt(
   };
   let currentOptions: JanttOptions = { ...options };
   let currentScale: TimeScale = currentOptions.viewport?.scale || currentData.meta?.scale || "day";
+  let currentRouting: LinkRoutingStyle = currentOptions.viewport?.linkRouting || currentData.meta?.linkRouting || "orthogonal";
   let showCritical = currentOptions.viewport?.showCriticalPath ?? (currentData.meta?.showCriticalPath ?? false);
   let showBaselines = currentOptions.viewport?.showBaselines ?? (currentData.meta?.showBaselines ?? true);
   let labelWidth = currentOptions.viewport?.labelWidth || 340;
@@ -93,6 +94,7 @@ export function renderJantt(
       {
         ...currentOptions.viewport,
         scale: currentScale,
+        linkRouting: currentRouting,
         showCriticalPath: showCritical,
         showBaselines,
         labelWidth
@@ -122,8 +124,14 @@ export function renderJantt(
           if (!wire) {
             previewWireSvg.setAttribute("d", "");
           } else {
-            const midX = wire.fromX + Math.round((wire.toX - wire.fromX) / 2);
-            const pathStr = `M ${wire.fromX} ${wire.fromY} L ${midX} ${wire.fromY} L ${midX} ${wire.toY} L ${wire.toX} ${wire.toY}`;
+            const pathStr = computeDependencyPath(
+              wire.fromX,
+              wire.fromY,
+              wire.toX,
+              wire.toY,
+              viewport.rowHeight,
+              currentRouting
+            );
             previewWireSvg.setAttribute("d", pathStr);
           }
         },
@@ -143,11 +151,16 @@ export function renderJantt(
       meta: currentData.meta,
       taskCount: displayTasks.length,
       currentScale,
+      currentRouting,
       showCritical,
       criticalCount: criticalTaskIds.size,
       searchQuery: filterQuery,
       onScaleChange: (scale) => {
         currentScale = scale;
+        render();
+      },
+      onRoutingChange: (routing) => {
+        currentRouting = routing;
         render();
       },
       onCriticalToggle: () => {
@@ -256,6 +269,7 @@ export function renderJantt(
       if (newOpts) {
         currentOptions = { ...currentOptions, ...newOpts };
         if (newOpts.viewport?.scale) currentScale = newOpts.viewport.scale;
+        if (newOpts.viewport?.linkRouting) currentRouting = newOpts.viewport.linkRouting;
         if (newOpts.viewport?.showCriticalPath !== undefined) showCritical = newOpts.viewport.showCriticalPath;
         if (newOpts.viewport?.showBaselines !== undefined) showBaselines = newOpts.viewport.showBaselines;
       }

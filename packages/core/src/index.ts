@@ -19,7 +19,7 @@ export * from "./exporter";
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
 import { resolveSchedule, calculateCriticalPath } from "./resolver";
-import { layout } from "./layout";
+import { layout, computeDependencyPath } from "./layout";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
 
 export const Jantt = {
@@ -28,6 +28,7 @@ export const Jantt = {
   resolveSchedule,
   calculateCriticalPath,
   layout,
+  computeDependencyPath,
   exportToCsv,
   downloadCsv,
   downloadJson,
