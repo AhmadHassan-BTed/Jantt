@@ -752,10 +752,10 @@
 /* Milestone Diamond Pin */
 .jantt-milestone {
   position: absolute;
-  width: 20px;
-  height: 20px;
-  transform: rotate(45deg);
-  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-radius: 3px;
   cursor: grab;
   z-index: 7;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
@@ -764,7 +764,7 @@
 }
 
 .jantt-milestone:hover {
-  transform: rotate(45deg) scale(1.15);
+  transform: translate(-50%, -50%) rotate(45deg) scale(1.2);
 }
 
 .jantt-milestone.is-critical {

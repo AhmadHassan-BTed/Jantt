@@ -302,6 +302,9 @@ export function App() {
       setValidationResult(val);
       if (val.valid) {
         setParsedData(parsed);
+        if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
+        if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
+        if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
       }
     } catch {}
   };

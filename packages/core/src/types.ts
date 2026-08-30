@@ -147,6 +147,10 @@ export interface TaskLayout {
   durationDays: number;
   isMilestone: boolean;
   isCritical: boolean;
+  anchorInX?: number;
+  anchorInY?: number;
+  anchorOutX?: number;
+  anchorOutY?: number;
   baselineLayout?: {
     x: number;
     y: number;

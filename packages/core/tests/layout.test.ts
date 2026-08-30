@@ -32,12 +32,12 @@ describe("Layout Engine", () => {
 
     const t1 = res.tasks[0];
     expect(t1.x).toBe(0); // diffDays(09-01, 09-01) * 30
-    expect(t1.width).toBe(4 * 30); // 4 days * 30 = 120
+    expect(t1.width).toBe(5 * 30); // 5 days inclusive (09-01 to 09-05) * 30 = 150
     expect(t1.rowIndex).toBe(0);
 
     const t2 = res.tasks[1];
     expect(t2.x).toBe(6 * 30); // diffDays(09-01, 09-07) * 30 = 180
-    expect(t2.width).toBe(5 * 30); // 5 days * 30 = 150
+    expect(t2.width).toBe(6 * 30); // 6 days inclusive (09-07 to 09-12) * 30 = 180
     expect(t2.rowIndex).toBe(1);
   });
 
@@ -66,7 +66,7 @@ describe("Layout Engine", () => {
     const dep = res.dependencies[0];
     expect(dep.fromTaskId).toBe("task-1");
     expect(dep.toTaskId).toBe("task-2");
-    expect(dep.path).toContain("M 120"); // Prereq right edge (0 + 120)
+    expect(dep.path).toContain("M 150"); // Prereq right edge (0 + 150)
     expect(dep.path).toContain("L"); // 90-degree orthogonal path
     // Ensures straight horizontal approach into the arrowhead
     expect(dep.path.endsWith(`L ${dep.toX} ${dep.toY}`)).toBe(true);
