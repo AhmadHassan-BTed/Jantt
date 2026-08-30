@@ -448,8 +448,8 @@ export function computeDependencyPath(
 
   const dx = toX - fromX;
 
-  // 2. Standard forward dependency with space (dx >= 8)
-  if (dx >= 8) {
+  // 2. Standard forward dependency with space (dx >= 12)
+  if (dx >= 12) {
     if (style === "curved") {
       const leadIn = 8;
       const endX = toX - leadIn;
@@ -469,26 +469,18 @@ export function computeDependencyPath(
     return `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
   }
 
-  // 3. Zero-gap, adjacent day, or tight overlap (-24 <= dx < 8)
-  if (dx >= -24) {
-    const leadOut = 8;
-    const dropX = Math.max(fromX + leadOut, toX + 6);
-    if (style === "curved") {
-      return `M ${fromX} ${fromY} C ${dropX + 6} ${fromY}, ${dropX + 6} ${toY}, ${toX} ${toY}`;
-    }
-    return `M ${fromX} ${fromY} L ${dropX} ${fromY} L ${dropX} ${toY} L ${toX} ${toY}`;
-  }
-
-  // 4. Significant reverse overlap (dx < -24)
-  const leadOut = 10;
-  const leadIn = 10;
-  const midY = Math.round(fromY + (toY > fromY ? 0.5 : -0.5) * _rowHeight);
+  // 3. Tight gap / adjacent milestone / reverse overlap (dx < 12)
+  // Route cleanly through the gutter between rows:
+  // Step out from predecessor -> drop to mid-row gutter -> step back before successor -> drop to target row -> enter target anchor from left
+  const leadOut = 8;
+  const leadIn = 8;
+  const stepOutX = fromX + leadOut;
+  const stepInX = toX - leadIn;
+  const midY = Math.round((fromY + toY) / 2);
 
   if (style === "curved") {
-    const stepOutX = fromX + leadOut;
-    const stepInX = toX - leadIn;
-    return `M ${fromX} ${fromY} C ${stepOutX + 8} ${fromY}, ${stepOutX + 8} ${midY}, ${stepOutX} ${midY} L ${stepInX} ${midY} C ${stepInX - 8} ${midY}, ${stepInX - 8} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
+    return `M ${fromX} ${fromY} C ${stepOutX + 6} ${fromY}, ${stepOutX + 6} ${midY}, ${stepOutX} ${midY} L ${stepInX} ${midY} C ${stepInX - 6} ${midY}, ${stepInX - 6} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
   }
 
-  return `M ${fromX} ${fromY} L ${fromX + leadOut} ${fromY} L ${fromX + leadOut} ${midY} L ${toX - leadIn} ${midY} L ${toX - leadIn} ${toY} L ${toX} ${toY}`;
+  return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
 }
