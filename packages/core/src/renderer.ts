@@ -450,9 +450,13 @@ export function renderJantt(
 
   let resizeObserver: ResizeObserver | null = null;
   if (typeof ResizeObserver !== "undefined") {
+    let resizeTimer: any = null;
     resizeObserver = new ResizeObserver(() => {
       if (rowHeightMode === "fit") {
-        render();
+        if (resizeTimer) cancelAnimationFrame(resizeTimer);
+        resizeTimer = requestAnimationFrame(() => {
+          render();
+        });
       }
     });
     resizeObserver.observe(container);
