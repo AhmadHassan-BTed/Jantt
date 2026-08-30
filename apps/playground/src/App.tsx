@@ -35,12 +35,12 @@ import {
   User,
   Clock,
   FileSpreadsheet,
-  Plus,
   RotateCcw,
   FolderPlus,
   Trash2,
   Upload,
-  Save
+  Save,
+  Palette
 } from "lucide-react";
 
 import constructionFixture from "../../../examples/construction-enterprise.json";
@@ -59,10 +59,9 @@ const DEFAULT_TEMPLATE: SavedProject = {
   data: constructionFixture as JanttData
 };
 
-const AVAILABLE_THEMES = themeManager.getAllThemes();
-
 const STORAGE_KEYS = {
   CUSTOM_PROJECTS: "jantt_custom_projects",
+  CUSTOM_THEMES: "jantt_custom_themes",
   ACTIVE_PROJECT_ID: "jantt_active_project_id",
   ACTIVE_JSON: "jantt_saved_json",
   THEME: "jantt_saved_theme",
@@ -76,6 +75,80 @@ const STORAGE_KEYS = {
   SIDEBAR_COLLAPSED: "jantt_saved_sidebar_collapsed",
   SIDEBAR_WIDTH: "jantt_saved_sidebar_width"
 };
+
+function createCustomThemeDef(params: {
+  id: string;
+  name: string;
+  mode: "dark" | "light";
+  accent: string;
+  bg?: string;
+  surface?: string;
+  text?: string;
+}): ThemeDefinition {
+  const isDark = params.mode === "dark";
+  const bg = params.bg || (isDark ? "#090E1A" : "#FFFFFF");
+  const surface = params.surface || (isDark ? "rgba(18, 26, 44, 0.9)" : "rgba(248, 250, 252, 0.95)");
+  const surfaceSolid = isDark ? "#121A2C" : "#F8FAFC";
+  const surfaceHover = isDark ? "rgba(28, 40, 68, 0.92)" : "#F1F5F9";
+  const text = params.text || (isDark ? "#F8FAFC" : "#0F172A");
+  const textMuted = isDark ? "#94A3B8" : "#64748B";
+  const border = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.08)";
+  const borderSubtle = isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)";
+  const borderStrong = isDark ? "rgba(255, 255, 255, 0.16)" : "rgba(0, 0, 0, 0.16)";
+
+  return {
+    id: params.id,
+    name: params.name,
+    label: `${params.name} (Custom ${isDark ? "Dark" : "Light"})`,
+    mode: params.mode,
+    className: isDark ? "jantt-theme-dark" : "jantt-theme-light",
+    description: `User-defined custom ${params.mode} theme with ${params.accent} accent.`,
+    vars: {
+      "--jantt-bg": bg,
+      "--jantt-surface": surface,
+      "--jantt-surface-hover": surfaceHover,
+      "--jantt-surface-solid": surfaceSolid,
+      "--jantt-border": border,
+      "--jantt-border-subtle": borderSubtle,
+      "--jantt-border-strong": borderStrong,
+      "--jantt-text": text,
+      "--jantt-text-muted": textMuted,
+      "--jantt-text-dim": textMuted,
+      "--jantt-accent": params.accent,
+      "--jantt-accent-glow": `${params.accent}55`,
+      "--jantt-accent-contrast": isDark ? "#000000" : "#FFFFFF",
+      "--jantt-today": "#F43F5E",
+      "--jantt-critical": "#F59E0B",
+      "--jantt-critical-glow": "rgba(245, 158, 11, 0.35)",
+      "--jantt-weekend-bg": "transparent",
+      "--jantt-grid-line": isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
+      "--jantt-grid-row-line": isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.04)",
+      "--jantt-dep-line": isDark ? "#475569" : "#94A3B8",
+      "--jantt-dep-line-active": params.accent,
+      "--jantt-shadow": isDark ? "0 25px 50px -12px rgba(0, 0, 0, 0.55)" : "0 10px 25px -5px rgba(0, 0, 0, 0.1)"
+    }
+  };
+}
+
+function loadCustomThemes(): ThemeDefinition[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_THEMES);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((t) => themeManager.registerTheme(t));
+        return parsed;
+      }
+    }
+  } catch {}
+  return [];
+}
+
+function saveCustomThemes(themes: ThemeDefinition[]) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_THEMES, JSON.stringify(themes));
+  } catch {}
+}
 
 function loadSavedProjects(): SavedProject[] {
   try {
@@ -95,6 +168,7 @@ function saveCustomProjects(projects: SavedProject[]) {
 }
 
 function loadInitialState() {
+  loadCustomThemes();
   const savedProjects = loadSavedProjects();
   let activeProjectId = "default";
   try {
@@ -216,8 +290,20 @@ export function App() {
   const [newProjectName, setNewProjectName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [customThemes, setCustomThemes] = useState<ThemeDefinition[]>(() => loadCustomThemes());
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const [newThemeName, setNewThemeName] = useState("");
+  const [newThemeMode, setNewThemeMode] = useState<"dark" | "light">("dark");
+  const [newThemeAccent, setNewThemeAccent] = useState("#38BDF8");
+  const [newThemeBg, setNewThemeBg] = useState("#090E1A");
+  const [newThemeSurface, setNewThemeSurface] = useState("#121A2C");
+  const [newThemeText, setNewThemeText] = useState("#F8FAFC");
+
   const [selectedThemeId, setSelectedThemeId] = useState(init.initialTheme);
-  const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
+  const activeTheme: ThemeDefinition =
+    themeManager.getTheme(selectedThemeId) ||
+    customThemes.find((t) => t.id === selectedThemeId) ||
+    themeManager.getAllThemes()[0];
   const [jsonText, setJsonText] = useState(init.initialJson);
   const [parsedData, setParsedData] = useState<JanttData | null>(init.initialParsed);
   const [validationResult, setValidationResult] = useState<ValidationResult>(() => validate(init.initialParsed || {}));
@@ -437,6 +523,52 @@ export function App() {
         if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
       }
     } catch {}
+  };
+
+  // Open modal to create custom theme
+  const handleOpenThemeModal = () => {
+    setNewThemeName(`Custom Palette ${customThemes.length + 1}`);
+    setNewThemeMode("dark");
+    setNewThemeAccent("#38BDF8");
+    setNewThemeBg("#090E1A");
+    setNewThemeSurface("#121A2C");
+    setNewThemeText("#F8FAFC");
+    setShowThemeModal(true);
+  };
+
+  // Save new custom theme to localStorage & apply
+  const handleSaveCustomTheme = () => {
+    if (!newThemeName.trim()) return;
+    const themeId = `custom-${Date.now().toString(36)}`;
+    const newTheme = createCustomThemeDef({
+      id: themeId,
+      name: newThemeName.trim(),
+      mode: newThemeMode,
+      accent: newThemeAccent,
+      bg: newThemeBg,
+      surface: newThemeSurface,
+      text: newThemeText
+    });
+    themeManager.registerTheme(newTheme);
+    const updated = [...customThemes.filter((t) => t.id !== themeId), newTheme];
+    setCustomThemes(updated);
+    saveCustomThemes(updated);
+    setSelectedThemeId(themeId);
+    setShowThemeModal(false);
+  };
+
+  // Delete custom theme from localStorage
+  const handleDeleteCustomTheme = (themeId: string) => {
+    const found = customThemes.find((t) => t.id === themeId);
+    if (!found) return;
+    const confirmed = window.confirm(`Delete custom theme "${found.name}" from browser storage?`);
+    if (!confirmed) return;
+    const updated = customThemes.filter((t) => t.id !== themeId);
+    setCustomThemes(updated);
+    saveCustomThemes(updated);
+    if (selectedThemeId === themeId) {
+      setSelectedThemeId("swiss-light");
+    }
   };
 
   // Handle raw text changes in the JSON editor
@@ -897,24 +1029,50 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               value={selectedThemeId}
               onChange={(e) => setSelectedThemeId(e.target.value)}
             >
-              {AVAILABLE_THEMES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
+              <optgroup label="Standard Themes">
+                {themeManager
+                  .getAllThemes()
+                  .filter((t) => !t.id.startsWith("custom-"))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+              </optgroup>
+              {customThemes.length > 0 && (
+                <optgroup label={`My Custom Themes (${customThemes.length})`}>
+                  {customThemes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 
-          {/* Add Task Button */}
+          {/* Add Custom Theme Button */}
           <button
-            className="btn-prompt"
-            style={{ background: "var(--jantt-accent)", color: "#FFFFFF", fontWeight: 700 }}
-            onClick={handleAddNewTask}
-            title="Quick add a new task"
+            className="btn-nav"
+            onClick={handleOpenThemeModal}
+            title="Create and customize a new color theme"
           >
-            <Plus size={14} />
-            <span>Add Task</span>
+            <Palette size={13} />
+            <span>Add Theme</span>
           </button>
+
+          {/* Delete Custom Theme Button */}
+          {customThemes.some((t) => t.id === selectedThemeId) && (
+            <button
+              className="btn-nav"
+              style={{ color: "#EF4444" }}
+              onClick={() => handleDeleteCustomTheme(selectedThemeId)}
+              title="Delete this custom theme from browser memory"
+            >
+              <Trash2 size={13} />
+              <span>Delete Theme</span>
+            </button>
+          )}
 
           {/* Prompt AI Button */}
           <button
@@ -960,10 +1118,6 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               )}
             </div>
             <div className="pane-actions">
-              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px", color: "var(--jantt-accent)", fontWeight: 700 }} onClick={handleAddNewTask} title="Add New Task">
-                <Plus size={12} />
-                <span>Add Task</span>
-              </button>
               <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
                 Format
               </button>
@@ -1495,6 +1649,196 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               >
                 <Save size={14} />
                 <span>Save to Browser Memory</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Custom Theme Modal */}
+      {showThemeModal && (
+        <div className="prompt-modal-backdrop" onClick={() => setShowThemeModal(false)}>
+          <div className="prompt-modal-card" style={{ maxWidth: "520px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="prompt-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Palette size={18} color="var(--jantt-accent)" />
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                  Create Custom Theme
+                </h3>
+              </div>
+              <button
+                className="prompt-modal-close-btn"
+                onClick={() => setShowThemeModal(false)}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="prompt-modal-body" style={{ gap: "16px", padding: "20px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "6px", color: "var(--jantt-text-muted)" }}>
+                  Theme Name
+                </label>
+                <input
+                  type="text"
+                  className="code-textarea"
+                  style={{
+                    width: "100%",
+                    height: "38px",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--jantt-border)",
+                    boxSizing: "border-box"
+                  }}
+                  value={newThemeName}
+                  onChange={(e) => setNewThemeName(e.target.value)}
+                  placeholder="e.g. Cyber Violet Dark"
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "6px", color: "var(--jantt-text-muted)" }}>
+                    Base Mode
+                  </label>
+                  <select
+                    className="select-input"
+                    style={{ width: "100%", height: "38px" }}
+                    value={newThemeMode}
+                    onChange={(e) => {
+                      const m = e.target.value as "dark" | "light";
+                      setNewThemeMode(m);
+                      if (m === "dark") {
+                        setNewThemeBg("#090E1A");
+                        setNewThemeSurface("#121A2C");
+                        setNewThemeText("#F8FAFC");
+                      } else {
+                        setNewThemeBg("#F8FAFC");
+                        setNewThemeSurface("#FFFFFF");
+                        setNewThemeText("#0F172A");
+                      }
+                    }}
+                  >
+                    <option value="dark">Dark Theme</option>
+                    <option value="light">Light Theme</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "6px", color: "var(--jantt-text-muted)" }}>
+                    Primary Accent Color
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <input
+                      type="color"
+                      value={newThemeAccent}
+                      onChange={(e) => setNewThemeAccent(e.target.value)}
+                      style={{ width: "38px", height: "38px", padding: 0, border: "none", borderRadius: "6px", cursor: "pointer" }}
+                    />
+                    <input
+                      type="text"
+                      className="code-textarea"
+                      style={{ flex: 1, height: "38px", padding: "8px", fontSize: "12px", fontFamily: "var(--jantt-font-mono)", borderRadius: "6px", border: "1px solid var(--jantt-border)", boxSizing: "border-box" }}
+                      value={newThemeAccent}
+                      onChange={(e) => setNewThemeAccent(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Preset Color Chips */}
+              <div>
+                <label style={{ display: "block", fontSize: "10.5px", fontWeight: 600, color: "var(--jantt-text-dim)", marginBottom: "6px" }}>
+                  Quick Accent Palettes:
+                </label>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {[
+                    { color: "#38BDF8", label: "Sky" },
+                    { color: "#10B981", label: "Emerald" },
+                    { color: "#8B5CF6", label: "Violet" },
+                    { color: "#EC4899", label: "Pink" },
+                    { color: "#F59E0B", label: "Amber" },
+                    { color: "#06B6D4", label: "Cyan" },
+                    { color: "#F43F5E", label: "Rose" },
+                    { color: "#6366F1", label: "Indigo" }
+                  ].map((chip) => (
+                    <button
+                      key={chip.color}
+                      type="button"
+                      onClick={() => setNewThemeAccent(chip.color)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        padding: "4px 8px",
+                        borderRadius: "6px",
+                        border: newThemeAccent.toLowerCase() === chip.color.toLowerCase() ? "2px solid #FFFFFF" : "1px solid var(--jantt-border)",
+                        background: "var(--jantt-surface)",
+                        color: "var(--jantt-text)",
+                        fontSize: "11px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: chip.color }} />
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: "8px",
+                  background: newThemeBg,
+                  border: "1px solid var(--jantt-border)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: newThemeText }}>Preview:</span>
+                  <div
+                    style={{
+                      padding: "4px 12px",
+                      borderRadius: "6px",
+                      background: newThemeAccent,
+                      color: newThemeMode === "dark" ? "#000000" : "#FFFFFF",
+                      fontSize: "11px",
+                      fontWeight: 700
+                    }}
+                  >
+                    Task Bar Item (80%)
+                  </div>
+                </div>
+                <div
+                  style={{
+                    width: "12px",
+                    height: "12px",
+                    transform: "rotate(45deg)",
+                    background: newThemeAccent
+                  }}
+                  title="Milestone Preview"
+                />
+              </div>
+            </div>
+
+            <div className="prompt-modal-footer">
+              <button className="btn-nav" onClick={() => setShowThemeModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn-nav btn-nav-primary"
+                onClick={handleSaveCustomTheme}
+                disabled={!newThemeName.trim()}
+              >
+                <Save size={14} />
+                <span>Save & Apply Theme</span>
               </button>
             </div>
           </div>
