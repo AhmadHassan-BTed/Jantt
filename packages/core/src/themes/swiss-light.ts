@@ -2,8 +2,8 @@ import { ThemeDefinition } from "./types";
 
 export const swissLightTheme: ThemeDefinition = {
   id: "swiss-light",
-  name: "Swiss Modern 2.0",
-  label: "Swiss Modern 2.0 (White Default)",
+  name: "Swiss Light",
+  label: "Swiss Light",
   mode: "light",
   className: "jantt-theme-light",
   description: "True Swiss Modern 2.0: Ultra-clean porcelain canvas, razor-sharp hairline borders, ink typography, and high-precision international accents.",

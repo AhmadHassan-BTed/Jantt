@@ -3,7 +3,7 @@ import { ThemeDefinition } from "./types";
 export const sunsetCrimsonTheme: ThemeDefinition = {
   id: "sunset-crimson",
   name: "Sunset Crimson",
-  label: "Sunset Crimson (Solar Flare)",
+  label: "Sunset Crimson",
   mode: "dark",
   className: "jantt-theme-sunset-crimson",
   description: "Solar flare glow with molten amber, coral crimson highlights, and deep charcoal slate surfaces.",

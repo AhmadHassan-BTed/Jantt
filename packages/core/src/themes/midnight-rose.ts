@@ -3,7 +3,7 @@ import { ThemeDefinition } from "./types";
 export const midnightRoseTheme: ThemeDefinition = {
   id: "midnight-rose",
   name: "Midnight Rose",
-  label: "Midnight Rose (Synthwave)",
+  label: "Midnight Rose",
   mode: "dark",
   className: "jantt-theme-midnight-rose",
   description: "Synthwave midnight nebula with deep amethyst shadows, glowing fuchsia pink accents, and rose gridlines.",

@@ -3,7 +3,7 @@ import { ThemeDefinition } from "./types";
 export const nordicFrostTheme: ThemeDefinition = {
   id: "nordic-frost",
   name: "Nordic Frost",
-  label: "Nordic Frost (Glacier Minimal)",
+  label: "Nordic Frost",
   mode: "light",
   className: "jantt-theme-nordic-frost",
   description: "Minimalist Scandinavian glacial design with icy porcelain surfaces, cool steel borders, and cobalt blue highlights.",
