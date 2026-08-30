@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
-import constructionFixture from "../../../examples/construction-enterprise.json";
+import masterTemplateFixture from "../../../examples/master-template.json";
 
 export interface SavedProject {
   id: string;
@@ -54,9 +54,9 @@ export interface SavedProject {
 
 const DEFAULT_TEMPLATE: SavedProject = {
   id: "default",
-  name: "Default Template: Enterprise Plan",
+  name: "Master Specification & Benchmark Cheatsheet",
   updatedAt: "2026-08-31T00:00:00.000Z",
-  data: constructionFixture as JanttData
+  data: masterTemplateFixture as JanttData
 };
 
 const AVAILABLE_THEMES = themeManager.getAllThemes();
@@ -247,7 +247,7 @@ export function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>(init.activeProjectId);
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
-  const [newPlanTemplateType, setNewPlanTemplateType] = useState<"blank" | "enterprise" | "clone">("blank");
+  const [newPlanTemplateType, setNewPlanTemplateType] = useState<"blank" | "master" | "clone">("blank");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedThemeId, setSelectedThemeId] = useState(init.initialTheme);
@@ -329,8 +329,8 @@ export function App() {
       if (!isDraggingRef.current) return;
       const minW = 280;
       const maxW = Math.max(minW, window.innerWidth - 360);
-      const newWidth = Math.min(Math.max(moveEvent.clientX, minW), maxW);
-      setSidebarWidth(newWidth);
+      const newW = Math.max(minW, Math.min(maxW, moveEvent.clientX));
+      setSidebarWidth(newW);
     };
 
     const handlePointerUp = () => {
@@ -346,16 +346,18 @@ export function App() {
     window.addEventListener("pointerup", handlePointerUp);
   }, []);
 
-  // Switch active project
+  // Switch between projects / templates
   const handleSelectProject = (projectId: string) => {
     setActiveProjectId(projectId);
     localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, projectId);
-    let projectData: JanttData = DEFAULT_TEMPLATE.data;
+
+    let targetData: JanttData = DEFAULT_TEMPLATE.data;
     if (projectId !== "default") {
       const found = customProjects.find((p) => p.id === projectId);
-      if (found) projectData = found.data;
+      if (found) targetData = found.data;
     }
-    const formatted = JSON.stringify(projectData, null, 2);
+
+    const formatted = JSON.stringify(targetData, null, 2);
     setJsonText(formatted);
     try {
       const parsed = JSON.parse(formatted);
@@ -387,11 +389,11 @@ export function App() {
     let data: JanttData;
     if (newPlanTemplateType === "blank") {
       data = createBlankPlan(newPlanTitle.trim());
-    } else if (newPlanTemplateType === "enterprise") {
+    } else if (newPlanTemplateType === "master") {
       data = {
-        ...JSON.parse(JSON.stringify(constructionFixture)),
+        ...JSON.parse(JSON.stringify(masterTemplateFixture)),
         meta: {
-          ...(constructionFixture.meta || {}),
+          ...(masterTemplateFixture.meta || {}),
           title: newPlanTitle.trim()
         }
       };
@@ -621,107 +623,7 @@ export function App() {
   const [promptModalTab, setPromptModalTab] = useState<"prompt" | "cheatsheet" | "ideology">("prompt");
   const [copiedRawCheatsheet, setCopiedRawCheatsheet] = useState(false);
 
-  const rawCheatsheetJson = `{
-  "$schema": "https://jantt.dev/schema/v1.json",
-  "meta": {
-    "title": "Project Master Schedule",
-    "description": "Cross-functional delivery plan",
-    "person": "Alex Morgan",
-    "organization": "Acme Engineering Corp",
-    "start": "2026-09-01",
-    "end": "2027-02-28",
-    "defaultGapDays": 2,
-    "scale": "week",
-    "linkRouting": "orthogonal",
-    "showCriticalPath": true,
-    "showBaselines": true,
-    "currency": "USD",
-    "budget": 350000,
-    "version": "1.2.0"
-  },
-  "categories": {
-    "planning": { "label": "Planning & Architecture", "color": "#38BDF8", "soft": "rgba(56,189,248,0.15)", "icon": "compass" },
-    "core-dev": { "label": "Core Engineering", "color": "#10B981", "soft": "rgba(16,185,129,0.15)", "icon": "code-2" },
-    "qa-testing": { "label": "QA & Validation", "color": "#F59E0B", "soft": "rgba(245,158,11,0.15)", "icon": "shield-check" },
-    "release": { "label": "Release & Launch", "color": "#A855F7", "soft": "rgba(168,85,247,0.15)", "icon": "rocket" }
-  },
-  "documents": [
-    { "id": "doc-prd", "label": "Product Requirement Document", "status": "have", "owner": "Alex Morgan", "url": "https://docs.acme.com/prd" },
-    { "id": "doc-arch", "label": "System Architecture RFC", "status": "have", "owner": "Dev Lead", "url": "https://docs.acme.com/rfc" }
-  ],
-  "tasks": [
-    {
-      "id": "spec-approval",
-      "wbs": "1.1",
-      "label": "Architecture Spec & RFC Signoff",
-      "category": "planning",
-      "start": "2026-09-01",
-      "end": "2026-09-14",
-      "assignee": "Alex Morgan",
-      "priority": "high",
-      "progress": 1.0,
-      "status": "completed",
-      "estimatedCost": 15000,
-      "actualCost": 14200
-    },
-    {
-      "id": "gate-arch-approved",
-      "wbs": "1.2",
-      "label": "Architecture Gate Approved",
-      "category": "planning",
-      "start": "2026-09-15",
-      "end": "2026-09-15",
-      "milestone": true,
-      "dependsOn": "spec-approval",
-      "status": "completed"
-    },
-    {
-      "id": "core-engine",
-      "wbs": "2.1",
-      "label": "Core Engine & DAG Solver",
-      "category": "core-dev",
-      "start": "2026-09-17",
-      "end": "2026-10-20",
-      "assignee": "Core Dev Team",
-      "dependsOn": "gate-arch-approved",
-      "gapDays": 2,
-      "priority": "urgent",
-      "progress": 0.65,
-      "status": "in-progress",
-      "estimatedCost": 60000,
-      "actualCost": 38000,
-      "baseline": { "start": "2026-09-15", "end": "2026-10-18" },
-      "fields": { "repo": "github.com/org/core", "storyPoints": 21 }
-    },
-    {
-      "id": "qa-e2e",
-      "wbs": "3.1",
-      "label": "End-to-End Test Suite",
-      "category": "qa-testing",
-      "start": "2026-10-22",
-      "end": "2026-11-15",
-      "assignee": "QA Lead",
-      "dependsOn": "core-engine",
-      "gapDays": 2,
-      "priority": "medium",
-      "progress": 0.1,
-      "status": "not-started",
-      "estimatedCost": 25000
-    },
-    {
-      "id": "v1-launch",
-      "wbs": "4.1",
-      "label": "Production v1.0 Launch Gate",
-      "category": "release",
-      "start": "2026-11-18",
-      "end": "2026-11-18",
-      "milestone": true,
-      "dependsOn": "qa-e2e",
-      "gapDays": 3,
-      "status": "not-started"
-    }
-  ]
-}`;
+  const rawCheatsheetJson = JSON.stringify(masterTemplateFixture, null, 2);
 
   const llmPromptSnippet = `You are a precision project management schedule generator.
 Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
@@ -1584,24 +1486,24 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       gap: "10px",
                       padding: "10px 14px",
                       borderRadius: "8px",
-                      border: newPlanTemplateType === "enterprise" ? "2px solid var(--jantt-accent)" : "1px solid var(--jantt-border)",
-                      background: newPlanTemplateType === "enterprise" ? "var(--jantt-surface-hover)" : "var(--jantt-surface)",
+                      border: newPlanTemplateType === "master" ? "2px solid var(--jantt-accent)" : "1px solid var(--jantt-border)",
+                      background: newPlanTemplateType === "master" ? "var(--jantt-surface-hover)" : "var(--jantt-surface)",
                       cursor: "pointer"
                     }}
                   >
                     <input
                       type="radio"
                       name="planTemplate"
-                      checked={newPlanTemplateType === "enterprise"}
-                      onChange={() => setNewPlanTemplateType("enterprise")}
+                      checked={newPlanTemplateType === "master"}
+                      onChange={() => setNewPlanTemplateType("master")}
                       style={{ marginTop: "3px" }}
                     />
                     <div>
                       <strong style={{ display: "block", fontSize: "13px", color: "var(--jantt-text)" }}>
-                        🏢 Enterprise Master Template
+                        ⚡ Master Benchmark Cheatsheet (Full Kitchen-Sink)
                       </strong>
                       <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)" }}>
-                        Full high-rise engineering schedule with phases, milestones, and dependencies.
+                        The benchmark specification with categories, milestones, multi-dependencies, baselines, and custom fields.
                       </span>
                     </div>
                   </label>
