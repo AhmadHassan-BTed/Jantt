@@ -82,7 +82,7 @@ describe("Schedule Resolver", () => {
 
   // ─── Implicit category pacing ─────────────────────────────────────────
 
-  it("auto-spaces sibling tasks sharing a category (implicit pacing)", () => {
+  it("preserves independent sibling tasks sharing a category without unexpected movement", () => {
     const tasks: Task[] = [
       { id: "app-1", category: "ready", start: "2026-09-01", end: "2026-09-03" },
       { id: "app-2", category: "ready", start: "2026-09-01", end: "2026-09-04" },
@@ -96,10 +96,10 @@ describe("Schedule Resolver", () => {
 
     expect(app1.start).toBe("2026-09-01");
     expect(app1.end).toBe("2026-09-03");
-    expect(app2.start).toBe("2026-09-05");
-    expect(app2.end).toBe("2026-09-08");
-    expect(app3.start).toBe("2026-09-10");
-    expect(app3.end).toBe("2026-09-13");
+    expect(app2.start).toBe("2026-09-01");
+    expect(app2.end).toBe("2026-09-04");
+    expect(app3.start).toBe("2026-09-02");
+    expect(app3.end).toBe("2026-09-05");
   });
 
   it("does not apply implicit pacing to tasks in different categories", () => {

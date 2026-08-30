@@ -1,5 +1,5 @@
 import { Task } from "./types";
-import { addDays, diffDays, parseISODate } from "./date-math";
+import { addDays, diffDays } from "./date-math";
 
 /**
  * Normalizes task dependencies into a clean string array.
@@ -31,16 +31,14 @@ export function getTaskDependencies(task: Task | { dependsOn?: string | string[]
  * Implements coordinated multi-predecessor pacing:
  * 1. Multi-Dependency Resolution: If a task depends on multiple tasks (e.g. [A, B]),
  *    it cannot start before max(A.end, B.end) + gapDays. Preserves task duration when shifted.
- * 2. Implicit category pacing: Tasks in the same category without explicit dependencies
- *    are automatically spaced by defaultGapDays in chronological order.
  *
  * Locked tasks (`locked: true`) are never moved.
  *
  * @param tasks - The array of tasks to resolve.
- * @param defaultGapDays - Default spacing between sibling tasks (default: 2).
+ * @param _defaultGapDays - Default spacing between sibling tasks (default: 2).
  * @returns A fresh, schedule-consistent array of tasks.
  */
-export function resolveSchedule(tasks: Task[], defaultGapDays = 2): Task[] {
+export function resolveSchedule(tasks: Task[], _defaultGapDays = 2): Task[] {
   if (!Array.isArray(tasks) || tasks.length === 0) {
     return [];
   }
@@ -56,25 +54,6 @@ export function resolveSchedule(tasks: Task[], defaultGapDays = 2): Task[] {
       }
     ])
   );
-
-  // Group unlocked tasks by category for implicit pacing
-  const categoryGroups: Record<string, Task[]> = {};
-  Object.values(byId)
-    .filter((t) => !t.locked)
-    .forEach((t) => {
-      const cat = t.category || "default";
-      (categoryGroups[cat] ||= []).push(t);
-    });
-
-  // Determine implicit sibling predecessor per category
-  const implicitPrev: Record<string, string> = {};
-  Object.values(categoryGroups).forEach((group) => {
-    const unexplicit = group.filter((t) => getTaskDependencies(t).length === 0);
-    unexplicit.sort((a, b) => parseISODate(a.start).getTime() - parseISODate(b.start).getTime());
-    for (let i = 1; i < unexplicit.length; i++) {
-      implicitPrev[unexplicit[i].id] = unexplicit[i - 1].id;
-    }
-  });
 
   const MAX_PASSES = 24;
   for (let pass = 0; pass < MAX_PASSES; pass++) {
@@ -96,11 +75,6 @@ export function resolveSchedule(tasks: Task[], defaultGapDays = 2): Task[] {
           if (!calculatedMinStart || diffDays(calculatedMinStart, minForThisDep) > 0) {
             calculatedMinStart = minForThisDep;
           }
-        }
-      } else if (implicitPrev[t.id]) {
-        const prereq = byId[implicitPrev[t.id]];
-        if (prereq) {
-          calculatedMinStart = addDays(prereq.end, defaultGapDays);
         }
       }
 
