@@ -841,6 +841,24 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
             <span>Jantt</span>
           </div>
           <span className="brand-badge">v1.1.0</span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              fontSize: "11px",
+              color: "#10B981",
+              background: "rgba(16, 185, 129, 0.12)",
+              padding: "2px 8px",
+              borderRadius: "12px",
+              fontWeight: 600,
+              marginLeft: "4px"
+            }}
+            title="All changes are continuously auto-saved to permanent browser storage (localStorage)"
+          >
+            <CheckCircle2 size={11} />
+            <span>Auto-Saved</span>
+          </span>
           {isSidebarCollapsed && (
             <button
               className="btn-nav btn-restore-sidebar"
