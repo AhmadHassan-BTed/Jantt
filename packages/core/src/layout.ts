@@ -146,11 +146,44 @@ export function layout(
   const layoutById = new Map<string, TaskLayout>();
 
   tasks.forEach((task, rowIndex) => {
-    const x = diffDays(chartStart, task.start) * viewport.dayWidth;
-    const durationDays = diffDays(task.start, task.end);
-    const isMilestone = Boolean(task.milestone || durationDays === 0);
-    const width = isMilestone ? 24 : Math.max(durationDays * viewport.dayWidth, 14);
-    const y = rowIndex * viewport.rowHeight + barYOffset;
+    const isMilestone = Boolean(task.milestone || task.start === task.end || diffDays(task.start, task.end) === 0);
+    const durationDays = diffDays(task.start, task.end) + (isMilestone ? 0 : 1);
+
+    const colStartX = diffDays(chartStart, task.start) * viewport.dayWidth;
+    const centerY = rowIndex * viewport.rowHeight + viewport.rowHeight / 2;
+
+    let x: number;
+    let y: number;
+    let width: number;
+    let height: number;
+    let anchorInX: number;
+    let anchorInY: number;
+    let anchorOutX: number;
+    let anchorOutY: number;
+
+    if (isMilestone) {
+      const centerX = colStartX + viewport.dayWidth / 2;
+      const size = 16;
+      const radius = size * 0.7071;
+      x = centerX;
+      y = centerY;
+      width = size;
+      height = size;
+      anchorInX = Math.round(centerX - radius);
+      anchorInY = centerY;
+      anchorOutX = Math.round(centerX + radius);
+      anchorOutY = centerY;
+    } else {
+      const colEndX = (diffDays(chartStart, task.end) + 1) * viewport.dayWidth;
+      x = colStartX;
+      width = Math.max(colEndX - colStartX, 14);
+      y = rowIndex * viewport.rowHeight + barYOffset;
+      height = barHeight;
+      anchorInX = x;
+      anchorInY = centerY;
+      anchorOutX = x + width;
+      anchorOutY = centerY;
+    }
 
     const cat = categories[task.category] || DEFAULT_CATEGORY;
     const displayLabel = task.label || task.name || task.id;
@@ -159,8 +192,8 @@ export function layout(
     let baselineLayout: TaskLayout["baselineLayout"] | undefined;
     if (task.baseline && viewport.showBaselines) {
       const bx = diffDays(chartStart, task.baseline.start) * viewport.dayWidth;
-      const bDuration = Math.max(diffDays(task.baseline.start, task.baseline.end), 1);
-      const bWidth = Math.max(bDuration * viewport.dayWidth, 12);
+      const bColEnd = (diffDays(chartStart, task.baseline.end) + 1) * viewport.dayWidth;
+      const bWidth = Math.max(bColEnd - bx, 12);
       baselineLayout = {
         x: bx,
         y: y + barHeight + 2,
@@ -174,14 +207,18 @@ export function layout(
       x,
       y,
       width,
-      height: barHeight,
+      height,
       rowIndex,
       category: cat,
       displayLabel,
       durationDays: Math.max(durationDays, 0),
       isMilestone,
       isCritical,
-      baselineLayout
+      baselineLayout,
+      anchorInX,
+      anchorInY,
+      anchorOutX,
+      anchorOutY
     };
 
     taskLayouts.push(item);
@@ -202,10 +239,10 @@ export function layout(
       const prereq = layoutById.get(depId);
       if (!prereq) return;
 
-      const fromX = prereq.isMilestone ? prereq.x + 24 : prereq.x + prereq.width;
-      const fromY = prereq.y + prereq.height / 2;
-      const toX = curr.isMilestone ? curr.x - 4 : curr.x;
-      const toY = curr.y + curr.height / 2;
+      const fromX = prereq.anchorOutX ?? (prereq.x + prereq.width);
+      const fromY = prereq.anchorOutY ?? (prereq.y + prereq.height / 2);
+      const toX = curr.anchorInX ?? curr.x;
+      const toY = curr.anchorInY ?? (curr.y + curr.height / 2);
 
       const path = computeDependencyPath(fromX, fromY, toX, toY, viewport.rowHeight, linkRouting);
       const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
@@ -409,35 +446,39 @@ export function computeDependencyPath(
     return `M ${fromX} ${fromY} L ${toX} ${toY}`;
   }
 
-  // 2. Standard forward dependency (successor starts at or after predecessor end)
-  if (toX >= fromX + 8) {
+  const dx = toX - fromX;
+
+  // 2. Standard forward dependency with space (dx >= 12)
+  if (dx >= 12) {
     if (style === "curved") {
       const leadIn = 8;
       const endX = toX - leadIn;
-      const dx = Math.max(endX - fromX, 16);
-      const cp1X = fromX + dx * 0.5;
-      const cp2X = endX - dx * 0.5;
+      const cdx = Math.max(endX - fromX, 16);
+      const cp1X = fromX + cdx * 0.5;
+      const cp2X = endX - cdx * 0.5;
       return `M ${fromX} ${fromY} C ${cp1X} ${fromY}, ${cp2X} ${toY}, ${endX} ${toY} L ${toX} ${toY}`;
     }
 
     if (style === "direct") {
-      const lead = Math.min(10, Math.floor((toX - fromX) / 2));
+      const lead = Math.min(10, Math.floor(dx / 2));
       return `M ${fromX} ${fromY} L ${fromX + lead} ${fromY} L ${toX - lead} ${toY} L ${toX} ${toY}`;
     }
 
     // Default "orthogonal" (Clean 90-degree right angles with mid-split)
-    const midX = fromX + Math.round((toX - fromX) / 2);
+    const midX = fromX + Math.round(dx / 2);
     return `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
   }
 
-  // 3. Tight gap / same-column / reverse flow (successor starts before or close to predecessor finish)
-  const stepOutX = fromX + 12;
-  const stepInX = toX - 12;
-  const midY = Math.round(fromY + (toY > fromY ? 1 : -1) * (rowHeight / 2));
+  // 3. Tight gap / same-column / reverse flow (dx < 12)
+  const leadOut = 10;
+  const leadIn = 10;
+  const midY = Math.round(fromY + (toY > fromY ? 0.5 : -0.5) * rowHeight);
 
   if (style === "curved") {
+    const stepOutX = fromX + leadOut;
+    const stepInX = toX - leadIn;
     return `M ${fromX} ${fromY} C ${stepOutX + 8} ${fromY}, ${stepOutX + 8} ${midY}, ${stepOutX} ${midY} L ${stepInX} ${midY} C ${stepInX - 8} ${midY}, ${stepInX - 8} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
   }
 
-  return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
+  return `M ${fromX} ${fromY} L ${fromX + leadOut} ${fromY} L ${fromX + leadOut} ${midY} L ${toX - leadIn} ${midY} L ${toX - leadIn} ${toY} L ${toX} ${toY}`;
 }

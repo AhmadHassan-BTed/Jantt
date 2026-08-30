@@ -37,7 +37,10 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       const mStone = document.createElement("div");
       mStone.className = `jantt-milestone ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
       mStone.style.left = `${item.x}px`;
-      mStone.style.top = `${item.y + (item.height - 20) / 2}px`;
+      mStone.style.top = `${item.y}px`;
+      mStone.style.width = `${item.width}px`;
+      mStone.style.height = `${item.height}px`;
+      mStone.style.transform = "translate(-50%, -50%) rotate(45deg)";
       mStone.style.background = item.category.color;
       mStone.setAttribute("data-task-id", item.task.id);
       mStone.setAttribute("tabindex", "0");
