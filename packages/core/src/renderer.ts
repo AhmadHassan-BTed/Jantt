@@ -179,8 +179,9 @@ export function renderJantt(
       const spansMulti = parseISODate(minStart).getUTCFullYear() !== parseISODate(maxEnd).getUTCFullYear();
       const headerH = spansMulti ? 78 : (currentOptions.viewport?.headerHeight || 58);
       const toolbarH = 50;
+      const addRowH = currentOptions.readOnly ? 0 : 38;
       const borderBuffer = 6;
-      const availH = Math.max(containerH - headerH - toolbarH - borderBuffer, 100);
+      const availH = Math.max(containerH - headerH - toolbarH - addRowH - borderBuffer, 100);
       const count = Math.max(displayTasks.length, 1);
       effectiveRowHeight = Math.max(26, Math.min(140, Math.floor(availH / count)));
     }
