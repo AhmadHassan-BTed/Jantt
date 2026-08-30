@@ -42,7 +42,7 @@ import {
   Plus
 } from "lucide-react";
 
-import { JanttLogo } from "./components/JanttLogo";
+import { JanttLogo, JanttIcon } from "./components/JanttLogo";
 import constructionFixture from "../../../examples/construction-enterprise.json";
 
 export interface SavedProject {
@@ -1338,8 +1338,8 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         <div className="prompt-modal-backdrop" onClick={() => setShowPromptModal(false)}>
           <div className="prompt-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="prompt-modal-header">
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Sparkles size={18} color="var(--jantt-accent)" />
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <JanttIcon size={22} variant="gradient" />
                 <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
                   AI Agent Workbench & Schema Cheatsheet
                 </h3>
