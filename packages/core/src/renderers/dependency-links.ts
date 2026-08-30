@@ -20,6 +20,11 @@ export interface DependencyLinksResult {
 export function renderDependencyLinks(props: DependencyLinksProps): DependencyLinksResult {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "jantt-svg-overlay");
+  svg.style.position = "absolute";
+  svg.style.top = "0";
+  svg.style.left = "0";
+  svg.style.width = `${props.canvasWidth}px`;
+  svg.style.height = `${props.canvasHeight}px`;
   svg.setAttribute("width", String(props.canvasWidth));
   svg.setAttribute("height", String(props.canvasHeight));
   svg.setAttribute("viewBox", `0 0 ${props.canvasWidth} ${props.canvasHeight}`);
