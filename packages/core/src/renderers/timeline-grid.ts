@@ -5,6 +5,7 @@ export interface TimelineGridProps {
   taskLayouts: TaskLayout[];
   rowHeight: number;
   showToday: boolean;
+  hasAddRow?: boolean;
 }
 
 /**
@@ -34,6 +35,14 @@ export function renderTimelineGrid(props: TimelineGridProps): {
     rowLine.setAttribute("data-grid-row-id", item.task.id);
     gridLayer.appendChild(rowLine);
   });
+
+  // 2b. Optional bottom Add Task grid row to maintain 1:1 table-to-grid height symmetry
+  if (props.hasAddRow) {
+    const addRowLine = document.createElement("div");
+    addRowLine.className = "jantt-grid-row jantt-grid-add-row";
+    addRowLine.style.height = `${Math.min(props.rowHeight, 38)}px`;
+    gridLayer.appendChild(addRowLine);
+  }
 
   // 3. Today marker line
   let todayLine: HTMLElement | undefined;

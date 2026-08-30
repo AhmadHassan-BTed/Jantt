@@ -348,6 +348,9 @@
 }
 
 .jantt-label-header {
+  position: sticky;
+  top: 0;
+  z-index: 26;
   border-bottom: 1px solid var(--jantt-border);
   display: grid;
   grid-template-columns: minmax(120px, 1fr) 70px 58px;
