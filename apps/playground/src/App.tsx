@@ -42,6 +42,7 @@ import {
   Plus
 } from "lucide-react";
 
+import { JanttLogo } from "./components/JanttLogo";
 import constructionFixture from "../../../examples/construction-enterprise.json";
 
 export interface SavedProject {
@@ -836,10 +837,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       {/* Navbar Header */}
       <header className="navbar">
         <div className="brand-section">
-          <div className="brand-logo">
-            <div className="brand-icon-box">J</div>
-            <span>Jantt</span>
-          </div>
+          <JanttLogo size={28} />
           <span className="brand-badge">v1.1.0</span>
           <span
             style={{
