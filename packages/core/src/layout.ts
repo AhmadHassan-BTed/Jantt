@@ -438,7 +438,7 @@ export function computeDependencyPath(
   fromY: number,
   toX: number,
   toY: number,
-  rowHeight = 46,
+  _rowHeight = 46,
   style: LinkRoutingStyle = "orthogonal"
 ): string {
   // 1. Same row connection
@@ -448,8 +448,8 @@ export function computeDependencyPath(
 
   const dx = toX - fromX;
 
-  // 2. Standard forward dependency with space (dx >= 12)
-  if (dx >= 12) {
+  // 2. Standard forward dependency with space (dx >= 8)
+  if (dx >= 8) {
     if (style === "curved") {
       const leadIn = 8;
       const endX = toX - leadIn;
@@ -469,10 +469,20 @@ export function computeDependencyPath(
     return `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
   }
 
-  // 3. Tight gap / same-column / reverse flow (dx < 12)
+  // 3. Zero-gap, adjacent day, or tight overlap (-24 <= dx < 8)
+  if (dx >= -24) {
+    const leadOut = 8;
+    const dropX = Math.max(fromX + leadOut, toX + 6);
+    if (style === "curved") {
+      return `M ${fromX} ${fromY} C ${dropX + 6} ${fromY}, ${dropX + 6} ${toY}, ${toX} ${toY}`;
+    }
+    return `M ${fromX} ${fromY} L ${dropX} ${fromY} L ${dropX} ${toY} L ${toX} ${toY}`;
+  }
+
+  // 4. Significant reverse overlap (dx < -24)
   const leadOut = 10;
   const leadIn = 10;
-  const midY = Math.round(fromY + (toY > fromY ? 0.5 : -0.5) * rowHeight);
+  const midY = Math.round(fromY + (toY > fromY ? 0.5 : -0.5) * _rowHeight);
 
   if (style === "curved") {
     const stepOutX = fromX + leadOut;
