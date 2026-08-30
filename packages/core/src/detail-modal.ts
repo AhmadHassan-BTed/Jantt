@@ -175,9 +175,7 @@ function renderDefaultModalContent(
       <!-- Domain Specific Fields Bag -->
       <div id="jantt-fields-bag-section">
         <label style="font-size: 12px; font-weight: 600; color: var(--jantt-text-muted); display: block; margin-bottom: 6px;">Custom Attributes</label>
-        <div id="jantt-fields-bag" style="background: var(--jantt-bg); border: 1px solid var(--jantt-border-subtle); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-          ${renderFieldsBagHtml(task.fields)}
-        </div>
+        <div id="jantt-fields-bag" style="background: var(--jantt-bg); border: 1px solid var(--jantt-border-subtle); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;"></div>
       </div>
     </div>
 
@@ -197,6 +195,96 @@ function renderDefaultModalContent(
     if (progressVal) progressVal.textContent = `${progressInput.value}%`;
   });
 
+  // Active custom attributes state & dynamic GUI adder
+  let currentFields: Record<string, string> = {};
+  if (task.fields) {
+    Object.entries(task.fields).forEach(([k, v]) => {
+      currentFields[k] = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+    });
+  }
+
+  const renderFieldsSection = () => {
+    const fieldsContainer = container.querySelector<HTMLElement>("#jantt-fields-bag");
+    if (!fieldsContainer) return;
+
+    const entries = Object.entries(currentFields);
+    let html = "";
+    if (entries.length === 0) {
+      html += '<div style="font-size: 12px; color: var(--jantt-text-dim); font-style: italic;">No custom attributes defined.</div>';
+    } else {
+      entries.forEach(([key, val]) => {
+        const isUrl = typeof val === "string" && (val.startsWith("http://") || val.startsWith("https://"));
+        html += `
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px;">
+            <span style="font-family: var(--jantt-font-mono); color: var(--jantt-text-muted); font-weight: 500; min-width: 90px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(key)}:</span>
+            <div style="flex-grow: 1; display: flex; align-items: center; gap: 6px;">
+              <input type="text" data-field-val-key="${escapeHtml(key)}" value="${escapeHtml(val)}" style="flex-grow: 1; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 4px; color: var(--jantt-text); padding: 3px 8px; font-size: 12px;" />
+              ${isUrl ? `<a href="${escapeHtml(val)}" target="_blank" rel="noopener noreferrer" style="color: var(--jantt-accent); text-decoration: underline; font-size: 11.5px;">Open</a>` : ""}
+              <button type="button" data-del-field-key="${escapeHtml(key)}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px;" title="Remove attribute">✕</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    html += `
+      <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--jantt-border-subtle);">
+        <input type="text" id="jantt-modal-new-field-key" placeholder="Attribute name (e.g. depth)" style="width: 130px; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 4px; color: var(--jantt-text); padding: 3px 8px; font-size: 12px;" />
+        <input type="text" id="jantt-modal-new-field-val" placeholder="Value (e.g. 45m)" style="flex-grow: 1; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 4px; color: var(--jantt-text); padding: 3px 8px; font-size: 12px;" />
+        <button type="button" id="jantt-modal-add-field-btn" class="jantt-btn jantt-btn-secondary" style="font-size: 11.5px; white-space: nowrap; height: 26px;">+ Add</button>
+      </div>
+    `;
+
+    fieldsContainer.innerHTML = html;
+
+    // Attach remove event listeners
+    fieldsContainer.querySelectorAll<HTMLButtonElement>("[data-del-field-key]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const k = btn.dataset.delFieldKey!;
+        delete currentFields[k];
+        renderFieldsSection();
+      });
+    });
+
+    // Attach input value listeners
+    fieldsContainer.querySelectorAll<HTMLInputElement>("[data-field-val-key]").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        const k = inp.dataset.fieldValKey!;
+        currentFields[k] = inp.value;
+      });
+    });
+
+    // Attach add button & enter key handler
+    const addBtn = fieldsContainer.querySelector<HTMLButtonElement>("#jantt-modal-add-field-btn");
+    const keyInput = fieldsContainer.querySelector<HTMLInputElement>("#jantt-modal-new-field-key");
+    const valInput = fieldsContainer.querySelector<HTMLInputElement>("#jantt-modal-new-field-val");
+
+    const handleAdd = () => {
+      const k = keyInput?.value.trim();
+      const v = valInput?.value.trim() || "";
+      if (k) {
+        currentFields[k] = v;
+        renderFieldsSection();
+      }
+    };
+
+    addBtn?.addEventListener("click", handleAdd);
+    valInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAdd();
+      }
+    });
+    keyInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (valInput) valInput.focus();
+      }
+    });
+  };
+
+  renderFieldsSection();
+
   const saveBtn = container.querySelector("#jantt-modal-save");
   saveBtn?.addEventListener("click", () => {
     const start = (container.querySelector("#jantt-edit-start") as HTMLInputElement)?.value || task.start;
@@ -206,11 +294,7 @@ function renderDefaultModalContent(
     const notes = (container.querySelector("#jantt-edit-notes") as HTMLTextAreaElement)?.value || "";
 
     // Collect custom fields
-    const updatedFields: Record<string, unknown> = { ...(task.fields || {}) };
-    container.querySelectorAll<HTMLInputElement>("[data-field-key]").forEach((input) => {
-      const k = input.dataset.fieldKey!;
-      updatedFields[k] = input.value;
-    });
+    const updatedFields: Record<string, unknown> = { ...currentFields };
 
     const updatedTask: Task = {
       ...task,
@@ -219,37 +303,15 @@ function renderDefaultModalContent(
       status,
       progress: progressNum,
       notes,
-      fields: updatedFields
+      fields: Object.keys(updatedFields).length > 0 ? updatedFields : undefined
     };
 
     onSave(updatedTask);
   });
 }
 
-function renderFieldsBagHtml(fields?: Record<string, unknown>): string {
-  if (!fields || Object.keys(fields).length === 0) {
-    return '<div style="font-size: 12px; color: var(--jantt-text-dim); font-style: italic;">No custom fields defined for this task.</div>';
-  }
-
-  return Object.entries(fields)
-    .map(([key, val]) => {
-      const valStr = typeof val === "object" ? JSON.stringify(val) : String(val ?? "");
-      const isUrl = typeof val === "string" && (val.startsWith("http://") || val.startsWith("https://"));
-      return `
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px;">
-          <span style="font-family: var(--jantt-font-mono); color: var(--jantt-text-muted); font-weight: 500; min-width: 90px;">${escapeHtml(key)}:</span>
-          <div style="flex-grow: 1; display: flex; align-items: center; gap: 6px;">
-            <input type="text" data-field-key="${escapeHtml(key)}" value="${escapeHtml(valStr)}" style="flex-grow: 1; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 4px; color: var(--jantt-text); padding: 3px 8px; font-size: 12px;" />
-            ${isUrl ? `<a href="${escapeHtml(val as string)}" target="_blank" rel="noopener noreferrer" style="color: var(--jantt-accent); text-decoration: underline; font-size: 11.5px;">Open</a>` : ""}
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-}
-
 function escapeHtml(str: string): string {
-  return str
+  return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
