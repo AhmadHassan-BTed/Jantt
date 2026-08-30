@@ -202,9 +202,9 @@ export function layout(
       const prereq = layoutById.get(depId);
       if (!prereq) return;
 
-      const fromX = prereq.isMilestone ? prereq.x + 12 : prereq.x + prereq.width;
+      const fromX = prereq.isMilestone ? prereq.x + 24 : prereq.x + prereq.width;
       const fromY = prereq.y + prereq.height / 2;
-      const toX = curr.x;
+      const toX = curr.isMilestone ? curr.x - 4 : curr.x;
       const toY = curr.y + curr.height / 2;
 
       const path = computeDependencyPath(fromX, fromY, toX, toY, viewport.rowHeight, linkRouting);
@@ -404,42 +404,40 @@ export function computeDependencyPath(
   rowHeight = 46,
   style: LinkRoutingStyle = "orthogonal"
 ): string {
-  const leadOut = 14;
-  const leadIn = 16;
+  // 1. Same row connection
+  if (fromY === toY) {
+    return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+  }
 
-  // 1. Forward flow with sufficient horizontal space
-  if (toX >= fromX + leadOut + leadIn) {
+  // 2. Standard forward dependency (successor starts at or after predecessor end)
+  if (toX >= fromX + 8) {
     if (style === "curved") {
-      const startX = fromX + leadOut;
+      const leadIn = 8;
       const endX = toX - leadIn;
-      const dx = Math.max(endX - startX, 20);
-      const cp1X = startX + dx * 0.5;
+      const dx = Math.max(endX - fromX, 16);
+      const cp1X = fromX + dx * 0.5;
       const cp2X = endX - dx * 0.5;
-      return `M ${fromX} ${fromY} L ${startX} ${fromY} C ${cp1X} ${fromY}, ${cp2X} ${toY}, ${endX} ${toY} L ${toX} ${toY}`;
+      return `M ${fromX} ${fromY} C ${cp1X} ${fromY}, ${cp2X} ${toY}, ${endX} ${toY} L ${toX} ${toY}`;
     }
 
     if (style === "direct") {
-      const startX = fromX + leadOut;
-      const endX = toX - leadIn;
-      return `M ${fromX} ${fromY} L ${startX} ${fromY} L ${endX} ${toY} L ${toX} ${toY}`;
+      const lead = Math.min(10, Math.floor((toX - fromX) / 2));
+      return `M ${fromX} ${fromY} L ${fromX + lead} ${fromY} L ${toX - lead} ${toY} L ${toX} ${toY}`;
     }
 
-    // Default "orthogonal" (90-degree right angles)
+    // Default "orthogonal" (Clean 90-degree right angles with mid-split)
     const midX = fromX + Math.round((toX - fromX) / 2);
     return `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
   }
 
-  // 2. Reverse flow or tight horizontal gap bypass
-  const stepOutX = fromX + leadOut;
-  const stepInX = toX - leadIn;
-  const midY = Math.round(fromY + (toY >= fromY ? 1 : -1) * (rowHeight / 2));
+  // 3. Tight gap / same-column / reverse flow (successor starts before or close to predecessor finish)
+  const stepOutX = fromX + 12;
+  const stepInX = toX - 12;
+  const midY = Math.round(fromY + (toY > fromY ? 1 : -1) * (rowHeight / 2));
 
   if (style === "curved") {
-    const cpOutX = stepOutX + 16;
-    const cpInX = stepInX - 16;
-    return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} C ${cpOutX} ${fromY}, ${cpOutX} ${midY}, ${stepOutX} ${midY} L ${stepInX} ${midY} C ${cpInX} ${midY}, ${cpInX} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
+    return `M ${fromX} ${fromY} C ${stepOutX + 8} ${fromY}, ${stepOutX + 8} ${midY}, ${stepOutX} ${midY} L ${stepInX} ${midY} C ${stepInX - 8} ${midY}, ${stepInX - 8} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
   }
 
-  // Orthogonal & Direct reverse step
   return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
 }

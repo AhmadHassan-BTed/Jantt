@@ -682,8 +682,8 @@
 .jantt-dep-path {
   fill: none;
   stroke: var(--jantt-dep-line);
-  stroke-width: 1.6;
-  stroke-dasharray: 4 2;
+  stroke-width: 1.75;
+  stroke-dasharray: none;
   transition: stroke 0.2s, stroke-width 0.2s;
   pointer-events: stroke;
   cursor: pointer;
@@ -692,13 +692,13 @@
 .jantt-dep-path:hover,
 .jantt-dep-path.is-active {
   stroke: var(--jantt-dep-line-active);
-  stroke-width: 2.4;
+  stroke-width: 2.5;
   stroke-dasharray: none;
 }
 
 .jantt-dep-path.is-critical {
   stroke: var(--jantt-critical);
-  stroke-width: 2.6;
+  stroke-width: 2.25;
   stroke-dasharray: none;
   filter: drop-shadow(0 0 5px var(--jantt-critical-glow));
 }
@@ -707,7 +707,7 @@
   fill: none;
   stroke: var(--jantt-accent);
   stroke-width: 2.2;
-  stroke-dasharray: 3 3;
+  stroke-dasharray: 4 3;
   pointer-events: none;
 }
 
