@@ -20,9 +20,90 @@ Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI tool
 
 <br />
 
-[Live Sandbox](http://localhost:5173/) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md)
+[Live Playground](https://ahmadhassan-bted.github.io/Jantt/) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md)
 
 </div>
+
+---
+
+## 🤖 Built for AI Agents: Stop Generating Brittle Timeline Code
+
+**The traditional approach to AI project schedules is broken:**
+* Asking LLMs (ChatGPT, Claude, Gemini, Cursor) to generate custom UI code (React JSX, SVG coordinate math, CSS grid positioning, canvas listeners) produces **500+ lines of fragile, hallucination-prone code**.
+* Dates drift, dependency wires misalign, drag listeners break, and massive context windows are wasted on throwaway UI boilerplate.
+
+### The Jantt Paradigm: JSON-as-Interface for AI
+
+```mermaid
+flowchart LR
+    A["1. Give LLM<br/>Jantt Cheatsheet"] --> B["2. AI Outputs<br/>Pure JSON (10x Fewer Tokens)"]
+    B --> C["3. Jantt Engine<br/>Instant Gantt / Kanban / KPI"]
+    C --> D["4. Human Adjusts Visually<br/>(Drag / Resize / Re-link)"]
+    D --> E["5. Syncs JSON Back<br/>to AI Agent"]
+    E --> B
+```
+
+1. **Feed the Cheatsheet**: Provide your AI agent with the lightweight **Jantt JSON Schema Cheatsheet**.
+2. **AI Outputs Pure JSON**: The model outputs structured, machine-verifiable data ($10\times$ fewer tokens than JSX, zero UI hallucinations).
+3. **Instant Zero-Code Execution**: Jantt parses the schema, solves DAG topological dependencies, routes 90° orthogonal links, and renders an interactive Gantt timeline, Kanban board, and KPI analytics suite.
+4. **Bidirectional Human-in-the-Loop**: The user visually tweaks dates, drags progress, and re-wires dependencies. Jantt immediately writes the updated state back to clean JSON to pipe straight back into the AI agent.
+
+### 📋 The AI Benchmark Cheatsheet (Ready to Copy)
+
+```json
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Master Delivery Plan",
+    "person": "Program Lead",
+    "start": "2026-09-01",
+    "end": "2027-02-28",
+    "scale": "week",
+    "linkRouting": "orthogonal",
+    "showCriticalPath": true,
+    "currency": "USD",
+    "budget": 250000
+  },
+  "categories": {
+    "core": { "label": "Core Dev", "color": "#38BDF8" },
+    "qa": { "label": "QA & Release", "color": "#10B981" }
+  },
+  "tasks": [
+    {
+      "id": "t1",
+      "wbs": "1.0",
+      "label": "Engine Architecture",
+      "category": "core",
+      "start": "2026-09-01",
+      "end": "2026-09-20",
+      "progress": 1.0,
+      "status": "completed"
+    },
+    {
+      "id": "gate-1",
+      "wbs": "1.1",
+      "label": "Architecture Approved",
+      "category": "core",
+      "start": "2026-09-21",
+      "end": "2026-09-21",
+      "milestone": true,
+      "dependsOn": "t1"
+    },
+    {
+      "id": "t2",
+      "wbs": "2.0",
+      "label": "Core Implementation",
+      "category": "core",
+      "start": "2026-09-23",
+      "end": "2026-10-30",
+      "dependsOn": "gate-1",
+      "gapDays": 2,
+      "progress": 0.4,
+      "status": "in-progress"
+    }
+  ]
+}
+```
 
 ---
 

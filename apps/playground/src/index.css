@@ -524,6 +524,38 @@ body {
   letter-spacing: -0.01em;
 }
 
+.prompt-modal-tabs {
+  display: flex;
+  background: var(--jantt-surface, #F8FAFC);
+  border-bottom: 1px solid var(--jantt-border, #E2E8F0);
+  padding: 8px 22px 0 22px;
+  gap: 8px;
+}
+
+.prompt-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--jantt-text-muted, #64748B);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.prompt-tab-btn:hover {
+  color: var(--jantt-text, #0F172A);
+}
+
+.prompt-tab-btn.is-active {
+  color: var(--jantt-accent, #0284C7);
+  border-bottom-color: var(--jantt-accent, #0284C7);
+}
+
 .prompt-modal-close-btn {
   background: transparent;
   border: none;
@@ -578,6 +610,92 @@ body {
 .prompt-modal-textarea:focus {
   border-color: var(--jantt-accent, #0284C7);
   box-shadow: 0 0 0 3px var(--jantt-accent-glow, rgba(2, 132, 199, 0.14));
+}
+
+/* Ideology & Architecture Explainer */
+.ideology-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ideology-hero {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.ideology-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.ideology-step-card {
+  background: var(--jantt-surface, #F8FAFC);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.step-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--jantt-accent, #0284C7);
+  letter-spacing: 0.05em;
+}
+
+.ideology-step-card h5 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--jantt-text, #0F172A);
+}
+
+.ideology-step-card p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--jantt-text-muted, #64748B);
+  line-height: 1.45;
+}
+
+.ideology-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.ideology-metric-box {
+  background: var(--jantt-surface, #F8FAFC);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+}
+
+.metric-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--jantt-accent, #0284C7);
+  font-family: var(--jantt-font-mono, monospace);
+}
+
+.metric-lbl {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--jantt-text-muted, #64748B);
+  line-height: 1.25;
 }
 
 .prompt-modal-footer {

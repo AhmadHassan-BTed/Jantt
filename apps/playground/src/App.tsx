@@ -426,6 +426,111 @@ export function App() {
     setValidationResult(validate(updated));
   };
 
+  const [promptModalTab, setPromptModalTab] = useState<"prompt" | "cheatsheet" | "ideology">("prompt");
+  const [copiedRawCheatsheet, setCopiedRawCheatsheet] = useState(false);
+
+  const rawCheatsheetJson = `{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Project Master Schedule",
+    "description": "Cross-functional delivery plan",
+    "person": "Alex Morgan",
+    "organization": "Acme Engineering Corp",
+    "start": "2026-09-01",
+    "end": "2027-02-28",
+    "defaultGapDays": 2,
+    "scale": "week",
+    "linkRouting": "orthogonal",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "currency": "USD",
+    "budget": 350000,
+    "version": "1.2.0"
+  },
+  "categories": {
+    "planning": { "label": "Planning & Architecture", "color": "#38BDF8", "soft": "rgba(56,189,248,0.15)", "icon": "compass" },
+    "core-dev": { "label": "Core Engineering", "color": "#10B981", "soft": "rgba(16,185,129,0.15)", "icon": "code-2" },
+    "qa-testing": { "label": "QA & Validation", "color": "#F59E0B", "soft": "rgba(245,158,11,0.15)", "icon": "shield-check" },
+    "release": { "label": "Release & Launch", "color": "#A855F7", "soft": "rgba(168,85,247,0.15)", "icon": "rocket" }
+  },
+  "documents": [
+    { "id": "doc-prd", "label": "Product Requirement Document", "status": "have", "owner": "Alex Morgan", "url": "https://docs.acme.com/prd" },
+    { "id": "doc-arch", "label": "System Architecture RFC", "status": "have", "owner": "Dev Lead", "url": "https://docs.acme.com/rfc" }
+  ],
+  "tasks": [
+    {
+      "id": "spec-approval",
+      "wbs": "1.1",
+      "label": "Architecture Spec & RFC Signoff",
+      "category": "planning",
+      "start": "2026-09-01",
+      "end": "2026-09-14",
+      "assignee": "Alex Morgan",
+      "priority": "high",
+      "progress": 1.0,
+      "status": "completed",
+      "estimatedCost": 15000,
+      "actualCost": 14200
+    },
+    {
+      "id": "gate-arch-approved",
+      "wbs": "1.2",
+      "label": "Architecture Gate Approved",
+      "category": "planning",
+      "start": "2026-09-15",
+      "end": "2026-09-15",
+      "milestone": true,
+      "dependsOn": "spec-approval",
+      "status": "completed"
+    },
+    {
+      "id": "core-engine",
+      "wbs": "2.1",
+      "label": "Core Engine & DAG Solver",
+      "category": "core-dev",
+      "start": "2026-09-17",
+      "end": "2026-10-20",
+      "assignee": "Core Dev Team",
+      "dependsOn": "gate-arch-approved",
+      "gapDays": 2,
+      "priority": "urgent",
+      "progress": 0.65,
+      "status": "in-progress",
+      "estimatedCost": 60000,
+      "actualCost": 38000,
+      "baseline": { "start": "2026-09-15", "end": "2026-10-18" },
+      "fields": { "repo": "github.com/org/core", "storyPoints": 21 }
+    },
+    {
+      "id": "qa-e2e",
+      "wbs": "3.1",
+      "label": "End-to-End Test Suite",
+      "category": "qa-testing",
+      "start": "2026-10-22",
+      "end": "2026-11-15",
+      "assignee": "QA Lead",
+      "dependsOn": "core-engine",
+      "gapDays": 2,
+      "priority": "medium",
+      "progress": 0.1,
+      "status": "not-started",
+      "estimatedCost": 25000
+    },
+    {
+      "id": "v1-launch",
+      "wbs": "4.1",
+      "label": "Production v1.0 Launch Gate",
+      "category": "release",
+      "start": "2026-11-18",
+      "end": "2026-11-18",
+      "milestone": true,
+      "dependsOn": "qa-e2e",
+      "gapDays": 3,
+      "status": "not-started"
+    }
+  ]
+}`;
+
   const llmPromptSnippet = `You are a precision project management schedule generator.
 Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
 
@@ -521,9 +626,15 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       await navigator.clipboard.writeText(llmPromptSnippet);
       setCopiedPrompt(true);
       setTimeout(() => setCopiedPrompt(false), 2000);
-    } catch {
-      // Ignore
-    }
+    } catch {}
+  };
+
+  const handleCopyRawCheatsheet = async () => {
+    try {
+      await navigator.clipboard.writeText(rawCheatsheetJson);
+      setCopiedRawCheatsheet(true);
+      setTimeout(() => setCopiedRawCheatsheet(false), 2000);
+    } catch {}
   };
 
   return (
@@ -980,7 +1091,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         </section>
       </main>
 
-      {/* AI Prompt Generator & Cheatsheet Modal */}
+      {/* AI Agent Workbench & Schema Cheatsheet Modal */}
       {showPromptModal && (
         <div className="prompt-modal-backdrop" onClick={() => setShowPromptModal(false)}>
           <div className="prompt-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -988,7 +1099,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Sparkles size={18} color="var(--jantt-accent)" />
                 <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
-                  AI System Prompt & Benchmark Cheatsheet
+                  AI Agent Workbench & Schema Cheatsheet
                 </h3>
               </div>
               <button
@@ -1000,16 +1111,114 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               </button>
             </div>
 
+            {/* Modal Segmented Tab Bar */}
+            <div className="prompt-modal-tabs">
+              <button
+                className={`prompt-tab-btn ${promptModalTab === "prompt" ? "is-active" : ""}`}
+                onClick={() => setPromptModalTab("prompt")}
+              >
+                <Sparkles size={13} />
+                <span>LLM System Prompt</span>
+              </button>
+              <button
+                className={`prompt-tab-btn ${promptModalTab === "cheatsheet" ? "is-active" : ""}`}
+                onClick={() => setPromptModalTab("cheatsheet")}
+              >
+                <FileJson size={13} />
+                <span>JSON Schema Cheatsheet</span>
+              </button>
+              <button
+                className={`prompt-tab-btn ${promptModalTab === "ideology" ? "is-active" : ""}`}
+                onClick={() => setPromptModalTab("ideology")}
+              >
+                <Zap size={13} />
+                <span>AI-Native Ideology</span>
+              </button>
+            </div>
+
             <div className="prompt-modal-body">
-              <p className="prompt-modal-desc">
-                Hand this prompt snippet to ChatGPT, Claude, Gemini, or any LLM to generate guaranteed valid, constraint-checked Jantt JSON schedules with full WBS, milestones, baselines, and multi-dependencies:
-              </p>
-              <textarea
-                className="prompt-modal-textarea"
-                readOnly
-                value={llmPromptSnippet}
-                rows={16}
-              />
+              {promptModalTab === "prompt" && (
+                <>
+                  <p className="prompt-modal-desc">
+                    Hand this prompt to ChatGPT, Claude, Gemini, Cursor, or your autonomous AI agent. The model will output 100% valid, constraint-checked Jantt JSON schedules without hallucinating UI code:
+                  </p>
+                  <textarea
+                    className="prompt-modal-textarea"
+                    readOnly
+                    value={llmPromptSnippet}
+                    rows={15}
+                  />
+                </>
+              )}
+
+              {promptModalTab === "cheatsheet" && (
+                <>
+                  <p className="prompt-modal-desc">
+                    Raw minimal Jantt JSON template structure. Provide this benchmark template directly to any code or LLM pipeline:
+                  </p>
+                  <textarea
+                    className="prompt-modal-textarea"
+                    readOnly
+                    value={rawCheatsheetJson}
+                    rows={15}
+                  />
+                </>
+              )}
+
+              {promptModalTab === "ideology" && (
+                <div className="ideology-wrap">
+                  <div className="ideology-hero">
+                    <h4 style={{ margin: "0 0 6px 0", fontSize: "15px", color: "var(--jantt-accent)" }}>
+                      Stop Asking AI to Write Fragile Timeline Code
+                    </h4>
+                    <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.5, color: "var(--jantt-text-muted)" }}>
+                      Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and canvas listeners produces brittle, hallucination-prone results. With Jantt, the AI outputs <strong>pure declarative JSON</strong>, and Jantt delivers deterministic, interactive execution.
+                    </p>
+                  </div>
+
+                  <div className="ideology-steps-grid">
+                    <div className="ideology-step-card">
+                      <div className="step-badge">Step 1</div>
+                      <h5>Feed Cheatsheet to LLM</h5>
+                      <p>Give the AI the compact schema contract (WBS, dates, DAG dependencies, milestones, budget).</p>
+                    </div>
+                    <div className="ideology-step-card">
+                      <div className="step-badge">Step 2</div>
+                      <h5>AI Outputs Pure JSON</h5>
+                      <p>Uses 10× fewer tokens. Machine-checkable, type-safe, and zero UI hallucinations.</p>
+                    </div>
+                    <div className="ideology-step-card">
+                      <div className="step-badge">Step 3</div>
+                      <h5>Instant Interactive Suite</h5>
+                      <p>Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban & Analytics.</p>
+                    </div>
+                    <div className="ideology-step-card">
+                      <div className="step-badge">Step 4</div>
+                      <h5>Bidirectional Loop</h5>
+                      <p>Humans drag and adjust visually. Jantt syncs clean JSON back to localStorage/disk for the AI agent.</p>
+                    </div>
+                  </div>
+
+                  <div className="ideology-metrics-row">
+                    <div className="ideology-metric-box">
+                      <span className="metric-val">10×</span>
+                      <span className="metric-lbl">Fewer LLM Tokens vs JSX</span>
+                    </div>
+                    <div className="ideology-metric-box">
+                      <span className="metric-val">0</span>
+                      <span className="metric-lbl">Runtime Dependencies</span>
+                    </div>
+                    <div className="ideology-metric-box">
+                      <span className="metric-val">100%</span>
+                      <span className="metric-lbl">Deterministic DAG Solver</span>
+                    </div>
+                    <div className="ideology-metric-box">
+                      <span className="metric-val">2-Way</span>
+                      <span className="metric-lbl">Bidirectional State Sync</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="prompt-modal-footer">
@@ -1020,10 +1229,24 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                 <button className="btn-nav" onClick={() => setShowPromptModal(false)}>
                   Close
                 </button>
-                <button className="btn-nav btn-nav-primary" onClick={handleCopyPrompt}>
-                  {copiedPrompt ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedPrompt ? "Copied to Clipboard" : "Copy Prompt Snippet"}
-                </button>
+                {promptModalTab === "prompt" && (
+                  <button className="btn-nav btn-nav-primary" onClick={handleCopyPrompt}>
+                    {copiedPrompt ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedPrompt ? "Copied Prompt" : "Copy LLM System Prompt"}
+                  </button>
+                )}
+                {promptModalTab === "cheatsheet" && (
+                  <button className="btn-nav btn-nav-primary" onClick={handleCopyRawCheatsheet}>
+                    {copiedRawCheatsheet ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedRawCheatsheet ? "Copied JSON" : "Copy Raw Cheatsheet JSON"}
+                  </button>
+                )}
+                {promptModalTab === "ideology" && (
+                  <button className="btn-nav btn-nav-primary" onClick={handleCopyPrompt}>
+                    {copiedPrompt ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedPrompt ? "Copied Prompt" : "Copy System Prompt"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
