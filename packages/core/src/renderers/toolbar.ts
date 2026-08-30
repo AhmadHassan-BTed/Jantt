@@ -17,6 +17,7 @@ export interface ToolbarProps {
   onRowHeightChange: (height: number) => void;
   onCriticalToggle: () => void;
   onAutoCascadeToggle: () => void;
+  onAddTask?: () => void;
   onSearchChange: (query: string) => void;
 }
 
@@ -129,6 +130,22 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   critBtn.innerHTML = `<span>Critical Path (${props.criticalCount})</span>`;
   critBtn.addEventListener("click", () => props.onCriticalToggle());
   controls.appendChild(critBtn);
+
+  // New Task Action Button
+  if (props.onAddTask) {
+    const addBtn = document.createElement("button");
+    addBtn.className = "jantt-add-task-btn";
+    addBtn.title = "Add a new task to this schedule";
+    addBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      <span>Add Task</span>
+    `;
+    addBtn.addEventListener("click", () => props.onAddTask?.());
+    controls.appendChild(addBtn);
+  }
 
   // Search Box
   const searchBox = document.createElement("div");

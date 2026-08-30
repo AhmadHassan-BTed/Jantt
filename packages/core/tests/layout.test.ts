@@ -283,7 +283,7 @@ describe("Layout Engine", () => {
   it("applies default 46px rowHeight when unspecified", () => {
     const res = layout(sampleData);
     expect(res.viewport.rowHeight).toBe(46);
-    expect(res.viewport.rowHeightMode).toBe("custom");
+    expect(res.viewport.rowHeightMode).toBe("fit");
     expect(res.canvasHeight).toBe(2 * 46);
   });
 

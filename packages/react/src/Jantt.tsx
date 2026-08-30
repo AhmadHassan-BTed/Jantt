@@ -8,6 +8,7 @@ export interface JanttProps {
   onViewportChange?: (viewport: ViewportOptions) => void;
   onTaskClick?: (task: Task) => void;
   onTaskDelete?: (taskId: string) => void;
+  onTaskAdd?: (newTask: Task) => void;
   sidebarContainer?: HTMLElement | string;
   renderDetail?: (
     task: Task,
@@ -32,6 +33,7 @@ export const Jantt: React.FC<JanttProps> = ({
   onViewportChange,
   onTaskClick,
   onTaskDelete,
+  onTaskAdd,
   sidebarContainer,
   renderDetail,
   viewport,
@@ -60,6 +62,7 @@ export const Jantt: React.FC<JanttProps> = ({
       onViewportChange,
       onTaskClick,
       onTaskDelete,
+      onTaskAdd,
       renderDetail
     });
 
@@ -84,10 +87,11 @@ export const Jantt: React.FC<JanttProps> = ({
         onViewportChange,
         onTaskClick,
         onTaskDelete,
+        onTaskAdd,
         renderDetail
       });
     }
-  }, [data, viewport, theme, themeClassName, className, readOnly, sidebarContainer, onChange, onCommit, onViewportChange, onTaskClick, onTaskDelete, renderDetail]);
+  }, [data, viewport, theme, themeClassName, className, readOnly, sidebarContainer, onChange, onCommit, onViewportChange, onTaskClick, onTaskDelete, onTaskAdd, renderDetail]);
 
   return (
     <div

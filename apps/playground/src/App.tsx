@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import {
   JanttData,
+  Task,
   validate,
   ValidationResult,
   TimeScale,
@@ -8,7 +9,10 @@ import {
   RowHeightMode,
   themeManager,
   ThemeDefinition,
-  downloadCsv
+  downloadCsv,
+  getTodayISODate,
+  addDays,
+  resolveSchedule
 } from "@jantt/core";
 import { Jantt } from "@jantt/react";
 import {
@@ -30,7 +34,8 @@ import {
   TrendingUp,
   User,
   Clock,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Plus
 } from "lucide-react";
 
 import basicFixture from "../../../examples/basic.json";
@@ -42,10 +47,10 @@ import brokenBadDateFixture from "../../../examples/broken-bad-date.json";
 import brokenDanglingDepFixture from "../../../examples/broken-dangling-dependency.json";
 
 const PRESETS: Record<string, { label: string; data: any }> = {
-  master: { label: "CheatSheet/MasterTemplate", data: masterFixture },
-  construction: { label: "High-Rise Construction (Enterprise)", data: constructionFixture },
-  basic: { label: "Acme Platform v2 Launch", data: basicFixture },
-  academic: { label: "Graduate Admissions Roadmap", data: academicFixture },
+  master: { label: "Benchmark: CheatSheet / MasterTemplate", data: masterFixture },
+  construction: { label: "Enterprise: High-Rise Construction", data: constructionFixture },
+  basic: { label: "Template: Minimal 5-Task Project", data: basicFixture },
+  academic: { label: "Academic: PhD & Admissions Roadmap", data: academicFixture },
   brokenMissingId: { label: "Diagnostic: Missing ID", data: brokenMissingIdFixture },
   brokenBadDate: { label: "Diagnostic: Bad Date Range", data: brokenBadDateFixture },
   brokenDangling: { label: "Diagnostic: Dangling Dep", data: brokenDanglingDepFixture }
@@ -65,7 +70,7 @@ export function App() {
   const [copiedJson, setCopiedJson] = useState(false);
   const [currentScale, setCurrentScale] = useState<TimeScale>("week");
   const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>("orthogonal");
-  const [rowHeightMode, setRowHeightMode] = useState<RowHeightMode>("custom");
+  const [rowHeightMode, setRowHeightMode] = useState<RowHeightMode>("fit");
   const [rowHeight, setRowHeight] = useState<number>(46);
   const [showCriticalPath, setShowCriticalPath] = useState(true);
   const [showBaselines, setShowBaselines] = useState(true);
@@ -211,6 +216,38 @@ export function App() {
     if (parsedData) {
       downloadCsv(parsedData, `jantt-schedule-${Date.now()}.csv`);
     }
+  };
+
+  // Quick Add New Task
+  const handleAddNewTask = () => {
+    if (!parsedData) return;
+    const today = getTodayISODate();
+    let lastEnd = today;
+    if (parsedData.tasks.length > 0) {
+      lastEnd = parsedData.tasks[parsedData.tasks.length - 1].end || today;
+    }
+    const catKeys = Object.keys(parsedData.categories || {});
+    const defaultCat = catKeys.length > 0 ? catKeys[0] : "general";
+    const nextIdx = parsedData.tasks.length + 1;
+    const newTask: Task = {
+      id: `task-${Date.now().toString(36)}`,
+      wbs: `${nextIdx}.0`,
+      label: `New Task ${nextIdx}`,
+      category: defaultCat,
+      start: lastEnd,
+      end: addDays(lastEnd, 7),
+      progress: 0,
+      status: "not-started",
+      dependsOn: parsedData.tasks.length > 0 ? parsedData.tasks[parsedData.tasks.length - 1].id : null,
+      gapDays: parsedData.meta?.defaultGapDays ?? 2
+    };
+
+    const nextTasks = [...parsedData.tasks, newTask];
+    const resolved = resolveSchedule(nextTasks, parsedData.meta?.defaultGapDays ?? 2);
+    const updated = { ...parsedData, tasks: resolved };
+    setParsedData(updated);
+    setJsonText(JSON.stringify(updated, null, 2));
+    setValidationResult(validate(updated));
   };
 
   const llmPromptSnippet = `You are a precision project management schedule generator.
@@ -401,6 +438,17 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
             </select>
           </div>
 
+          {/* Add Task Button */}
+          <button
+            className="btn-prompt"
+            style={{ background: "var(--jantt-accent)", color: "#FFFFFF", fontWeight: 700 }}
+            onClick={handleAddNewTask}
+            title="Quick add a new task"
+          >
+            <Plus size={14} />
+            <span>Add Task</span>
+          </button>
+
           {/* Prompt AI Button */}
           <button
             className="btn-prompt"
@@ -445,6 +493,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               )}
             </div>
             <div className="pane-actions">
+              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px", color: "var(--jantt-accent)", fontWeight: 700 }} onClick={handleAddNewTask} title="Add New Task">
+                <Plus size={12} />
+                <span>Add Task</span>
+              </button>
               <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
                 Format
               </button>
@@ -524,6 +576,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                 <Jantt
                   data={parsedData}
                   onCommit={handleChartCommit}
+                  onTaskAdd={handleAddNewTask}
                   onViewportChange={(vp) => {
                     if (vp.scale) setCurrentScale(vp.scale);
                     if (vp.linkRouting) setLinkRouting(vp.linkRouting);

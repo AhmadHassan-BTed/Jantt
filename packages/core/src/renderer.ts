@@ -3,6 +3,7 @@ import { layout, computeDependencyPath } from "./layout";
 import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
 import { resolveSchedule, getTaskDependencies } from "./resolver";
+import { addDays, getTodayISODate, parseISODate } from "./date-math";
 import {
   renderToolbar,
   renderGridTable,
@@ -35,7 +36,7 @@ export function renderJantt(
   let currentOptions: JanttOptions = { ...options };
   let currentScale: TimeScale = currentOptions.viewport?.scale || currentData.meta?.scale || "day";
   let currentRouting: LinkRoutingStyle = currentOptions.viewport?.linkRouting || currentData.meta?.linkRouting || "orthogonal";
-  let rowHeightMode: RowHeightMode = currentOptions.viewport?.rowHeightMode || "custom";
+  let rowHeightMode: RowHeightMode = currentOptions.viewport?.rowHeightMode || "fit";
   let customRowHeight: number = currentOptions.viewport?.rowHeight || 46;
   let showCritical = currentOptions.viewport?.showCriticalPath ?? (currentData.meta?.showCriticalPath ?? false);
   let showBaselines = currentOptions.viewport?.showBaselines ?? (currentData.meta?.showBaselines ?? true);
@@ -117,6 +118,37 @@ export function renderJantt(
     });
   };
 
+  const handleAddTask = () => {
+    const today = getTodayISODate();
+    let lastEnd = today;
+    if (currentData.tasks.length > 0) {
+      lastEnd = currentData.tasks[currentData.tasks.length - 1].end || today;
+    }
+    const catKeys = Object.keys(currentData.categories || {});
+    const defaultCat = catKeys.length > 0 ? catKeys[0] : "general";
+    const nextIdx = currentData.tasks.length + 1;
+    const newTask: Task = {
+      id: `task-${Date.now().toString(36)}`,
+      wbs: `${nextIdx}.0`,
+      label: `New Task ${nextIdx}`,
+      category: defaultCat,
+      start: lastEnd,
+      end: addDays(lastEnd, 7),
+      progress: 0,
+      status: "not-started",
+      dependsOn: currentData.tasks.length > 0 ? currentData.tasks[currentData.tasks.length - 1].id : null,
+      gapDays: currentData.meta?.defaultGapDays ?? 2
+    };
+
+    const nextTasks = [...currentData.tasks, newTask];
+    const resolved = resolveSchedule(nextTasks, currentData.meta?.defaultGapDays ?? 2);
+    currentData = { ...currentData, tasks: resolved };
+    render();
+    openTaskSidebar(newTask);
+    currentOptions.onTaskAdd?.(newTask);
+    currentOptions.onCommit?.(currentData);
+  };
+
   const render = () => {
     // 0. Capture scroll positions before re-render so viewport never resets to beginning
     const prevBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
@@ -138,9 +170,17 @@ export function renderJantt(
     let effectiveRowHeight = customRowHeight;
     if (rowHeightMode === "fit") {
       const containerH = container.clientHeight || root.clientHeight || 550;
-      const headerH = currentOptions.viewport?.headerHeight || 58;
-      const toolbarH = 48;
-      const availH = Math.max(containerH - headerH - toolbarH - 12, 100);
+      let minStart = displayTasks[0]?.start || getTodayISODate();
+      let maxEnd = displayTasks[displayTasks.length - 1]?.end || minStart;
+      displayTasks.forEach((t) => {
+        if (t.start && t.start < minStart) minStart = t.start;
+        if (t.end && t.end > maxEnd) maxEnd = t.end;
+      });
+      const spansMulti = parseISODate(minStart).getUTCFullYear() !== parseISODate(maxEnd).getUTCFullYear();
+      const headerH = spansMulti ? 78 : (currentOptions.viewport?.headerHeight || 58);
+      const toolbarH = 50;
+      const borderBuffer = 6;
+      const availH = Math.max(containerH - headerH - toolbarH - borderBuffer, 100);
       const count = Math.max(displayTasks.length, 1);
       effectiveRowHeight = Math.max(26, Math.min(140, Math.floor(availH / count)));
     }
@@ -217,6 +257,7 @@ export function renderJantt(
       criticalCount: criticalTaskIds.size,
       searchQuery: filterQuery,
       autoCascade: controller ? controller.isAutoCascade() : true,
+      onAddTask: currentOptions.readOnly ? undefined : handleAddTask,
       onScaleChange: (s) => {
         currentScale = s;
         currentOptions.onViewportChange?.({
@@ -292,6 +333,9 @@ export function renderJantt(
     // 5. Scroll Body Container
     const bodyWrap = document.createElement("div");
     bodyWrap.className = "jantt-body-wrap";
+    if (rowHeightMode === "fit") {
+      bodyWrap.style.overflowY = "hidden";
+    }
     root.appendChild(bodyWrap);
 
     // 6. Right Timeline Area Container
@@ -318,7 +362,8 @@ export function renderJantt(
       rowHeight: viewport.rowHeight,
       gridContainer,
       controller,
-      onTaskClick: openTaskSidebar
+      onTaskClick: openTaskSidebar,
+      onAddTask: currentOptions.readOnly ? undefined : handleAddTask
     });
     bodyWrap.appendChild(labelCol);
     bodyWrap.appendChild(splitter);
