@@ -344,6 +344,7 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  height: max-content;
   min-height: 100%;
 }
 
@@ -351,6 +352,7 @@
   position: sticky;
   top: 0;
   z-index: 26;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--jantt-border);
   display: grid;
   grid-template-columns: minmax(120px, 1fr) 70px 58px;
@@ -368,6 +370,7 @@
 }
 
 .jantt-label-row {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: minmax(120px, 1fr) 70px 58px;
   align-items: center;
@@ -458,25 +461,31 @@
   display: flex;
   flex-direction: column;
   background: var(--jantt-bg);
+  height: max-content;
+  min-height: 100%;
 }
 
 .jantt-timeline-header {
   position: sticky;
   top: 0;
   z-index: 10;
+  flex-shrink: 0;
   background: var(--jantt-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--jantt-border);
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 .jantt-header-years {
   display: flex;
   border-bottom: 1px solid var(--jantt-border-subtle);
-  height: 24px;
+  height: 20px;
   background: var(--jantt-bg);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .jantt-year-cell {
@@ -495,7 +504,9 @@
 .jantt-header-months {
   display: flex;
   border-bottom: 1px solid var(--jantt-border-subtle);
-  height: 28px;
+  height: 29px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .jantt-month-cell {
@@ -512,7 +523,9 @@
 
 .jantt-header-days {
   display: flex;
-  height: 28px;
+  height: 29px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .jantt-day-cell {
