@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   JanttData,
   Task,
@@ -35,7 +35,8 @@ import {
   User,
   Clock,
   FileSpreadsheet,
-  Plus
+  Plus,
+  RotateCcw
 } from "lucide-react";
 
 import basicFixture from "../../../examples/basic.json";
@@ -58,29 +59,186 @@ const PRESETS: Record<string, { label: string; data: any }> = {
 
 const AVAILABLE_THEMES = themeManager.getAllThemes();
 
+const STORAGE_KEYS = {
+  JSON: "jantt_saved_json",
+  PRESET: "jantt_saved_preset",
+  THEME: "jantt_saved_theme",
+  SCALE: "jantt_saved_scale",
+  ROUTING: "jantt_saved_routing",
+  ROW_HEIGHT_MODE: "jantt_saved_row_height_mode",
+  ROW_HEIGHT: "jantt_saved_row_height",
+  CRITICAL: "jantt_saved_critical",
+  BASELINES: "jantt_saved_baselines",
+  VIEW: "jantt_saved_view",
+  SIDEBAR_COLLAPSED: "jantt_saved_sidebar_collapsed",
+  SIDEBAR_WIDTH: "jantt_saved_sidebar_width"
+};
+
+function loadInitialState() {
+  let initialPreset = "construction";
+  try {
+    const savedPreset = localStorage.getItem(STORAGE_KEYS.PRESET);
+    if (savedPreset && PRESETS[savedPreset]) initialPreset = savedPreset;
+  } catch {}
+
+  let initialJson = JSON.stringify(PRESETS[initialPreset].data, null, 2);
+  let initialParsed: JanttData | null = PRESETS[initialPreset].data as JanttData;
+
+  try {
+    const savedJson = localStorage.getItem(STORAGE_KEYS.JSON);
+    if (savedJson) {
+      const parsed = JSON.parse(savedJson);
+      const val = validate(parsed);
+      if (val.valid) {
+        initialJson = savedJson;
+        initialParsed = parsed;
+      }
+    }
+  } catch {}
+
+  let initialTheme = "swiss-light";
+  try {
+    const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
+    if (savedTheme && themeManager.getTheme(savedTheme)) initialTheme = savedTheme;
+  } catch {}
+
+  let initialScale: TimeScale = "week";
+  try {
+    const savedScale = localStorage.getItem(STORAGE_KEYS.SCALE) as TimeScale;
+    if (savedScale && ["day", "week", "month", "quarter", "year"].includes(savedScale)) {
+      initialScale = savedScale;
+    } else if (initialParsed?.meta?.scale) {
+      initialScale = initialParsed.meta.scale;
+    }
+  } catch {}
+
+  let initialRouting: LinkRoutingStyle = "orthogonal";
+  try {
+    const savedRouting = localStorage.getItem(STORAGE_KEYS.ROUTING) as LinkRoutingStyle;
+    if (savedRouting && ["orthogonal", "curved", "direct"].includes(savedRouting)) {
+      initialRouting = savedRouting;
+    }
+  } catch {}
+
+  let initialRowHeightMode: RowHeightMode = "fit";
+  try {
+    const savedMode = localStorage.getItem(STORAGE_KEYS.ROW_HEIGHT_MODE) as RowHeightMode;
+    if (savedMode && ["fit", "custom"].includes(savedMode)) initialRowHeightMode = savedMode;
+  } catch {}
+
+  let initialRowHeight = 46;
+  try {
+    const savedHeight = localStorage.getItem(STORAGE_KEYS.ROW_HEIGHT);
+    if (savedHeight) initialRowHeight = parseInt(savedHeight, 10) || 46;
+  } catch {}
+
+  let initialCritical = true;
+  try {
+    const savedCrit = localStorage.getItem(STORAGE_KEYS.CRITICAL);
+    if (savedCrit !== null) initialCritical = savedCrit === "true";
+  } catch {}
+
+  let initialBaselines = true;
+  try {
+    const savedBase = localStorage.getItem(STORAGE_KEYS.BASELINES);
+    if (savedBase !== null) initialBaselines = savedBase === "true";
+  } catch {}
+
+  let initialView: "gantt" | "kanban" | "summary" = "gantt";
+  try {
+    const savedView = localStorage.getItem(STORAGE_KEYS.VIEW) as any;
+    if (savedView && ["gantt", "kanban", "summary"].includes(savedView)) initialView = savedView;
+  } catch {}
+
+  let initialCollapsed = false;
+  try {
+    const savedCol = localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED);
+    if (savedCol !== null) initialCollapsed = savedCol === "true";
+  } catch {}
+
+  let initialWidth = 480;
+  try {
+    const savedW = localStorage.getItem(STORAGE_KEYS.SIDEBAR_WIDTH);
+    if (savedW) initialWidth = parseInt(savedW, 10) || 480;
+  } catch {}
+
+  return {
+    initialPreset,
+    initialJson,
+    initialParsed,
+    initialTheme,
+    initialScale,
+    initialRouting,
+    initialRowHeightMode,
+    initialRowHeight,
+    initialCritical,
+    initialBaselines,
+    initialView,
+    initialCollapsed,
+    initialWidth
+  };
+}
+
 export function App() {
-  const [selectedPreset, setSelectedPreset] = useState("construction");
-  const [selectedThemeId, setSelectedThemeId] = useState("swiss-light");
+  const init = useMemo(() => loadInitialState(), []);
+
+  const [selectedPreset, setSelectedPreset] = useState(init.initialPreset);
+  const [selectedThemeId, setSelectedThemeId] = useState(init.initialTheme);
   const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
-  const [jsonText, setJsonText] = useState(() => JSON.stringify(constructionFixture, null, 2));
-  const [parsedData, setParsedData] = useState<JanttData | null>(constructionFixture as JanttData);
-  const [validationResult, setValidationResult] = useState<ValidationResult>(() => validate(constructionFixture));
+  const [jsonText, setJsonText] = useState(init.initialJson);
+  const [parsedData, setParsedData] = useState<JanttData | null>(init.initialParsed);
+  const [validationResult, setValidationResult] = useState<ValidationResult>(() => validate(init.initialParsed || {}));
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
-  const [currentScale, setCurrentScale] = useState<TimeScale>("week");
-  const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>("orthogonal");
-  const [rowHeightMode, setRowHeightMode] = useState<RowHeightMode>("fit");
-  const [rowHeight, setRowHeight] = useState<number>(46);
-  const [showCriticalPath, setShowCriticalPath] = useState(true);
-  const [showBaselines, setShowBaselines] = useState(true);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<"gantt" | "kanban" | "summary">("gantt");
+  const [currentScale, setCurrentScale] = useState<TimeScale>(init.initialScale);
+  const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>(init.initialRouting);
+  const [rowHeightMode, setRowHeightMode] = useState<RowHeightMode>(init.initialRowHeightMode);
+  const [rowHeight, setRowHeight] = useState<number>(init.initialRowHeight);
+  const [showCriticalPath, setShowCriticalPath] = useState(init.initialCritical);
+  const [showBaselines, setShowBaselines] = useState(init.initialBaselines);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(init.initialCollapsed);
+  const [activeView, setActiveView] = useState<"gantt" | "kanban" | "summary">(init.initialView);
 
   // Sidebar width resize state
-  const [sidebarWidth, setSidebarWidth] = useState(480);
+  const [sidebarWidth, setSidebarWidth] = useState(init.initialWidth);
   const [isResizing, setIsResizing] = useState(false);
   const isDraggingRef = useRef(false);
+
+  // Auto-persist active state to localStorage memory
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.JSON, jsonText);
+    } catch {}
+  }, [jsonText]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PRESET, selectedPreset);
+      localStorage.setItem(STORAGE_KEYS.THEME, selectedThemeId);
+      localStorage.setItem(STORAGE_KEYS.SCALE, currentScale);
+      localStorage.setItem(STORAGE_KEYS.ROUTING, linkRouting);
+      localStorage.setItem(STORAGE_KEYS.ROW_HEIGHT_MODE, rowHeightMode);
+      localStorage.setItem(STORAGE_KEYS.ROW_HEIGHT, String(rowHeight));
+      localStorage.setItem(STORAGE_KEYS.CRITICAL, String(showCriticalPath));
+      localStorage.setItem(STORAGE_KEYS.BASELINES, String(showBaselines));
+      localStorage.setItem(STORAGE_KEYS.VIEW, activeView);
+      localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, String(isSidebarCollapsed));
+      localStorage.setItem(STORAGE_KEYS.SIDEBAR_WIDTH, String(sidebarWidth));
+    } catch {}
+  }, [
+    selectedPreset,
+    selectedThemeId,
+    currentScale,
+    linkRouting,
+    rowHeightMode,
+    rowHeight,
+    showCriticalPath,
+    showBaselines,
+    activeView,
+    isSidebarCollapsed,
+    sidebarWidth
+  ]);
 
   const startResizing = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -113,7 +271,7 @@ export function App() {
   // Handle preset selection
   const handleSelectPreset = (key: string) => {
     setSelectedPreset(key);
-    const fixture = PRESETS[key].data;
+    const fixture = PRESETS[key]?.data || constructionFixture;
     const formatted = JSON.stringify(fixture, null, 2);
     setJsonText(formatted);
     try {
@@ -131,6 +289,21 @@ export function App() {
     } catch {
       setParsedData(null);
     }
+  };
+
+  // Reset current preset to clean default template
+  const handleResetPreset = () => {
+    const fixture = PRESETS[selectedPreset]?.data || constructionFixture;
+    const formatted = JSON.stringify(fixture, null, 2);
+    setJsonText(formatted);
+    try {
+      const parsed = JSON.parse(formatted);
+      const val = validate(parsed);
+      setValidationResult(val);
+      if (val.valid) {
+        setParsedData(parsed);
+      }
+    } catch {}
   };
 
   // Handle raw text changes in the JSON editor
@@ -499,6 +672,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               </button>
               <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
                 Format
+              </button>
+              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleResetPreset} title="Reset current preset back to initial template">
+                <RotateCcw size={12} />
+                <span>Reset</span>
               </button>
               <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleCopyJson} title="Copy JSON">
                 {copiedJson ? <Check size={12} /> : <Copy size={12} />}
