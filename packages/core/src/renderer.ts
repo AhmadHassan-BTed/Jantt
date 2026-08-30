@@ -349,10 +349,14 @@ export function renderJantt(
     timelineArea.appendChild(timelineHeader);
 
     // 6b. Canvas Body Container
+    const hasAddRow = !currentOptions.readOnly;
+    const addRowHeight = hasAddRow ? Math.min(viewport.rowHeight, 38) : 0;
+    const totalCanvasHeight = canvasHeight + addRowHeight;
+
     const gridContainer = document.createElement("div");
     gridContainer.style.position = "relative";
     gridContainer.style.width = `${canvasWidth}px`;
-    gridContainer.style.height = `${canvasHeight}px`;
+    gridContainer.style.height = `${totalCanvasHeight}px`;
 
     // 7. Render Sticky Data Grid Table & Splitter
     const { labelCol, splitter } = renderGridTable({
@@ -373,7 +377,8 @@ export function renderJantt(
       header,
       taskLayouts,
       rowHeight: viewport.rowHeight,
-      showToday: viewport.showToday
+      showToday: viewport.showToday,
+      hasAddRow
     });
     gridContainer.appendChild(gridLayer);
     if (todayLine) gridContainer.appendChild(todayLine);
