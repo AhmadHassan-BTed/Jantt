@@ -345,13 +345,6 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0px,
-    transparent 45px,
-    var(--jantt-border-subtle) 45px,
-    var(--jantt-border-subtle) 46px
-  );
 }
 
 .jantt-label-header {
@@ -609,13 +602,6 @@
   height: 100%;
   min-height: 100%;
   pointer-events: none;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0px,
-    transparent 45px,
-    var(--jantt-grid-row-line, var(--jantt-border-subtle)) 45px,
-    var(--jantt-grid-row-line, var(--jantt-border-subtle)) 46px
-  );
 }
 
 .jantt-grid-row {
