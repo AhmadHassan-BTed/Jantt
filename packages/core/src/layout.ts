@@ -138,8 +138,9 @@ export function layout(
   // Critical path calculation
   const { criticalTaskIds, criticalDepKeys } = calculateCriticalPath(tasks);
 
-  // Compute TaskLayouts
-  const barHeight = Math.min(28, viewport.rowHeight - 14);
+  // Compute TaskLayouts: Proportional bar height (~62% of row height) with vertical padding for dependency clearance
+  const verticalPadding = Math.max(8, Math.round(viewport.rowHeight * 0.36));
+  const barHeight = Math.max(18, Math.min(48, viewport.rowHeight - verticalPadding));
   const barYOffset = (viewport.rowHeight - barHeight) / 2;
 
   const taskLayouts: TaskLayout[] = [];
@@ -163,7 +164,7 @@ export function layout(
 
     if (isMilestone) {
       const centerX = colStartX + viewport.dayWidth / 2;
-      const size = 16;
+      const size = Math.max(14, Math.min(22, Math.round(barHeight * 0.62)));
       const radius = size * 0.7071;
       x = centerX;
       y = centerY;
