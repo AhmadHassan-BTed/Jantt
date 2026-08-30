@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="./assets/jantt-logo.svg" alt="Jantt — The JSON Gantt Chart Engine" width="280" />
+<img src="./assets/jantt-logo.svg" alt="Jantt — The Declarative JSON Gantt Chart Engine" width="320" />
 
 <br />
 
-### The JSON Gantt Chart Engine
+### The Declarative JSON Gantt Chart Engine
 **Where human intuition meets declarative AI planning.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
@@ -24,6 +24,10 @@ Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI tool
 
 [Live Playground](https://ahmadhassan-bted.github.io/Jantt/) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md)
 
+<br />
+
+<img src="./assets/screenshots/jantt-swiss-dark-overview.png" alt="Jantt Interactive Workspace in Swiss Dark Mode with 90° Orthogonal Routing and Split JSON Editor" width="100%" style="border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);" />
+
 </div>
 
 ---
@@ -38,7 +42,7 @@ Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI tool
 
 ```mermaid
 flowchart LR
-    A["1. Give LLM<br/>Jantt Cheatsheet"] --> B["2. AI Outputs<br/>Pure JSON (10x Fewer Tokens)"]
+    A["1. Feed AI Agent<br/>Jantt Cheatsheet"] --> B["2. AI Outputs<br/>Pure JSON (10x Fewer Tokens)"]
     B --> C["3. Jantt Engine<br/>Instant Gantt / Kanban / KPI"]
     C --> D["4. Human Adjusts Visually<br/>(Drag / Resize / Re-link)"]
     D --> E["5. Syncs JSON Back<br/>to AI Agent"]
@@ -109,23 +113,68 @@ flowchart LR
 
 ---
 
-## The Vision
+## 🎨 Visual Showcase & Curated Themes
 
-Planning is deeply human. Milestones, deadlines, and project roadmaps represent real effort, coordination, and aspirations. In modern software engineering, schedules are increasingly drafted, refined, and reorganized by **AI models** before human review.
+Jantt features a fully reactive, CSS variable-driven theming architecture with out-of-the-box support for light modes, sleek dark modes, and high-contrast vibrant styles:
 
-There has long been a gap between AI-generated plans and visual human intuition:
-- **Static text and markdown tables** fail to communicate temporal relationships, overlaps, or bottlenecks.
-- **Legacy Gantt libraries** require hundreds of lines of imperative setup code, proprietary SDK APIs, and heavy runtime dependencies.
-- **State synchronization is brittle**: syncing visual adjustments back to disk or piping incremental AI edits into a UI is historically complex.
+<div align="center">
 
-**Jantt bridges this divide.**
+### ☀️ Swiss Light Mode
+*Daylight clarity, high contrast typography, and subtle glassmorphic tooltips.*
 
-> **The JSON file is the application state.**  
-> What an AI outputs, Jantt renders immediately. What a human drags, resizes, or links on screen, Jantt writes straight back to clean, portable JSON.
+<img src="./assets/screenshots/jantt-swiss-light-interactive.png" alt="Jantt Swiss Light Theme" width="100%" style="border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;" />
+
+<br />
+
+### 🌙 Swiss Dark Mode
+*Sleek obsidian palette with glowing critical path indicators and 90° right-angle routing.*
+
+<img src="./assets/screenshots/jantt-swiss-dark-overview.png" alt="Jantt Swiss Dark Theme" width="100%" style="border-radius: 8px; border: 1px solid #1e293b; margin-bottom: 20px;" />
+
+</div>
+
+### 🌈 Vibrant Color Themes
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <b>🌲 Cyber Emerald</b><br /><br />
+      <img src="./assets/screenshots/jantt-cyber-emerald-theme.png" alt="Cyber Emerald Theme" width="100%" style="border-radius: 6px;" />
+    </td>
+    <td width="50%" align="center">
+      <b>🌹 Midnight Rose</b><br /><br />
+      <img src="./assets/screenshots/jantt-midnight-rose-theme.png" alt="Midnight Rose Theme" width="100%" style="border-radius: 6px;" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <b>🌇 Sunset Crimson</b><br /><br />
+      <img src="./assets/screenshots/jantt-sunset-crimson-theme.png" alt="Sunset Crimson Theme" width="100%" style="border-radius: 6px;" />
+    </td>
+    <td width="50%" align="center">
+      <b>⚡ Kitchen-Sink Master Benchmark</b><br /><br />
+      <img src="./assets/screenshots/jantt-benchmark-cheatsheet.png" alt="Master Benchmark Cheatsheet" width="100%" style="border-radius: 6px;" />
+    </td>
+  </tr>
+</table>
 
 ---
 
-## Comparison Matrix
+## 💎 Graphic Assets & Brand Identity
+
+The Jantt design system includes tailored vector icons and badges located in [`assets/`](./assets):
+
+| Graphic | Asset File | Description |
+| :---: | :--- | :--- |
+| <img src="./assets/jantt-logo.svg" width="140" /> | [`assets/jantt-logo.svg`](./assets/jantt-logo.svg) | Official horizontal banner logo with dual-tone timeline bars. |
+| <img src="./assets/jantt-icon-gradient.svg" width="40" /> | [`assets/jantt-icon-gradient.svg`](./assets/jantt-icon-gradient.svg) | Vibrant blue-to-emerald gradient icon badge. |
+| <img src="./assets/jantt-icon-duotone.svg" width="40" /> | [`assets/jantt-icon-duotone.svg`](./assets/jantt-icon-duotone.svg) | Deep duotone blue and emerald badge. |
+| <img src="./assets/jantt-icon-monochrome.svg" width="40" /> | [`assets/jantt-icon-monochrome.svg`](./assets/jantt-icon-monochrome.svg) | High-contrast monochrome icon for documentation. |
+| <img src="./assets/jantt-icon-outline.svg" width="40" /> | [`assets/jantt-icon-outline.svg`](./assets/jantt-icon-outline.svg) | Minimal geometric outline icon for light backgrounds. |
+
+---
+
+## ⚡ Comparison Matrix
 
 | Capability | Jantt Engine (`@jantt/core`) | DHTMLX Gantt | Frappe Gantt | Mermaid.js |
 |---|:---:|:---:|:---:|:---:|
@@ -141,7 +190,7 @@ There has long been a gap between AI-generated plans and visual human intuition:
 
 ---
 
-## System Architecture
+## 🏗️ System Architecture
 
 Jantt operates on a strictly decoupled, unidirectional data flow. Raw JSON is validated, topologically solved, mapped into coordinate space, and presented via modular DOM and SVG layers.
 
@@ -191,9 +240,9 @@ flowchart TD
 
 ---
 
-## Interaction & Request Lifecycle
+## 🔄 Interaction & Request Lifecycle
 
-When interacting with the canvas (dragging a task bar, resizing duration, connecting dependency handles, or adjusting progress), the event cycle flows cleanly through the state machine:
+When dragging task bars, resizing durations, connecting dependency handles, or adjusting progress, the event cycle flows cleanly through the state machine:
 
 ```mermaid
 sequenceDiagram
@@ -223,7 +272,7 @@ sequenceDiagram
 
 ---
 
-## Key Capabilities
+## 🚀 Key Capabilities
 
 <details open>
 <summary><b>1. Interactive Drag-to-Link (90° Orthogonal Step Routing)</b></summary>
@@ -295,7 +344,7 @@ Export schedule data straight from the browser without server dependencies:
 
 ---
 
-## Monorepo Directory Structure
+## 📦 Monorepo Directory Structure
 
 ```
 Jantt/
@@ -317,6 +366,7 @@ Jantt/
 ├── cli/                       # Standalone Node.js CLI runner (npx jantt open)
 ├── apps/
 │   └── playground/            # Split-view interactive documentation sandbox
+├── assets/                    # Official vector logos & curated screenshot gallery
 ├── schema/
 │   └── jantt.schema.json      # Formal JSON Schema v1 specification
 ├── examples/                  # Validated JSON planning fixtures
@@ -325,7 +375,7 @@ Jantt/
 
 ---
 
-## Quickstarts
+## ⚡ Quickstarts
 
 ### 1. React Application (`@jantt/react`)
 
@@ -445,7 +495,7 @@ const csvData = exportToCsv({ ...rawJson, tasks: resolvedTasks });
 
 ---
 
-## JSON Schema Contract
+## 📑 JSON Schema Contract
 
 Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/jantt.schema.json):
 
@@ -492,7 +542,7 @@ Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/
 
 ---
 
-## AI Prompting Specification
+## 🤖 AI Prompting Specification
 
 Use this system prompt with ChatGPT, Claude, Gemini, or local LLMs to generate valid Jantt timelines:
 
@@ -509,7 +559,7 @@ Rules:
 
 ---
 
-## Theming & CSS Variables Reference
+## 🎨 Theming & CSS Variables Reference
 
 ```css
 :root {
@@ -528,7 +578,7 @@ Rules:
 
 ---
 
-## Keyboard Accessibility
+## ⌨️ Keyboard Accessibility
 
 | Key | Action |
 |---|---|
@@ -540,7 +590,7 @@ Rules:
 
 ---
 
-## Local Development & Contributing
+## 🛠️ Local Development & Contributing
 
 New contributors are welcomed. Please review [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
 
@@ -564,7 +614,7 @@ npm run dev
 
 ---
 
-## Author & Maintainer
+## 👤 Author & Maintainer
 
 **Ahmad Hassan (B-Ted)**  
 - GitHub: [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed)
@@ -572,6 +622,6 @@ npm run dev
 
 ---
 
-## License
+## 📄 License
 
 This project is licensed under the **MIT License** — see the [`LICENSE`](./LICENSE) file for details.
