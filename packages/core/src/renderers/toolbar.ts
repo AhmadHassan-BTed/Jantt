@@ -75,22 +75,65 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   rowHeightGroup.appendChild(fitBtn);
   controls.appendChild(rowHeightGroup);
 
-  // Numeric input for custom row height
+  // Numeric input & steppers for custom row height
   if (props.rowHeightMode === "custom") {
     const heightInputBox = document.createElement("div");
     heightInputBox.className = "jantt-rowheight-input-wrap";
-    heightInputBox.title = "Custom Row Height (pixels)";
+    heightInputBox.title = "Custom Row Height (24px - 140px)";
     heightInputBox.innerHTML = `
-      <input type="number" min="26" max="120" step="2" class="jantt-rowheight-input" value="${props.rowHeight}" />
+      <button type="button" class="jantt-rowheight-btn is-minus" title="Decrease row height (-2px)">-</button>
+      <input type="number" min="24" max="140" step="2" class="jantt-rowheight-input" value="${props.rowHeight}" />
       <span class="jantt-rowheight-unit">px</span>
+      <button type="button" class="jantt-rowheight-btn is-plus" title="Increase row height (+2px)">+</button>
     `;
     const numInput = heightInputBox.querySelector<HTMLInputElement>(".jantt-rowheight-input")!;
-    numInput.addEventListener("change", (e) => {
+    const minusBtn = heightInputBox.querySelector<HTMLButtonElement>(".is-minus")!;
+    const plusBtn = heightInputBox.querySelector<HTMLButtonElement>(".is-plus")!;
+
+    const applyVal = (newVal: number) => {
+      const clamped = Math.max(24, Math.min(140, newVal));
+      props.onRowHeightChange(clamped);
+      requestAnimationFrame(() => {
+        const reInput = toolbar.parentElement?.querySelector<HTMLInputElement>(".jantt-rowheight-input");
+        if (reInput && document.activeElement?.classList.contains("jantt-rowheight-input")) {
+          reInput.focus();
+        }
+      });
+    };
+
+    minusBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      applyVal(props.rowHeight - 2);
+    });
+
+    plusBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      applyVal(props.rowHeight + 2);
+    });
+
+    numInput.addEventListener("input", (e) => {
       const val = parseInt((e.target as HTMLInputElement).value, 10);
-      if (!isNaN(val) && val >= 24 && val <= 160) {
-        props.onRowHeightChange(val);
+      if (!isNaN(val) && val >= 24 && val <= 140) {
+        applyVal(val);
       }
     });
+
+    numInput.addEventListener("change", (e) => {
+      const val = parseInt((e.target as HTMLInputElement).value, 10);
+      if (!isNaN(val)) {
+        applyVal(val);
+      }
+    });
+
+    numInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const val = parseInt((e.target as HTMLInputElement).value, 10);
+        if (!isNaN(val)) {
+          applyVal(val);
+        }
+      }
+    });
+
     controls.appendChild(heightInputBox);
   }
 
