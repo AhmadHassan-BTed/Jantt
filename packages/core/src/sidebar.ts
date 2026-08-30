@@ -487,6 +487,94 @@ function renderDefaultSidebarContent(
     if (progVal) progVal.textContent = `${progInput.value}%`;
   });
 
+  // Active custom attributes state & dynamic GUI adder
+  let currentFields: Record<string, string> = {};
+  if (task.fields) {
+    Object.entries(task.fields).forEach(([k, v]) => {
+      currentFields[k] = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+    });
+  }
+
+  const renderFieldsSection = () => {
+    const fieldsContainer = container.querySelector<HTMLElement>("#jantt-sidebar-fields");
+    if (!fieldsContainer) return;
+
+    const entries = Object.entries(currentFields);
+    let html = "";
+    if (entries.length === 0) {
+      html += '<div style="font-size: 12px; color: var(--jantt-text-dim); font-style: italic;">No custom attributes defined.</div>';
+    } else {
+      entries.forEach(([key, val]) => {
+        html += `
+          <div class="jantt-sidebar-field-row" style="display: flex; align-items: center; gap: 8px;">
+            <span class="jantt-sidebar-field-key" style="font-family: var(--jantt-font-mono); font-size: 11.5px; font-weight: 600; color: var(--jantt-text-muted); min-width: 90px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(key)}:</span>
+            <input type="text" data-field-val-key="${escapeHtml(key)}" value="${escapeHtml(val)}" class="jantt-input jantt-input-sm" style="flex-grow: 1;" ${readOnly || task.locked ? "disabled" : ""} />
+            ${!readOnly && !task.locked ? `<button type="button" data-del-field-key="${escapeHtml(key)}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px;" title="Remove attribute">✕</button>` : ""}
+          </div>
+        `;
+      });
+    }
+
+    if (!readOnly && !task.locked) {
+      html += `
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--jantt-border-subtle);">
+          <input type="text" id="jantt-new-field-key" class="jantt-input jantt-input-sm" placeholder="Attribute name (e.g. depth)" style="width: 130px; font-size: 11.5px;" />
+          <input type="text" id="jantt-new-field-val" class="jantt-input jantt-input-sm" placeholder="Value (e.g. 45m)" style="flex-grow: 1; font-size: 11.5px;" />
+          <button type="button" id="jantt-add-field-btn" class="jantt-btn jantt-btn-secondary" style="font-size: 11.5px; white-space: nowrap; height: 28px;">+ Add</button>
+        </div>
+      `;
+    }
+
+    fieldsContainer.innerHTML = html;
+
+    // Attach remove event listeners
+    fieldsContainer.querySelectorAll<HTMLButtonElement>("[data-del-field-key]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const k = btn.dataset.delFieldKey!;
+        delete currentFields[k];
+        renderFieldsSection();
+      });
+    });
+
+    // Attach input value listeners
+    fieldsContainer.querySelectorAll<HTMLInputElement>("[data-field-val-key]").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        const k = inp.dataset.fieldValKey!;
+        currentFields[k] = inp.value;
+      });
+    });
+
+    // Attach add button & enter key handler
+    const addBtn = fieldsContainer.querySelector<HTMLButtonElement>("#jantt-add-field-btn");
+    const keyInput = fieldsContainer.querySelector<HTMLInputElement>("#jantt-new-field-key");
+    const valInput = fieldsContainer.querySelector<HTMLInputElement>("#jantt-new-field-val");
+
+    const handleAdd = () => {
+      const k = keyInput?.value.trim();
+      const v = valInput?.value.trim() || "";
+      if (k) {
+        currentFields[k] = v;
+        renderFieldsSection();
+      }
+    };
+
+    addBtn?.addEventListener("click", handleAdd);
+    valInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAdd();
+      }
+    });
+    keyInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (valInput) valInput.focus();
+      }
+    });
+  };
+
+  renderFieldsSection();
+
   // Delete Task Handler
   const deleteBtn = container.querySelector("#jantt-sidebar-delete");
   deleteBtn?.addEventListener("click", () => {
@@ -512,11 +600,7 @@ function renderDefaultSidebarContent(
     const progress = progInput ? parseInt(progInput.value, 10) / 100 : task.progress;
 
     // Collect custom fields
-    const updatedFields: Record<string, unknown> = { ...(task.fields || {}) };
-    container.querySelectorAll<HTMLInputElement>("[data-field-key]").forEach((input) => {
-      const k = input.dataset.fieldKey!;
-      updatedFields[k] = input.value;
-    });
+    const updatedFields: Record<string, unknown> = { ...currentFields };
 
     const finalDependsOn: string | string[] | null =
       currentDeps.length === 0 ? null : currentDeps.length === 1 ? currentDeps[0] : currentDeps;
@@ -536,7 +620,7 @@ function renderDefaultSidebarContent(
       dependsOn: finalDependsOn,
       progress,
       notes,
-      fields: updatedFields
+      fields: Object.keys(updatedFields).length > 0 ? updatedFields : undefined
     };
 
     onSave(updatedTask);
