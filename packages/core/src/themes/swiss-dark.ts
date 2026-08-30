@@ -2,8 +2,8 @@ import { ThemeDefinition } from "./types";
 
 export const swissDarkTheme: ThemeDefinition = {
   id: "swiss-dark",
-  name: "Swiss Dark 2.0",
-  label: "Swiss Dark 2.0 (Deep Glass)",
+  name: "Swiss Dark",
+  label: "Swiss Dark",
   mode: "dark",
   className: "jantt-theme-dark",
   description: "Deep obsidian sapphire glassmorphism with high-contrast precision grid lines and azure accents.",

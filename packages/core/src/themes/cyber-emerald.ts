@@ -3,7 +3,7 @@ import { ThemeDefinition } from "./types";
 export const cyberEmeraldTheme: ThemeDefinition = {
   id: "cyber-emerald",
   name: "Cyber Emerald",
-  label: "Cyber Emerald (Neon Grid)",
+  label: "Cyber Emerald",
   mode: "dark",
   className: "jantt-theme-cyber-emerald",
   description: "Futuristic dark neon aesthetic with glowing emerald matrix gridlines and high-contrast indicators.",
