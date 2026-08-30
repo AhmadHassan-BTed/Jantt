@@ -36,32 +36,35 @@ import {
   Clock,
   FileSpreadsheet,
   Plus,
-  RotateCcw
+  RotateCcw,
+  FolderPlus,
+  Trash2,
+  Upload,
+  Save
 } from "lucide-react";
 
-import basicFixture from "../../../examples/basic.json";
 import constructionFixture from "../../../examples/construction-enterprise.json";
-import academicFixture from "../../../examples/academic-roadmap.json";
-import masterFixture from "../../../examples/master-template.json";
-import brokenMissingIdFixture from "../../../examples/broken-missing-id.json";
-import brokenBadDateFixture from "../../../examples/broken-bad-date.json";
-import brokenDanglingDepFixture from "../../../examples/broken-dangling-dependency.json";
 
-const PRESETS: Record<string, { label: string; data: any }> = {
-  master: { label: "Benchmark: CheatSheet / MasterTemplate", data: masterFixture },
-  construction: { label: "Enterprise: High-Rise Construction", data: constructionFixture },
-  basic: { label: "Template: Minimal 5-Task Project", data: basicFixture },
-  academic: { label: "Academic: PhD & Admissions Roadmap", data: academicFixture },
-  brokenMissingId: { label: "Diagnostic: Missing ID", data: brokenMissingIdFixture },
-  brokenBadDate: { label: "Diagnostic: Bad Date Range", data: brokenBadDateFixture },
-  brokenDangling: { label: "Diagnostic: Dangling Dep", data: brokenDanglingDepFixture }
+export interface SavedProject {
+  id: string;
+  name: string;
+  updatedAt: string;
+  data: JanttData;
+}
+
+const DEFAULT_TEMPLATE: SavedProject = {
+  id: "default",
+  name: "Default Template: Enterprise Plan",
+  updatedAt: "2026-08-31T00:00:00.000Z",
+  data: constructionFixture as JanttData
 };
 
 const AVAILABLE_THEMES = themeManager.getAllThemes();
 
 const STORAGE_KEYS = {
-  JSON: "jantt_saved_json",
-  PRESET: "jantt_saved_preset",
+  CUSTOM_PROJECTS: "jantt_custom_projects",
+  ACTIVE_PROJECT_ID: "jantt_active_project_id",
+  ACTIVE_JSON: "jantt_saved_json",
   THEME: "jantt_saved_theme",
   SCALE: "jantt_saved_scale",
   ROUTING: "jantt_saved_routing",
@@ -74,18 +77,43 @@ const STORAGE_KEYS = {
   SIDEBAR_WIDTH: "jantt_saved_sidebar_width"
 };
 
-function loadInitialState() {
-  let initialPreset = "construction";
+function loadSavedProjects(): SavedProject[] {
   try {
-    const savedPreset = localStorage.getItem(STORAGE_KEYS.PRESET);
-    if (savedPreset && PRESETS[savedPreset]) initialPreset = savedPreset;
+    const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_PROJECTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+function saveCustomProjects(projects: SavedProject[]) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_PROJECTS, JSON.stringify(projects));
+  } catch {}
+}
+
+function loadInitialState() {
+  const savedProjects = loadSavedProjects();
+  let activeProjectId = "default";
+  try {
+    const savedId = localStorage.getItem(STORAGE_KEYS.ACTIVE_PROJECT_ID);
+    if (savedId && (savedId === "default" || savedProjects.some((p) => p.id === savedId))) {
+      activeProjectId = savedId;
+    }
   } catch {}
 
-  let initialJson = JSON.stringify(PRESETS[initialPreset].data, null, 2);
-  let initialParsed: JanttData | null = PRESETS[initialPreset].data as JanttData;
+  let initialParsed: JanttData = DEFAULT_TEMPLATE.data;
+  if (activeProjectId !== "default") {
+    const found = savedProjects.find((p) => p.id === activeProjectId);
+    if (found) initialParsed = found.data;
+  }
+
+  let initialJson = JSON.stringify(initialParsed, null, 2);
 
   try {
-    const savedJson = localStorage.getItem(STORAGE_KEYS.JSON);
+    const savedJson = localStorage.getItem(STORAGE_KEYS.ACTIVE_JSON);
     if (savedJson) {
       const parsed = JSON.parse(savedJson);
       const val = validate(parsed);
@@ -163,7 +191,7 @@ function loadInitialState() {
   } catch {}
 
   return {
-    initialPreset,
+    activeProjectId,
     initialJson,
     initialParsed,
     initialTheme,
@@ -182,7 +210,12 @@ function loadInitialState() {
 export function App() {
   const init = useMemo(() => loadInitialState(), []);
 
-  const [selectedPreset, setSelectedPreset] = useState(init.initialPreset);
+  const [customProjects, setCustomProjects] = useState<SavedProject[]>(() => loadSavedProjects());
+  const [activeProjectId, setActiveProjectId] = useState<string>(init.activeProjectId);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [selectedThemeId, setSelectedThemeId] = useState(init.initialTheme);
   const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
   const [jsonText, setJsonText] = useState(init.initialJson);
@@ -205,16 +238,27 @@ export function App() {
   const [isResizing, setIsResizing] = useState(false);
   const isDraggingRef = useRef(false);
 
-  // Auto-persist active state to localStorage memory
+  // Auto-persist active state and custom projects to localStorage memory
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.JSON, jsonText);
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, jsonText);
     } catch {}
-  }, [jsonText]);
+
+    // If a custom project is active, auto-update it in customProjects
+    if (activeProjectId !== "default" && parsedData) {
+      setCustomProjects((prev) => {
+        const updated = prev.map((p) =>
+          p.id === activeProjectId ? { ...p, data: parsedData, updatedAt: new Date().toISOString() } : p
+        );
+        saveCustomProjects(updated);
+        return updated;
+      });
+    }
+  }, [jsonText, activeProjectId, parsedData]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.PRESET, selectedPreset);
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, activeProjectId);
       localStorage.setItem(STORAGE_KEYS.THEME, selectedThemeId);
       localStorage.setItem(STORAGE_KEYS.SCALE, currentScale);
       localStorage.setItem(STORAGE_KEYS.ROUTING, linkRouting);
@@ -227,7 +271,7 @@ export function App() {
       localStorage.setItem(STORAGE_KEYS.SIDEBAR_WIDTH, String(sidebarWidth));
     } catch {}
   }, [
-    selectedPreset,
+    activeProjectId,
     selectedThemeId,
     currentScale,
     linkRouting,
@@ -268,11 +312,16 @@ export function App() {
     window.addEventListener("pointerup", handlePointerUp);
   }, []);
 
-  // Handle preset selection
-  const handleSelectPreset = (key: string) => {
-    setSelectedPreset(key);
-    const fixture = PRESETS[key]?.data || constructionFixture;
-    const formatted = JSON.stringify(fixture, null, 2);
+  // Switch active project
+  const handleSelectProject = (projectId: string) => {
+    setActiveProjectId(projectId);
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, projectId);
+    let projectData: JanttData = DEFAULT_TEMPLATE.data;
+    if (projectId !== "default") {
+      const found = customProjects.find((p) => p.id === projectId);
+      if (found) projectData = found.data;
+    }
+    const formatted = JSON.stringify(projectData, null, 2);
     setJsonText(formatted);
     try {
       const parsed = JSON.parse(formatted);
@@ -291,10 +340,91 @@ export function App() {
     }
   };
 
-  // Reset current preset to clean default template
-  const handleResetPreset = () => {
-    const fixture = PRESETS[selectedPreset]?.data || constructionFixture;
-    const formatted = JSON.stringify(fixture, null, 2);
+  // Open modal to save current plan as new project
+  const handleOpenSaveModal = () => {
+    setNewProjectName(parsedData?.meta?.title || `My Custom Plan ${customProjects.length + 1}`);
+    setShowSaveModal(true);
+  };
+
+  // Save current plan as new custom project in localStorage
+  const handleSaveNewProject = () => {
+    if (!parsedData || !newProjectName.trim()) return;
+    const newProj: SavedProject = {
+      id: `proj-${Date.now().toString(36)}`,
+      name: newProjectName.trim(),
+      updatedAt: new Date().toISOString(),
+      data: parsedData
+    };
+    const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
+    setCustomProjects(updated);
+    saveCustomProjects(updated);
+    setActiveProjectId(newProj.id);
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+    setShowSaveModal(false);
+    setNewProjectName("");
+  };
+
+  // Delete custom project from localStorage
+  const handleDeleteProject = (projectId: string) => {
+    if (projectId === "default") return;
+    const projToDelete = customProjects.find((p) => p.id === projectId);
+    const confirmed = window.confirm(
+      `Delete project "${projToDelete?.name || projectId}" from browser storage?`
+    );
+    if (!confirmed) return;
+    const updated = customProjects.filter((p) => p.id !== projectId);
+    setCustomProjects(updated);
+    saveCustomProjects(updated);
+    if (activeProjectId === projectId) {
+      handleSelectProject("default");
+    }
+  };
+
+  // Import JSON file from local disk
+  const handleImportJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+        const val = validate(parsed);
+        if (val.valid) {
+          const projName = parsed.meta?.title || file.name.replace(/\.json$/i, "");
+          const newProj: SavedProject = {
+            id: `proj-${Date.now().toString(36)}`,
+            name: projName,
+            updatedAt: new Date().toISOString(),
+            data: parsed
+          };
+          const updated = [newProj, ...customProjects];
+          setCustomProjects(updated);
+          saveCustomProjects(updated);
+          setActiveProjectId(newProj.id);
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+          setJsonText(JSON.stringify(parsed, null, 2));
+          setParsedData(parsed);
+          setValidationResult(val);
+        } else {
+          alert("The imported file has schema errors:\n" + val.errors.map((err) => `${err.path}: ${err.message}`).join("\n"));
+        }
+      } catch (err: any) {
+        alert("Invalid JSON file: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  // Reset active plan back to original template or saved state
+  const handleResetActiveProject = () => {
+    let targetData = DEFAULT_TEMPLATE.data;
+    if (activeProjectId !== "default") {
+      const found = customProjects.find((p) => p.id === activeProjectId);
+      if (found) targetData = found.data;
+    }
+    const formatted = JSON.stringify(targetData, null, 2);
     setJsonText(formatted);
     try {
       const parsed = JSON.parse(formatted);
@@ -692,22 +822,71 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
             </button>
           </div>
 
-          {/* Preset Selector */}
+          {/* Plan / Project Selector */}
           <div className="nav-select-group">
-            <label htmlFor="preset-select">Preset:</label>
+            <label htmlFor="project-select">Plan:</label>
             <select
-              id="preset-select"
+              id="project-select"
               className="select-input"
-              value={selectedPreset}
-              onChange={(e) => handleSelectPreset(e.target.value)}
+              value={activeProjectId}
+              onChange={(e) => handleSelectProject(e.target.value)}
             >
-              {Object.entries(PRESETS).map(([k, p]) => (
-                <option key={k} value={k}>
-                  {p.label}
-                </option>
-              ))}
+              <optgroup label="Templates">
+                <option value="default">{DEFAULT_TEMPLATE.name}</option>
+              </optgroup>
+              {customProjects.length > 0 && (
+                <optgroup label={`My Saved Plans (${customProjects.length})`}>
+                  {customProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.data?.tasks?.length || 0} tasks)
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
+
+          {/* Save Current Plan As New Button */}
+          <button
+            className="btn-nav"
+            onClick={handleOpenSaveModal}
+            title="Save current schedule as a new custom plan in browser memory"
+          >
+            <FolderPlus size={13} />
+            <span>Save Plan</span>
+          </button>
+
+          {/* Delete Active Custom Plan Button */}
+          {activeProjectId !== "default" && (
+            <button
+              className="btn-nav"
+              style={{ color: "#EF4444" }}
+              onClick={() => handleDeleteProject(activeProjectId)}
+              title="Delete this custom plan from browser memory"
+            >
+              <Trash2 size={13} />
+              <span>Delete</span>
+            </button>
+          )}
+
+          {/* Hidden File Input for JSON Import */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".json,application/json"
+            onChange={handleImportJsonFile}
+            style={{ display: "none" }}
+          />
+
+          {/* Import JSON Button */}
+          <button
+            className="btn-nav"
+            onClick={() => fileInputRef.current?.click()}
+            title="Import a Jantt JSON file from your computer"
+          >
+            <Upload size={13} />
+            <span>Import</span>
+          </button>
 
           {/* Theme Selector */}
           <div className="nav-select-group">
@@ -767,7 +946,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         <section
           id="editor-pane"
           className={`editor-pane ${isSidebarCollapsed ? "is-collapsed" : ""}`}
-          style={isSidebarCollapsed ? undefined : { width: `${sidebarWidth}px`, flexShrink: 0 }}
+          style={{ width: isSidebarCollapsed ? "0px" : `${sidebarWidth}px` }}
         >
           <div className="pane-header">
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -788,7 +967,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
                 Format
               </button>
-              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleResetPreset} title="Reset current preset back to initial template">
+              <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleResetActiveProject} title="Reset current plan back to saved state or default template">
                 <RotateCcw size={12} />
                 <span>Reset</span>
               </button>
@@ -1248,6 +1427,75 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Custom Plan Modal */}
+      {showSaveModal && (
+        <div className="prompt-modal-backdrop" onClick={() => setShowSaveModal(false)}>
+          <div className="prompt-modal-card" style={{ maxWidth: "480px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="prompt-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <FolderPlus size={18} color="var(--jantt-accent)" />
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                  Save Custom Plan
+                </h3>
+              </div>
+              <button
+                className="prompt-modal-close-btn"
+                onClick={() => setShowSaveModal(false)}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="prompt-modal-body" style={{ gap: "14px", padding: "20px" }}>
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--jantt-text-muted)", lineHeight: 1.5 }}>
+                Save this schedule to permanent browser storage. You can switch between your saved plans, edit, or delete them anytime.
+              </p>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "6px", color: "var(--jantt-text-muted)" }}>
+                  Plan Name
+                </label>
+                <input
+                  type="text"
+                  className="code-textarea"
+                  style={{
+                    width: "100%",
+                    height: "40px",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    fontFamily: "var(--jantt-font-sans)",
+                    borderRadius: "8px",
+                    border: "1px solid var(--jantt-border)",
+                    boxSizing: "border-box"
+                  }}
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveNewProject();
+                  }}
+                  placeholder="e.g. Q4 Product Delivery Roadmap"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="prompt-modal-footer">
+              <button className="btn-nav" onClick={() => setShowSaveModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn-nav btn-nav-primary"
+                onClick={handleSaveNewProject}
+                disabled={!newProjectName.trim()}
+              >
+                <Save size={14} />
+                <span>Save to Browser Memory</span>
+              </button>
             </div>
           </div>
         </div>
