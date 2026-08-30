@@ -9,6 +9,7 @@ export interface GridTableProps {
   gridContainer: HTMLElement;
   controller: InteractionController;
   onTaskClick: (task: Task) => void;
+  onAddTask?: () => void;
 }
 
 /**
@@ -82,6 +83,27 @@ export function renderGridTable(props: GridTableProps): {
 
     labelCol.appendChild(row);
   });
+
+  // Optional Add Task row at bottom of table
+  if (props.onAddTask) {
+    const addRow = document.createElement("div");
+    addRow.className = "jantt-label-row jantt-label-add-row";
+    addRow.style.height = `${Math.min(props.rowHeight, 38)}px`;
+    addRow.title = "Add a new task";
+    addRow.innerHTML = `
+      <div class="jantt-col-name" style="color: var(--jantt-accent); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Add Task</span>
+      </div>
+      <div></div>
+      <div></div>
+    `;
+    addRow.addEventListener("click", () => props.onAddTask?.());
+    labelCol.appendChild(addRow);
+  }
 
   // Draggable Splitter
   const splitter = document.createElement("div");

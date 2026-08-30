@@ -235,6 +235,7 @@ export interface JanttOptions {
   onViewportChange?: (viewport: ViewportOptions) => void;
   onTaskClick?: (task: Task) => void;
   onTaskDelete?: (taskId: string) => void;
+  onTaskAdd?: (newTask: Task) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;
   onLinkDelete?: (fromTaskId: string, toTaskId: string) => void;
   renderDetail?: (

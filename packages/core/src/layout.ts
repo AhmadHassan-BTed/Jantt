@@ -41,7 +41,7 @@ const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
 const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns">> = {
   dayWidth: 32,
   rowHeight: 46,
-  rowHeightMode: "custom",
+  rowHeightMode: "fit",
   labelWidth: 340,
   headerHeight: 58,
   startDate: "",
