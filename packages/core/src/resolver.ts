@@ -87,7 +87,7 @@ export function resolveSchedule(tasks: Task[], defaultGapDays = 2): Task[] {
       let calculatedMinStart: string | null = null;
 
       if (explicitDeps.length > 0) {
-        const gap = t.gapDays ?? t.minGapDays ?? defaultGapDays;
+        const gap = t.gapDays ?? t.minGapDays ?? 0;
 
         for (const depId of explicitDeps) {
           const prereq = byId[depId];
