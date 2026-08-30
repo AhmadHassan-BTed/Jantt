@@ -477,6 +477,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "start": "YYYY-MM-DD",
       "end": "YYYY-MM-DD",
       "assignee": "Team Member Name",
+      "phase": "Phase 1: Foundation",
       "priority": "low" | "medium" | "high" | "urgent",
       "estimatedCost": 28000,
       "actualCost": 15000,
@@ -485,7 +486,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "locked": false,
       "progress": 0.75,
       "milestone": false,
-      "status": "not-started" | "in-progress" | "completed" | "blocked",
+      "status": "not-started" | "in-progress" | "submitted" | "completed" | "blocked",
       "urgent": false,
       "baseline": {
         "start": "YYYY-MM-DD",
