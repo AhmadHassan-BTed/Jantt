@@ -1,0 +1,139 @@
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "AI Cheatsheet Master Schedule",
+    "description": "Cross-functional delivery plan and AI benchmark specification",
+    "person": "Alex Morgan",
+    "organization": "Acme Engineering Corp",
+    "start": "2026-09-01",
+    "end": "2027-02-28",
+    "defaultGapDays": 2,
+    "scale": "week",
+    "linkRouting": "orthogonal",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "currency": "USD",
+    "budget": 350000,
+    "version": "1.2.0"
+  },
+  "categories": {
+    "planning": {
+      "label": "Planning & Architecture",
+      "color": "#38BDF8",
+      "soft": "rgba(56,189,248,0.15)",
+      "icon": "compass"
+    },
+    "core-dev": {
+      "label": "Core Engineering",
+      "color": "#10B981",
+      "soft": "rgba(16,185,129,0.15)",
+      "icon": "code-2"
+    },
+    "qa-testing": {
+      "label": "QA & Validation",
+      "color": "#F59E0B",
+      "soft": "rgba(245,158,11,0.15)",
+      "icon": "shield-check"
+    },
+    "release": {
+      "label": "Release & Launch",
+      "color": "#A855F7",
+      "soft": "rgba(168,85,247,0.15)",
+      "icon": "rocket"
+    }
+  },
+  "documents": [
+    {
+      "id": "doc-prd",
+      "label": "Product Requirement Document",
+      "status": "have",
+      "owner": "Alex Morgan",
+      "url": "https://docs.acme.com/prd"
+    },
+    {
+      "id": "doc-arch",
+      "label": "System Architecture RFC",
+      "status": "have",
+      "owner": "Dev Lead",
+      "url": "https://docs.acme.com/rfc"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "spec-approval",
+      "wbs": "1.1",
+      "label": "Architecture Spec & RFC Signoff",
+      "category": "planning",
+      "start": "2026-09-01",
+      "end": "2026-09-14",
+      "assignee": "Alex Morgan",
+      "priority": "high",
+      "progress": 1.0,
+      "status": "completed",
+      "estimatedCost": 15000,
+      "actualCost": 14200
+    },
+    {
+      "id": "gate-arch-approved",
+      "wbs": "1.2",
+      "label": "Architecture Gate Approved",
+      "category": "planning",
+      "start": "2026-09-15",
+      "end": "2026-09-15",
+      "milestone": true,
+      "dependsOn": "spec-approval",
+      "status": "completed"
+    },
+    {
+      "id": "core-engine",
+      "wbs": "2.1",
+      "label": "Core Engine & DAG Solver",
+      "category": "core-dev",
+      "start": "2026-09-17",
+      "end": "2026-10-20",
+      "assignee": "Core Dev Team",
+      "dependsOn": "gate-arch-approved",
+      "gapDays": 2,
+      "priority": "urgent",
+      "progress": 0.65,
+      "status": "in-progress",
+      "estimatedCost": 60000,
+      "actualCost": 38000,
+      "baseline": {
+        "start": "2026-09-15",
+        "end": "2026-10-18"
+      },
+      "fields": {
+        "repo": "github.com/org/core",
+        "storyPoints": 21
+      }
+    },
+    {
+      "id": "qa-e2e",
+      "wbs": "3.1",
+      "label": "End-to-End Test Suite",
+      "category": "qa-testing",
+      "start": "2026-10-22",
+      "end": "2026-11-15",
+      "assignee": "QA Lead",
+      "dependsOn": "core-engine",
+      "gapDays": 2,
+      "priority": "medium",
+      "progress": 0.1,
+      "status": "not-started",
+      "estimatedCost": 25000
+    },
+    {
+      "id": "v1-launch",
+      "wbs": "4.1",
+      "label": "Production v1.0 Launch Gate",
+      "category": "release",
+      "start": "2026-11-18",
+      "end": "2026-11-18",
+      "milestone": true,
+      "dependsOn": "qa-e2e",
+      "gapDays": 3,
+      "status": "not-started"
+    }
+  ]
+}
