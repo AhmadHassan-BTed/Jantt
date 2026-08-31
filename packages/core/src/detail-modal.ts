@@ -125,8 +125,9 @@ function renderDefaultModalContent(
         <div style="font-size: 12px; color: var(--jantt-text-muted); margin-top: 2px; font-family: var(--jantt-font-mono);">
           ID: ${escapeHtml(task.id)}
         </div>
-      </div>
-      <button class="jantt-modal-close-btn" style="background: transparent; border: none; font-size: 20px; color: var(--jantt-text-muted); cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
+      <button class="jantt-modal-close-btn" style="background: transparent; border: none; color: var(--jantt-text-muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; justify-content: center;" title="Close Modal (Esc)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
     </div>
 
     <div class="jantt-modal-body">
@@ -220,7 +221,9 @@ function renderDefaultModalContent(
             <div style="flex-grow: 1; display: flex; align-items: center; gap: 6px;">
               <input type="text" data-field-val-key="${escapeHtml(key)}" value="${escapeHtml(val)}" style="flex-grow: 1; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 4px; color: var(--jantt-text); padding: 3px 8px; font-size: 12px;" />
               ${isUrl ? `<a href="${escapeHtml(val)}" target="_blank" rel="noopener noreferrer" style="color: var(--jantt-accent); text-decoration: underline; font-size: 11.5px;">Open</a>` : ""}
-              <button type="button" data-del-field-key="${escapeHtml(key)}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px;" title="Remove attribute">✕</button>
+              <button type="button" data-del-field-key="${escapeHtml(key)}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px; display: inline-flex; align-items: center; justify-content: center;" title="Remove attribute">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
             </div>
           </div>
         `;

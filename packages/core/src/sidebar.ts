@@ -179,7 +179,9 @@ function renderDefaultSidebarContent(
         </div>
         <h2 class="jantt-sidebar-title">${escapeHtml(task.label || task.name || task.id)}</h2>
       </div>
-      <button class="jantt-sidebar-close-btn" title="Close Sidebar (Esc)">✕</button>
+      <button class="jantt-sidebar-close-btn" title="Close Sidebar (Esc)" style="display: flex; align-items: center; justify-content: center;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
     </div>
 
     <!-- Body Content -->
@@ -367,7 +369,7 @@ function renderDefaultSidebarContent(
               <span>${escapeHtml(pLabel)} (#${escapeHtml(depId)})</span>
               ${
                 !readOnly && !task.locked
-                  ? `<button type="button" data-remove-dep="${escapeHtml(depId)}" style="background: none; border: none; color: var(--jantt-text-dim); cursor: pointer; font-size: 12px; padding: 0;" title="Remove dependency">✕</button>`
+                  ? `<button type="button" data-remove-dep="${escapeHtml(depId)}" style="background: none; border: none; color: var(--jantt-text-dim); cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;" title="Remove dependency"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>`
                   : ""
               }
             </span>
@@ -509,7 +511,7 @@ function renderDefaultSidebarContent(
           <div class="jantt-sidebar-field-row" style="display: flex; align-items: center; gap: 8px;">
             <span class="jantt-sidebar-field-key" style="font-family: var(--jantt-font-mono); font-size: 11.5px; font-weight: 600; color: var(--jantt-text-muted); min-width: 90px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(key)}:</span>
             <input type="text" data-field-val-key="${escapeHtml(key)}" value="${escapeHtml(val)}" class="jantt-input jantt-input-sm" style="flex-grow: 1;" ${readOnly || task.locked ? "disabled" : ""} />
-            ${!readOnly && !task.locked ? `<button type="button" data-del-field-key="${escapeHtml(key)}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px;" title="Remove attribute">✕</button>` : ""}
+            ${!readOnly && !task.locked ? `<button type="button" data-del-field-key="${escapeHtml(key)}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px; display: inline-flex; align-items: center; justify-content: center;" title="Remove attribute"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ""}
           </div>
         `;
       });
