@@ -1,139 +1,515 @@
 {
   "$schema": "https://jantt.dev/schema/v1.json",
   "meta": {
-    "title": "AI Cheatsheet Master Schedule",
-    "description": "Cross-functional delivery plan and AI benchmark specification",
-    "person": "Alex Morgan",
-    "organization": "Acme Engineering Corp",
+    "title": "Master Kitchen-Sink Specification & Benchmark Cheatsheet",
+    "description": "The definitive benchmark reference template demonstrating 100% of Jantt schema capabilities: WBS hierarchies, multi-dependencies, locked constraints, urgent alerts, planned vs actual baselines, granular progress tracking, budget analysis, category definitions, and custom metadata attributes.",
+    "person": "Lead Technical Program Director",
+    "organization": "Acme Global Engineering & Architecture",
     "start": "2026-09-01",
-    "end": "2027-02-28",
+    "end": "2027-01-31",
     "defaultGapDays": 2,
     "scale": "week",
     "linkRouting": "orthogonal",
     "showCriticalPath": true,
     "showBaselines": true,
     "currency": "USD",
-    "budget": 350000,
-    "version": "1.2.0"
+    "budget": 385000,
+    "version": "1.2.0",
+    "generatedAt": "2026-08-29T19:00:00.000Z"
   },
   "categories": {
-    "planning": {
-      "label": "Planning & Architecture",
-      "color": "#38BDF8",
-      "soft": "rgba(56,189,248,0.15)",
-      "icon": "compass"
+    "specs": {
+      "label": "Architecture & Specs",
+      "color": "#3B82F6",
+      "soft": "#1E293B",
+      "icon": "file-text"
     },
-    "core-dev": {
-      "label": "Core Engineering",
+    "core": {
+      "label": "Core Engine & Services",
       "color": "#10B981",
-      "soft": "rgba(16,185,129,0.15)",
-      "icon": "code-2"
+      "soft": "#064E3B",
+      "icon": "cpu"
     },
-    "qa-testing": {
-      "label": "QA & Validation",
+    "ui": {
+      "label": "Frontend & Design System",
+      "color": "#8B5CF6",
+      "soft": "#312E81",
+      "icon": "layout"
+    },
+    "security": {
+      "label": "Security & Compliance",
       "color": "#F59E0B",
-      "soft": "rgba(245,158,11,0.15)",
+      "soft": "#78350F",
       "icon": "shield-check"
     },
+    "devops": {
+      "label": "Cloud & Infrastructure",
+      "color": "#06B6D4",
+      "soft": "#083344",
+      "icon": "cloud"
+    },
+    "qa": {
+      "label": "QA & Test Automation",
+      "color": "#E11D48",
+      "soft": "#4C0519",
+      "icon": "check-circle"
+    },
     "release": {
-      "label": "Release & Launch",
-      "color": "#A855F7",
-      "soft": "rgba(168,85,247,0.15)",
+      "label": "Deployment & Release",
+      "color": "#EC4899",
+      "soft": "#831843",
       "icon": "rocket"
     }
   },
   "documents": [
     {
-      "id": "doc-prd",
-      "label": "Product Requirement Document",
+      "id": "doc-arch-rfc",
+      "label": "RFC-204: Global Event-Driven Mesh Architecture",
       "status": "have",
-      "owner": "Alex Morgan",
-      "url": "https://docs.acme.com/prd"
+      "owner": "Sarah Chen",
+      "url": "https://wiki.acme.corp/rfc/204",
+      "note": "Approved unanimously by Architecture Review Board on Aug 24"
     },
     {
-      "id": "doc-arch",
-      "label": "System Architecture RFC",
-      "status": "have",
-      "owner": "Dev Lead",
-      "url": "https://docs.acme.com/rfc"
+      "id": "doc-soc2-audit",
+      "label": "SOC2 Type II & ISO 27001 Security Checklist",
+      "status": "pending",
+      "owner": "Marcus Brody",
+      "url": "https://compliance.acme.corp/soc2-audit",
+      "note": "Under audit review with external auditor"
+    },
+    {
+      "id": "doc-legal-sla",
+      "label": "Global Service Level Agreement & Privacy Policy v2",
+      "status": "missing",
+      "owner": "Legal Counsel",
+      "url": "https://legal.acme.corp/sla-v2",
+      "note": "Mandatory blocker for GA production rollout"
     }
   ],
   "tasks": [
     {
-      "id": "spec-approval",
+      "id": "task-spec-schema",
       "wbs": "1.1",
-      "label": "Architecture Spec & RFC Signoff",
-      "category": "planning",
+      "label": "API Contracts, Protocol Buffers & JSON Schemas",
+      "category": "specs",
       "start": "2026-09-01",
       "end": "2026-09-14",
-      "assignee": "Alex Morgan",
+      "assignee": "Sarah Chen",
       "priority": "high",
+      "estimatedCost": 28000,
+      "actualCost": 27500,
+      "dependsOn": null,
+      "gapDays": 0,
+      "locked": true,
       "progress": 1.0,
+      "milestone": false,
       "status": "completed",
-      "estimatedCost": 15000,
-      "actualCost": 14200
-    },
-    {
-      "id": "gate-arch-approved",
-      "wbs": "1.2",
-      "label": "Architecture Gate Approved",
-      "category": "planning",
-      "start": "2026-09-15",
-      "end": "2026-09-15",
-      "milestone": true,
-      "dependsOn": "spec-approval",
-      "status": "completed"
-    },
-    {
-      "id": "core-engine",
-      "wbs": "2.1",
-      "label": "Core Engine & DAG Solver",
-      "category": "core-dev",
-      "start": "2026-09-17",
-      "end": "2026-10-20",
-      "assignee": "Core Dev Team",
-      "dependsOn": "gate-arch-approved",
-      "gapDays": 2,
-      "priority": "urgent",
-      "progress": 0.65,
-      "status": "in-progress",
-      "estimatedCost": 60000,
-      "actualCost": 38000,
+      "urgent": false,
       "baseline": {
-        "start": "2026-09-15",
+        "start": "2026-09-01",
+        "end": "2026-09-12"
+      },
+      "notes": "Formalize OpenAPI 3.1 contracts, TypeScript interfaces, and bidirectional JSON schema validation rules.",
+      "fields": {
+        "deliverable": "packages/schema/v1.json",
+        "jira": "JANTT-101",
+        "storyPoints": 13,
+        "team": "Core Architecture"
+      }
+    },
+    {
+      "id": "task-spec-security",
+      "wbs": "1.2",
+      "label": "Threat Modeling & Zero-Trust Auth Architecture",
+      "category": "specs",
+      "start": "2026-09-03",
+      "end": "2026-09-16",
+      "assignee": "Marcus Brody",
+      "priority": "urgent",
+      "estimatedCost": 24000,
+      "actualCost": 23500,
+      "dependsOn": null,
+      "gapDays": 0,
+      "locked": true,
+      "progress": 1.0,
+      "milestone": false,
+      "status": "completed",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-09-01",
+        "end": "2026-09-15"
+      },
+      "notes": "Define OAuth 2.1 mTLS mutual authentication and RBAC permission matrices.",
+      "fields": {
+        "deliverable": "docs/security-architecture.md",
+        "jira": "JANTT-102",
+        "storyPoints": 8,
+        "team": "SecOps"
+      }
+    },
+    {
+      "id": "task-gate-1",
+      "wbs": "1.3",
+      "label": "Milestone 1: Technical Blueprint Signoff & Gate 1",
+      "category": "specs",
+      "start": "2026-09-17",
+      "end": "2026-09-17",
+      "assignee": "Sarah Chen",
+      "priority": "urgent",
+      "estimatedCost": 5000,
+      "actualCost": 5000,
+      "dependsOn": ["task-spec-schema", "task-spec-security"],
+      "gapDays": 1,
+      "locked": true,
+      "progress": 1.0,
+      "milestone": true,
+      "status": "completed",
+      "urgent": false,
+      "notes": "Formal executive checkpoint gating all backend, UI, and infrastructure implementation phases.",
+      "fields": {
+        "reviewBoard": "Executive Tech Council",
+        "gateId": "G1-SPECS"
+      }
+    },
+    {
+      "id": "task-core-services",
+      "wbs": "2.1",
+      "label": "High-Performance DAG Constraint Solver Engine",
+      "category": "core",
+      "start": "2026-09-19",
+      "end": "2026-10-22",
+      "assignee": "Alex Rivera",
+      "priority": "urgent",
+      "estimatedCost": 72000,
+      "actualCost": 54000,
+      "dependsOn": "task-gate-1",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.75,
+      "milestone": false,
+      "status": "in-progress",
+      "urgent": true,
+      "baseline": {
+        "start": "2026-09-17",
         "end": "2026-10-18"
       },
+      "notes": "Zero-dependency pure TypeScript topological dependency resolver and critical path calculation engine.",
       "fields": {
-        "repo": "github.com/org/core",
+        "repo": "github.com/acme/jantt-core",
+        "coverageTarget": "95%",
+        "jira": "JANTT-201",
         "storyPoints": 21
       }
     },
     {
-      "id": "qa-e2e",
-      "wbs": "3.1",
-      "label": "End-to-End Test Suite",
-      "category": "qa-testing",
-      "start": "2026-10-22",
-      "end": "2026-11-15",
-      "assignee": "QA Lead",
-      "dependsOn": "core-engine",
+      "id": "task-db-pipeline",
+      "wbs": "2.2",
+      "label": "Distributed Data Ingestion & Streaming Pipeline",
+      "category": "core",
+      "start": "2026-09-19",
+      "end": "2026-10-14",
+      "assignee": "David Kim",
+      "priority": "high",
+      "estimatedCost": 48000,
+      "actualCost": 38000,
+      "dependsOn": "task-gate-1",
       "gapDays": 2,
-      "priority": "medium",
-      "progress": 0.1,
-      "status": "not-started",
-      "estimatedCost": 25000
+      "locked": false,
+      "progress": 0.85,
+      "milestone": false,
+      "status": "in-progress",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-09-17",
+        "end": "2026-10-10"
+      },
+      "notes": "Scalable Apache Kafka streaming consumer and PostgreSQL schema migration pipelines.",
+      "fields": {
+        "throughputTarget": "100k msg/sec",
+        "jira": "JANTT-202",
+        "storyPoints": 13
+      }
     },
     {
-      "id": "v1-launch",
-      "wbs": "4.1",
-      "label": "Production v1.0 Launch Gate",
+      "id": "task-ui-components",
+      "wbs": "2.3",
+      "label": "Swiss Modern 2.0 Timeline Canvas & Interaction Engine",
+      "category": "ui",
+      "start": "2026-09-19",
+      "end": "2026-10-18",
+      "assignee": "Elena Rostova",
+      "priority": "high",
+      "estimatedCost": 58000,
+      "actualCost": 42000,
+      "dependsOn": "task-gate-1",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.70,
+      "milestone": false,
+      "status": "in-progress",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-09-17",
+        "end": "2026-10-14"
+      },
+      "notes": "Interactive SVG dependency links, multi-touch drag handlers, live zoom scales, and precision glassmorphism.",
+      "fields": {
+        "figma": "figma.com/@acme/swiss-jantt",
+        "framework": "React 18 + Vanilla CSS",
+        "jira": "JANTT-203",
+        "storyPoints": 21
+      }
+    },
+    {
+      "id": "task-api-gateway",
+      "wbs": "2.4",
+      "label": "GraphQL & RESTful API Gateway Mesh",
+      "category": "core",
+      "start": "2026-10-24",
+      "end": "2026-11-10",
+      "assignee": "Alex Rivera",
+      "priority": "medium",
+      "estimatedCost": 32000,
+      "actualCost": 12000,
+      "dependsOn": ["task-core-services", "task-db-pipeline"],
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.40,
+      "milestone": false,
+      "status": "in-progress",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-10-20",
+        "end": "2026-11-06"
+      },
+      "notes": "Reverse proxy routing layer with JWT verification, rate limiting, and distributed tracing.",
+      "fields": {
+        "latencySLA": "< 15ms p99",
+        "jira": "JANTT-204",
+        "storyPoints": 13
+      }
+    },
+    {
+      "id": "task-gate-2",
+      "wbs": "3.0",
+      "label": "Milestone 2: Alpha Feature Freeze & Live Showcase",
       "category": "release",
-      "start": "2026-11-18",
-      "end": "2026-11-18",
+      "start": "2026-11-12",
+      "end": "2026-11-12",
+      "assignee": "Lead Technical Program Director",
+      "priority": "urgent",
+      "estimatedCost": 8000,
+      "actualCost": 0,
+      "dependsOn": ["task-ui-components", "task-api-gateway"],
+      "gapDays": 2,
+      "locked": true,
+      "progress": 0.0,
       "milestone": true,
-      "dependsOn": "qa-e2e",
-      "gapDays": 3,
-      "status": "not-started"
+      "status": "not-started",
+      "urgent": false,
+      "notes": "Live stakeholder demonstration and feature-freeze lockdown before security audit and QA validation.",
+      "fields": {
+        "audience": "Product Leadership & Key Customers",
+        "gateId": "G2-ALPHA"
+      }
+    },
+    {
+      "id": "task-sec-audit",
+      "wbs": "3.1",
+      "label": "Third-Party Penetration Testing & SOC2 Audit",
+      "category": "security",
+      "start": "2026-11-14",
+      "end": "2026-12-08",
+      "assignee": "Marcus Brody",
+      "priority": "urgent",
+      "estimatedCost": 45000,
+      "actualCost": 0,
+      "dependsOn": "task-gate-2",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "milestone": false,
+      "status": "not-started",
+      "urgent": true,
+      "baseline": {
+        "start": "2026-11-10",
+        "end": "2026-12-02"
+      },
+      "notes": "Full black-box and white-box penetration testing by SecOps Labs with OWASP Top 10 vulnerability remediation.",
+      "fields": {
+        "auditor": "SecOps Labs Inc.",
+        "compliance": "SOC2 Type II / ISO 27001",
+        "jira": "JANTT-301",
+        "storyPoints": 13
+      }
+    },
+    {
+      "id": "task-qa-automation",
+      "wbs": "3.2",
+      "label": "End-to-End Test Suite & Chaos Engineering",
+      "category": "qa",
+      "start": "2026-11-14",
+      "end": "2026-12-10",
+      "assignee": "Jessica Taylor",
+      "priority": "high",
+      "estimatedCost": 34000,
+      "actualCost": 0,
+      "dependsOn": "task-gate-2",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "milestone": false,
+      "status": "not-started",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-11-12",
+        "end": "2026-12-06"
+      },
+      "notes": "Playwright cross-browser matrix, stress testing up to 10k tasks, and network failure injection.",
+      "fields": {
+        "targetFlakiness": "< 0.1%",
+        "testFramework": "Playwright + Vitest",
+        "jira": "JANTT-302",
+        "storyPoints": 13
+      }
+    },
+    {
+      "id": "task-cloud-infra",
+      "wbs": "3.3",
+      "label": "Multi-Region Kubernetes & Global CDN Mesh",
+      "category": "devops",
+      "start": "2026-11-14",
+      "end": "2026-12-12",
+      "assignee": "Rachel Green",
+      "priority": "high",
+      "estimatedCost": 52000,
+      "actualCost": 0,
+      "dependsOn": "task-gate-2",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "milestone": false,
+      "status": "not-started",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-11-12",
+        "end": "2026-12-08"
+      },
+      "notes": "Terraform provisioning across AWS us-east, eu-central, and ap-southeast with Cloudflare Anycast edge caching.",
+      "fields": {
+        "iac": "Terraform + Helm",
+        "sla": "99.99% Uptime",
+        "jira": "JANTT-303",
+        "storyPoints": 21
+      }
+    },
+    {
+      "id": "task-gate-3",
+      "wbs": "4.0",
+      "label": "Milestone 3: Security Clearance & Beta Readiness",
+      "category": "security",
+      "start": "2026-12-14",
+      "end": "2026-12-14",
+      "assignee": "Marcus Brody",
+      "priority": "urgent",
+      "estimatedCost": 7000,
+      "actualCost": 0,
+      "dependsOn": ["task-sec-audit", "task-qa-automation", "task-cloud-infra"],
+      "gapDays": 2,
+      "locked": true,
+      "progress": 0.0,
+      "milestone": true,
+      "status": "not-started",
+      "urgent": false,
+      "notes": "Final security signoff, SOC2 compliance cert issuance, and staging deployment signoff.",
+      "fields": {
+        "signoffAuthority": "Chief Information Security Officer",
+        "gateId": "G3-SECURITY"
+      }
+    },
+    {
+      "id": "task-canary-rollout",
+      "wbs": "4.1",
+      "label": "Staging Canary Rollout & Synthetic Load Benchmarks",
+      "category": "devops",
+      "start": "2026-12-16",
+      "end": "2027-01-05",
+      "assignee": "Rachel Green",
+      "priority": "urgent",
+      "estimatedCost": 30000,
+      "actualCost": 0,
+      "dependsOn": "task-gate-3",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "milestone": false,
+      "status": "not-started",
+      "urgent": true,
+      "baseline": {
+        "start": "2026-12-14",
+        "end": "2027-01-02"
+      },
+      "notes": "Progressive 5% -> 25% -> 100% traffic shift in staging with automated rollbacks on anomaly detection.",
+      "fields": {
+        "pipeline": "ArgoCD Progressive Canary",
+        "jira": "JANTT-401",
+        "storyPoints": 13
+      }
+    },
+    {
+      "id": "task-developer-portal",
+      "wbs": "4.2",
+      "label": "SDK Documentation, Tutorials & Interactive Sandbox",
+      "category": "specs",
+      "start": "2026-12-16",
+      "end": "2027-01-10",
+      "assignee": "Sarah Chen",
+      "priority": "medium",
+      "estimatedCost": 22000,
+      "actualCost": 0,
+      "dependsOn": "task-gate-3",
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.0,
+      "milestone": false,
+      "status": "not-started",
+      "urgent": false,
+      "baseline": {
+        "start": "2026-12-14",
+        "end": "2027-01-06"
+      },
+      "notes": "Developer docs, interactive playground sandboxes, API cheatsheet, and SDK guides for React, Vue, and Vanilla JS.",
+      "fields": {
+        "site": "https://jantt.dev/docs",
+        "jira": "JANTT-402",
+        "storyPoints": 8
+      }
+    },
+    {
+      "id": "task-gate-4",
+      "wbs": "5.0",
+      "label": "Milestone 4: Global Production GA Launch",
+      "category": "release",
+      "start": "2027-01-14",
+      "end": "2027-01-14",
+      "assignee": "Lead Technical Program Director",
+      "priority": "urgent",
+      "estimatedCost": 12000,
+      "actualCost": 0,
+      "dependsOn": ["task-canary-rollout", "task-developer-portal"],
+      "gapDays": 4,
+      "locked": true,
+      "progress": 0.0,
+      "milestone": true,
+      "status": "not-started",
+      "urgent": true,
+      "notes": "Global General Availability release with press release, customer webinars, and real-time telemetry monitoring.",
+      "fields": {
+        "releaseTag": "v1.2.0-GA",
+        "status": "Scheduled Worldwide",
+        "gateId": "G4-GA-LAUNCH"
+      }
     }
   ]
 }
