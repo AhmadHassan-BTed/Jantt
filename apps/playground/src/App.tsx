@@ -39,7 +39,9 @@ import {
   FolderPlus,
   Trash2,
   Upload,
-  Plus
+  Plus,
+  Info,
+  FilePlus
 } from "lucide-react";
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
@@ -985,7 +987,12 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                     <div className="error-msg">
                       <strong>{err.path}:</strong> {err.message}
                     </div>
-                    {err.suggestion && <div className="error-suggestion">💡 {err.suggestion}</div>}
+                    {err.suggestion && (
+                      <div className="error-suggestion" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <Info size={14} style={{ flexShrink: 0 }} />
+                        <span>{err.suggestion}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1470,8 +1477,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       style={{ marginTop: "3px" }}
                     />
                     <div>
-                      <strong style={{ display: "block", fontSize: "13px", color: "var(--jantt-text)" }}>
-                        ✨ Blank Plan (Clean Slate)
+                      <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--jantt-text)" }}>
+                        <FilePlus size={15} color="var(--jantt-accent)" />
+                        Blank Plan (Clean Slate)
                       </strong>
                       <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)" }}>
                         Starts fresh with a minimal template: 1 sample task and category.
@@ -1499,8 +1507,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       style={{ marginTop: "3px" }}
                     />
                     <div>
-                      <strong style={{ display: "block", fontSize: "13px", color: "var(--jantt-text)" }}>
-                        ⚡ Master Benchmark Cheatsheet (Full Kitchen-Sink)
+                      <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--jantt-text)" }}>
+                        <Zap size={15} color="var(--jantt-accent)" />
+                        Master Benchmark Cheatsheet (Full Kitchen-Sink)
                       </strong>
                       <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)" }}>
                         The benchmark specification with categories, milestones, multi-dependencies, baselines, and custom fields.
@@ -1528,8 +1537,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       style={{ marginTop: "3px" }}
                     />
                     <div>
-                      <strong style={{ display: "block", fontSize: "13px", color: "var(--jantt-text)" }}>
-                        📋 Duplicate Current Schedule
+                      <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--jantt-text)" }}>
+                        <Copy size={15} color="var(--jantt-accent)" />
+                        Duplicate Current Schedule
                       </strong>
                       <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)" }}>
                         Clones all current tasks, categories, and links into a new separate plan.

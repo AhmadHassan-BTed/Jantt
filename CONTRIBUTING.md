@@ -4,7 +4,7 @@ Thank you for your interest in contributing to **Jantt**! We welcome contributio
 
 ---
 
-## 🏛️ Monorepo Architecture Overview
+## Monorepo Architecture Overview
 
 Jantt is structured as an npm workspaces monorepo with high cohesion and zero unnecessary coupling:
 
@@ -24,7 +24,7 @@ jantt/
 
 ---
 
-## 🛠️ Development Setup
+## Development Setup
 
 ### Prerequisites
 - **Node.js**: `v18.0.0` or higher (Node 20+ recommended)
@@ -52,7 +52,7 @@ npm run dev
 
 ---
 
-## 🧪 Testing & Validation
+## Testing & Validation
 
 We maintain a strict 100% test passing standard across all packages:
 
@@ -72,7 +72,7 @@ npm run lint
 
 ---
 
-## 📐 Coding & Architectural Standards
+## Coding & Architectural Standards
 
 1. **Zero Runtime Dependencies in `@jantt/core`**:
    `@jantt/core` MUST remain 100% dependency-free. No external math, date, or utility libraries may be added to `@jantt/core`.
@@ -85,7 +85,7 @@ npm run lint
 
 ---
 
-## 📝 Commit Conventions
+## Commit Conventions
 
 We adhere to the [Conventional Commits](https://www.conventionalcommits.org/) specification:
 
@@ -99,7 +99,7 @@ We adhere to the [Conventional Commits](https://www.conventionalcommits.org/) sp
 
 ---
 
-## 🚀 Pull Request Process
+## Pull Request Process
 
 1. Fork the repository and create your feature branch:
    ```bash

@@ -32,7 +32,7 @@ Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI tool
 
 ---
 
-## 🤖 Built for AI Agents: Stop Generating Brittle Timeline Code
+## Built for AI Agents: Stop Generating Brittle Timeline Code
 
 **The traditional approach to AI project schedules is broken:**
 * Asking LLMs (ChatGPT, Claude, Gemini, Cursor) to generate custom UI code (React JSX, SVG coordinate math, CSS grid positioning, canvas listeners) produces **500+ lines of fragile, hallucination-prone code**.
@@ -54,7 +54,7 @@ flowchart LR
 3. **Instant Zero-Code Execution**: Jantt parses the schema, solves DAG topological dependencies, routes 90° orthogonal links, and renders an interactive Gantt timeline, Kanban board, and KPI analytics suite.
 4. **Bidirectional Human-in-the-Loop**: The user visually tweaks dates, drags progress, and re-wires dependencies. Jantt immediately writes the updated state back to clean JSON to pipe straight back into the AI agent.
 
-### 📋 The AI Benchmark Cheatsheet (Ready to Copy)
+### The AI Benchmark Cheatsheet (Ready to Copy)
 
 ```json
 {
@@ -113,46 +113,46 @@ flowchart LR
 
 ---
 
-## 🎨 Visual Showcase & Curated Themes
+## Visual Showcase & Curated Themes
 
 Jantt features a fully reactive, CSS variable-driven theming architecture with out-of-the-box support for light modes, sleek dark modes, and high-contrast vibrant styles:
 
 <div align="center">
 
-### ☀️ Swiss Light Mode
+### Swiss Light Mode
 *Daylight clarity, high contrast typography, and subtle glassmorphic tooltips.*
 
 <img src="./assets/screenshots/jantt-swiss-light-interactive.png" alt="Jantt Swiss Light Theme" width="100%" style="border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;" />
 
 <br />
 
-### 🌙 Swiss Dark Mode
+### Swiss Dark Mode
 *Sleek obsidian palette with glowing critical path indicators and 90° right-angle routing.*
 
 <img src="./assets/screenshots/jantt-swiss-dark-overview.png" alt="Jantt Swiss Dark Theme" width="100%" style="border-radius: 8px; border: 1px solid #1e293b; margin-bottom: 20px;" />
 
 </div>
 
-### 🌈 Vibrant Color Themes
+### Color Theme Gallery
 
 <table>
   <tr>
     <td width="50%" align="center">
-      <b>🌲 Cyber Emerald</b><br /><br />
+      <b>Cyber Emerald</b><br /><br />
       <img src="./assets/screenshots/jantt-cyber-emerald-theme.png" alt="Cyber Emerald Theme" width="100%" style="border-radius: 6px;" />
     </td>
     <td width="50%" align="center">
-      <b>🌹 Midnight Rose</b><br /><br />
+      <b>Midnight Rose</b><br /><br />
       <img src="./assets/screenshots/jantt-midnight-rose-theme.png" alt="Midnight Rose Theme" width="100%" style="border-radius: 6px;" />
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <b>🌇 Sunset Crimson</b><br /><br />
+      <b>Sunset Crimson</b><br /><br />
       <img src="./assets/screenshots/jantt-sunset-crimson-theme.png" alt="Sunset Crimson Theme" width="100%" style="border-radius: 6px;" />
     </td>
     <td width="50%" align="center">
-      <b>⚡ Kitchen-Sink Master Benchmark</b><br /><br />
+      <b>Master Specification Benchmark</b><br /><br />
       <img src="./assets/screenshots/jantt-benchmark-cheatsheet.png" alt="Master Benchmark Cheatsheet" width="100%" style="border-radius: 6px;" />
     </td>
   </tr>
@@ -160,7 +160,7 @@ Jantt features a fully reactive, CSS variable-driven theming architecture with o
 
 ---
 
-## 💎 Graphic Assets & Brand Identity
+## Graphic Assets & Brand Identity
 
 The Jantt design system includes tailored vector icons and badges located in [`assets/`](./assets):
 
@@ -174,7 +174,7 @@ The Jantt design system includes tailored vector icons and badges located in [`a
 
 ---
 
-## ⚡ Comparison Matrix
+## Comparison Matrix
 
 | Capability | Jantt Engine (`@jantt/core`) | DHTMLX Gantt | Frappe Gantt | Mermaid.js |
 |---|:---:|:---:|:---:|:---:|
@@ -190,7 +190,7 @@ The Jantt design system includes tailored vector icons and badges located in [`a
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 Jantt operates on a strictly decoupled, unidirectional data flow. Raw JSON is validated, topologically solved, mapped into coordinate space, and presented via modular DOM and SVG layers.
 
@@ -240,7 +240,7 @@ flowchart TD
 
 ---
 
-## 🔄 Interaction & Request Lifecycle
+## Interaction & Request Lifecycle
 
 When dragging task bars, resizing durations, connecting dependency handles, or adjusting progress, the event cycle flows cleanly through the state machine:
 
@@ -272,7 +272,7 @@ sequenceDiagram
 
 ---
 
-## 🚀 Key Capabilities
+## Key Capabilities
 
 <details open>
 <summary><b>1. Interactive Drag-to-Link (90° Orthogonal Step Routing)</b></summary>
@@ -344,7 +344,7 @@ Export schedule data straight from the browser without server dependencies:
 
 ---
 
-## 📦 Monorepo Directory Structure
+## Monorepo Directory Structure
 
 ```
 Jantt/
@@ -375,7 +375,7 @@ Jantt/
 
 ---
 
-## ⚡ Quickstarts
+## Quickstarts
 
 ### 1. React Application (`@jantt/react`)
 
@@ -495,7 +495,7 @@ const csvData = exportToCsv({ ...rawJson, tasks: resolvedTasks });
 
 ---
 
-## 📑 JSON Schema Contract
+## JSON Schema Contract
 
 Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/jantt.schema.json):
 
@@ -542,7 +542,7 @@ Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/
 
 ---
 
-## 🤖 AI Prompting Specification
+## AI Prompting Specification
 
 Use this system prompt with ChatGPT, Claude, Gemini, or local LLMs to generate valid Jantt timelines:
 
@@ -559,7 +559,7 @@ Rules:
 
 ---
 
-## 🎨 Theming & CSS Variables Reference
+## Theming & CSS Variables Reference
 
 ```css
 :root {
@@ -578,7 +578,7 @@ Rules:
 
 ---
 
-## ⌨️ Keyboard Accessibility
+## Keyboard Accessibility
 
 | Key | Action |
 |---|---|
@@ -590,7 +590,7 @@ Rules:
 
 ---
 
-## 🛠️ Local Development & Contributing
+## Local Development & Contributing
 
 New contributors are welcomed. Please review [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
 
@@ -614,7 +614,7 @@ npm run dev
 
 ---
 
-## 👤 Author & Maintainer
+## Author & Maintainer
 
 **Ahmad Hassan (B-Ted)**  
 - GitHub: [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed)
@@ -622,6 +622,6 @@ npm run dev
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** — see the [`LICENSE`](./LICENSE) file for details.
