@@ -110,9 +110,9 @@ describe("Cloud Remote Sync & URL Parsing", () => {
       const result = await fetchRemotePlan("https://drive.google.com/file/d/1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ/view?usp=drive_link");
       expect(result.info.provider).toBe("google-drive");
       expect(result.info.fileId).toBe("1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ");
-      // Ensure fetch was called with the proxy URL
+      // Ensure fetch was called with the proxy URL (corsproxy.io is primary)
       const calledUrl = mockFetch.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("allorigins.win");
+      expect(calledUrl).toContain("corsproxy.io");
     });
 
     it("handles 404 file not found error", async () => {
