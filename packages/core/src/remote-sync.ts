@@ -110,28 +110,36 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
 // ---------------------------------------------------------------------------
 
 /**
- * List of CORS proxies tried in order.
- * - corsproxy.io: purpose-built, sets correct CORS headers, free tier
- * - api.allorigins.win: secondary option
- * - thingproxy.freeboard.io: tertiary fallback
+ * The project's own Cloudflare Worker CORS proxy.
+ * Deploy it once with `npx wrangler deploy` from /worker — free forever.
+ *
+ * After deploying you'll get a URL like:
+ *   https://jantt-cors-proxy.<your-cf-subdomain>.workers.dev
+ *
+ * Update the URL below, or set it at runtime via:
+ *   (window as any).__JANTT_CORS_PROXY = "https://jantt-cors-proxy.YOUR.workers.dev";
  */
-const CORS_PROXIES = [
-  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
-];
+const DEFAULT_WORKER_URL = "https://jantt-cors-proxy.ahmadhassan-bted.workers.dev";
+
+function getWorkerUrl(): string {
+  // Allow runtime override from the app
+  if (typeof window !== "undefined" && (window as any).__JANTT_CORS_PROXY) {
+    return (window as any).__JANTT_CORS_PROXY;
+  }
+  return DEFAULT_WORKER_URL;
+}
 
 /**
- * Attempts a direct fetch first (for non-CORS-blocked providers),
- * then falls back through the proxy list for Google Drive / Dropbox.
+ * Fetches a URL, routing through our own Cloudflare Worker proxy
+ * when the provider is known to block CORS (Google Drive, Dropbox).
  */
 async function fetchWithCorsFallback(url: string, provider: CloudProviderType): Promise<string> {
-  // Google Drive always requires a proxy — go straight to it
+  // Google Drive ALWAYS blocks CORS — go straight to our worker
   if (provider === "google-drive") {
-    return fetchViaProxyList(url);
+    return fetchViaWorker(url);
   }
 
-  // For others, try direct first
+  // For others (GitHub, generic), try direct first
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -139,49 +147,47 @@ async function fetchWithCorsFallback(url: string, provider: CloudProviderType): 
     });
     if (res.ok) return res.text();
   } catch {
-    // CORS / network error — fall through to proxies
+    // CORS / network error — fall through to worker
   }
 
-  return fetchViaProxyList(url);
+  // Fallback to our worker proxy
+  return fetchViaWorker(url);
 }
 
-async function fetchViaProxyList(targetUrl: string): Promise<string> {
-  let lastError: string = "Unknown error";
+/**
+ * Fetches via our Cloudflare Worker CORS proxy.
+ */
+async function fetchViaWorker(targetUrl: string): Promise<string> {
+  const workerBase = getWorkerUrl();
+  const proxyUrl = `${workerBase}?url=${encodeURIComponent(targetUrl)}`;
 
-  for (const makeProxyUrl of CORS_PROXIES) {
-    const proxyUrl = makeProxyUrl(targetUrl);
-    try {
-      const res = await fetch(proxyUrl, {
-        method: "GET",
-        headers: { Accept: "application/json, text/plain, */*" }
-      });
-
-      if (res.ok) return res.text();
-
-      if (res.status === 404) {
-        throw new Error("File not found (404). Please verify the share link is correct and the file is publicly accessible.");
-      }
-      if (res.status === 403 || res.status === 401) {
-        throw new Error(
-          `Access denied (${res.status}). Ensure the file sharing is set to "Anyone with the link can view".`
-        );
-      }
-      // Non-2xx from this proxy — try next one
-      lastError = `Proxy returned ${res.status}: ${res.statusText}`;
-    } catch (e: any) {
-      // If we threw a specific error (404/403), re-throw immediately
-      if (e.message?.includes("File not found") || e.message?.includes("Access denied")) {
-        throw e;
-      }
-      // Otherwise record and try the next proxy
-      lastError = e.message || String(e);
-    }
+  let res: Response;
+  try {
+    res = await fetch(proxyUrl, {
+      method: "GET",
+      headers: { Accept: "application/json, text/plain, */*" }
+    });
+  } catch (e: any) {
+    throw new Error(
+      `Could not connect to the Jantt CORS proxy.\n\n` +
+      `If the proxy hasn't been deployed yet, see the deployment guide in /worker/README.md.\n\n` +
+      `(${e.message || "Network error"})`
+    );
   }
 
-  throw new Error(
-    `Unable to reach the remote file via any proxy.\n\nDetails: ${lastError}\n\n` +
-    `Tip: Make sure the file is publicly shared ("Anyone with the link can view").`
-  );
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error("File not found (404). Verify the share link is correct and the file is publicly accessible.");
+    }
+    if (res.status === 403 || res.status === 401) {
+      throw new Error(
+        `Access denied (${res.status}). Ensure the file sharing is set to "Anyone with the link can view".`
+      );
+    }
+    throw new Error(`Proxy returned error ${res.status}: ${res.statusText}`);
+  }
+
+  return res.text();
 }
 
 // ---------------------------------------------------------------------------
