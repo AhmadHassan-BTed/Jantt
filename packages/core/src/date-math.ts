@@ -159,3 +159,22 @@ export function formatHumanDate(dateStr: string): string {
   const y = d.getUTCFullYear();
   return `${m} ${day}, ${y}`;
 }
+
+/**
+ * Checks if a task's date range [start, end] overlaps with a specific date.
+ * Returns true if: start <= date <= end
+ */
+export function isTaskOnDate(taskStart: string, taskEnd: string, date: string): boolean {
+  if (!isValidISODate(taskStart) || !isValidISODate(taskEnd) || !isValidISODate(date)) {
+    return false;
+  }
+  return diffDays(taskStart, date) >= 0 && diffDays(date, taskEnd) >= 0;
+}
+
+
+/**
+ * Checks if a task's date range overlaps with today's date.
+ */
+export function isTaskToday(taskStart: string, taskEnd: string): boolean {
+  return isTaskOnDate(taskStart, taskEnd, getTodayISODate());
+}

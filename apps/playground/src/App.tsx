@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   JanttData,
   Task,
+  Person,
+  Team,
   validate,
   ValidationResult,
   TimeScale,
@@ -12,9 +14,13 @@ import {
   downloadCsv,
   getTodayISODate,
   addDays,
-  resolveSchedule
+  resolveSchedule,
+  isTaskOnDate,
+  resolveTeamById,
+  resolveTaskAssignee
 } from "@jantt/core";
 import { Jantt } from "@jantt/react";
+
 import {
   Sparkles,
   CheckCircle2,
@@ -32,7 +38,7 @@ import {
   DollarSign,
   Calendar,
   TrendingUp,
-  User,
+  Users,
   Clock,
   FileSpreadsheet,
   RotateCcw,
@@ -41,8 +47,11 @@ import {
   Upload,
   Plus,
   Info,
-  FilePlus
+  FilePlus,
+  SortAsc,
+  Star
 } from "lucide-react";
+
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
 import masterTemplateFixture from "../../../examples/master-template.json";
@@ -96,6 +105,30 @@ function createBlankPlan(title: string): JanttData {
   };
 }
 
+// ── Type Declarations ──────────────────────────────────────────────────────
+export type DateFilterMode = "all" | "today" | "date";
+
+export type KanbanSortField = "priority" | "start" | "end" | "wbs" | "assignee" | "progress" | "name";
+export interface KanbanSortRule {
+  field: KanbanSortField;
+  direction: "asc" | "desc";
+}
+
+export type SortDirection = "asc" | "desc" | null;
+export interface SummarySortConfig {
+  column: string;
+  direction: SortDirection;
+}
+
+// Priority ordering for multi-sort (higher = more urgent)
+export const PRIORITY_ORDER: Record<string, number> = {
+  urgent: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  "": 0
+};
+
 const STORAGE_KEYS = {
   CUSTOM_PROJECTS: "jantt_custom_projects",
   ACTIVE_PROJECT_ID: "jantt_active_project_id",
@@ -109,8 +142,12 @@ const STORAGE_KEYS = {
   BASELINES: "jantt_saved_baselines",
   VIEW: "jantt_saved_view",
   SIDEBAR_COLLAPSED: "jantt_saved_sidebar_collapsed",
-  SIDEBAR_WIDTH: "jantt_saved_sidebar_width"
+  SIDEBAR_WIDTH: "jantt_saved_sidebar_width",
+  KANBAN_SORT: "jantt_kanban_sort",
+  PERSON_FILTER: "jantt_person_filter",
+  DATE_FILTER_MODE: "jantt_date_filter_mode"
 };
+
 
 function loadSavedProjects(): SavedProject[] {
   try {
@@ -207,10 +244,10 @@ function loadInitialState() {
     if (savedBase !== null) initialBaselines = savedBase === "true";
   } catch {}
 
-  let initialView: "gantt" | "kanban" | "summary" = "gantt";
+  let initialView: "gantt" | "kanban" | "summary" | "today" = "gantt";
   try {
     const savedView = localStorage.getItem(STORAGE_KEYS.VIEW) as any;
-    if (savedView && ["gantt", "kanban", "summary"].includes(savedView)) initialView = savedView;
+    if (savedView && ["gantt", "kanban", "summary", "today"].includes(savedView)) initialView = savedView;
   } catch {}
 
   let initialCollapsed = false;
@@ -223,6 +260,34 @@ function loadInitialState() {
   try {
     const savedW = localStorage.getItem(STORAGE_KEYS.SIDEBAR_WIDTH);
     if (savedW) initialWidth = parseInt(savedW, 10) || 480;
+  } catch {}
+
+  // Restore kanban multi-sort rules
+  const DEFAULT_KANBAN_SORT: KanbanSortRule[] = [
+    { field: "priority", direction: "desc" },
+    { field: "start", direction: "asc" }
+  ];
+  let initialKanbanSort: KanbanSortRule[] = DEFAULT_KANBAN_SORT;
+  try {
+    const savedSort = localStorage.getItem(STORAGE_KEYS.KANBAN_SORT);
+    if (savedSort) {
+      const parsed = JSON.parse(savedSort);
+      if (Array.isArray(parsed) && parsed.length > 0) initialKanbanSort = parsed;
+    }
+  } catch {}
+
+  // Restore person filter
+  let initialPersonFilter = "all";
+  try {
+    const savedPF = localStorage.getItem(STORAGE_KEYS.PERSON_FILTER);
+    if (savedPF) initialPersonFilter = savedPF;
+  } catch {}
+
+  // Restore date filter mode
+  let initialDateFilterMode: DateFilterMode = "all";
+  try {
+    const savedDFM = localStorage.getItem(STORAGE_KEYS.DATE_FILTER_MODE) as DateFilterMode;
+    if (savedDFM && ["all", "today", "date"].includes(savedDFM)) initialDateFilterMode = savedDFM;
   } catch {}
 
   return {
@@ -238,7 +303,10 @@ function loadInitialState() {
     initialBaselines,
     initialView,
     initialCollapsed,
-    initialWidth
+    initialWidth,
+    initialKanbanSort,
+    initialPersonFilter,
+    initialDateFilterMode
   };
 }
 
@@ -267,7 +335,30 @@ export function App() {
   const [showCriticalPath, setShowCriticalPath] = useState(init.initialCritical);
   const [showBaselines, setShowBaselines] = useState(init.initialBaselines);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(init.initialCollapsed);
-  const [activeView, setActiveView] = useState<"gantt" | "kanban" | "summary">(init.initialView);
+  const [activeView, setActiveView] = useState<"gantt" | "kanban" | "summary" | "today">(init.initialView);
+
+  // ── Date Filter State ──────────────────────────────────────────────────
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>(init.initialDateFilterMode);
+  const [dateFilterValue, setDateFilterValue] = useState<string>(getTodayISODate());
+
+  // ── Summary View Sort State ────────────────────────────────────────────
+  const [summarySortConfig, setSummarySortConfig] = useState<SummarySortConfig>({ column: "", direction: null });
+
+  // ── Kanban Multi-Sort State ────────────────────────────────────────────
+  const [kanbanSortRules, setKanbanSortRules] = useState<KanbanSortRule[]>(init.initialKanbanSort);
+
+  // ── People & Team Management State ─────────────────────────────────────
+  const [people, setPeople] = useState<Person[]>(() => (init.initialParsed as any)?.people || []);
+  const [teams, setTeams] = useState<Team[]>(() => (init.initialParsed as any)?.teams || []);
+  const [selectedPersonFilter, setSelectedPersonFilter] = useState<string>(init.initialPersonFilter);
+  const [showPeopleModal, setShowPeopleModal] = useState(false);
+  const [peopleModalTab, setPeopleModalTab] = useState<"people" | "teams">("people");
+  const [newPersonName, setNewPersonName] = useState("");
+  const [newPersonRole, setNewPersonRole] = useState("");
+  const [newPersonTeamId, setNewPersonTeamId] = useState("");
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamColor, setNewTeamColor] = useState("#38BDF8");
+  const [newTeamDesc, setNewTeamDesc] = useState("");
 
   // Sidebar width resize state
   const [sidebarWidth, setSidebarWidth] = useState(init.initialWidth);
@@ -320,6 +411,199 @@ export function App() {
     sidebarWidth
   ]);
 
+  // Persist new state keys
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.KANBAN_SORT, JSON.stringify(kanbanSortRules));
+    } catch {}
+  }, [kanbanSortRules]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PERSON_FILTER, selectedPersonFilter);
+    } catch {}
+  }, [selectedPersonFilter]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.DATE_FILTER_MODE, dateFilterMode);
+    } catch {}
+  }, [dateFilterMode]);
+
+  // ── Derived State: Date Filter ────────────────────────────────────────────
+  const dateFilterActiveDate = useMemo(() => {
+    if (dateFilterMode === "today") return getTodayISODate();
+    if (dateFilterMode === "date") return dateFilterValue;
+    return null;
+  }, [dateFilterMode, dateFilterValue]);
+
+  const isTaskMatchingDateFilter = useCallback((task: Task): boolean => {
+    if (!dateFilterActiveDate) return true;
+    return isTaskOnDate(task.start, task.end, dateFilterActiveDate);
+  }, [dateFilterActiveDate]);
+
+  // ── Derived State: Summary Sorted Tasks (with progress auto-sync) ─────────
+  const sortedSummaryTasks = useMemo(() => {
+    if (!parsedData) return [];
+    // Apply status → progress auto-sync
+    let tasks = parsedData.tasks.map((t) => {
+      if (t.status === "completed") return { ...t, progress: 1.0 };
+      if (t.status === "submitted" && (t.progress ?? 0) < 0.75) return { ...t, progress: 0.75 };
+      if (t.status === "not-started" && (t.progress ?? 0) > 0) return { ...t, progress: 0 };
+      return t;
+    });
+    if (!summarySortConfig.column || !summarySortConfig.direction) return tasks;
+    const { column, direction } = summarySortConfig;
+    const dir = direction === "asc" ? 1 : -1;
+    return [...tasks].sort((a, b) => {
+      let va: any, vb: any;
+      switch (column) {
+        case "wbs": va = a.wbs || ""; vb = b.wbs || ""; break;
+        case "name": va = (a.label || a.name || a.id).toLowerCase(); vb = (b.label || b.name || b.id).toLowerCase(); break;
+        case "category": va = a.category; vb = b.category; break;
+        case "assignee": {
+          const aInfo = resolveTaskAssignee(a, people, teams);
+          const bInfo = resolveTaskAssignee(b, people, teams);
+          va = aInfo.displayName.toLowerCase();
+          vb = bInfo.displayName.toLowerCase();
+          break;
+        }
+        case "start": va = a.start; vb = b.start; break;
+        case "end": va = a.end; vb = b.end; break;
+        case "budget": va = a.estimatedCost || 0; vb = b.estimatedCost || 0; break;
+        case "status": va = a.status || "not-started"; vb = b.status || "not-started"; break;
+        case "progress": va = a.progress ?? 0; vb = b.progress ?? 0; break;
+        default: return 0;
+      }
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }, [parsedData, summarySortConfig, people, teams]);
+
+  const handleSummarySort = (column: string) => {
+    setSummarySortConfig((prev) => {
+      if (prev.column === column) {
+        if (prev.direction === "asc") return { column, direction: "desc" };
+        if (prev.direction === "desc") return { column: "", direction: null };
+      }
+      return { column, direction: "asc" };
+    });
+  };
+
+  // ── Kanban Multi-Sort Engine ──────────────────────────────────────────────
+  const kanbanMultiSort = useCallback((tasks: Task[]): Task[] => {
+    if (kanbanSortRules.length === 0) return tasks;
+    return [...tasks].sort((a, b) => {
+      for (const rule of kanbanSortRules) {
+        let va: any, vb: any;
+        const dir = rule.direction === "asc" ? 1 : -1;
+        switch (rule.field) {
+          case "priority":
+            va = PRIORITY_ORDER[a.priority || ""] || 0;
+            vb = PRIORITY_ORDER[b.priority || ""] || 0;
+            break;
+          case "start": va = a.start; vb = b.start; break;
+          case "end": va = a.end; vb = b.end; break;
+          case "wbs": va = a.wbs || "zzz"; vb = b.wbs || "zzz"; break;
+          case "assignee": {
+            const aInfo = resolveTaskAssignee(a, people, teams);
+            const bInfo = resolveTaskAssignee(b, people, teams);
+            va = aInfo.displayName.toLowerCase();
+            vb = bInfo.displayName.toLowerCase();
+            break;
+          }
+          case "progress": va = a.progress ?? 0; vb = b.progress ?? 0; break;
+          case "name": va = (a.label || a.name || "").toLowerCase(); vb = (b.label || b.name || "").toLowerCase(); break;
+          default: continue;
+        }
+        const cmp = typeof va === "number" ? (va - vb) * dir : String(va).localeCompare(String(vb)) * dir;
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
+    });
+  }, [kanbanSortRules, people, teams]);
+
+  // ── People & Team Management Handlers ─────────────────────────────────────
+  const handleAddPerson = () => {
+    if (!newPersonName.trim() || !parsedData) return;
+    const PERSON_COLORS = ["#4FAE93", "#38BDF8", "#F59E0B", "#A78BFA", "#F43F5E", "#10B981", "#FB923C", "#60A5FA"];
+    const newPerson: Person = {
+      id: `person-${Date.now().toString(36)}`,
+      name: newPersonName.trim(),
+      role: newPersonRole.trim() || undefined,
+      teamId: newPersonTeamId || undefined,
+      color: PERSON_COLORS[people.length % PERSON_COLORS.length]
+    };
+    const updated = [...people, newPerson];
+    setPeople(updated);
+    const updatedData = { ...parsedData, people: updated };
+    handleChartCommit(updatedData);
+    setNewPersonName("");
+    setNewPersonRole("");
+    setNewPersonTeamId("");
+  };
+
+  const handleRemovePerson = (personId: string) => {
+    if (!parsedData) return;
+    const updated = people.filter((p) => p.id !== personId);
+    setPeople(updated);
+    const updatedData = { ...parsedData, people: updated };
+    handleChartCommit(updatedData);
+  };
+
+  const handleAddTeam = () => {
+    if (!newTeamName.trim() || !parsedData) return;
+    const newTeam: Team = {
+      id: `team-${Date.now().toString(36)}`,
+      name: newTeamName.trim(),
+      color: newTeamColor || "#38BDF8",
+      description: newTeamDesc.trim() || undefined
+    };
+    const updated = [...teams, newTeam];
+    setTeams(updated);
+    const updatedData = { ...parsedData, teams: updated };
+    handleChartCommit(updatedData);
+    setNewTeamName("");
+    setNewTeamDesc("");
+  };
+
+  const handleRemoveTeam = (teamId: string) => {
+    if (!parsedData) return;
+    const updatedTeams = teams.filter((t) => t.id !== teamId);
+    // Clear teamId on members who belonged to this team
+    const updatedPeople = people.map((p) => (p.teamId === teamId ? { ...p, teamId: undefined } : p));
+    setTeams(updatedTeams);
+    setPeople(updatedPeople);
+    const updatedData = { ...parsedData, teams: updatedTeams, people: updatedPeople };
+    handleChartCommit(updatedData);
+  };
+
+  // Apply Gantt date filter dimming via DOM after render
+  useEffect(() => {
+    if (activeView !== "gantt" || dateFilterMode === "all") {
+      // Remove all dimming when switching to "all"
+      document.querySelectorAll<HTMLElement>("[data-task-id]").forEach((el) => {
+        el.classList.remove("jantt-task-dimmed");
+      });
+      return;
+    }
+    const handle = requestAnimationFrame(() => {
+      document.querySelectorAll<HTMLElement>("[data-task-id]").forEach((el) => {
+        const taskId = el.dataset.taskId;
+        const task = parsedData?.tasks.find((t) => t.id === taskId);
+        if (task && !isTaskMatchingDateFilter(task)) {
+          el.classList.add("jantt-task-dimmed");
+        } else {
+          el.classList.remove("jantt-task-dimmed");
+        }
+      });
+    });
+    return () => cancelAnimationFrame(handle);
+  }, [activeView, dateFilterMode, dateFilterValue, parsedData, isTaskMatchingDateFilter]);
+
+
+
+
   const startResizing = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
@@ -367,6 +651,9 @@ export function App() {
       setValidationResult(val);
       if (val.valid) {
         setParsedData(parsed);
+        // Sync people and teams from new project
+        setPeople(parsed.people || []);
+        setTeams(parsed.teams || []);
         if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
         if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
         if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
@@ -377,6 +664,8 @@ export function App() {
       setParsedData(null);
     }
   };
+
+
 
   // Open modal to add a new plan/template
   const handleOpenAddPlanModal = () => {
@@ -539,9 +828,17 @@ export function App() {
   // Handle live commit from interactive Gantt drag/resize/modal/link/multi-shift
   const handleChartCommit = useCallback((updated: JanttData) => {
     setParsedData(updated);
+    // Sync people and teams from updated data if present
+    if (Array.isArray((updated as any).people)) {
+      setPeople((updated as any).people);
+    }
+    if (Array.isArray((updated as any).teams)) {
+      setTeams((updated as any).teams);
+    }
     const formatted = JSON.stringify(updated, null, 2);
     setJsonText(formatted);
     setValidationResult(validate(updated));
+
 
     // Trigger visual sync flash / glow in JSON editor
     setIsLiveSyncing(true);
@@ -550,6 +847,7 @@ export function App() {
       setIsLiveSyncing(false);
     }, 1300);
   }, []);
+
 
   // Format JSON in editor
   const formatJson = () => {
@@ -775,7 +1073,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         </div>
 
         <div className="nav-controls">
-          {/* View Switcher: Gantt Timeline, Kanban Board, Budget & Analytics */}
+          {/* View Switcher: Gantt Timeline, Kanban Board, Budget & Analytics, Today Focus */}
           <div className="jantt-scale-group" style={{ margin: "0 6px" }}>
             <button
               className={`jantt-scale-btn ${activeView === "gantt" ? "is-active" : ""}`}
@@ -799,9 +1097,28 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               title="Project Budget & Performance Analytics"
             >
               <PieChart size={13} />
-              <span>Budget & KPI</span>
+              <span>Budget &amp; KPI</span>
+            </button>
+            <button
+              className={`jantt-scale-btn today-tab-btn ${activeView === "today" ? "is-active" : ""}`}
+              onClick={() => setActiveView("today")}
+              title="Today's Focus — tasks active today"
+            >
+              <Star size={13} />
+              <span>Today</span>
             </button>
           </div>
+
+          {/* People (Team) Manager Button */}
+          <button
+            className="btn-nav"
+            onClick={() => setShowPeopleModal(true)}
+            title="Manage team members and assignees"
+          >
+            <Users size={13} />
+            <span>People{people.length > 0 ? ` (${people.length})` : ""}</span>
+          </button>
+
 
           {/* Plan / Project Selector */}
           <div className="nav-select-group">
@@ -1015,209 +1332,622 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         <section className="chart-pane">
           <div className="chart-container-card">
             {parsedData ? (
-              activeView === "gantt" ? (
-                <Jantt
-                  data={parsedData}
-                  onCommit={handleChartCommit}
-                  onTaskAdd={handleAddNewTask}
-                  onViewportChange={(vp) => {
-                    if (vp.scale) setCurrentScale(vp.scale);
-                    if (vp.linkRouting) setLinkRouting(vp.linkRouting);
-                    if (vp.rowHeight !== undefined) setRowHeight(vp.rowHeight);
-                    if (vp.rowHeightMode !== undefined) setRowHeightMode(vp.rowHeightMode);
-                    if (vp.showCriticalPath !== undefined) setShowCriticalPath(vp.showCriticalPath);
-                    if (vp.showBaselines !== undefined) setShowBaselines(vp.showBaselines);
-                  }}
-                  viewport={{
-                    scale: currentScale,
-                    linkRouting,
-                    rowHeight,
-                    rowHeightMode,
-                    showCriticalPath,
-                    showBaselines
-                  }}
-                  theme={activeTheme.vars}
-                  themeClassName={activeTheme.className}
-                />
-              ) : activeView === "kanban" ? (
-                <div className="kanban-view-container">
-                  {(
-                    [
-                      { id: "not-started", label: "To Do / Not Started" },
-                      { id: "in-progress", label: "In Progress" },
-                      { id: "submitted", label: "In Review / Submitted" },
-                      { id: "completed", label: "Completed" }
-                    ] as const
-                  ).map((col) => {
-                    const colTasks = parsedData.tasks.filter((t) => {
-                      if (col.id === "not-started") return !t.status || t.status === "not-started";
-                      return t.status === col.id;
-                    });
-                    return (
-                      <div key={col.id} className="kanban-column">
-                        <div className="kanban-col-header">
-                          <span className="kanban-col-title">{col.label}</span>
-                          <span className="kanban-col-count">{colTasks.length}</span>
+              <>
+                {/* ── Date Filter Bar (shown on Kanban, Budget & KPI, Today) ── */}
+                {activeView !== "gantt" && (
+                  <div className="date-filter-bar">
+                    <div className="date-filter-tabs">
+                      <button
+                        className={`date-filter-tab ${dateFilterMode === "all" ? "is-active" : ""}`}
+                        onClick={() => setDateFilterMode("all")}
+                      >All Tasks</button>
+                      <button
+                        className={`date-filter-tab ${dateFilterMode === "today" ? "is-active" : ""}`}
+                        onClick={() => setDateFilterMode("today")}
+                      >
+                        <Clock size={11} />
+                        Today
+                      </button>
+                      <button
+                        className={`date-filter-tab ${dateFilterMode === "date" ? "is-active" : ""}`}
+                        onClick={() => setDateFilterMode("date")}
+                      >
+                        <Calendar size={11} />
+                        Pick Date
+                      </button>
+                    </div>
+                    {dateFilterMode === "date" && (
+                      <input
+                        type="date"
+                        className="date-filter-input"
+                        value={dateFilterValue}
+                        onChange={(e) => setDateFilterValue(e.target.value)}
+                      />
+                    )}
+                    {dateFilterMode !== "all" && (
+                      <span className="date-filter-active-label">
+                        Showing: {dateFilterMode === "today" ? getTodayISODate() : dateFilterValue}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* ── GANTT VIEW ── */}
+                {activeView === "gantt" && (
+                  <>
+                    {/* Date Filter Bar for Gantt (separate to keep it at top of Gantt toolbar area) */}
+                    <div className="date-filter-bar">
+                      <div className="date-filter-tabs">
+                        <button className={`date-filter-tab ${dateFilterMode === "all" ? "is-active" : ""}`} onClick={() => setDateFilterMode("all")}>All Tasks</button>
+                        <button className={`date-filter-tab ${dateFilterMode === "today" ? "is-active" : ""}`} onClick={() => setDateFilterMode("today")}><Clock size={11} />Today</button>
+                        <button className={`date-filter-tab ${dateFilterMode === "date" ? "is-active" : ""}`} onClick={() => setDateFilterMode("date")}><Calendar size={11} />Pick Date</button>
+                      </div>
+                      {dateFilterMode === "date" && (
+                        <input type="date" className="date-filter-input" value={dateFilterValue} onChange={(e) => setDateFilterValue(e.target.value)} />
+                      )}
+                      {dateFilterMode !== "all" && (
+                        <span className="date-filter-active-label">Showing: {dateFilterMode === "today" ? getTodayISODate() : dateFilterValue}</span>
+                      )}
+                    </div>
+                    <Jantt
+                      data={parsedData}
+                      onCommit={handleChartCommit}
+                      onTaskAdd={handleAddNewTask}
+                      onViewportChange={(vp) => {
+                        if (vp.scale) setCurrentScale(vp.scale);
+                        if (vp.linkRouting) setLinkRouting(vp.linkRouting);
+                        if (vp.rowHeight !== undefined) setRowHeight(vp.rowHeight);
+                        if (vp.rowHeightMode !== undefined) setRowHeightMode(vp.rowHeightMode);
+                        if (vp.showCriticalPath !== undefined) setShowCriticalPath(vp.showCriticalPath);
+                        if (vp.showBaselines !== undefined) setShowBaselines(vp.showBaselines);
+                      }}
+                      viewport={{ scale: currentScale, linkRouting, rowHeight, rowHeightMode, showCriticalPath, showBaselines }}
+                      theme={activeTheme.vars}
+                      themeClassName={activeTheme.className}
+                    />
+                  </>
+                )}
+
+                {/* ── KANBAN VIEW ── */}
+                {activeView === "kanban" && (
+                  <div className="kanban-outer-wrap">
+                    {/* Multi-Sort Bar */}
+                    <div className="kanban-sort-bar">
+                      <span className="kanban-sort-label">
+                        <SortAsc size={12} />
+                        Sort by:
+                      </span>
+                      {kanbanSortRules.map((rule, idx) => (
+                        <div key={idx} className="kanban-sort-chip">
+                          <select
+                            className="kanban-sort-field-select"
+                            value={rule.field}
+                            onChange={(e) => {
+                              const updated = [...kanbanSortRules];
+                              updated[idx] = { ...rule, field: e.target.value as KanbanSortField };
+                              setKanbanSortRules(updated);
+                            }}
+                          >
+                            <option value="priority">Priority</option>
+                            <option value="start">Start Date</option>
+                            <option value="end">End Date</option>
+                            <option value="wbs">WBS</option>
+                            <option value="assignee">Assignee</option>
+                            <option value="progress">Progress</option>
+                            <option value="name">Task Name</option>
+                          </select>
+                          <button
+                            className="kanban-sort-dir-btn"
+                            title={rule.direction === "asc" ? "Ascending — click to reverse" : "Descending — click to reverse"}
+                            onClick={() => {
+                              const updated = [...kanbanSortRules];
+                              updated[idx] = { ...rule, direction: rule.direction === "asc" ? "desc" : "asc" };
+                              setKanbanSortRules(updated);
+                            }}
+                          >
+                            {rule.direction === "asc" ? "↑" : "↓"}
+                          </button>
+                          {kanbanSortRules.length > 1 && (
+                            <button
+                              className="kanban-sort-remove-btn"
+                              title="Remove this sort rule"
+                              onClick={() => setKanbanSortRules(kanbanSortRules.filter((_, i) => i !== idx))}
+                            >×</button>
+                          )}
                         </div>
-                        <div className="kanban-card-list">
-                          {colTasks.map((t) => {
+                      ))}
+                      {kanbanSortRules.length < 4 && (
+                        <button
+                          className="kanban-sort-add-btn"
+                          onClick={() => setKanbanSortRules([...kanbanSortRules, { field: "start", direction: "asc" }])}
+                        >+ Add Sort</button>
+                      )}
+                    </div>
+
+                    {/* Kanban Columns */}
+                    <div className="kanban-view-container">
+                      {(
+                        [
+                          { id: "not-started", label: "To Do / Not Started" },
+                          { id: "in-progress", label: "In Progress" },
+                          { id: "submitted", label: "In Review / Submitted" },
+                          { id: "completed", label: "Completed" }
+                        ] as const
+                      ).map((col) => {
+                        const colTasks = kanbanMultiSort(
+                          parsedData.tasks.filter((t) => {
+                            if (col.id === "not-started") return !t.status || t.status === "not-started";
+                            return t.status === col.id;
+                          })
+                        );
+                        return (
+                          <div key={col.id} className="kanban-column">
+                            <div className="kanban-col-header">
+                              <span className="kanban-col-title">{col.label}</span>
+                              <span className="kanban-col-count">{colTasks.length}</span>
+                            </div>
+                            <div className="kanban-card-list">
+                              {colTasks.map((t) => {
+                                const cat = parsedData.categories?.[t.category];
+                                const catColor = cat?.color || "var(--jantt-accent)";
+                                const isCompleted = t.status === "completed";
+                                const isDimmed = !isTaskMatchingDateFilter(t);
+                                const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                                return (
+                                  <div key={t.id} className={`kanban-card ${isDimmed ? "kanban-card-dimmed" : ""}`}>
+                                    <div className="kanban-card-top">
+                                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span className="kanban-cat-dot" style={{ background: catColor }} />
+                                        <span className="kanban-cat-label">{cat?.label || t.category}</span>
+                                      </div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                        {t.priority && (
+                                          <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {/* WBS Number + Task Title */}
+                                    <div className="kanban-card-title-row">
+                                      {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
+                                      <h4 className="kanban-card-title">{t.label || t.name || t.id}</h4>
+                                    </div>
+                                    <div className="kanban-card-meta">
+                                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                        <Calendar size={11} />
+                                        <span>{t.start} → {t.end}</span>
+                                      </div>
+                                      {t.assignee && (
+                                        <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+                                          <span
+                                            style={{
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              width: "16px",
+                                              height: "16px",
+                                              borderRadius: "50%",
+                                              background: assigneeInfo.avatarColor,
+                                              color: "#FFFFFF",
+                                              fontSize: "9px",
+                                              fontWeight: 700,
+                                              flexShrink: 0
+                                            }}
+                                          >
+                                            {assigneeInfo.initials}
+                                          </span>
+                                          <span>{assigneeInfo.displayName}</span>
+                                          {assigneeInfo.team && (
+                                            <span
+                                              style={{
+                                                fontSize: "9px",
+                                                fontWeight: 700,
+                                                background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1F`,
+                                                color: assigneeInfo.team.color || "var(--jantt-accent)",
+                                                padding: "1px 5px",
+                                                borderRadius: "4px"
+                                              }}
+                                            >
+                                              {assigneeInfo.team.name}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* Progress: hide for completed, show checkmark */}
+                                    {isCompleted ? (
+                                      <div className="kanban-card-complete-badge">✓ Done</div>
+                                    ) : t.progress !== undefined && t.progress !== null ? (
+                                      <div className="kanban-card-prog-wrap">
+                                        <div className="kanban-card-prog-bar" style={{ width: `${Math.round(t.progress * 100)}%` }} />
+                                      </div>
+                                    ) : null}
+                                    <div className="kanban-card-footer">
+                                      <select
+                                        className="kanban-status-select"
+                                        value={t.status || "not-started"}
+                                        onChange={(e) => {
+                                          const newStatus = e.target.value;
+                                          let newProgress = t.progress;
+                                          if (newStatus === "completed") newProgress = 1.0;
+                                          else if (newStatus === "submitted" && (t.progress ?? 0) < 0.75) newProgress = 0.75;
+                                          else if (newStatus === "not-started") newProgress = 0;
+                                          const updatedTasks = parsedData.tasks.map((item) =>
+                                            item.id === t.id ? { ...item, status: newStatus, progress: newProgress } : item
+                                          );
+                                          handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                                        }}
+                                      >
+                                        <option value="not-started">Move to: To Do</option>
+                                        <option value="in-progress">Move to: In Progress</option>
+                                        <option value="submitted">Move to: In Review</option>
+                                        <option value="completed">Move to: Completed</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── BUDGET & KPI VIEW ── */}
+                {activeView === "summary" && (
+                  <div className="summary-view-container">
+                    <div className="summary-kpi-grid">
+                      <div className="summary-kpi-card">
+                        <div className="kpi-icon-wrap" style={{ color: "var(--jantt-accent)" }}>
+                          <DollarSign size={20} />
+                        </div>
+                        <div className="kpi-data">
+                          <span className="kpi-label">Total Estimated Budget</span>
+                          <span className="kpi-value">
+                            ${parsedData.tasks.reduce((sum, t) => sum + (t.estimatedCost || 0), 0).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="summary-kpi-card">
+                        <div className="kpi-icon-wrap" style={{ color: "#10B981" }}>
+                          <TrendingUp size={20} />
+                        </div>
+                        <div className="kpi-data">
+                          <span className="kpi-label">Project Progress</span>
+                          <span className="kpi-value">
+                            {Math.round(
+                              (parsedData.tasks.reduce((sum, t) => sum + (t.status === "completed" ? 1 : (t.progress || 0)), 0) /
+                                Math.max(parsedData.tasks.length, 1)) *
+                              100
+                            )}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="summary-kpi-card">
+                        <div className="kpi-icon-wrap" style={{ color: "var(--jantt-today)" }}>
+                          <Zap size={20} />
+                        </div>
+                        <div className="kpi-data">
+                          <span className="kpi-label">Total Active Tasks</span>
+                          <span className="kpi-value">{parsedData.tasks.length}</span>
+                        </div>
+                      </div>
+                      <div className="summary-kpi-card">
+                        <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical)" }}>
+                          <Clock size={20} />
+                        </div>
+                        <div className="kpi-data">
+                          <span className="kpi-label">Milestones Tracked</span>
+                          <span className="kpi-value">{parsedData.tasks.filter((t) => t.milestone).length}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="summary-breakdown-card">
+                      <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px" }}>
+                        Work Breakdown &amp; Category Distribution
+                        {summarySortConfig.column && (
+                          <span style={{ fontSize: "11px", fontWeight: 400, marginLeft: "10px", color: "var(--jantt-text-muted)" }}>
+                            Sorted by {summarySortConfig.column} {summarySortConfig.direction === "asc" ? "↑" : "↓"}
+                            <button
+                              onClick={() => setSummarySortConfig({ column: "", direction: null })}
+                              style={{ marginLeft: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--jantt-accent)", fontSize: "11px" }}
+                            >Clear</button>
+                          </span>
+                        )}
+                      </h3>
+                      <table className="summary-table">
+                        <thead>
+                          <tr>
+                            {(["wbs", "name", "category", "assignee"] as const).map((col) => (
+                              <th key={col} className={`summary-th-sortable ${summarySortConfig.column === col ? "is-sorted" : ""}`} onClick={() => handleSummarySort(col)}>
+                                {col === "wbs" ? "WBS" : col === "name" ? "Task Name" : col === "category" ? "Category" : "Assignee / Team"}
+                                {summarySortConfig.column === col && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                              </th>
+                            ))}
+                            <th className={`summary-th-sortable ${summarySortConfig.column === "start" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("start")}>
+                              Start{summarySortConfig.column === "start" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                            </th>
+                            <th className={`summary-th-sortable ${summarySortConfig.column === "end" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("end")}>
+                              End{summarySortConfig.column === "end" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                            </th>
+                            <th className={`summary-th-sortable ${summarySortConfig.column === "budget" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("budget")}>
+                              Budget ($){summarySortConfig.column === "budget" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                            </th>
+                            <th className={`summary-th-sortable ${summarySortConfig.column === "status" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("status")}>
+                              Status{summarySortConfig.column === "status" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                            </th>
+                            <th className={`summary-th-sortable ${summarySortConfig.column === "progress" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("progress")}>
+                              Progress{summarySortConfig.column === "progress" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedSummaryTasks.map((t) => {
                             const cat = parsedData.categories?.[t.category];
-                            const catColor = cat?.color || "var(--jantt-accent)";
+                            const isCompleted = t.status === "completed";
+                            const effectiveProgress = isCompleted ? 1.0 : (t.progress ?? 0);
+                            const isDimmed = !isTaskMatchingDateFilter(t);
+                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
                             return (
-                              <div key={t.id} className="kanban-card">
-                                <div className="kanban-card-top">
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                    <span className="kanban-cat-dot" style={{ background: catColor }} />
-                                    <span className="kanban-cat-label">{cat?.label || t.category}</span>
-                                  </div>
-                                  {t.priority && (
-                                    <span className={`kanban-prio-badge is-${t.priority}`}>
-                                      {t.priority}
-                                    </span>
+                              <tr key={t.id} className={isDimmed ? "summary-row-dimmed" : ""}>
+                                <td style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 700 }}>{t.wbs || "-"}</td>
+                                <td style={{ fontWeight: 600 }}>{t.label || t.name || t.id}</td>
+                                <td>
+                                  <span className="jantt-label-dot" style={{ background: cat?.color || "var(--jantt-accent)", display: "inline-block", marginRight: "6px" }} />
+                                  {cat?.label || t.category}
+                                </td>
+                                <td>
+                                  {t.assignee ? (
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                      <span
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          width: "18px",
+                                          height: "18px",
+                                          borderRadius: "50%",
+                                          background: assigneeInfo.avatarColor,
+                                          color: "#FFFFFF",
+                                          fontSize: "10px",
+                                          fontWeight: 700,
+                                          flexShrink: 0
+                                        }}
+                                      >
+                                        {assigneeInfo.initials}
+                                      </span>
+                                      <span style={{ fontWeight: 500 }}>{assigneeInfo.displayName}</span>
+                                      {assigneeInfo.team && (
+                                        <span
+                                          style={{
+                                            fontSize: "9.5px",
+                                            fontWeight: 600,
+                                            background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1A`,
+                                            color: assigneeInfo.team.color || "var(--jantt-accent)",
+                                            padding: "1px 5px",
+                                            borderRadius: "4px"
+                                          }}
+                                        >
+                                          {assigneeInfo.team.name}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: "var(--jantt-text-muted)" }}>-</span>
                                   )}
-                                </div>
-                                <h4 className="kanban-card-title">{t.label || t.name || t.id}</h4>
-                                <div className="kanban-card-meta">
-                                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                    <Calendar size={11} />
-                                    <span>{t.start} → {t.end}</span>
-                                  </div>
-                                  {t.assignee && (
-                                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                      <User size={11} />
-                                      <span>{t.assignee}</span>
+                                </td>
+                                <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.start}</td>
+                                <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.end}</td>
+                                <td style={{ fontFamily: "var(--jantt-font-mono)" }}>
+                                  {t.estimatedCost ? `$${t.estimatedCost.toLocaleString()}` : "-"}
+                                </td>
+                                <td>
+                                  <span className={`kanban-prio-badge is-status-${(t.status || "not-started").replace("-", "")}`}>
+                                    {t.status || "not-started"}
+                                  </span>
+                                </td>
+                                <td>
+                                  {isCompleted ? (
+                                    <span className="progress-complete-badge">✓ 100%</span>
+                                  ) : (
+                                    <div className="summary-progress-cell">
+                                      <div className="summary-mini-progress-bar">
+                                        <div className="summary-mini-progress-fill" style={{ width: `${Math.round(effectiveProgress * 100)}%` }} />
+                                      </div>
+                                      <span className="summary-progress-pct">{Math.round(effectiveProgress * 100)}%</span>
                                     </div>
                                   )}
-                                </div>
-                                {t.progress !== undefined && t.progress !== null && (
-                                  <div className="kanban-card-prog-wrap">
-                                    <div className="kanban-card-prog-bar" style={{ width: `${Math.round(t.progress * 100)}%` }} />
-                                  </div>
-                                )}
-                                <div className="kanban-card-footer">
-                                  <select
-                                    className="kanban-status-select"
-                                    value={t.status || "not-started"}
-                                    onChange={(e) => {
-                                      const updatedTasks = parsedData.tasks.map((item) =>
-                                        item.id === t.id ? { ...item, status: e.target.value } : item
-                                      );
-                                      handleChartCommit({ ...parsedData, tasks: updatedTasks });
-                                    }}
-                                  >
-                                    <option value="not-started">Move to: To Do</option>
-                                    <option value="in-progress">Move to: In Progress</option>
-                                    <option value="submitted">Move to: In Review</option>
-                                    <option value="completed">Move to: Completed</option>
-                                  </select>
-                                </div>
-                              </div>
+                                </td>
+                              </tr>
                             );
                           })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="summary-view-container">
-                  <div className="summary-kpi-grid">
-                    <div className="summary-kpi-card">
-                      <div className="kpi-icon-wrap" style={{ color: "var(--jantt-accent)" }}>
-                        <DollarSign size={20} />
-                      </div>
-                      <div className="kpi-data">
-                        <span className="kpi-label">Total Estimated Budget</span>
-                        <span className="kpi-value">
-                          ${parsedData.tasks.reduce((sum, t) => sum + (t.estimatedCost || 0), 0).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="summary-kpi-card">
-                      <div className="kpi-icon-wrap" style={{ color: "#10B981" }}>
-                        <TrendingUp size={20} />
-                      </div>
-                      <div className="kpi-data">
-                        <span className="kpi-label">Project Progress</span>
-                        <span className="kpi-value">
-                          {Math.round(
-                            (parsedData.tasks.reduce((sum, t) => sum + (t.progress || 0), 0) /
-                              Math.max(parsedData.tasks.length, 1)) *
-                            100
-                          )}%
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="summary-kpi-card">
-                      <div className="kpi-icon-wrap" style={{ color: "var(--jantt-today)" }}>
-                        <Zap size={20} />
-                      </div>
-                      <div className="kpi-data">
-                        <span className="kpi-label">Total Active Tasks</span>
-                        <span className="kpi-value">{parsedData.tasks.length}</span>
-                      </div>
-                    </div>
-
-                    <div className="summary-kpi-card">
-                      <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical)" }}>
-                        <Clock size={20} />
-                      </div>
-                      <div className="kpi-data">
-                        <span className="kpi-label">Milestones Tracked</span>
-                        <span className="kpi-value">{parsedData.tasks.filter((t) => t.milestone).length}</span>
-                      </div>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
+                )}
 
-                  <div className="summary-breakdown-card">
-                    <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px" }}>
-                      Work Breakdown & Category Distribution
-                    </h3>
-                    <table className="summary-table">
-                      <thead>
-                        <tr>
-                          <th>WBS</th>
-                          <th>Task Name</th>
-                          <th>Category</th>
-                          <th>Assignee</th>
-                          <th>Dates</th>
-                          <th>Budget ($)</th>
-                          <th>Status</th>
-                          <th>Progress</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {parsedData.tasks.map((t) => {
-                          const cat = parsedData.categories?.[t.category];
+                {/* ── TODAY VIEW ── */}
+                {activeView === "today" && (
+                  <div className="today-view-container">
+                    <div className="today-view-header">
+                      <div className="today-view-title-section">
+                        <Star size={20} style={{ color: "var(--jantt-accent)" }} />
+                        <h2 className="today-view-title">Today's Focus</h2>
+                        <span className="today-view-date-badge">{getTodayISODate()}</span>
+                        <span className="today-task-count-badge">
+                          {parsedData.tasks.filter((t) => isTaskOnDate(t.start, t.end, getTodayISODate())).length} tasks active today
+                        </span>
+                      </div>
+                      <div className="today-view-person-filter">
+                        <Users size={13} />
+                        <select
+                          className="today-person-select"
+                          value={selectedPersonFilter}
+                          onChange={(e) => setSelectedPersonFilter(e.target.value)}
+                        >
+                          <option value="all">All People &amp; Teams</option>
+                          {teams.length > 0 && (
+                            <optgroup label="Teams / Squads">
+                              {teams.map((tm) => (
+                                <option key={tm.id} value={`team:${tm.id}`}>
+                                  Team: {tm.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {people.length > 0 && (
+                            <optgroup label="Team Members">
+                              {people.map((p) => {
+                                const pTeam = resolveTeamById(teams, p.teamId);
+                                return (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}{p.role ? ` (${p.role})` : ""}{pTeam ? ` • ${pTeam.name}` : ""}
+                                  </option>
+                                );
+                              })}
+                            </optgroup>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="today-task-grid">
+                      {(() => {
+                        const today = getTodayISODate();
+                        let todayTasks = parsedData.tasks.filter((t) => isTaskOnDate(t.start, t.end, today));
+                        if (selectedPersonFilter !== "all") {
+                          if (selectedPersonFilter.startsWith("team:")) {
+                            const targetTeamId = selectedPersonFilter.replace("team:", "");
+                            todayTasks = todayTasks.filter((t) => {
+                              const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                              return assigneeInfo.team?.id === targetTeamId || t.teamId === targetTeamId;
+                            });
+                          } else {
+                            todayTasks = todayTasks.filter((t) => {
+                              const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                              return (
+                                t.assignee === selectedPersonFilter ||
+                                assigneeInfo.person?.id === selectedPersonFilter ||
+                                assigneeInfo.person?.name === selectedPersonFilter
+                              );
+                            });
+                          }
+                        }
+                        if (todayTasks.length === 0) {
                           return (
-                            <tr key={t.id}>
-                              <td style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 700 }}>{t.wbs || "-"}</td>
-                              <td style={{ fontWeight: 600 }}>{t.label || t.name || t.id}</td>
-                              <td>
-                                <span className="jantt-label-dot" style={{ background: cat?.color || "var(--jantt-accent)", display: "inline-block", marginRight: "6px" }} />
-                                {cat?.label || t.category}
-                              </td>
-                              <td>{t.assignee || "-"}</td>
-                              <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.start} → {t.end}</td>
-                              <td style={{ fontFamily: "var(--jantt-font-mono)" }}>
-                                {t.estimatedCost ? `$${t.estimatedCost.toLocaleString()}` : "-"}
-                              </td>
-                              <td>
-                                <span className={`kanban-prio-badge is-${t.status || "not-started"}`}>
-                                  {t.status || "not-started"}
-                                </span>
-                              </td>
-                              <td>{t.progress !== undefined && t.progress !== null ? `${Math.round(t.progress * 100)}%` : "-"}</td>
-                            </tr>
+                            <div className="today-empty-state">
+                              <CheckCircle2 size={48} style={{ color: "#10B981" }} />
+                              <h3>All Clear!</h3>
+                              <p>No tasks scheduled for today{selectedPersonFilter !== "all" ? " for this selection" : ""}.</p>
+                            </div>
                           );
-                        })}
-                      </tbody>
-                    </table>
+                        }
+                        return todayTasks.map((t) => {
+                          const cat = parsedData.categories?.[t.category];
+                          const catColor = cat?.color || "var(--jantt-accent)";
+                          const isCompleted = t.status === "completed";
+                          const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                          return (
+                            <div key={t.id} className={`today-task-card ${isCompleted ? "is-completed" : ""}`} style={{ borderTopColor: catColor }}>
+                              <div className="today-card-header">
+                                <div className="today-card-category">
+                                  <span className="kanban-cat-dot" style={{ background: catColor }} />
+                                  <span>{cat?.label || t.category}</span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
+                                  {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
+                                </div>
+                              </div>
+                              <h3 className="today-card-title">{t.label || t.name || t.id}</h3>
+                              <div className="today-card-meta">
+                                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                  <Calendar size={11} /> {t.start} → {t.end}
+                                </span>
+                                {t.assignee && (
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        width: "18px",
+                                        height: "18px",
+                                        borderRadius: "50%",
+                                        background: assigneeInfo.avatarColor,
+                                        color: "#FFFFFF",
+                                        fontSize: "10px",
+                                        fontWeight: 700
+                                      }}
+                                    >
+                                      {assigneeInfo.initials}
+                                    </span>
+                                    <span style={{ fontWeight: 600, color: "var(--jantt-text)" }}>{assigneeInfo.displayName}</span>
+                                    {assigneeInfo.role && (
+                                      <span style={{ color: "var(--jantt-text-muted)", fontSize: "11px" }}>({assigneeInfo.role})</span>
+                                    )}
+                                    {assigneeInfo.team && (
+                                      <span
+                                        style={{
+                                          fontSize: "9.5px",
+                                          fontWeight: 700,
+                                          background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1F`,
+                                          color: assigneeInfo.team.color || "var(--jantt-accent)",
+                                          padding: "2px 6px",
+                                          borderRadius: "100px",
+                                          border: `1px solid ${assigneeInfo.team.color || "var(--jantt-accent)"}40`
+                                        }}
+                                      >
+                                        {assigneeInfo.team.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              {isCompleted ? (
+                                <div className="today-card-complete">✓ Completed</div>
+                              ) : (
+                                <div className="today-card-progress">
+                                  <div className="today-prog-bar-wrap">
+                                    <div className="today-prog-bar-fill" style={{ width: `${Math.round((t.progress ?? 0) * 100)}%`, background: catColor }} />
+                                  </div>
+                                  <span className="today-prog-pct">{Math.round((t.progress ?? 0) * 100)}%</span>
+                                </div>
+                              )}
+                              <div className="today-card-actions">
+                                <select
+                                  className="kanban-status-select"
+                                  value={t.status || "not-started"}
+                                  onChange={(e) => {
+                                    const newStatus = e.target.value;
+                                    let newProgress = t.progress;
+                                    if (newStatus === "completed") newProgress = 1.0;
+                                    else if (newStatus === "submitted" && (t.progress ?? 0) < 0.75) newProgress = 0.75;
+                                    else if (newStatus === "not-started") newProgress = 0;
+                                    const updatedTasks = parsedData.tasks.map((item) =>
+                                      item.id === t.id ? { ...item, status: newStatus, progress: newProgress } : item
+                                    );
+                                    handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                                  }}
+                                >
+                                  <option value="not-started">To Do</option>
+                                  <option value="in-progress">In Progress</option>
+                                  <option value="submitted">Submitted / Review</option>
+                                  <option value="completed">Mark as Completed ✓</option>
+                                </select>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
                   </div>
-                </div>
-              )
+                )}
+
+              </>
             ) : (
               <div
                 style={{
@@ -1232,7 +1962,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                 }}
               >
                 <AlertTriangle size={36} color="#F43F5E" />
-                <h3 style={{ color: "var(--jantt-text)" }}>Cannot render Gantt chart</h3>
+                <h3 style={{ color: "var(--jantt-text)" }}>Cannot render chart</h3>
                 <p style={{ fontSize: "13px", maxWidth: "400px", textAlign: "center" }}>
                   Please resolve the schema diagnostic errors in the left panel to display the interactive chart.
                 </p>
@@ -1241,6 +1971,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
           </div>
         </section>
       </main>
+
 
       {/* AI Agent Workbench & Schema Cheatsheet Modal */}
       {showPromptModal && (
@@ -1566,7 +2297,444 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
           </div>
         </div>
       )}
+
+      {/* People & Teams Management Modal */}
+      {showPeopleModal && (
+        <div className="prompt-modal-backdrop" onClick={() => setShowPeopleModal(false)}>
+          <div className="prompt-modal-card" style={{ maxWidth: "620px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="prompt-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Users size={18} color="var(--jantt-accent)" />
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                  Team &amp; Assignee Management
+                </h3>
+              </div>
+              <button
+                className="prompt-modal-close-btn"
+                onClick={() => setShowPeopleModal(false)}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Tabs (Members vs Teams) */}
+            <div className="prompt-modal-tabs">
+              <button
+                className={`prompt-tab-btn ${peopleModalTab === "people" ? "is-active" : ""}`}
+                onClick={() => setPeopleModalTab("people")}
+              >
+                <Users size={13} />
+                <span>Team Members ({people.length})</span>
+              </button>
+              <button
+                className={`prompt-tab-btn ${peopleModalTab === "teams" ? "is-active" : ""}`}
+                onClick={() => setPeopleModalTab("teams")}
+              >
+                <Layers size={13} />
+                <span>Teams &amp; Squads ({teams.length})</span>
+              </button>
+            </div>
+
+            <div className="prompt-modal-body" style={{ gap: "18px", padding: "20px" }}>
+              {peopleModalTab === "people" ? (
+                <>
+                  {/* Add New Member Input Bar */}
+                  <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", color: "var(--jantt-text-muted)" }}>
+                      Add New Team Member
+                    </label>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <input
+                        type="text"
+                        className="code-textarea"
+                        style={{
+                          flex: "1 1 160px",
+                          height: "38px",
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          fontFamily: "var(--jantt-font-sans)",
+                          borderRadius: "8px",
+                          border: "1px solid var(--jantt-border)",
+                          boxSizing: "border-box"
+                        }}
+                        value={newPersonName}
+                        onChange={(e) => setNewPersonName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddPerson();
+                        }}
+                        placeholder="Full Name (e.g. Alex Morgan)"
+                      />
+                      <input
+                        type="text"
+                        className="code-textarea"
+                        style={{
+                          flex: "1 1 130px",
+                          height: "38px",
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          fontFamily: "var(--jantt-font-sans)",
+                          borderRadius: "8px",
+                          border: "1px solid var(--jantt-border)",
+                          boxSizing: "border-box"
+                        }}
+                        value={newPersonRole}
+                        onChange={(e) => setNewPersonRole(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddPerson();
+                        }}
+                        placeholder="Role (e.g. Tech Lead)"
+                      />
+                      {teams.length > 0 && (
+                        <select
+                          className="code-textarea"
+                          style={{
+                            flex: "1 1 120px",
+                            height: "38px",
+                            padding: "6px 10px",
+                            fontSize: "12px",
+                            fontFamily: "var(--jantt-font-sans)",
+                            borderRadius: "8px",
+                            border: "1px solid var(--jantt-border)",
+                            boxSizing: "border-box",
+                            background: "var(--jantt-surface-solid)",
+                            color: "var(--jantt-text)"
+                          }}
+                          value={newPersonTeamId}
+                          onChange={(e) => setNewPersonTeamId(e.target.value)}
+                        >
+                          <option value="">No Team Assigned</option>
+                          {teams.map((tm) => (
+                            <option key={tm.id} value={tm.id}>Team: {tm.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      <button
+                        className="btn-nav btn-nav-primary"
+                        style={{ height: "38px", padding: "0 14px", flexShrink: 0 }}
+                        onClick={handleAddPerson}
+                        disabled={!newPersonName.trim()}
+                      >
+                        <Plus size={14} />
+                        <span>Add Member</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* People List */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", color: "var(--jantt-text-muted)" }}>
+                      Current Members ({people.length})
+                    </label>
+                    {people.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "28px 16px", background: "var(--jantt-surface)", border: "1px dashed var(--jantt-border)", borderRadius: "10px", color: "var(--jantt-text-muted)" }}>
+                        <Users size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
+                        <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No team members defined yet.</p>
+                        <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Add members above to assign tasks and filter in the Today view.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
+                        {people.map((p) => {
+                          const assignedCount = parsedData?.tasks.filter(
+                            (t) => t.assignee === p.name || t.assignee === p.id
+                          ).length || 0;
+                          const initials = p.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .substring(0, 2)
+                            .toUpperCase();
+                          const avatarBg = p.color || "var(--jantt-accent)";
+                          const memberTeam = resolveTeamById(teams, p.teamId);
+
+                          return (
+                            <div
+                              key={p.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "10px 14px",
+                                background: "var(--jantt-surface)",
+                                border: "1px solid var(--jantt-border)",
+                                borderRadius: "8px"
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <div
+                                  style={{
+                                    width: "32px",
+                                    height: "32px",
+                                    borderRadius: "50%",
+                                    background: avatarBg,
+                                    color: "#FFFFFF",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "12px",
+                                    fontWeight: 700,
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  {initials}
+                                </div>
+                                <div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                                      {p.name}
+                                    </span>
+                                    <span style={{ fontSize: "10px", fontFamily: "var(--jantt-font-mono)", color: "var(--jantt-text-muted)" }}>
+                                      #{p.id}
+                                    </span>
+                                    {memberTeam && (
+                                      <span
+                                        style={{
+                                          fontSize: "10px",
+                                          fontWeight: 600,
+                                          background: `${memberTeam.color || "var(--jantt-accent)"}1F`,
+                                          color: memberTeam.color || "var(--jantt-accent)",
+                                          padding: "1px 6px",
+                                          borderRadius: "100px"
+                                        }}
+                                      >
+                                        {memberTeam.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {p.role && (
+                                    <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
+                                      {p.role}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    fontWeight: 600,
+                                    padding: "2px 8px",
+                                    borderRadius: "100px",
+                                    background: assignedCount > 0 ? "rgba(56, 189, 248, 0.12)" : "var(--jantt-border-subtle)",
+                                    color: assignedCount > 0 ? "var(--jantt-accent)" : "var(--jantt-text-muted)"
+                                  }}
+                                >
+                                  {assignedCount} {assignedCount === 1 ? "task" : "tasks"}
+                                </span>
+                                <button
+                                  onClick={() => handleRemovePerson(p.id)}
+                                  style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "var(--jantt-text-muted)",
+                                    cursor: "pointer",
+                                    padding: "4px",
+                                    borderRadius: "4px",
+                                    display: "flex",
+                                    alignItems: "center"
+                                  }}
+                                  title={`Remove ${p.name}`}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Add New Team / Squad Box */}
+                  <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", color: "var(--jantt-text-muted)" }}>
+                      Add New Team / Squad
+                    </label>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                      <input
+                        type="text"
+                        className="code-textarea"
+                        style={{
+                          flex: "1 1 160px",
+                          height: "38px",
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          fontFamily: "var(--jantt-font-sans)",
+                          borderRadius: "8px",
+                          border: "1px solid var(--jantt-border)",
+                          boxSizing: "border-box"
+                        }}
+                        value={newTeamName}
+                        onChange={(e) => setNewTeamName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddTeam();
+                        }}
+                        placeholder="Team Name (e.g. Core Engineering)"
+                      />
+                      <input
+                        type="color"
+                        style={{
+                          width: "38px",
+                          height: "38px",
+                          border: "1px solid var(--jantt-border)",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          padding: "2px",
+                          background: "var(--jantt-surface-solid)"
+                        }}
+                        value={newTeamColor}
+                        onChange={(e) => setNewTeamColor(e.target.value)}
+                        title="Pick Team Color"
+                      />
+                      <input
+                        type="text"
+                        className="code-textarea"
+                        style={{
+                          flex: "1 1 180px",
+                          height: "38px",
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          fontFamily: "var(--jantt-font-sans)",
+                          borderRadius: "8px",
+                          border: "1px solid var(--jantt-border)",
+                          boxSizing: "border-box"
+                        }}
+                        value={newTeamDesc}
+                        onChange={(e) => setNewTeamDesc(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddTeam();
+                        }}
+                        placeholder="Description / Mission"
+                      />
+                      <button
+                        className="btn-nav btn-nav-primary"
+                        style={{ height: "38px", padding: "0 14px", flexShrink: 0 }}
+                        onClick={handleAddTeam}
+                        disabled={!newTeamName.trim()}
+                      >
+                        <Plus size={14} />
+                        <span>Add Team</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Teams List */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", color: "var(--jantt-text-muted)" }}>
+                      Current Teams ({teams.length})
+                    </label>
+                    {teams.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "28px 16px", background: "var(--jantt-surface)", border: "1px dashed var(--jantt-border)", borderRadius: "10px", color: "var(--jantt-text-muted)" }}>
+                        <Layers size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
+                        <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No teams defined yet.</p>
+                        <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Create teams above to organize members and filter schedules by squad.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
+                        {teams.map((tm) => {
+                          const memberCount = people.filter((p) => p.teamId === tm.id).length;
+                          return (
+                            <div
+                              key={tm.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "10px 14px",
+                                background: "var(--jantt-surface)",
+                                border: "1px solid var(--jantt-border)",
+                                borderRadius: "8px"
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span
+                                  style={{
+                                    width: "14px",
+                                    height: "14px",
+                                    borderRadius: "50%",
+                                    background: tm.color || "var(--jantt-accent)",
+                                    display: "inline-block",
+                                    flexShrink: 0
+                                  }}
+                                />
+                                <div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                                      {tm.name}
+                                    </span>
+                                    <span style={{ fontSize: "10px", fontFamily: "var(--jantt-font-mono)", color: "var(--jantt-text-muted)" }}>
+                                      #{tm.id}
+                                    </span>
+                                  </div>
+                                  {tm.description && (
+                                    <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
+                                      {tm.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    fontWeight: 600,
+                                    padding: "2px 8px",
+                                    borderRadius: "100px",
+                                    background: "rgba(56, 189, 248, 0.12)",
+                                    color: "var(--jantt-accent)"
+                                  }}
+                                >
+                                  {memberCount} {memberCount === 1 ? "member" : "members"}
+                                </span>
+                                <button
+                                  onClick={() => handleRemoveTeam(tm.id)}
+                                  style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "var(--jantt-text-muted)",
+                                    cursor: "pointer",
+                                    padding: "4px",
+                                    borderRadius: "4px",
+                                    display: "flex",
+                                    alignItems: "center"
+                                  }}
+                                  title={`Remove ${tm.name}`}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="prompt-modal-footer">
+              <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
+                Teams and members are referenced by ID across your schedule.
+              </span>
+              <button
+                className="btn-nav btn-nav-primary"
+                onClick={() => setShowPeopleModal(false)}
+              >
+                <Check size={14} />
+                <span>Done</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
+
   );
 }
 

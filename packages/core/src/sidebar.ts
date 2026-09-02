@@ -489,6 +489,23 @@ function renderDefaultSidebarContent(
     if (progVal) progVal.textContent = `${progInput.value}%`;
   });
 
+  // Status change auto-sync with progress
+  const statusSelect = container.querySelector<HTMLSelectElement>("#jantt-sidebar-status");
+  statusSelect?.addEventListener("change", () => {
+    if (!progInput || !progVal) return;
+    const s = statusSelect.value;
+    if (s === "completed") {
+      progInput.value = "100";
+      progVal.textContent = "100%";
+    } else if (s === "submitted" && parseInt(progInput.value, 10) < 75) {
+      progInput.value = "75";
+      progVal.textContent = "75%";
+    } else if (s === "not-started") {
+      progInput.value = "0";
+      progVal.textContent = "0%";
+    }
+  });
+
   // Active custom attributes state & dynamic GUI adder
   let currentFields: Record<string, string> = {};
   if (task.fields) {
