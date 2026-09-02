@@ -1529,3 +1529,48 @@ g[data-task-id].jantt-task-dimmed {
   to { transform: scale(1); opacity: 1; }
 }
 
+@keyframes jantt-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes jantt-slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.spin-sync-icon {
+  animation: jantt-spin 1s linear infinite;
+}
+
+.jantt-toast {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.1);
+  letter-spacing: -0.01em;
+  user-select: none;
+}
+
+.toast-success {
+  background: #10B981 !important;
+}
+
+.toast-error {
+  background: #EF4444 !important;
+}
+
+.sync-status-badge {
+  letter-spacing: -0.01em;
+  transition: all 0.2s ease;
+}
+
+.btn-sync-cloud:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.12) !important;
+  color: var(--jantt-accent) !important;
+}
+
+

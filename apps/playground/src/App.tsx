@@ -17,8 +17,11 @@ import {
   resolveSchedule,
   isTaskOnDate,
   resolveTeamById,
-  resolveTaskAssignee
+  resolveTaskAssignee,
+  fetchRemotePlan,
+  RemoteFetchResult
 } from "@jantt/core";
+
 import { Jantt } from "@jantt/react";
 
 import {
@@ -49,9 +52,15 @@ import {
   Info,
   FilePlus,
   SortAsc,
-  Star
+  Star,
+  Cloud,
+  RefreshCw,
+  ExternalLink,
+  Link2,
+  GitFork,
+  Globe,
+  Loader2
 } from "lucide-react";
-
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
 import masterTemplateFixture from "../../../examples/master-template.json";
@@ -61,7 +70,26 @@ export interface SavedProject {
   name: string;
   updatedAt: string;
   data: JanttData;
+  source?: "local" | "linked" | "template";
+  sourceUrl?: string;
+  lastSyncedAt?: string;
+  syncError?: string;
 }
+
+export function formatRelativeTime(isoStr?: string): string {
+  if (!isoStr) return "Never";
+  try {
+    const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+    if (diff < 5) return "Just now";
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  } catch {
+    return isoStr;
+  }
+}
+
 
 const DEFAULT_TEMPLATE: SavedProject = {
   id: "default",
@@ -360,10 +388,32 @@ export function App() {
   const [newTeamColor, setNewTeamColor] = useState("#38BDF8");
   const [newTeamDesc, setNewTeamDesc] = useState("");
 
+  // ── Cloud Link & Sync State ─────────────────────────────────────────────
+  const [showLinkCloudModal, setShowLinkCloudModal] = useState(false);
+  const [linkCloudUrl, setLinkCloudUrl] = useState("");
+  const [linkCloudName, setLinkCloudName] = useState("");
+  const [isFetchingCloudPreview, setIsFetchingCloudPreview] = useState(false);
+  const [cloudPreviewResult, setCloudPreviewResult] = useState<RemoteFetchResult | null>(null);
+  const [cloudPreviewError, setCloudPreviewError] = useState<string | null>(null);
+  const [isSyncingProject, setIsSyncingProject] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isToastError, setIsToastError] = useState(false);
+  const toastTimerRef = useRef<number | null>(null);
+
+  const showToast = useCallback((msg: string, isErr = false) => {
+    setToastMessage(msg);
+    setIsToastError(isErr);
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  }, []);
+
   // Sidebar width resize state
   const [sidebarWidth, setSidebarWidth] = useState(init.initialWidth);
   const [isResizing, setIsResizing] = useState(false);
   const isDraggingRef = useRef(false);
+
 
   // Auto-persist active state and custom projects to localStorage memory
   useEffect(() => {
@@ -705,7 +755,8 @@ export function App() {
       id: `plan-${Date.now().toString(36)}`,
       name: newPlanTitle.trim(),
       updatedAt: new Date().toISOString(),
-      data
+      data,
+      source: "local"
     };
 
     const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
@@ -717,15 +768,157 @@ export function App() {
     setParsedData(data);
     setValidationResult(validate(data));
     setShowAddPlanModal(false);
+    showToast(`Created local plan "${newProj.name}"`);
   };
 
-  // Delete custom project from localStorage
+  // Open Link Cloud Plan modal
+  const handleOpenLinkCloudModal = () => {
+    setLinkCloudUrl("");
+    setLinkCloudName("");
+    setCloudPreviewResult(null);
+    setCloudPreviewError(null);
+    setIsFetchingCloudPreview(false);
+    setShowLinkCloudModal(true);
+  };
+
+  // Fetch & Preview remote cloud plan
+  const handleFetchCloudPreview = async () => {
+    if (!linkCloudUrl.trim()) return;
+    setIsFetchingCloudPreview(true);
+    setCloudPreviewError(null);
+    try {
+      const res = await fetchRemotePlan(linkCloudUrl.trim());
+      setCloudPreviewResult(res);
+      if (!linkCloudName.trim()) {
+        setLinkCloudName(res.title);
+      }
+    } catch (err: any) {
+      setCloudPreviewError(err.message || "Failed to fetch remote plan");
+      setCloudPreviewResult(null);
+    } finally {
+      setIsFetchingCloudPreview(false);
+    }
+  };
+
+  // Save linked cloud plan to custom projects
+  const handleSaveLinkedCloudPlan = async () => {
+    let result = cloudPreviewResult;
+    if (!result) {
+      if (!linkCloudUrl.trim()) return;
+      setIsFetchingCloudPreview(true);
+      try {
+        result = await fetchRemotePlan(linkCloudUrl.trim());
+      } catch (err: any) {
+        setCloudPreviewError(err.message || "Failed to fetch remote plan");
+        setIsFetchingCloudPreview(false);
+        return;
+      }
+      setIsFetchingCloudPreview(false);
+    }
+
+    const newProj: SavedProject = {
+      id: `cloud-${Date.now().toString(36)}`,
+      name: linkCloudName.trim() || result.title || "Linked Cloud Plan",
+      updatedAt: new Date().toISOString(),
+      data: result.data,
+      source: "linked",
+      sourceUrl: result.info.originalUrl,
+      lastSyncedAt: new Date().toISOString()
+    };
+
+    const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
+    setCustomProjects(updated);
+    saveCustomProjects(updated);
+    setActiveProjectId(newProj.id);
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+    setJsonText(JSON.stringify(result.data, null, 2));
+    setParsedData(result.data);
+    setPeople(result.data.people || []);
+    setTeams(result.data.teams || []);
+    setValidationResult(validate(result.data));
+    setShowLinkCloudModal(false);
+    showToast(`Linked "${newProj.name}" from ${result.info.label}!`);
+  };
+
+  // Re-sync active linked cloud plan from original URL
+  const handleSyncActiveProject = async () => {
+    const activeProject = customProjects.find((p) => p.id === activeProjectId);
+    if (!activeProject || activeProject.source !== "linked" || !activeProject.sourceUrl) return;
+
+    setIsSyncingProject(true);
+    try {
+      const res = await fetchRemotePlan(activeProject.sourceUrl);
+      const updatedData = res.data;
+      const now = new Date().toISOString();
+
+      const updated = customProjects.map((p) =>
+        p.id === activeProjectId
+          ? {
+              ...p,
+              data: updatedData,
+              updatedAt: now,
+              lastSyncedAt: now,
+              syncError: undefined
+            }
+          : p
+      );
+      setCustomProjects(updated);
+      saveCustomProjects(updated);
+      setParsedData(updatedData);
+      setPeople(updatedData.people || []);
+      setTeams(updatedData.teams || []);
+      setJsonText(JSON.stringify(updatedData, null, 2));
+      setValidationResult(validate(updatedData));
+      showToast(`Synced latest version from ${res.info.label}!`);
+    } catch (err: any) {
+      showToast(`Sync failed: ${err.message}`, true);
+      const updated = customProjects.map((p) =>
+        p.id === activeProjectId ? { ...p, syncError: err.message } : p
+      );
+      setCustomProjects(updated);
+      saveCustomProjects(updated);
+    } finally {
+      setIsSyncingProject(false);
+    }
+  };
+
+  // Fork linked plan to an independent local editable copy
+  const handleForkToLocalPlan = () => {
+    const activeProject = customProjects.find((p) => p.id === activeProjectId);
+    if (!activeProject) return;
+
+    const forkedData = parsedData
+      ? JSON.parse(JSON.stringify(parsedData))
+      : JSON.parse(JSON.stringify(activeProject.data));
+
+    const newProj: SavedProject = {
+      id: `plan-${Date.now().toString(36)}`,
+      name: `${activeProject.name} (Editable Copy)`,
+      updatedAt: new Date().toISOString(),
+      data: forkedData,
+      source: "local"
+    };
+
+    const updated = [newProj, ...customProjects];
+    setCustomProjects(updated);
+    saveCustomProjects(updated);
+    setActiveProjectId(newProj.id);
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+    setJsonText(JSON.stringify(forkedData, null, 2));
+    setParsedData(forkedData);
+    setValidationResult(validate(forkedData));
+    showToast(`Created independent local copy: "${newProj.name}"`);
+  };
+
+  // Delete custom or linked project from localStorage
   const handleDeleteProject = (projectId: string) => {
     if (projectId === "default") return;
     const projToDelete = customProjects.find((p) => p.id === projectId);
-    const confirmed = window.confirm(
-      `Delete project "${projToDelete?.name || projectId}" from browser storage?`
-    );
+    const isLinked = projToDelete?.source === "linked";
+    const promptMsg = isLinked
+      ? `Unlink cloud plan "${projToDelete?.name || projectId}" from this browser? (Your original cloud file on Google Drive/GitHub remains untouched).`
+      : `Delete local plan "${projToDelete?.name || projectId}" from browser storage?`;
+    const confirmed = window.confirm(promptMsg);
     if (!confirmed) return;
     const updated = customProjects.filter((p) => p.id !== projectId);
     setCustomProjects(updated);
@@ -733,6 +926,7 @@ export function App() {
     if (activeProjectId === projectId) {
       handleSelectProject("default");
     }
+    showToast(isLinked ? "Unlinked cloud plan." : "Deleted local plan.");
   };
 
   // Import JSON file from local disk
@@ -751,7 +945,8 @@ export function App() {
             id: `proj-${Date.now().toString(36)}`,
             name: projName,
             updatedAt: new Date().toISOString(),
-            data: parsed
+            data: parsed,
+            source: "local"
           };
           const updated = [newProj, ...customProjects];
           setCustomProjects(updated);
@@ -761,6 +956,7 @@ export function App() {
           setJsonText(JSON.stringify(parsed, null, 2));
           setParsedData(parsed);
           setValidationResult(val);
+          showToast(`Imported "${newProj.name}"`);
         } else {
           alert("The imported file has schema errors:\n" + val.errors.map((err) => `${err.path}: ${err.message}`).join("\n"));
         }
@@ -771,6 +967,7 @@ export function App() {
     reader.readAsText(file);
     e.target.value = "";
   };
+
 
   // Reset active plan back to original template or saved state
   const handleResetActiveProject = () => {
@@ -1132,13 +1329,26 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               <optgroup label="Templates">
                 <option value="default">{DEFAULT_TEMPLATE.name}</option>
               </optgroup>
-              {customProjects.length > 0 && (
-                <optgroup label={`My Saved Plans (${customProjects.length})`}>
-                  {customProjects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.data?.tasks?.length || 0} tasks)
-                    </option>
-                  ))}
+              {customProjects.filter((p) => p.source !== "linked").length > 0 && (
+                <optgroup label={`💻 Local Plans (${customProjects.filter((p) => p.source !== "linked").length})`}>
+                  {customProjects
+                    .filter((p) => p.source !== "linked")
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.data?.tasks?.length || 0} tasks)
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+              {customProjects.filter((p) => p.source === "linked").length > 0 && (
+                <optgroup label={`☁️ Linked Cloud Plans (${customProjects.filter((p) => p.source === "linked").length})`}>
+                  {customProjects
+                    .filter((p) => p.source === "linked")
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        ☁️ {p.name} ({p.data?.tasks?.length || 0} tasks)
+                      </option>
+                    ))}
                 </optgroup>
               )}
             </select>
@@ -1155,18 +1365,97 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
             <span>Add Plan</span>
           </button>
 
-          {/* Delete Active Custom Plan Button */}
+          {/* Link Cloud Plan Button */}
+          <button
+            className="btn-nav"
+            onClick={handleOpenLinkCloudModal}
+            title="Link and sync a remote plan from Google Drive, GitHub, Dropbox or direct URL"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <Cloud size={13} style={{ color: "var(--jantt-accent)" }} />
+            <span>Link Cloud Plan</span>
+          </button>
+
+          {/* Linked Cloud Plan Controls (when active plan is linked) */}
+          {customProjects.some((p) => p.id === activeProjectId && p.source === "linked") && (() => {
+            const linkedActive = customProjects.find((p) => p.id === activeProjectId)!;
+            return (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "var(--jantt-accent)",
+                    background: "rgba(56, 189, 248, 0.12)",
+                    padding: "2px 8px",
+                    borderRadius: "12px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}
+                  title={`Source URL: ${linkedActive.sourceUrl || "Cloud"}\nLast synced: ${linkedActive.lastSyncedAt || "Never"}`}
+                >
+                  <Cloud size={11} />
+                  <span>Synced: {formatRelativeTime(linkedActive.lastSyncedAt)}</span>
+                </span>
+
+                <button
+                  className="btn-nav"
+                  onClick={handleSyncActiveProject}
+                  disabled={isSyncingProject}
+                  title="Re-fetch and update this plan from the cloud URL"
+                  style={{ color: "var(--jantt-accent)", fontWeight: 600 }}
+                >
+                  <RefreshCw size={13} className={isSyncingProject ? "spin-sync-icon" : ""} />
+                  <span>{isSyncingProject ? "Syncing..." : "Sync"}</span>
+                </button>
+
+                <button
+                  className="btn-nav"
+                  onClick={handleForkToLocalPlan}
+                  title="Create an editable local copy of this cloud plan"
+                >
+                  <GitFork size={13} />
+                  <span>Fork</span>
+                </button>
+
+                {linkedActive.sourceUrl && (
+                  <a
+                    href={linkedActive.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-nav"
+                    title="Open original cloud link in new tab"
+                    style={{ padding: "6px 8px", display: "inline-flex", alignItems: "center" }}
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Delete / Unlink Active Plan Button */}
           {activeProjectId !== "default" && (
             <button
               className="btn-nav"
               style={{ color: "#EF4444" }}
               onClick={() => handleDeleteProject(activeProjectId)}
-              title="Delete this custom plan from browser memory"
+              title={
+                customProjects.find((p) => p.id === activeProjectId)?.source === "linked"
+                  ? "Unlink this cloud plan from browser storage"
+                  : "Delete this custom plan from browser memory"
+              }
             >
               <Trash2 size={13} />
-              <span>Delete Plan</span>
+              <span>
+                {customProjects.find((p) => p.id === activeProjectId)?.source === "linked"
+                  ? "Unlink"
+                  : "Delete Plan"}
+              </span>
             </button>
           )}
+
 
           {/* Hidden File Input for JSON Import */}
           <input
@@ -2733,9 +3022,259 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         </div>
       )}
 
+      {/* ── Link Remote / Cloud Plan Modal ────────────────────────────────────── */}
+      {showLinkCloudModal && (
+        <div className="prompt-modal-backdrop" onClick={() => setShowLinkCloudModal(false)}>
+          <div
+            className="prompt-modal-card"
+            style={{ maxWidth: "620px", width: "90%" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="prompt-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "8px",
+                    background: "rgba(56, 189, 248, 0.15)",
+                    color: "var(--jantt-accent)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Cloud size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                    Link Remote / Cloud Plan
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "12px", color: "var(--jantt-text-muted)" }}>
+                    Paste a link to your file from Google Drive, GitHub, Dropbox, or any direct JSON URL.
+                  </p>
+                </div>
+              </div>
+              <button className="btn-modal-close" onClick={() => setShowLinkCloudModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Cloud Tips Banner */}
+              <div
+                style={{
+                  background: "var(--jantt-surface, #F8FAFC)",
+                  border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
+                  borderRadius: "8px",
+                  padding: "12px 14px",
+                  fontSize: "12px",
+                  color: "var(--jantt-text)"
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Globe size={14} style={{ color: "var(--jantt-accent)" }} />
+                  <span>How to get share links:</span>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: "18px", color: "var(--jantt-text-muted)", lineHeight: 1.6 }}>
+                  <li>
+                    <strong>Google Drive:</strong> Right-click file &rarr; <em>Share</em> &rarr; Set to <em>&quot;Anyone with the link can view&quot;</em> &rarr; Copy link &amp; paste here.
+                  </li>
+                  <li>
+                    <strong>GitHub:</strong> Paste any GitHub file URL (e.g. <code>github.com/.../blob/main/schedule.json</code>).
+                  </li>
+                  <li>
+                    <strong>Dropbox:</strong> Paste any shared Dropbox link (e.g. <code>dropbox.com/s/.../plan.json</code>).
+                  </li>
+                  <li>
+                    <strong>Direct URL:</strong> Any public HTTPS endpoint serving valid Jantt JSON.
+                  </li>
+                </ul>
+              </div>
+
+              {/* URL Input */}
+              <div>
+                <label style={{ display: "block", fontSize: "12.5px", fontWeight: 600, marginBottom: "6px", color: "var(--jantt-text)" }}>
+                  Cloud Share Link or JSON URL:
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    className="prompt-input"
+                    style={{ flex: 1 }}
+                    placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                    value={linkCloudUrl}
+                    onChange={(e) => {
+                      setLinkCloudUrl(e.target.value);
+                      setCloudPreviewError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleFetchCloudPreview();
+                    }}
+                  />
+                  <button
+                    className="btn-nav btn-nav-primary"
+                    onClick={handleFetchCloudPreview}
+                    disabled={isFetchingCloudPreview || !linkCloudUrl.trim()}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {isFetchingCloudPreview ? (
+                      <>
+                        <Loader2 size={14} className="spin-sync-icon" />
+                        <span>Fetching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Link2 size={14} />
+                        <span>Fetch &amp; Preview</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Alert */}
+              {cloudPreviewError && (
+                <div
+                  style={{
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid #EF4444",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    fontSize: "12.5px",
+                    color: "#EF4444",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "8px"
+                  }}
+                >
+                  <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Unable to link remote plan:</div>
+                    <div style={{ marginTop: "2px", whiteSpace: "pre-wrap" }}>{cloudPreviewError}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview Card */}
+              {cloudPreviewResult && (
+                <div
+                  style={{
+                    background: "rgba(56, 189, 248, 0.06)",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    borderRadius: "8px",
+                    padding: "14px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <CheckCircle2 size={16} style={{ color: "#10B981" }} />
+                      <span style={{ fontWeight: 700, fontSize: "14px", color: "var(--jantt-text)" }}>
+                        {cloudPreviewResult.title}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: "100px",
+                        background: "var(--jantt-accent)",
+                        color: "#FFFFFF"
+                      }}
+                    >
+                      {cloudPreviewResult.info.label}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", fontSize: "12px" }}>
+                    <div style={{ background: "var(--jantt-surface, #F8FAFC)", padding: "8px", borderRadius: "6px" }}>
+                      <div style={{ color: "var(--jantt-text-muted)", fontSize: "11px" }}>Tasks</div>
+                      <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--jantt-text)" }}>
+                        {cloudPreviewResult.taskCount}
+                      </div>
+                    </div>
+                    <div style={{ background: "var(--jantt-surface, #F8FAFC)", padding: "8px", borderRadius: "6px" }}>
+                      <div style={{ color: "var(--jantt-text-muted)", fontSize: "11px" }}>Categories</div>
+                      <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--jantt-text)" }}>
+                        {Object.keys(cloudPreviewResult.data.categories || {}).length}
+                      </div>
+                    </div>
+                    <div style={{ background: "var(--jantt-surface, #F8FAFC)", padding: "8px", borderRadius: "6px" }}>
+                      <div style={{ color: "var(--jantt-text-muted)", fontSize: "11px" }}>Schema</div>
+                      <div style={{ fontWeight: 700, fontSize: "13px", color: "#10B981", marginTop: "2px" }}>
+                        Valid &#x2713;
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "var(--jantt-text)" }}>
+                      Display Name (in your plan selector):
+                    </label>
+                    <input
+                      type="text"
+                      className="prompt-input"
+                      value={linkCloudName}
+                      onChange={(e) => setLinkCloudName(e.target.value)}
+                      placeholder="Custom display name"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="prompt-modal-footer">
+              <button className="btn-nav" onClick={() => setShowLinkCloudModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn-nav btn-nav-primary"
+                onClick={handleSaveLinkedCloudPlan}
+                disabled={!linkCloudUrl.trim() || isFetchingCloudPreview}
+              >
+                <Cloud size={14} />
+                <span>Save &amp; Subscribe to Plan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Floating Toast Notification ────────────────────────────────────────── */}
+      {toastMessage && (
+        <div
+          className={`jantt-toast ${isToastError ? "toast-error" : "toast-success"}`}
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "10px 16px",
+            borderRadius: "8px",
+            background: isToastError ? "#EF4444" : "#10B981",
+            color: "#FFFFFF",
+            fontWeight: 600,
+            fontSize: "13px",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
+            animation: "jantt-slide-in-right 0.25s ease-out"
+          }}
+        >
+          {isToastError ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
     </div>
 
   );
 }
 
 export default App;
+
