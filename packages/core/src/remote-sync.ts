@@ -25,7 +25,7 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
   // 1. Google Drive URLs
   // Formats:
   // - https://drive.google.com/file/d/{FILE_ID}/view?usp=sharing
-  // - https://drive.google.com/file/d/{FILE_ID}
+  // - https://drive.google.com/file/d/{FILE_ID}/view?usp=drive_link
   // - https://drive.google.com/open?id={FILE_ID}
   // - https://drive.google.com/uc?id={FILE_ID}
   // - https://docs.google.com/file/d/{FILE_ID}
@@ -34,15 +34,18 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
   const driveUcRegex = /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/i;
   const docsFileRegex = /docs\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
 
-  let driveMatch = trimmed.match(driveFileRegex) ||
+  const driveMatch =
+    trimmed.match(driveFileRegex) ||
     trimmed.match(driveOpenRegex) ||
     trimmed.match(driveUcRegex) ||
     trimmed.match(docsFileRegex);
 
   if (driveMatch && driveMatch[1]) {
     const fileId = driveMatch[1];
-    // Google Drive direct export download endpoint
-    const downloadUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+    // Direct usercontent endpoint — works for public files but blocked by CORS
+    // when fetched from browser JS. We store it and handle CORS via proxy fallback
+    // inside fetchRemotePlan().
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
     return {
       originalUrl: trimmed,
       provider: "google-drive",
@@ -53,7 +56,6 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
   }
 
   // 2. GitHub URLs (convert blob URL to raw.githubusercontent.com)
-  // Format: https://github.com/{user}/{repo}/blob/{branch}/{path}
   const githubBlobRegex = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/i;
   const githubMatch = trimmed.match(githubBlobRegex);
   if (githubMatch) {
@@ -77,7 +79,7 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
     };
   }
 
-  // 3. Dropbox URLs (convert ?dl=0 to ?dl=1 or ?raw=1)
+  // 3. Dropbox URLs (convert ?dl=0 to ?dl=1)
   if (/dropbox\.com/i.test(trimmed)) {
     let downloadUrl = trimmed;
     if (downloadUrl.includes("dl=0")) {
@@ -103,6 +105,67 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
   };
 }
 
+// ---------------------------------------------------------------------------
+// CORS-aware fetch helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempts a direct fetch first, then falls back to the allorigins CORS proxy
+ * for providers known to block cross-origin requests from browsers (Google Drive, Dropbox).
+ */
+async function fetchWithCorsFallback(url: string, provider: CloudProviderType): Promise<string> {
+  const CORS_PROXY = "https://api.allorigins.win/raw?url=";
+
+  // For Google Drive we know direct browser fetch is always CORS-blocked,
+  // so go straight to the proxy to save time.
+  if (provider === "google-drive") {
+    return fetchViaProxy(url, CORS_PROXY);
+  }
+
+  // For others, try direct first.
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json, text/plain, */*" }
+    });
+    if (res.ok) return res.text();
+  } catch {
+    // Direct fetch failed (CORS / network) — fall through to proxy
+  }
+
+  // Fallback: proxy
+  return fetchViaProxy(url, CORS_PROXY);
+}
+
+async function fetchViaProxy(targetUrl: string, proxy: string): Promise<string> {
+  const proxyUrl = `${proxy}${encodeURIComponent(targetUrl)}`;
+  let res: Response;
+  try {
+    res = await fetch(proxyUrl, {
+      method: "GET",
+      headers: { Accept: "application/json, text/plain, */*" }
+    });
+  } catch (e: any) {
+    throw new Error(`Network error — could not reach remote server or proxy: ${e.message || String(e)}`);
+  }
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error("File not found (404). Please verify the share link is correct and the file is publicly accessible.");
+    }
+    if (res.status === 403 || res.status === 401) {
+      throw new Error(
+        `Access denied (${res.status}). Ensure the file sharing is set to "Anyone with the link can view".`
+      );
+    }
+    throw new Error(`Server returned error ${res.status}: ${res.statusText}`);
+  }
+
+  return res.text();
+}
+
+// ---------------------------------------------------------------------------
+
 export interface RemoteFetchResult {
   data: JanttData;
   info: CloudUrlInfo;
@@ -113,49 +176,45 @@ export interface RemoteFetchResult {
 
 /**
  * Fetches, parses, and validates a remote Jantt plan from a shared URL.
+ * Handles CORS automatically via proxy fallback for Google Drive and Dropbox links.
  */
 export async function fetchRemotePlan(url: string): Promise<RemoteFetchResult> {
   const info = parseCloudUrl(url);
 
-  let response: Response;
+  let rawText: string;
   try {
-    response = await fetch(info.downloadUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/json, text/plain, */*"
-      }
-    });
-  } catch (netErr: any) {
-    // If it's a Google Drive link, provide targeted guidance
+    rawText = await fetchWithCorsFallback(info.downloadUrl, info.provider);
+  } catch (err: any) {
     if (info.provider === "google-drive") {
       throw new Error(
-        `Unable to fetch Google Drive file. Please ensure the file is shared with "Anyone with the link can view". (${netErr.message || "Network Error"})`
+        `Unable to fetch Google Drive file.\n\n` +
+        `Make sure the file sharing is set to "Anyone with the link can view":\n` +
+        `Right-click → Share → Change to "Anyone with the link" → Copy link.\n\n` +
+        `(${err.message || "Network error"})`
       );
     }
-    throw new Error(`Failed to connect to remote server: ${netErr.message || "Network Error"}`);
+    throw err;
   }
 
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`File not found (404). Please verify the link exists and is public.`);
+  // Detect HTML error pages (private Drive links, login redirects, etc.)
+  if (rawText.trimStart().startsWith("<!DOCTYPE") || rawText.trimStart().startsWith("<html")) {
+    if (info.provider === "google-drive") {
+      throw new Error(
+        `Google Drive returned an HTML page instead of JSON.\n\n` +
+        `This usually means the file is not publicly shared.\n` +
+        `In Google Drive: right-click the file → Share → "Anyone with the link can view".`
+      );
     }
-    if (response.status === 403 || response.status === 401) {
-      throw new Error(`Access denied (${response.status}). Ensure the file sharing permissions are set to "Anyone with the link".`);
-    }
-    throw new Error(`Server returned error ${response.status}: ${response.statusText}`);
+    throw new Error(
+      `The URL returned an HTML page instead of JSON. ` +
+      `Make sure the link points directly to a public Jantt JSON file.`
+    );
   }
 
-  const rawText = await response.text();
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
   } catch (jsonErr: any) {
-    // Check if the response was an HTML error page (common with private Drive links)
-    if (rawText.includes("<!DOCTYPE html") || rawText.includes("<html")) {
-      throw new Error(
-        `The URL returned an HTML page instead of JSON. If using Google Drive, make sure the file permissions are set to "Anyone with the link can view".`
-      );
-    }
     throw new Error(`Remote file is not valid JSON: ${jsonErr.message}`);
   }
 
