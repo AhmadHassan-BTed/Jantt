@@ -55,19 +55,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 20px;
+  padding: 8px 16px;
   background: var(--jantt-surface, #F8FAFC);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--jantt-border, #E2E8F0);
   z-index: 100;
   flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
 }
-
 .brand-section {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-right: 12px;
 }
 
 .brand-logo {
@@ -109,16 +112,30 @@ body {
 .nav-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Hide scrollbar but keep functionality */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 0;
+}
+
+.nav-controls::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-select-group {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
+  gap: 5px;
+  font-size: 12px;
   color: var(--jantt-text-muted, #94A3B8);
   font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .select-input {
@@ -126,13 +143,15 @@ body {
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
   color: var(--jantt-text, #F8FAFC);
   border-radius: 9px;
-  padding: 6px 12px;
-  font-size: 12.5px;
+  padding: 5px 10px;
+  font-size: 12px;
   font-weight: 500;
   outline: none;
   cursor: pointer;
   transition: all 0.15s ease;
+  max-width: 200px;
 }
+
 
 .select-input option {
   background: var(--jantt-surface-solid, #121A2C);
@@ -148,16 +167,18 @@ body {
 .btn-nav {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
   color: var(--jantt-text, #E2E8F0);
-  padding: 6px 13px;
+  padding: 5px 10px;
   border-radius: 9px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-nav:hover {
@@ -202,7 +223,9 @@ body {
   flex-direction: row;
   flex: 1 1 0%;
   min-height: 0;
-  height: calc(100vh - 54px);
+  /* Use flex remainder rather than fixed calc so the layout self-adjusts
+     regardless of how tall the navbar ends up being */
+  height: 100%;
   width: 100%;
   overflow: hidden;
   position: relative;
@@ -212,17 +235,19 @@ body {
 .btn-prompt {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: var(--jantt-accent, #0284C7);
   border: 1px solid var(--jantt-accent, #0284C7);
   color: var(--jantt-btn-text, #FFFFFF);
-  padding: 6px 13px;
+  padding: 5px 10px;
   border-radius: 9px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .jantt-theme-dark .btn-prompt {
