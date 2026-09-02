@@ -1237,7 +1237,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       <header className="navbar">
         <div className="brand-section">
           <JanttLogo size={28} />
-          <span className="brand-badge">v1.1.0</span>
+          <span className="brand-badge">v1.1.1</span>
           <span
             style={{
               display: "inline-flex",
