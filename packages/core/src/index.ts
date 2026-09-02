@@ -9,6 +9,7 @@ export * from "./types";
 export * from "./date-math";
 export * from "./validator";
 export * from "./resolver";
+export * from "./team-resolver";
 export * from "./layout";
 export * from "./controller";
 export * from "./detail-modal";
@@ -17,6 +18,7 @@ export * from "./renderers";
 export * from "./renderer";
 export * from "./exporter";
 export * from "./themes";
+
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";

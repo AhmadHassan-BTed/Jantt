@@ -12,8 +12,11 @@ import {
   getMonthNameOnly,
   formatMonthYear,
   getDayOfWeekShort,
-  getTodayISODate
+  getTodayISODate,
+  isTaskOnDate,
+  isTaskToday
 } from "../src/date-math";
+
 
 describe("Date Math Utilities", () => {
   // ─── isValidISODate ───────────────────────────────────────────────────
@@ -267,4 +270,41 @@ describe("Date Math Utilities", () => {
       expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
   });
+
+  // ─── isTaskOnDate & isTaskToday ───────────────────────────────────────
+
+  describe("isTaskOnDate", () => {
+    it("returns true when target date is within task start and end", () => {
+      expect(isTaskOnDate("2026-09-01", "2026-09-05", "2026-09-03")).toBe(true);
+    });
+
+    it("returns true when target date equals task start or end", () => {
+      expect(isTaskOnDate("2026-09-01", "2026-09-05", "2026-09-01")).toBe(true);
+      expect(isTaskOnDate("2026-09-01", "2026-09-05", "2026-09-05")).toBe(true);
+    });
+
+    it("returns false when target date is outside task span", () => {
+      expect(isTaskOnDate("2026-09-01", "2026-09-05", "2026-08-31")).toBe(false);
+      expect(isTaskOnDate("2026-09-01", "2026-09-05", "2026-09-06")).toBe(false);
+    });
+
+    it("handles single-day milestones", () => {
+      expect(isTaskOnDate("2026-09-01", "2026-09-01", "2026-09-01")).toBe(true);
+      expect(isTaskOnDate("2026-09-01", "2026-09-01", "2026-09-02")).toBe(false);
+    });
+
+    it("returns false for invalid date strings", () => {
+      expect(isTaskOnDate("invalid", "2026-09-05", "2026-09-03")).toBe(false);
+      expect(isTaskOnDate("2026-09-01", "invalid", "2026-09-03")).toBe(false);
+      expect(isTaskOnDate("2026-09-01", "2026-09-05", "invalid")).toBe(false);
+    });
+  });
+
+  describe("isTaskToday", () => {
+    it("checks against today's date", () => {
+      const today = getTodayISODate();
+      expect(isTaskToday(today, today)).toBe(true);
+    });
+  });
 });
+

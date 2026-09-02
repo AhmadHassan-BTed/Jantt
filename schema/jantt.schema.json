@@ -100,6 +100,75 @@
         "additionalProperties": true
       }
     },
+    "teams": {
+      "type": "array",
+      "description": "Optional list of functional teams or squads (e.g. 'Engineering', 'Design').",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the team, referenced by person teamId or task teamId."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the team."
+          },
+          "color": {
+            "type": "string",
+            "description": "Hex color used for team badges and styling."
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional team summary or charter."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "people": {
+      "type": "array",
+      "description": "Optional list of team members who can be assigned to tasks.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the person, referenced by task assignee."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the team member."
+          },
+          "teamId": {
+            "type": "string",
+            "description": "Unique ID of the team this person belongs to (references teams[].id)."
+          },
+          "role": {
+            "type": "string",
+            "description": "Job title or role (e.g. 'Frontend Engineer', 'PM')."
+          },
+          "avatar": {
+            "type": "string",
+            "description": "Avatar URL or fallback initials string."
+          },
+          "color": {
+            "type": "string",
+            "description": "Hex color used for visual avatar badge (e.g. '#4FAE93')."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address of the team member."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+
+
     "tasks": {
       "type": "array",
       "description": "List of scheduled tasks/milestones displayed in the Gantt chart.",
@@ -169,10 +238,27 @@
             "type": "boolean",
             "description": "Visual urgency badge/indicator."
           },
+          "assignee": {
+            "type": "string",
+            "description": "ID of the assigned team member (references people[].id) or assignee name."
+          },
+          "teamId": {
+            "type": "string",
+            "description": "ID of the assigned team/squad (references teams[].id)."
+          },
+          "wbs": {
+            "type": "string",
+            "description": "Work Breakdown Structure code (e.g. '1.2.1')."
+          },
+          "estimatedCost": {
+            "type": "number",
+            "description": "Estimated budget or cost amount in dollars."
+          },
           "notes": {
             "type": "string",
             "description": "Detailed notes or task description."
           },
+
           "fields": {
             "type": "object",
             "description": "Arbitrary domain-specific key-value pairs rendered in the detail panel.",

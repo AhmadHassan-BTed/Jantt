@@ -38,6 +38,25 @@ export interface DocumentItem {
   [key: string]: unknown;
 }
 
+export interface Team {
+  id: string;
+  name: string;
+  color?: string; // Hex color for team badge
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface Person {
+  id: string;
+  name: string;
+  teamId?: string; // References Team.id
+  role?: string;
+  avatar?: string; // URL or initials fallback
+  color?: string; // Hex color for avatar badge
+  email?: string;
+  [key: string]: unknown;
+}
+
 export interface TaskBaseline {
   start: string; // YYYY-MM-DD
   end: string; // YYYY-MM-DD
@@ -60,7 +79,8 @@ export interface Task {
   status?: "not-started" | "in-progress" | "submitted" | "completed" | "blocked" | string;
   urgent?: boolean;
   priority?: "low" | "medium" | "high" | "urgent" | string;
-  assignee?: string;
+  assignee?: string; // Person.id or Person.name
+  teamId?: string; // Direct or inherited Team.id
   wbs?: string;
   phase?: string;
   estimatedCost?: number;
@@ -76,9 +96,12 @@ export interface JanttData {
   meta?: JanttMeta;
   categories?: CategoriesMap;
   documents?: DocumentItem[];
+  teams?: Team[];
+  people?: Person[];
   tasks: Task[];
   [key: string]: unknown;
 }
+
 
 export interface ValidationError {
   path: string;
