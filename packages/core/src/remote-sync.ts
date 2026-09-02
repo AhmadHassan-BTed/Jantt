@@ -110,19 +110,28 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
 // ---------------------------------------------------------------------------
 
 /**
- * Attempts a direct fetch first, then falls back to the allorigins CORS proxy
- * for providers known to block cross-origin requests from browsers (Google Drive, Dropbox).
+ * List of CORS proxies tried in order.
+ * - corsproxy.io: purpose-built, sets correct CORS headers, free tier
+ * - api.allorigins.win: secondary option
+ * - thingproxy.freeboard.io: tertiary fallback
+ */
+const CORS_PROXIES = [
+  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
+/**
+ * Attempts a direct fetch first (for non-CORS-blocked providers),
+ * then falls back through the proxy list for Google Drive / Dropbox.
  */
 async function fetchWithCorsFallback(url: string, provider: CloudProviderType): Promise<string> {
-  const CORS_PROXY = "https://api.allorigins.win/raw?url=";
-
-  // For Google Drive we know direct browser fetch is always CORS-blocked,
-  // so go straight to the proxy to save time.
+  // Google Drive always requires a proxy — go straight to it
   if (provider === "google-drive") {
-    return fetchViaProxy(url, CORS_PROXY);
+    return fetchViaProxyList(url);
   }
 
-  // For others, try direct first.
+  // For others, try direct first
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -130,38 +139,49 @@ async function fetchWithCorsFallback(url: string, provider: CloudProviderType): 
     });
     if (res.ok) return res.text();
   } catch {
-    // Direct fetch failed (CORS / network) — fall through to proxy
+    // CORS / network error — fall through to proxies
   }
 
-  // Fallback: proxy
-  return fetchViaProxy(url, CORS_PROXY);
+  return fetchViaProxyList(url);
 }
 
-async function fetchViaProxy(targetUrl: string, proxy: string): Promise<string> {
-  const proxyUrl = `${proxy}${encodeURIComponent(targetUrl)}`;
-  let res: Response;
-  try {
-    res = await fetch(proxyUrl, {
-      method: "GET",
-      headers: { Accept: "application/json, text/plain, */*" }
-    });
-  } catch (e: any) {
-    throw new Error(`Network error — could not reach remote server or proxy: ${e.message || String(e)}`);
+async function fetchViaProxyList(targetUrl: string): Promise<string> {
+  let lastError: string = "Unknown error";
+
+  for (const makeProxyUrl of CORS_PROXIES) {
+    const proxyUrl = makeProxyUrl(targetUrl);
+    try {
+      const res = await fetch(proxyUrl, {
+        method: "GET",
+        headers: { Accept: "application/json, text/plain, */*" }
+      });
+
+      if (res.ok) return res.text();
+
+      if (res.status === 404) {
+        throw new Error("File not found (404). Please verify the share link is correct and the file is publicly accessible.");
+      }
+      if (res.status === 403 || res.status === 401) {
+        throw new Error(
+          `Access denied (${res.status}). Ensure the file sharing is set to "Anyone with the link can view".`
+        );
+      }
+      // Non-2xx from this proxy — try next one
+      lastError = `Proxy returned ${res.status}: ${res.statusText}`;
+    } catch (e: any) {
+      // If we threw a specific error (404/403), re-throw immediately
+      if (e.message?.includes("File not found") || e.message?.includes("Access denied")) {
+        throw e;
+      }
+      // Otherwise record and try the next proxy
+      lastError = e.message || String(e);
+    }
   }
 
-  if (!res.ok) {
-    if (res.status === 404) {
-      throw new Error("File not found (404). Please verify the share link is correct and the file is publicly accessible.");
-    }
-    if (res.status === 403 || res.status === 401) {
-      throw new Error(
-        `Access denied (${res.status}). Ensure the file sharing is set to "Anyone with the link can view".`
-      );
-    }
-    throw new Error(`Server returned error ${res.status}: ${res.statusText}`);
-  }
-
-  return res.text();
+  throw new Error(
+    `Unable to reach the remote file via any proxy.\n\nDetails: ${lastError}\n\n` +
+    `Tip: Make sure the file is publicly shared ("Anyone with the link can view").`
+  );
 }
 
 // ---------------------------------------------------------------------------
