@@ -18,7 +18,7 @@ export * from "./renderers";
 export * from "./renderer";
 export * from "./exporter";
 export * from "./themes";
-
+export * from "./remote-sync";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
@@ -27,6 +27,7 @@ import { layout, computeDependencyPath } from "./layout";
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
 import { themeManager } from "./themes";
+import { parseCloudUrl, fetchRemotePlan } from "./remote-sync";
 
 export const Jantt = {
   mount: renderJantt,
@@ -42,7 +43,10 @@ export const Jantt = {
   downloadJson,
   exportSvgString,
   themeManager,
+  parseCloudUrl,
+  fetchRemotePlan,
   version: "1.1.0"
 };
+
 
 export default Jantt;

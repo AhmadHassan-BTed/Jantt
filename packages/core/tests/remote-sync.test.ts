@@ -1,0 +1,129 @@
+import { describe, it, expect, vi } from "vitest";
+import { parseCloudUrl, fetchRemotePlan } from "../src/remote-sync";
+import { JanttData } from "../src/types";
+
+describe("Cloud Remote Sync & URL Parsing", () => {
+  describe("parseCloudUrl", () => {
+    it("parses Google Drive standard share URLs", () => {
+      const url = "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y/view?usp=sharing";
+      const info = parseCloudUrl(url);
+      expect(info.provider).toBe("google-drive");
+      expect(info.fileId).toBe("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y");
+      expect(info.downloadUrl).toBe("https://drive.usercontent.google.com/download?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y&export=download");
+      expect(info.label).toBe("Google Drive");
+    });
+
+    it("parses Google Drive open?id= URLs", () => {
+      const url = "https://drive.google.com/open?id=abc123XYZ_456";
+      const info = parseCloudUrl(url);
+      expect(info.provider).toBe("google-drive");
+      expect(info.fileId).toBe("abc123XYZ_456");
+      expect(info.downloadUrl).toContain("id=abc123XYZ_456");
+    });
+
+    it("parses GitHub blob URLs and transforms to raw.githubusercontent.com", () => {
+      const url = "https://github.com/AhmadHassan-BTed/Jantt/blob/main/examples/master-template.json";
+      const info = parseCloudUrl(url);
+      expect(info.provider).toBe("github");
+      expect(info.downloadUrl).toBe("https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/examples/master-template.json");
+    });
+
+    it("recognizes raw.githubusercontent.com and gists directly", () => {
+      const url = "https://raw.githubusercontent.com/org/repo/main/schedule.json";
+      const info = parseCloudUrl(url);
+      expect(info.provider).toBe("github");
+      expect(info.downloadUrl).toBe(url);
+    });
+
+    it("parses Dropbox URLs and converts ?dl=0 to ?dl=1", () => {
+      const url = "https://www.dropbox.com/s/sample123/schedule.json?dl=0";
+      const info = parseCloudUrl(url);
+      expect(info.provider).toBe("dropbox");
+      expect(info.downloadUrl).toBe("https://www.dropbox.com/s/sample123/schedule.json?dl=1");
+    });
+
+    it("handles generic JSON URLs", () => {
+      const url = "https://api.mycompany.com/schedules/q3-roadmap.json";
+      const info = parseCloudUrl(url);
+      expect(info.provider).toBe("generic");
+      expect(info.downloadUrl).toBe(url);
+    });
+
+    it("throws error for empty or invalid input", () => {
+      expect(() => parseCloudUrl("")).toThrow();
+      expect(() => parseCloudUrl(null as any)).toThrow();
+    });
+  });
+
+  describe("fetchRemotePlan", () => {
+    const validPlan: JanttData = {
+      meta: { title: "Cloud Project Roadmap" },
+      categories: {
+        dev: { label: "Development", color: "#38BDF8" }
+      },
+      tasks: [
+        {
+          id: "t1",
+          label: "Phase 1 Launch",
+          category: "dev",
+          start: "2026-09-01",
+          end: "2026-09-10"
+        }
+      ]
+    };
+
+    it("successfully fetches and validates a remote plan", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(validPlan)
+      });
+      global.fetch = mockFetch;
+
+      const result = await fetchRemotePlan("https://github.com/AhmadHassan-BTed/Jantt/blob/main/plan.json");
+      expect(result.data.meta?.title).toBe("Cloud Project Roadmap");
+      expect(result.taskCount).toBe(1);
+      expect(result.title).toBe("Cloud Project Roadmap");
+      expect(result.info.provider).toBe("github");
+    });
+
+    it("handles 404 file not found error", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: "Not Found"
+      });
+      global.fetch = mockFetch;
+
+      await expect(fetchRemotePlan("https://api.example.com/missing.json")).rejects.toThrow("File not found (404)");
+    });
+
+    it("handles invalid JSON response", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => "<html><body>Error page</body></html>"
+      });
+      global.fetch = mockFetch;
+
+      await expect(fetchRemotePlan("https://drive.google.com/file/d/12345/view")).rejects.toThrow("HTML page instead of JSON");
+    });
+
+    it("handles invalid Jantt schema", async () => {
+      const invalidPlan = {
+        meta: { title: "Bad Plan" },
+        tasks: [
+          { id: "t1", label: "Invalid Date Task", category: "dev", start: "not-a-date", end: "2026-09-10" }
+        ]
+      };
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(invalidPlan)
+      });
+      global.fetch = mockFetch;
+
+      await expect(fetchRemotePlan("https://example.com/bad.json")).rejects.toThrow("not a valid Jantt plan");
+    });
+  });
+});

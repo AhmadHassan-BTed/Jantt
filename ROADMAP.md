@@ -45,13 +45,19 @@ To be the world's most capable, lightweight, dependency-free Gantt chart engine 
 - [ ] **Virtual Scrolling**:
   - Ultra-high performance rendering for 5,000+ tasks.
 
-### Phase 4: AI & Collaborative Ecosystem (v2.0.0 Vision) [Planned]
+### Phase 4: Cloud Sync & Collaborative Ecosystem (v2.0.0 Vision) [Planned]
+- [ ] **Google Drive OAuth App-Connected Cloud Sync**:
+  - Full Google Identity Services (GIS) OAuth 2.0 integration.
+  - Automatic bidirectional syncing to personal Google Drive folder (`jantt-plans/`).
+  - Native Google Drive File Picker & Google Workspace share permissions manager.
+  - Real-time multi-user conflict resolution with last-write-wins and 3-way merge prompts.
 - [ ] **Real-Time Multi-Agent Collaboration (CRDTs)**:
   - Yjs / Automerge bindings for real-time collaborative schedule editing.
 - [ ] **AI Natural Language Command Extension**:
   - Built-in prompt tools for Claude, GPT, and Gemini to stream timeline updates directly into Jantt state.
 - [ ] **Vue, Svelte, and Angular Official Wrappers**:
   - Lightweight wrappers for other major web frameworks.
+
 
 ---
 
