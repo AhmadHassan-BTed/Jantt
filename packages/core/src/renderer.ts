@@ -80,12 +80,32 @@ export function renderJantt(
     );
   };
 
-  const handleDayWidthChange = (newWidth: number) => {
-    currentDayWidth = clampDayWidth(newWidth);
+  const handleDayWidthChange = (newWidth: number, anchorClientX?: number) => {
+    const prevDayWidth = currentDayWidth;
+    const clamped = clampDayWidth(newWidth);
+    if (clamped === prevDayWidth) return;
+
+    currentDayWidth = clamped;
     currentScale = getScaleFromDayWidth(currentDayWidth);
     currentOptions.onDayWidthChange?.(currentDayWidth);
     broadcastViewportChange();
+
+    const bodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
+    let newScrollLeft: number | null = null;
+    if (bodyWrap && anchorClientX !== undefined) {
+      const rect = bodyWrap.getBoundingClientRect();
+      const mouseViewportX = anchorClientX - rect.left;
+      const mouseContentX = mouseViewportX + bodyWrap.scrollLeft;
+      const ratio = currentDayWidth / prevDayWidth;
+      newScrollLeft = Math.max(0, mouseContentX * ratio - mouseViewportX);
+    }
+
     render();
+
+    if (newScrollLeft !== null) {
+      const newBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
+      if (newBodyWrap) newBodyWrap.scrollLeft = newScrollLeft;
+    }
   };
 
   container.innerHTML = "";
@@ -412,7 +432,7 @@ export function renderJantt(
     const timelineHeader = renderTimelineHeader(header, {
       selectedDate: selectedDateFilter,
       dayWidth: currentDayWidth,
-      onColumnResize: handleDayWidthChange,
+      onColumnResize: (w, clientX) => handleDayWidthChange(w, clientX),
       onDateClick: (dateStr: string) => {
         selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
         currentOptions.onDateClick?.(dateStr);
