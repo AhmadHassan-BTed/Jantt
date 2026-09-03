@@ -270,6 +270,7 @@ export interface JanttOptions {
   onTaskClick?: (task: Task) => void;
   onDateClick?: (dateStr: string) => void;
   onClearDateFilter?: () => void;
+  onDayWidthChange?: (dayWidth: number) => void;
   onTaskDelete?: (taskId: string) => void;
   onTaskAdd?: (newTask: Task) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;

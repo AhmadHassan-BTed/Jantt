@@ -325,6 +325,104 @@
   transform: scale(0.92);
 }
 
+/* Continuous Zoom Slider */
+.jantt-zoom-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--jantt-surface-solid);
+  border: 1px solid var(--jantt-border);
+  border-radius: 8px;
+  padding: 3px 8px;
+  box-sizing: border-box;
+  height: 28px;
+}
+
+.jantt-zoom-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--jantt-text-muted);
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.jantt-zoom-btn:hover {
+  background: var(--jantt-surface-hover);
+  color: var(--jantt-accent);
+}
+
+.jantt-zoom-btn:active {
+  transform: scale(0.92);
+}
+
+.jantt-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 76px;
+  height: 4px;
+  background: var(--jantt-border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  margin: 0 2px;
+  transition: background 0.15s ease;
+}
+
+.jantt-zoom-slider:hover {
+  background: var(--jantt-border-focus, var(--jantt-accent));
+}
+
+.jantt-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--jantt-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jantt-zoom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.5));
+}
+
+.jantt-zoom-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--jantt-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jantt-zoom-slider::-moz-range-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.5));
+}
+
+.jantt-zoom-label {
+  font-size: 10px;
+  font-family: var(--jantt-font-mono);
+  font-weight: 700;
+  color: var(--jantt-text-dim);
+  min-width: 28px;
+  text-align: right;
+  user-select: none;
+}
+
 /* Search Bar */
 .jantt-search-box {
   display: flex;
@@ -642,6 +740,26 @@
 .jantt-day-cell.is-date-selected .jantt-day-num,
 .jantt-day-cell.is-date-selected .jantt-boundary-marker {
   color: #FFFFFF !important;
+}
+
+/* Draggable Timeline Column Resize Handle */
+.jantt-col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  touch-action: none;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.jantt-col-resize-handle:hover,
+.jantt-col-resize-handle:active {
+  background: var(--jantt-accent);
+  box-shadow: 0 0 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.6));
 }
 
 .jantt-day-name {

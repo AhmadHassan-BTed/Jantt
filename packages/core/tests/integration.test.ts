@@ -483,5 +483,108 @@ describe("Stress & Boundary Tests", () => {
       chart.destroy();
       document.body.removeChild(container);
     });
+
+    it("supports continuous timeline zoom via zoom slider and adjusts scale automatically", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const testData: JanttData = {
+        tasks: [
+          { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05" }
+        ]
+      };
+
+      let reportedDayWidth: number | null = null;
+      let reportedScale: string | null = null;
+
+      const chart = renderJantt(container, testData, {
+        onDayWidthChange: (dw) => {
+          reportedDayWidth = dw;
+        },
+        onViewportChange: (vp) => {
+          reportedScale = vp.scale || null;
+        }
+      });
+
+      // Find zoom slider
+      const slider = container.querySelector<HTMLInputElement>(".jantt-zoom-slider");
+      expect(slider).not.toBeNull();
+      expect(parseFloat(slider!.value)).toBeGreaterThan(0);
+
+      // Slide to 8px (Month scale range: 5 <= dayWidth < 12)
+      slider!.value = "8";
+      slider!.dispatchEvent(new Event("input"));
+
+      expect(chart.getDayWidth?.()).toBe(8);
+      expect(reportedDayWidth).toBe(8);
+      expect(reportedScale).toBe("month");
+
+      // Verify active preset button automatically switched to "month"
+      const monthBtn = Array.from(container.querySelectorAll<HTMLButtonElement>(".jantt-scale-btn")).find(
+        (b) => b.textContent?.trim().toLowerCase() === "month"
+      );
+      expect(monthBtn?.classList.contains("is-active")).toBe(true);
+
+      // Slide to 50px (Day scale range: >= 28px)
+      slider!.value = "50";
+      slider!.dispatchEvent(new Event("input"));
+
+      expect(chart.getDayWidth?.()).toBe(50);
+      expect(reportedScale).toBe("day");
+
+      // Verify zoom in / out stepper buttons
+      const zoomOutBtn = container.querySelector<HTMLButtonElement>(".jantt-zoom-btn.is-zoom-out");
+      expect(zoomOutBtn).not.toBeNull();
+      zoomOutBtn!.click();
+      expect(chart.getDayWidth?.()).toBeLessThan(50);
+
+      chart.destroy();
+      document.body.removeChild(container);
+    });
+
+    it("supports draggable column length resize via header handle and Ctrl+Wheel zoom", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const testData: JanttData = {
+        tasks: [
+          { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05" }
+        ]
+      };
+
+      let changedWidth: number | null = null;
+      const chart = renderJantt(container, testData, {
+        onDayWidthChange: (w) => {
+          changedWidth = w;
+        }
+      });
+
+      // Test programmatic setDayWidth
+      chart.setDayWidth?.(20); // Week scale (12 <= dw < 28)
+      expect(chart.getDayWidth?.()).toBe(20);
+      expect(changedWidth).toBe(20);
+
+      // Test resize handles present in header
+      const resizeHandle = container.querySelector<HTMLElement>(".jantt-col-resize-handle");
+      expect(resizeHandle).not.toBeNull();
+
+      // Test Ctrl + Wheel zoom on bodyWrap
+      const bodyWrap = container.querySelector<HTMLElement>(".jantt-body-wrap");
+      expect(bodyWrap).not.toBeNull();
+
+      const initialWidth = chart.getDayWidth?.() || 20;
+      const wheelEvt = new WheelEvent("wheel", {
+        deltaY: -100, // Zoom in
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true
+      });
+      bodyWrap!.dispatchEvent(wheelEvt);
+
+      expect(chart.getDayWidth?.()).toBeGreaterThan(initialWidth);
+
+      chart.destroy();
+      document.body.removeChild(container);
+    });
   });
 });

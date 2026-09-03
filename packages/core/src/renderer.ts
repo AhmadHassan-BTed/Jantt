@@ -1,5 +1,5 @@
 import { JanttData, JanttOptions, Task, TimeScale, LinkRoutingStyle, RowHeightMode } from "./types";
-import { layout, computeDependencyPath } from "./layout";
+import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "./layout";
 import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
 import { resolveSchedule, getTaskDependencies } from "./resolver";
@@ -20,6 +20,8 @@ export interface JanttInstance {
   getData: () => JanttData;
   filterByDate?: (dateStr: string | null) => void;
   getSelectedDate?: () => string | null;
+  setDayWidth?: (dayWidth: number) => void;
+  getDayWidth?: () => number;
 }
 
 /**
@@ -37,6 +39,10 @@ export function renderJantt(
   };
   let currentOptions: JanttOptions = { ...options };
   let currentScale: TimeScale = currentOptions.viewport?.scale || currentData.meta?.scale || "day";
+  let currentDayWidth: number =
+    currentOptions.viewport?.dayWidth ||
+    SCALE_DAY_WIDTHS[currentScale] ||
+    36;
   let currentRouting: LinkRoutingStyle = currentOptions.viewport?.linkRouting || currentData.meta?.linkRouting || "orthogonal";
   let rowHeightMode: RowHeightMode = currentOptions.viewport?.rowHeightMode || "fit";
   let customRowHeight: number = currentOptions.viewport?.rowHeight || 46;
@@ -45,6 +51,23 @@ export function renderJantt(
   let labelWidth = currentOptions.viewport?.labelWidth || 340;
   let filterQuery = currentOptions.searchQuery || "";
   let selectedDateFilter: string | null = currentOptions.selectedDate ?? currentOptions.viewport?.selectedDate ?? null;
+
+  const handleDayWidthChange = (newWidth: number) => {
+    currentDayWidth = Math.max(1.2, Math.min(100, Math.round(newWidth * 10) / 10));
+    currentScale = getScaleFromDayWidth(currentDayWidth);
+    currentOptions.onDayWidthChange?.(currentDayWidth);
+    currentOptions.onViewportChange?.({
+      scale: currentScale,
+      dayWidth: currentDayWidth,
+      linkRouting: currentRouting,
+      rowHeight: customRowHeight,
+      rowHeightMode,
+      showCriticalPath: showCritical,
+      showBaselines,
+      selectedDate: selectedDateFilter
+    });
+    render();
+  };
 
   container.innerHTML = "";
   const root = document.createElement("div");
@@ -201,6 +224,7 @@ export function renderJantt(
       {
         ...currentOptions.viewport,
         scale: currentScale,
+        dayWidth: currentDayWidth,
         linkRouting: currentRouting,
         rowHeight: effectiveRowHeight,
         rowHeightMode,
@@ -263,16 +287,20 @@ export function renderJantt(
       currentScale,
       currentRouting,
       rowHeightMode,
-      rowHeight: customRowHeight,
+      rowHeight: effectiveRowHeight,
       showCritical,
       criticalCount: criticalTaskIds.size,
       searchQuery: filterQuery,
-      autoCascade: controller ? controller.isAutoCascade() : true,
-      onAddTask: currentOptions.readOnly ? undefined : handleAddTask,
+      autoCascade: controller.isAutoCascade(),
+      dayWidth: currentDayWidth,
+      onDayWidthChange: handleDayWidthChange,
       onScaleChange: (s) => {
         currentScale = s;
+        currentDayWidth = SCALE_DAY_WIDTHS[s] || 36;
+        currentOptions.onDayWidthChange?.(currentDayWidth);
         currentOptions.onViewportChange?.({
           scale: currentScale,
+          dayWidth: currentDayWidth,
           linkRouting: currentRouting,
           rowHeight: customRowHeight,
           rowHeightMode,
@@ -367,6 +395,44 @@ export function renderJantt(
     if (rowHeightMode === "fit") {
       bodyWrap.style.overflowY = "hidden";
     }
+
+    // Ctrl + Wheel / Cmd + Wheel zoom anchored to cursor
+    bodyWrap.addEventListener("wheel", (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+        const rect = bodyWrap.getBoundingClientRect();
+        const mouseViewportX = e.clientX - rect.left;
+        const mouseContentX = mouseViewportX + bodyWrap.scrollLeft;
+
+        const prevDayWidth = currentDayWidth;
+        const newDayWidth = Math.max(1.2, Math.min(100, Math.round((currentDayWidth * zoomFactor) * 10) / 10));
+        if (newDayWidth !== prevDayWidth) {
+          currentDayWidth = newDayWidth;
+          currentScale = getScaleFromDayWidth(currentDayWidth);
+          currentOptions.onDayWidthChange?.(currentDayWidth);
+          currentOptions.onViewportChange?.({
+            scale: currentScale,
+            dayWidth: currentDayWidth,
+            linkRouting: currentRouting,
+            rowHeight: customRowHeight,
+            rowHeightMode,
+            showCriticalPath: showCritical,
+            showBaselines,
+            selectedDate: selectedDateFilter
+          });
+
+          const ratio = newDayWidth / prevDayWidth;
+          const newScrollLeft = Math.max(0, mouseContentX * ratio - mouseViewportX);
+          render();
+          requestAnimationFrame(() => {
+            const newBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
+            if (newBodyWrap) newBodyWrap.scrollLeft = newScrollLeft;
+          });
+        }
+      }
+    }, { passive: false });
+
     root.appendChild(bodyWrap);
 
     // 6. Right Timeline Area Container
@@ -378,11 +444,14 @@ export function renderJantt(
     // 6a. Timeline Header
     const timelineHeader = renderTimelineHeader(header, {
       selectedDate: selectedDateFilter,
+      dayWidth: currentDayWidth,
+      onColumnResize: handleDayWidthChange,
       onDateClick: (dateStr: string) => {
         selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
         currentOptions.onDateClick?.(dateStr);
         currentOptions.onViewportChange?.({
           scale: currentScale,
+          dayWidth: currentDayWidth,
           linkRouting: currentRouting,
           rowHeight: customRowHeight,
           rowHeightMode,
@@ -543,7 +612,13 @@ export function renderJantt(
         if (newOpts.themeClassName !== undefined || newOpts.className !== undefined) {
           root.className = `jantt-container ${currentOptions.themeClassName || ""} ${currentOptions.className || ""}`.trim();
         }
-        if (newOpts.viewport?.scale) currentScale = newOpts.viewport.scale;
+        if (newOpts.viewport?.dayWidth !== undefined) {
+          currentDayWidth = newOpts.viewport.dayWidth;
+          currentScale = getScaleFromDayWidth(currentDayWidth);
+        } else if (newOpts.viewport?.scale) {
+          currentScale = newOpts.viewport.scale;
+          currentDayWidth = SCALE_DAY_WIDTHS[currentScale] || 36;
+        }
         if (newOpts.viewport?.linkRouting) currentRouting = newOpts.viewport.linkRouting;
         if (newOpts.viewport?.rowHeight !== undefined) customRowHeight = newOpts.viewport.rowHeight;
         if (newOpts.viewport?.rowHeightMode !== undefined) rowHeightMode = newOpts.viewport.rowHeightMode;
@@ -570,6 +645,7 @@ export function renderJantt(
       selectedDateFilter = dateStr;
       currentOptions.onViewportChange?.({
         scale: currentScale,
+        dayWidth: currentDayWidth,
         linkRouting: currentRouting,
         rowHeight: customRowHeight,
         rowHeightMode,
@@ -579,6 +655,8 @@ export function renderJantt(
       });
       render();
     },
-    getSelectedDate: () => selectedDateFilter
+    getSelectedDate: () => selectedDateFilter,
+    setDayWidth: (w: number) => handleDayWidthChange(w),
+    getDayWidth: () => currentDayWidth
   };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { layout } from "../src/layout";
+import { layout, getScaleFromDayWidth } from "../src/layout";
 import { JanttData, JanttLayoutResult } from "../src/types";
 import constructionJson from "../../../examples/construction-enterprise.json";
 import basicJson from "../../../examples/basic.json";
@@ -301,5 +301,45 @@ describe("Layout Engine", () => {
     expect(res.viewport.rowHeight).toBe(32);
     expect(res.viewport.rowHeightMode).toBe("fit");
     expect(res.canvasHeight).toBe(2 * 32);
+  });
+
+  // ─── Continuous dayWidth & Auto-Scale Transition ─────────────────────
+
+  it("derives scale tier from continuous dayWidth via getScaleFromDayWidth", () => {
+    expect(getScaleFromDayWidth(45)).toBe("day");
+    expect(getScaleFromDayWidth(28)).toBe("day");
+    expect(getScaleFromDayWidth(27.9)).toBe("week");
+    expect(getScaleFromDayWidth(18)).toBe("week");
+    expect(getScaleFromDayWidth(12)).toBe("week");
+    expect(getScaleFromDayWidth(11.9)).toBe("month");
+    expect(getScaleFromDayWidth(7)).toBe("month");
+    expect(getScaleFromDayWidth(5)).toBe("month");
+    expect(getScaleFromDayWidth(4.9)).toBe("quarter");
+    expect(getScaleFromDayWidth(3)).toBe("quarter");
+    expect(getScaleFromDayWidth(2.2)).toBe("quarter");
+    expect(getScaleFromDayWidth(2.1)).toBe("year");
+    expect(getScaleFromDayWidth(1.2)).toBe("year");
+  });
+
+  it("auto-adjusts scale tier in layout() when continuous dayWidth is provided", () => {
+    const resDay = layout(sampleData, { dayWidth: 40 });
+    expect(resDay.header.scale).toBe("day");
+    expect(resDay.viewport.dayWidth).toBe(40);
+
+    const resWeek = layout(sampleData, { dayWidth: 20 });
+    expect(resWeek.header.scale).toBe("week");
+    expect(resWeek.viewport.dayWidth).toBe(20);
+
+    const resMonth = layout(sampleData, { dayWidth: 8 });
+    expect(resMonth.header.scale).toBe("month");
+    expect(resMonth.viewport.dayWidth).toBe(8);
+
+    const resQuarter = layout(sampleData, { dayWidth: 3.5 });
+    expect(resQuarter.header.scale).toBe("quarter");
+    expect(resQuarter.viewport.dayWidth).toBe(3.5);
+
+    const resYear = layout(sampleData, { dayWidth: 1.5 });
+    expect(resYear.header.scale).toBe("year");
+    expect(resYear.viewport.dayWidth).toBe(1.5);
   });
 });

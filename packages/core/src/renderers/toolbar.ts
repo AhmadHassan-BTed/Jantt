@@ -12,6 +12,8 @@ export interface ToolbarProps {
   searchQuery: string;
   autoCascade: boolean;
   selectedDate?: string | null;
+  dayWidth: number;
+  onDayWidthChange: (dayWidth: number) => void;
   onScaleChange: (scale: TimeScale) => void;
   onRoutingChange: (routing: LinkRoutingStyle) => void;
   onRowHeightModeChange: (mode: RowHeightMode) => void;
@@ -45,10 +47,10 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   const controls = document.createElement("div");
   controls.className = "jantt-toolbar-controls";
 
-  // Scale Segmented Control
+  // Scale Segmented Control (Presets)
   const scaleGroup = document.createElement("div");
   scaleGroup.className = "jantt-scale-group";
-  scaleGroup.title = "Timeline Zoom Scale";
+  scaleGroup.title = "Timeline Zoom Presets";
   (["day", "week", "month", "quarter", "year"] as TimeScale[]).forEach((s) => {
     const btn = document.createElement("button");
     btn.className = `jantt-scale-btn ${s === props.currentScale ? "is-active" : ""}`;
@@ -57,6 +59,49 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     scaleGroup.appendChild(btn);
   });
   controls.appendChild(scaleGroup);
+
+  // Continuous Zoom Slider Control
+  const zoomSliderWrap = document.createElement("div");
+  zoomSliderWrap.className = "jantt-zoom-slider-wrap";
+  zoomSliderWrap.title = "Timeline Zoom (or Ctrl + Scroll on chart)";
+  zoomSliderWrap.innerHTML = `
+    <button type="button" class="jantt-zoom-btn is-zoom-out" aria-label="Zoom out" title="Zoom out (−)">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
+    <input type="range" class="jantt-zoom-slider" min="1.2" max="75" step="0.5" value="${props.dayWidth}" />
+    <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
+    <span class="jantt-zoom-label">${Math.round(props.dayWidth)}px</span>
+  `;
+
+  const zoomSlider = zoomSliderWrap.querySelector<HTMLInputElement>(".jantt-zoom-slider")!;
+  const zoomOutBtn = zoomSliderWrap.querySelector<HTMLButtonElement>(".is-zoom-out")!;
+  const zoomInBtn = zoomSliderWrap.querySelector<HTMLButtonElement>(".is-zoom-in")!;
+
+  zoomSlider.addEventListener("input", (e) => {
+    const val = parseFloat((e.target as HTMLInputElement).value);
+    if (!isNaN(val) && val > 0) {
+      props.onDayWidthChange(val);
+    }
+  });
+
+  zoomOutBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    props.onDayWidthChange(Math.max(1.2, Math.round((props.dayWidth / 1.25) * 10) / 10));
+  });
+
+  zoomInBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    props.onDayWidthChange(Math.min(75, Math.round((props.dayWidth * 1.25) * 10) / 10));
+  });
+
+  controls.appendChild(zoomSliderWrap);
 
   // Row Height: Fit Mode vs Custom px Control
   const rowHeightGroup = document.createElement("div");

@@ -23,7 +23,7 @@ export * from "./remote-sync";
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
 import { resolveSchedule, calculateCriticalPath, getTaskDependencies } from "./resolver";
-import { layout, computeDependencyPath } from "./layout";
+import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "./layout";
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
 import { themeManager } from "./themes";
@@ -38,6 +38,8 @@ export const Jantt = {
   getTaskDependencies,
   layout,
   computeDependencyPath,
+  getScaleFromDayWidth,
+  SCALE_DAY_WIDTHS,
   exportToCsv,
   downloadCsv,
   downloadJson,
