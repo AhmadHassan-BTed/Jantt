@@ -367,9 +367,9 @@ describe("Stress & Boundary Tests", () => {
 
       const testData: JanttData = {
         tasks: [
-          { id: "t1", label: "Task 1", start: "2026-09-01", end: "2026-09-05" },
-          { id: "t2", label: "Task 2", start: "2026-09-06", end: "2026-09-10" },
-          { id: "t3", label: "Task 3", start: "2026-09-03", end: "2026-09-08" }
+          { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+          { id: "t2", label: "Task 2", category: "dev", start: "2026-09-06", end: "2026-09-10" },
+          { id: "t3", label: "Task 3", category: "dev", start: "2026-09-03", end: "2026-09-08" }
         ]
       };
 

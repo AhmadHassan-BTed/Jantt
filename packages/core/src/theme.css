@@ -280,11 +280,13 @@
   font-weight: 600;
   text-align: center;
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .jantt-rowheight-input::-webkit-outer-spin-button,
 .jantt-rowheight-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
+  appearance: none;
   margin: 0;
 }
 
