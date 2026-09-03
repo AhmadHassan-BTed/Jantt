@@ -308,6 +308,7 @@ export function renderJantt(
       rowHeightMode,
       rowHeight: effectiveRowHeight,
       showCritical,
+      showBaselines,
       criticalCount: criticalTaskIds.size,
       searchQuery: filterQuery,
       autoCascade: controller.isAutoCascade(),
@@ -338,6 +339,11 @@ export function renderJantt(
       },
       onCriticalToggle: () => {
         showCritical = !showCritical;
+        broadcastViewportChange();
+        render();
+      },
+      onBaselinesToggle: () => {
+        showBaselines = !showBaselines;
         broadcastViewportChange();
         render();
       },
