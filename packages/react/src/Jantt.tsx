@@ -13,6 +13,7 @@ export interface JanttProps {
   selectedDate?: string | null;
   onDateClick?: (dateStr: string) => void;
   onClearDateFilter?: () => void;
+  onDayWidthChange?: (dayWidth: number) => void;
   renderDetail?: (
     task: Task,
     container: HTMLElement,
@@ -41,6 +42,7 @@ export const Jantt: React.FC<JanttProps> = ({
   selectedDate,
   onDateClick,
   onClearDateFilter,
+  onDayWidthChange,
   renderDetail,
   viewport,
   theme,
@@ -66,6 +68,7 @@ export const Jantt: React.FC<JanttProps> = ({
       selectedDate,
       onDateClick,
       onClearDateFilter,
+      onDayWidthChange,
       onChange,
       onCommit,
       onViewportChange,
@@ -94,6 +97,7 @@ export const Jantt: React.FC<JanttProps> = ({
         selectedDate,
         onDateClick,
         onClearDateFilter,
+        onDayWidthChange,
         onChange,
         onCommit,
         onViewportChange,
@@ -103,7 +107,7 @@ export const Jantt: React.FC<JanttProps> = ({
         renderDetail
       });
     }
-  }, [data, viewport, theme, themeClassName, className, readOnly, sidebarContainer, selectedDate, onDateClick, onClearDateFilter, onChange, onCommit, onViewportChange, onTaskClick, onTaskDelete, onTaskAdd, renderDetail]);
+  }, [data, viewport, theme, themeClassName, className, readOnly, sidebarContainer, selectedDate, onDateClick, onClearDateFilter, onDayWidthChange, onChange, onCommit, onViewportChange, onTaskClick, onTaskDelete, onTaskAdd, renderDetail]);
 
   return (
     <div

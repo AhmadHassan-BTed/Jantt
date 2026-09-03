@@ -31,13 +31,29 @@ const DEFAULT_CATEGORY: Category = {
   soft: "#1E293B"
 };
 
-const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
+export const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
   day: 36,
   week: 18,
   month: 7,
   quarter: 3,
   year: 1.5
 };
+
+/**
+ * Derives the optimal header scale tier from a continuous day width in pixels.
+ * - dayWidth >= 28px: Day tier (detailed dates and day names)
+ * - 12px <= dayWidth < 28px: Week tier (compact week grouping)
+ * - 5px <= dayWidth < 12px: Month tier (month grouping with milestones)
+ * - 2.2px <= dayWidth < 5px: Quarter tier (quarterly grouping)
+ * - dayWidth < 2.2px: Year tier (multi-year high-level roadmap)
+ */
+export function getScaleFromDayWidth(dayWidth: number): TimeScale {
+  if (dayWidth >= 28) return "day";
+  if (dayWidth >= 12) return "week";
+  if (dayWidth >= 5) return "month";
+  if (dayWidth >= 2.2) return "quarter";
+  return "year";
+}
 
 const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> = {
   dayWidth: 32,
@@ -65,10 +81,23 @@ export function layout(
   const tasks = data.tasks || [];
   const categories = data.categories || {};
 
-  const scale: TimeScale =
-    viewportOptions.scale || data.meta?.scale || "day";
+  // Auto-adjust scale tier based on continuous dayWidth
+  let scale: TimeScale;
+  let dayWidth: number;
 
-  const defaultDayWidth = SCALE_DAY_WIDTHS[scale] || 32;
+  if (viewportOptions.dayWidth !== undefined && viewportOptions.scale === undefined) {
+    dayWidth = Math.max(0.8, Math.min(120, viewportOptions.dayWidth));
+    scale = getScaleFromDayWidth(dayWidth);
+  } else if (viewportOptions.scale !== undefined && viewportOptions.dayWidth === undefined) {
+    scale = viewportOptions.scale;
+    dayWidth = SCALE_DAY_WIDTHS[scale] || 32;
+  } else if (viewportOptions.dayWidth !== undefined && viewportOptions.scale !== undefined) {
+    dayWidth = Math.max(0.8, Math.min(120, viewportOptions.dayWidth));
+    scale = getScaleFromDayWidth(dayWidth);
+  } else {
+    scale = data.meta?.scale || "day";
+    dayWidth = SCALE_DAY_WIDTHS[scale] || 32;
+  }
 
   const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> & {
     columns?: ViewportOptions["columns"];
@@ -76,7 +105,7 @@ export function layout(
     selectedDate?: string | null;
   } = {
     ...DEFAULT_VIEWPORT,
-    dayWidth: viewportOptions.dayWidth || defaultDayWidth,
+    dayWidth,
     scale,
     linkRouting: viewportOptions.linkRouting || data.meta?.linkRouting || "orthogonal",
     showCriticalPath: viewportOptions.showCriticalPath ?? (data.meta?.showCriticalPath ?? false),

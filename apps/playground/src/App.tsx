@@ -357,6 +357,7 @@ export function App() {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [currentScale, setCurrentScale] = useState<TimeScale>(init.initialScale);
+  const [currentDayWidth, setCurrentDayWidth] = useState<number | undefined>(undefined);
   const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>(init.initialRouting);
   const [rowHeightMode, setRowHeightMode] = useState<RowHeightMode>(init.initialRowHeightMode);
   const [rowHeight, setRowHeight] = useState<number>(init.initialRowHeight);
@@ -1694,8 +1695,12 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       onClearDateFilter={() => {
                         setDateFilterMode("all");
                       }}
+                      onDayWidthChange={(dw) => {
+                        setCurrentDayWidth(dw);
+                      }}
                       onViewportChange={(vp) => {
                         if (vp.scale) setCurrentScale(vp.scale);
+                        if (vp.dayWidth !== undefined) setCurrentDayWidth(vp.dayWidth);
                         if (vp.linkRouting) setLinkRouting(vp.linkRouting);
                         if (vp.rowHeight !== undefined) setRowHeight(vp.rowHeight);
                         if (vp.rowHeightMode !== undefined) setRowHeightMode(vp.rowHeightMode);
@@ -1712,7 +1717,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                           }
                         }
                       }}
-                      viewport={{ scale: currentScale, linkRouting, rowHeight, rowHeightMode, showCriticalPath, showBaselines, selectedDate: dateFilterActiveDate }}
+                      viewport={{ scale: currentScale, dayWidth: currentDayWidth, linkRouting, rowHeight, rowHeightMode, showCriticalPath, showBaselines, selectedDate: dateFilterActiveDate }}
                       theme={activeTheme.vars}
                       themeClassName={activeTheme.className}
                     />
