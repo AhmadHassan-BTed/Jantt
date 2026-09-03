@@ -6,6 +6,7 @@ export interface TimelineGridProps {
   rowHeight: number;
   showToday: boolean;
   hasAddRow?: boolean;
+  selectedDate?: string | null;
 }
 
 /**
@@ -21,7 +22,10 @@ export function renderTimelineGrid(props: TimelineGridProps): {
   // 1. Vertical day column boundary grid lines extending from header day cells
   props.header.days.forEach((d) => {
     const col = document.createElement("div");
-    col.className = `jantt-grid-day-col ${d.isWeekend ? "is-weekend" : ""}`;
+    const isSelected = props.selectedDate === d.dateStr;
+    col.className = `jantt-grid-day-col ${d.isWeekend ? "is-weekend" : ""} ${
+      isSelected ? "is-selected-date-col" : ""
+    }`.trim();
     col.style.left = `${d.x}px`;
     col.style.width = `${d.width}px`;
     gridLayer.appendChild(col);

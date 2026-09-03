@@ -3,7 +3,7 @@ import { layout, computeDependencyPath } from "./layout";
 import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
 import { resolveSchedule, getTaskDependencies } from "./resolver";
-import { addDays, getTodayISODate, parseISODate } from "./date-math";
+import { addDays, getTodayISODate, isTaskOnDate, parseISODate } from "./date-math";
 import {
   renderToolbar,
   renderGridTable,
@@ -18,6 +18,8 @@ export interface JanttInstance {
   update: (data: JanttData, options?: Partial<JanttOptions>) => void;
   destroy: () => void;
   getData: () => JanttData;
+  filterByDate?: (dateStr: string | null) => void;
+  getSelectedDate?: () => string | null;
 }
 
 /**
@@ -42,6 +44,7 @@ export function renderJantt(
   let showBaselines = currentOptions.viewport?.showBaselines ?? (currentData.meta?.showBaselines ?? true);
   let labelWidth = currentOptions.viewport?.labelWidth || 340;
   let filterQuery = currentOptions.searchQuery || "";
+  let selectedDateFilter: string | null = currentOptions.selectedDate || null;
 
   container.innerHTML = "";
   const root = document.createElement("div");
@@ -164,6 +167,12 @@ export function renderJantt(
         (t.category || "").toLowerCase().includes(q) ||
         (t.notes || "").toLowerCase().includes(q)
       );
+    }
+    if (selectedDateFilter) {
+      displayTasks = displayTasks.filter((t) => {
+        if (!t.start || !t.end) return false;
+        return isTaskOnDate(t.start, t.end, selectedDateFilter!);
+      });
     }
 
     // 2. Dynamic Row Height Calculation
@@ -324,6 +333,11 @@ export function renderJantt(
         controller.toggleAutoCascade();
         render();
       },
+      selectedDate: selectedDateFilter,
+      onClearDateFilter: () => {
+        selectedDateFilter = null;
+        render();
+      },
       onSearchChange: (q) => {
         filterQuery = q;
         render();
@@ -346,7 +360,14 @@ export function renderJantt(
     timelineArea.style.minWidth = `${canvasWidth}px`;
 
     // 6a. Timeline Header
-    const timelineHeader = renderTimelineHeader(header);
+    const timelineHeader = renderTimelineHeader(header, {
+      selectedDate: selectedDateFilter,
+      onDateClick: (dateStr: string) => {
+        selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
+        currentOptions.onDateClick?.(dateStr);
+        render();
+      }
+    });
     timelineArea.appendChild(timelineHeader);
 
     // 6b. Canvas Body Container
@@ -379,7 +400,8 @@ export function renderJantt(
       taskLayouts,
       rowHeight: viewport.rowHeight,
       showToday: viewport.showToday,
-      hasAddRow
+      hasAddRow,
+      selectedDate: selectedDateFilter
     });
     gridContainer.appendChild(gridLayer);
     if (todayLine) gridContainer.appendChild(todayLine);
@@ -468,6 +490,15 @@ export function renderJantt(
     resizeObserver.observe(container);
   }
 
+  let todayTimer: any = null;
+  if (typeof window !== "undefined") {
+    todayTimer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "hidden") {
+        render();
+      }
+    }, 60000);
+  }
+
   render();
 
   return {
@@ -493,16 +524,23 @@ export function renderJantt(
         if (newOpts.viewport?.rowHeightMode !== undefined) rowHeightMode = newOpts.viewport.rowHeightMode;
         if (newOpts.viewport?.showCriticalPath !== undefined) showCritical = newOpts.viewport.showCriticalPath;
         if (newOpts.viewport?.showBaselines !== undefined) showBaselines = newOpts.viewport.showBaselines;
+        if (newOpts.selectedDate !== undefined) selectedDateFilter = newOpts.selectedDate;
         tooltip.updateTheme(currentOptions.theme, currentOptions.themeClassName);
       }
       render();
     },
     destroy: () => {
+      if (todayTimer) clearInterval(todayTimer);
       resizeObserver?.disconnect();
       tooltip.hide();
       activeSidebarInstance?.close();
       container.innerHTML = "";
     },
-    getData: () => currentData
+    getData: () => currentData,
+    filterByDate: (dateStr: string | null) => {
+      selectedDateFilter = dateStr;
+      render();
+    },
+    getSelectedDate: () => selectedDateFilter
   };
 }

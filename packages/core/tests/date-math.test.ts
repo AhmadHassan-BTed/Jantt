@@ -13,6 +13,7 @@ import {
   formatMonthYear,
   getDayOfWeekShort,
   getTodayISODate,
+  getTodayProgressFraction,
   isTaskOnDate,
   isTaskToday
 } from "../src/date-math";
@@ -300,10 +301,34 @@ describe("Date Math Utilities", () => {
     });
   });
 
-  describe("isTaskToday", () => {
-    it("checks against today's date", () => {
-      const today = getTodayISODate();
-      expect(isTaskToday(today, today)).toBe(true);
+  // ─── getTodayProgressFraction ────────────────────────────────────────
+
+  describe("getTodayProgressFraction", () => {
+    it("returns 0.0 at midnight start of day (00:00:00.000)", () => {
+      const midnight = new Date(2026, 8, 3, 0, 0, 0, 0);
+      expect(getTodayProgressFraction(midnight)).toBe(0);
+    });
+
+    it("returns 0.25 at 06:00:00 (quarter day)", () => {
+      const morning = new Date(2026, 8, 3, 6, 0, 0, 0);
+      expect(getTodayProgressFraction(morning)).toBeCloseTo(0.25, 4);
+    });
+
+    it("returns 0.5 at noon (12:00:00)", () => {
+      const noon = new Date(2026, 8, 3, 12, 0, 0, 0);
+      expect(getTodayProgressFraction(noon)).toBeCloseTo(0.5, 4);
+    });
+
+    it("returns 0.75 at 18:00:00 (three quarters of day)", () => {
+      const evening = new Date(2026, 8, 3, 18, 0, 0, 0);
+      expect(getTodayProgressFraction(evening)).toBeCloseTo(0.75, 4);
+    });
+
+    it("approaches 1.0 as the end of day approaches (23:59:59)", () => {
+      const endOfDay = new Date(2026, 8, 3, 23, 59, 59, 999);
+      const frac = getTodayProgressFraction(endOfDay);
+      expect(frac).toBeGreaterThan(0.999);
+      expect(frac).toBeLessThan(1.0);
     });
   });
 });

@@ -1,11 +1,17 @@
 import { GridHeader } from "../types";
 
+export interface TimelineHeaderOptions {
+  selectedDate?: string | null;
+  onDateClick?: (dateStr: string) => void;
+}
+
 /**
  * Renders the multi-tier sticky timeline header (Years, Months, Weekdays, Dates).
  * Dynamically adapts the days tier to prevent text squishing on zoomed-out scales (Month, Quarter, Year)
  * by only rendering legible boundary dates where tasks start or finish.
+ * Day cells are interactive and clickable to filter tasks active on that date.
  */
-export function renderTimelineHeader(header: GridHeader): HTMLElement {
+export function renderTimelineHeader(header: GridHeader, options?: TimelineHeaderOptions): HTMLElement {
   const timelineHeader = document.createElement("div");
   timelineHeader.className = "jantt-timeline-header";
   timelineHeader.style.height = `${header.totalHeight}px`;
@@ -46,11 +52,24 @@ export function renderTimelineHeader(header: GridHeader): HTMLElement {
   header.days.forEach((d) => {
     const dCell = document.createElement("div");
     const isBoundary = Boolean(d.isTaskBoundary);
+    const isSelected = options?.selectedDate === d.dateStr;
     dCell.className = `jantt-day-cell ${d.isWeekend ? "is-weekend" : ""} ${d.isToday ? "is-today" : ""} ${
       isBoundary ? "is-task-boundary" : ""
-    }`;
+    } ${isSelected ? "is-date-selected" : ""}`;
     dCell.style.width = `${d.width}px`;
-    dCell.title = isBoundary ? `${d.dateStr} (Task Start/End Date)` : d.dateStr;
+    dCell.title = isSelected
+      ? `${d.dateStr} (Active filter — click to clear)`
+      : isBoundary
+      ? `${d.dateStr} (Task boundary date — click to show tasks on this date)`
+      : `${d.dateStr} (Click to show tasks on this date)`;
+    dCell.setAttribute("data-date", d.dateStr);
+
+    if (options?.onDateClick) {
+      dCell.addEventListener("click", (e) => {
+        e.stopPropagation();
+        options.onDateClick!(d.dateStr);
+      });
+    }
 
     if (isZoomedOut) {
       // On Month/Quarter/Year scales: ONLY show legible markers on task start/finish boundary dates or today
