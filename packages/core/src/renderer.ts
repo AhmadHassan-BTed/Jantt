@@ -63,6 +63,7 @@ export function renderJantt(
   let labelWidth = currentOptions.viewport?.labelWidth || DEFAULT_LABEL_WIDTH;
   let filterQuery = currentOptions.searchQuery || "";
   let selectedDateFilter: string | null = currentOptions.selectedDate ?? currentOptions.viewport?.selectedDate ?? null;
+  let isSettingsOpen = false;
 
   const broadcastViewportChange = () => {
     currentOptions.onViewportChange?.(
@@ -333,6 +334,10 @@ export function renderJantt(
       searchQuery: filterQuery,
       autoCascade: controller.isAutoCascade(),
       dayWidth: currentDayWidth,
+      isSettingsOpen,
+      onSettingsOpenChange: (open) => {
+        isSettingsOpen = open;
+      },
       onDayWidthChange: handleDayWidthChange,
       onScaleChange: (s) => {
         currentScale = s;

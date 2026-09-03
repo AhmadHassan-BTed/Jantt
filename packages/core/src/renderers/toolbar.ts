@@ -32,6 +32,8 @@ export interface ToolbarProps {
   onAddTask?: () => void;
   onSearchChange: (query: string) => void;
   onClearDateFilter?: () => void;
+  isSettingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -124,7 +126,53 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 
   centerZone.appendChild(zoomStrip);
 
-  // 2b. Critical Path Toggle Button
+  // 2b. Unified Row Height Strip (Vertical Scale & Presets outside)
+  const rowHeightStrip = document.createElement("div");
+  rowHeightStrip.className = "jantt-rowheight-strip";
+  rowHeightStrip.title = "Task Row Height (Vertical Zoom)";
+
+  rowHeightStrip.innerHTML = `
+    <span class="jantt-rowheight-icon" title="Row Height">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M12 3v18M8 6l4-3 4 3M8 18l4 3 4-3"></path>
+      </svg>
+    </span>
+    <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="Drag to adjust task row height (${props.rowHeight}px)" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
+    <span class="jantt-rowheight-label">${props.rowHeightMode === "fit" ? "Fit" : `${props.rowHeight}px`}</span>
+    <span class="jantt-zoom-strip-divider"></span>
+    <div class="jantt-scale-group">
+      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 32 ? "is-active" : ""}" data-val="32" title="Compact task rows (32px)">Compact</button>
+      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 46 ? "is-active" : ""}" data-val="46" title="Default task rows (46px)">Default</button>
+      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 64 ? "is-active" : ""}" data-val="64" title="Spacious task rows (64px)">Spacious</button>
+      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "fit" ? "is-active" : ""}" data-mode="fit" title="Fit mode: dynamically scale row heights so all tasks fit without vertical scrolling">Fit</button>
+    </div>
+  `;
+
+  const rhSlider = rowHeightStrip.querySelector<HTMLInputElement>(".jantt-rowheight-slider")!;
+  rhSlider.addEventListener("input", (e) => {
+    const val = parseInt((e.target as HTMLInputElement).value, 10);
+    if (!isNaN(val)) {
+      props.onRowHeightChange(val);
+    }
+  });
+
+  const rhPresetBtns = rowHeightStrip.querySelectorAll<HTMLButtonElement>(".jantt-scale-btn");
+  rhPresetBtns.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const mode = btn.dataset.mode;
+      if (mode === "fit") {
+        props.onRowHeightModeChange("fit");
+      } else {
+        const val = parseInt(btn.dataset.val || "46", 10);
+        props.onRowHeightChange(val);
+      }
+    });
+  });
+
+  centerZone.appendChild(rowHeightStrip);
+
+  // 2c. Critical Path Toggle Button
   const critBtn = document.createElement("button");
   critBtn.type = "button";
   critBtn.className = `jantt-critical-btn ${props.showCritical ? "is-active" : ""}`;
@@ -226,19 +274,8 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   settingsWrap.appendChild(settingsBtn);
 
   // Settings Popover Panel
-  const popover = renderSettingsPopover(props);
+  const popover = renderSettingsPopover(props, () => togglePopover(false));
   settingsWrap.appendChild(popover);
-
-  const togglePopover = (open?: boolean) => {
-    const isOpen = open !== undefined ? open : !popover.classList.contains("is-open");
-    popover.classList.toggle("is-open", isOpen);
-    settingsBtn.classList.toggle("is-active", isOpen);
-  };
-
-  settingsBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    togglePopover();
-  });
 
   const onDocClick = (e: MouseEvent) => {
     if (!settingsWrap.contains(e.target as Node)) {
@@ -252,8 +289,31 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     }
   };
 
-  document.addEventListener("pointerdown", onDocClick);
-  document.addEventListener("keydown", onDocKeydown);
+  const togglePopover = (open?: boolean) => {
+    const isOpen = open !== undefined ? open : !popover.classList.contains("is-open");
+    popover.classList.toggle("is-open", isOpen);
+    settingsBtn.classList.toggle("is-active", isOpen);
+    if (isOpen) {
+      document.addEventListener("pointerdown", onDocClick);
+      document.addEventListener("keydown", onDocKeydown);
+    } else {
+      document.removeEventListener("pointerdown", onDocClick);
+      document.removeEventListener("keydown", onDocKeydown);
+    }
+    props.onSettingsOpenChange?.(isOpen);
+  };
+
+  if (props.isSettingsOpen) {
+    popover.classList.add("is-open");
+    settingsBtn.classList.add("is-active");
+    document.addEventListener("pointerdown", onDocClick);
+    document.addEventListener("keydown", onDocKeydown);
+  }
+
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    togglePopover();
+  });
 
   rightZone.appendChild(settingsWrap);
   toolbar.appendChild(rightZone);
@@ -264,12 +324,11 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 /**
  * Builds the floating Chart Settings Popover.
  * Provides intuitive controls for:
- * 1. Canvas & Row Height (Slider + presets + Fit-to-screen mode)
- * 2. Dependency Link Routing Style (90° Orthogonal, Curved, Direct)
- * 3. Engine Auto-Cascade Rule
- * 4. Baseline Comparisons
+ * 1. Dependency Link Routing Style (90° Orthogonal, Curved, Direct)
+ * 2. Engine Auto-Cascade Rule
+ * 3. Baseline Comparisons
  */
-function renderSettingsPopover(props: ToolbarProps): HTMLElement {
+function renderSettingsPopover(props: ToolbarProps, onClose: () => void): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "jantt-settings-popover";
 
@@ -278,44 +337,14 @@ function renderSettingsPopover(props: ToolbarProps): HTMLElement {
       <div class="jantt-settings-title">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
         <span>Chart Settings</span>
       </div>
       <button type="button" class="jantt-settings-close-btn" aria-label="Close settings">✕</button>
     </div>
 
-    <!-- Section 1: Canvas & Row Height -->
-    <div class="jantt-settings-section">
-      <div class="jantt-settings-section-title">Canvas &amp; Row Height</div>
-      
-      <div class="jantt-settings-row">
-        <label class="jantt-settings-label">Display Mode</label>
-        <div class="jantt-scale-group jantt-rowheight-mode-group">
-          <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" ? "is-active" : ""}" data-mode="custom">Custom</button>
-          <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "fit" ? "is-active" : ""}" data-mode="fit" title="Fit Mode: Dynamically scale row heights so all tasks fit inside the screen">Fit Canvas</button>
-        </div>
-      </div>
-
-      <div class="jantt-settings-row jantt-rowheight-slider-row" style="${props.rowHeightMode === "fit" ? "opacity: 0.45; pointer-events: none;" : ""}">
-        <div class="jantt-settings-slider-header">
-          <label class="jantt-settings-label">Row Height</label>
-          <span class="jantt-settings-val-badge">${props.rowHeight}px</span>
-        </div>
-        <div class="jantt-settings-slider-wrap">
-          <input type="range" class="jantt-settings-slider jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" />
-        </div>
-        <div class="jantt-settings-presets">
-          <button type="button" class="jantt-preset-btn ${props.rowHeight === 32 ? "is-active" : ""}" data-val="32">Compact (32px)</button>
-          <button type="button" class="jantt-preset-btn ${props.rowHeight === 46 ? "is-active" : ""}" data-val="46">Default (46px)</button>
-          <button type="button" class="jantt-preset-btn ${props.rowHeight === 64 ? "is-active" : ""}" data-val="64">Spacious (64px)</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="jantt-settings-divider"></div>
-
-    <!-- Section 2: Dependencies & Routing -->
+    <!-- Section 1: Dependencies & Routing -->
     <div class="jantt-settings-section">
       <div class="jantt-settings-section-title">Dependencies &amp; Connectors</div>
       <div class="jantt-settings-row">
@@ -330,28 +359,28 @@ function renderSettingsPopover(props: ToolbarProps): HTMLElement {
 
     <div class="jantt-settings-divider"></div>
 
-    <!-- Section 3: Engine & Rules -->
+    <!-- Section 2: Engine & Rules -->
     <div class="jantt-settings-section">
       <div class="jantt-settings-section-title">Scheduling Engine</div>
 
       <!-- Auto-Cascade Toggle -->
-      <div class="jantt-settings-switch-row">
+      <div class="jantt-settings-switch-row" data-action="toggle-cascade" title="Click to toggle auto-cascading dependencies">
         <div class="jantt-settings-switch-info">
           <span class="jantt-settings-switch-label">Auto-Cascade Tasks</span>
           <span class="jantt-settings-switch-sub">Downstream tasks shift automatically when predecessor moves</span>
         </div>
-        <button type="button" class="jantt-toggle-switch ${props.autoCascade ? "is-active" : ""}" role="switch" aria-checked="${props.autoCascade}" data-switch="auto-cascade">
+        <button type="button" class="jantt-toggle-switch ${props.autoCascade ? "is-active" : ""}" role="switch" aria-checked="${props.autoCascade}" data-switch="auto-cascade" aria-label="Toggle Auto-Cascade">
           <span class="jantt-toggle-thumb"></span>
         </button>
       </div>
 
       <!-- Baselines Toggle -->
-      <div class="jantt-settings-switch-row">
+      <div class="jantt-settings-switch-row" data-action="toggle-baselines" title="Click to toggle baseline comparison bars">
         <div class="jantt-settings-switch-info">
           <span class="jantt-settings-switch-label">Show Baselines</span>
           <span class="jantt-settings-switch-sub">Display original planned schedule bars beneath active tasks</span>
         </div>
-        <button type="button" class="jantt-toggle-switch ${props.showBaselines ? "is-active" : ""}" role="switch" aria-checked="${Boolean(props.showBaselines)}" data-switch="baselines">
+        <button type="button" class="jantt-toggle-switch ${props.showBaselines ? "is-active" : ""}" role="switch" aria-checked="${Boolean(props.showBaselines)}" data-switch="baselines" aria-label="Toggle Baselines">
           <span class="jantt-toggle-thumb"></span>
         </button>
       </div>
@@ -360,63 +389,36 @@ function renderSettingsPopover(props: ToolbarProps): HTMLElement {
 
   // Prevent popover clicks from bubbling to document listener
   panel.addEventListener("pointerdown", (e) => e.stopPropagation());
+  panel.addEventListener("click", (e) => e.stopPropagation());
 
   // Close button
   const closeBtn = panel.querySelector<HTMLButtonElement>(".jantt-settings-close-btn")!;
-  closeBtn.addEventListener("click", () => {
-    panel.classList.remove("is-open");
-    panel.parentElement?.querySelector<HTMLButtonElement>(".jantt-settings-btn")?.classList.remove("is-active");
-  });
-
-  // Mode buttons (Custom vs Fit)
-  const modeBtns = panel.querySelectorAll<HTMLButtonElement>(".jantt-rowheight-mode-group .jantt-scale-btn");
-  modeBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const mode = btn.dataset.mode as RowHeightMode;
-      props.onRowHeightModeChange(mode);
-    });
-  });
-
-  // Row height slider & value badge
-  const rowSlider = panel.querySelector<HTMLInputElement>(".jantt-rowheight-slider");
-  const valBadge = panel.querySelector<HTMLElement>(".jantt-settings-val-badge");
-  if (rowSlider && valBadge) {
-    rowSlider.addEventListener("input", (e) => {
-      const val = parseInt((e.target as HTMLInputElement).value, 10);
-      if (!isNaN(val)) {
-        valBadge.textContent = `${val}px`;
-        props.onRowHeightChange(val);
-      }
-    });
-  }
-
-  // Row height presets
-  const presetBtns = panel.querySelectorAll<HTMLButtonElement>(".jantt-preset-btn");
-  presetBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const val = parseInt(btn.dataset.val || "46", 10);
-      props.onRowHeightChange(val);
-    });
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClose();
   });
 
   // Link routing buttons
   const routingBtns = panel.querySelectorAll<HTMLButtonElement>(".jantt-routing-group .jantt-scale-btn");
   routingBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const routing = btn.dataset.routing as LinkRoutingStyle;
       props.onRoutingChange(routing);
     });
   });
 
-  // Auto-cascade switch
-  const cascadeSwitch = panel.querySelector<HTMLButtonElement>('[data-switch="auto-cascade"]');
-  cascadeSwitch?.addEventListener("click", () => {
+  // Auto-cascade switch & row toggle
+  const cascadeRow = panel.querySelector<HTMLElement>('[data-action="toggle-cascade"]');
+  cascadeRow?.addEventListener("click", (e) => {
+    e.stopPropagation();
     props.onAutoCascadeToggle();
   });
 
-  // Baselines switch
-  const baselinesSwitch = panel.querySelector<HTMLButtonElement>('[data-switch="baselines"]');
-  baselinesSwitch?.addEventListener("click", () => {
+  // Baselines switch & row toggle
+  const baselinesRow = panel.querySelector<HTMLElement>('[data-action="toggle-baselines"]');
+  baselinesRow?.addEventListener("click", (e) => {
+    e.stopPropagation();
     props.onBaselinesToggle?.();
   });
 
