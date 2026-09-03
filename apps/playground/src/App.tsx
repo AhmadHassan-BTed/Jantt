@@ -52,14 +52,16 @@ import {
   Info,
   FilePlus,
   SortAsc,
-  Star,
   Cloud,
   RefreshCw,
   ExternalLink,
   Link2,
   GitFork,
   Globe,
-  Loader2
+  Loader2,
+  CheckSquare,
+  ListTodo,
+  Filter
 } from "lucide-react";
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
@@ -134,7 +136,8 @@ function createBlankPlan(title: string): JanttData {
 }
 
 // ── Type Declarations ──────────────────────────────────────────────────────
-export type DateFilterMode = "all" | "today" | "date";
+export type DateFilterMode = "all" | "today" | "week" | "date" | "range";
+export type ActiveView = "gantt" | "kanban" | "tasks" | "summary";
 
 export type KanbanSortField = "priority" | "start" | "end" | "wbs" | "assignee" | "progress" | "name";
 export interface KanbanSortRule {
@@ -272,10 +275,11 @@ function loadInitialState() {
     if (savedBase !== null) initialBaselines = savedBase === "true";
   } catch {}
 
-  let initialView: "gantt" | "kanban" | "summary" | "today" = "gantt";
+  let initialView: ActiveView = "gantt";
   try {
     const savedView = localStorage.getItem(STORAGE_KEYS.VIEW) as any;
-    if (savedView && ["gantt", "kanban", "summary", "today"].includes(savedView)) initialView = savedView;
+    if (savedView === "today") initialView = "tasks";
+    else if (savedView && ["gantt", "kanban", "summary", "tasks"].includes(savedView)) initialView = savedView;
   } catch {}
 
   let initialCollapsed = false;
@@ -315,7 +319,7 @@ function loadInitialState() {
   let initialDateFilterMode: DateFilterMode = "all";
   try {
     const savedDFM = localStorage.getItem(STORAGE_KEYS.DATE_FILTER_MODE) as DateFilterMode;
-    if (savedDFM && ["all", "today", "date"].includes(savedDFM)) initialDateFilterMode = savedDFM;
+    if (savedDFM && ["all", "today", "week", "date", "range"].includes(savedDFM)) initialDateFilterMode = savedDFM;
   } catch {}
 
   return {
@@ -364,11 +368,18 @@ export function App() {
   const [showCriticalPath, setShowCriticalPath] = useState(init.initialCritical);
   const [showBaselines, setShowBaselines] = useState(init.initialBaselines);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(init.initialCollapsed);
-  const [activeView, setActiveView] = useState<"gantt" | "kanban" | "summary" | "today">(init.initialView);
+  const [activeView, setActiveView] = useState<ActiveView>(init.initialView);
 
   // ── Date Filter State ──────────────────────────────────────────────────
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>(init.initialDateFilterMode);
   const [dateFilterValue, setDateFilterValue] = useState<string>(getTodayISODate());
+  const [dateFilterRangeStart, setDateFilterRangeStart] = useState<string>("");
+  const [dateFilterRangeEnd, setDateFilterRangeEnd] = useState<string>("");
+  const [dateFilterBehavior, setDateFilterBehavior] = useState<"dim" | "hide">("dim");
+
+  // ── Tasks View State ───────────────────────────────────────────────────
+  const [tasksViewMode, setTasksViewMode] = useState<"cards" | "todo">("cards");
+  const [tasksSearchQuery, setTasksSearchQuery] = useState<string>("");
 
   // ── Summary View Sort State ────────────────────────────────────────────
   const [summarySortConfig, setSummarySortConfig] = useState<SummarySortConfig>({ column: "", direction: null });
@@ -484,14 +495,58 @@ export function App() {
   // ── Derived State: Date Filter ────────────────────────────────────────────
   const dateFilterActiveDate = useMemo(() => {
     if (dateFilterMode === "today") return getTodayISODate();
-    if (dateFilterMode === "date") return dateFilterValue;
+    if (dateFilterMode === "date") return dateFilterValue || null;
+    if (dateFilterMode === "range") return dateFilterRangeStart || null;
     return null;
-  }, [dateFilterMode, dateFilterValue]);
+  }, [dateFilterMode, dateFilterValue, dateFilterRangeStart]);
 
   const isTaskMatchingDateFilter = useCallback((task: Task): boolean => {
-    if (!dateFilterActiveDate) return true;
-    return isTaskOnDate(task.start, task.end, dateFilterActiveDate);
-  }, [dateFilterActiveDate]);
+    if (dateFilterMode === "all") return true;
+    if (dateFilterMode === "today") {
+      return isTaskOnDate(task.start, task.end, getTodayISODate());
+    }
+    if (dateFilterMode === "week") {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const distanceToMonday = (dayOfWeek + 6) % 7;
+      const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
+      const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+      const weekStart = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, "0")}-${String(mon.getDate()).padStart(2, "0")}`;
+      const weekEnd = `${sun.getFullYear()}-${String(sun.getMonth() + 1).padStart(2, "0")}-${String(sun.getDate()).padStart(2, "0")}`;
+      return task.start <= weekEnd && task.end >= weekStart;
+    }
+    if (dateFilterMode === "date") {
+      if (!dateFilterValue) return true;
+      return isTaskOnDate(task.start, task.end, dateFilterValue);
+    }
+    if (dateFilterMode === "range") {
+      if (!dateFilterRangeStart && !dateFilterRangeEnd) return true;
+      const start = dateFilterRangeStart || "0000-01-01";
+      const end = dateFilterRangeEnd || "9999-12-31";
+      return task.start <= end && task.end >= start;
+    }
+    return true;
+  }, [dateFilterMode, dateFilterValue, dateFilterRangeStart, dateFilterRangeEnd]);
+
+  const matchingTasksCount = useMemo(() => {
+    if (!parsedData) return 0;
+    return parsedData.tasks.filter(isTaskMatchingDateFilter).length;
+  }, [parsedData, isTaskMatchingDateFilter]);
+
+  const dateFilterActiveSummary = useMemo(() => {
+    if (dateFilterMode === "all") return null;
+    const total = parsedData?.tasks.length || 0;
+    const countText = `${matchingTasksCount} of ${total} tasks active`;
+    if (dateFilterMode === "today") return { label: `Today (${getTodayISODate()})`, countText };
+    if (dateFilterMode === "week") return { label: `This Week`, countText };
+    if (dateFilterMode === "date") return { label: dateFilterValue || "Selected Date", countText };
+    if (dateFilterMode === "range") {
+      const from = dateFilterRangeStart || "Start";
+      const to = dateFilterRangeEnd || "End";
+      return { label: `${from} → ${to}`, countText };
+    }
+    return null;
+  }, [dateFilterMode, dateFilterValue, dateFilterRangeStart, dateFilterRangeEnd, matchingTasksCount, parsedData]);
 
   // ── Derived State: Summary Sorted Tasks (with progress auto-sync) ─────────
   const sortedSummaryTasks = useMemo(() => {
@@ -1271,7 +1326,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         </div>
 
         <div className="nav-controls">
-          {/* View Switcher: Gantt Timeline, Kanban Board, Budget & Analytics, Today Focus */}
+          {/* View Switcher: Gantt Timeline, Kanban Board, Detailed Tasks, Budget & Analytics */}
           <div className="jantt-scale-group" style={{ margin: "0 6px" }}>
             <button
               className={`jantt-scale-btn ${activeView === "gantt" ? "is-active" : ""}`}
@@ -1290,20 +1345,20 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               <span>Kanban</span>
             </button>
             <button
+              className={`jantt-scale-btn ${activeView === "tasks" ? "is-active" : ""}`}
+              onClick={() => setActiveView("tasks")}
+              title="Detailed Tasks & Interactive Todo Checklist"
+            >
+              <CheckSquare size={13} />
+              <span>Tasks</span>
+            </button>
+            <button
               className={`jantt-scale-btn ${activeView === "summary" ? "is-active" : ""}`}
               onClick={() => setActiveView("summary")}
               title="Project Budget & Performance Analytics"
             >
               <PieChart size={13} />
               <span>Budget &amp; KPI</span>
-            </button>
-            <button
-              className={`jantt-scale-btn today-tab-btn ${activeView === "today" ? "is-active" : ""}`}
-              onClick={() => setActiveView("today")}
-              title="Today's Focus — tasks active today"
-            >
-              <Star size={13} />
-              <span>Today</span>
             </button>
           </div>
 
@@ -1610,44 +1665,136 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
           <div className="chart-container-card">
             {parsedData ? (
               <>
-                {/* ── Date Filter Bar (shown on Kanban, Budget & KPI, Today) ── */}
-                {activeView !== "gantt" && (
-                  <div className="date-filter-bar">
-                    <div className="date-filter-tabs">
-                      <button
-                        className={`date-filter-tab ${dateFilterMode === "all" ? "is-active" : ""}`}
-                        onClick={() => setDateFilterMode("all")}
-                      >All Tasks</button>
-                      <button
-                        className={`date-filter-tab ${dateFilterMode === "today" ? "is-active" : ""}`}
-                        onClick={() => setDateFilterMode("today")}
-                      >
-                        <Clock size={11} />
-                        Today
-                      </button>
-                      <button
-                        className={`date-filter-tab ${dateFilterMode === "date" ? "is-active" : ""}`}
-                        onClick={() => setDateFilterMode("date")}
-                      >
-                        <Calendar size={11} />
-                        Pick Date
-                      </button>
-                    </div>
-                    {dateFilterMode === "date" && (
+                {/* ── Contextual Date Filter Sub-header (Active across Gantt, Kanban, Tasks, Budget & KPI) ── */}
+                <div className="date-filter-bar">
+                  <div className="date-filter-tabs">
+                    <button
+                      className={`date-filter-tab ${dateFilterMode === "all" ? "is-active" : ""}`}
+                      onClick={() => setDateFilterMode("all")}
+                      title="Show all project tasks without date restrictions"
+                    >
+                      All Tasks
+                    </button>
+                    <button
+                      className={`date-filter-tab ${dateFilterMode === "today" ? "is-active" : ""}`}
+                      onClick={() => setDateFilterMode("today")}
+                      title={`Filter tasks active today (${getTodayISODate()})`}
+                    >
+                      <Clock size={11} />
+                      Today
+                    </button>
+                    <button
+                      className={`date-filter-tab ${dateFilterMode === "week" ? "is-active" : ""}`}
+                      onClick={() => setDateFilterMode("week")}
+                      title="Filter tasks active this week (Monday to Sunday)"
+                    >
+                      <Calendar size={11} />
+                      This Week
+                    </button>
+                    <button
+                      className={`date-filter-tab ${dateFilterMode === "date" ? "is-active" : ""}`}
+                      onClick={() => {
+                        setDateFilterMode("date");
+                        if (!dateFilterValue) setDateFilterValue(getTodayISODate());
+                      }}
+                      title="Filter tasks active on a specific date"
+                    >
+                      <Calendar size={11} />
+                      Pick Date
+                    </button>
+                    <button
+                      className={`date-filter-tab ${dateFilterMode === "range" ? "is-active" : ""}`}
+                      onClick={() => {
+                        setDateFilterMode("range");
+                        if (!dateFilterRangeStart) setDateFilterRangeStart(getTodayISODate());
+                      }}
+                      title="Filter tasks overlapping a date range"
+                    >
+                      <Filter size={11} />
+                      Date Range
+                    </button>
+                  </div>
+
+                  {/* Single Date Picker */}
+                  {dateFilterMode === "date" && (
+                    <input
+                      type="date"
+                      className="date-filter-input"
+                      value={dateFilterValue}
+                      onChange={(e) => setDateFilterValue(e.target.value)}
+                      title="Select target date"
+                    />
+                  )}
+
+                  {/* Date Range Picker */}
+                  {dateFilterMode === "range" && (
+                    <div className="date-range-inputs">
                       <input
                         type="date"
                         className="date-filter-input"
-                        value={dateFilterValue}
-                        onChange={(e) => setDateFilterValue(e.target.value)}
+                        placeholder="Start"
+                        value={dateFilterRangeStart}
+                        onChange={(e) => setDateFilterRangeStart(e.target.value)}
+                        title="Range Start Date"
                       />
-                    )}
-                    {dateFilterMode !== "all" && (
+                      <span className="date-filter-range-sep">→</span>
+                      <input
+                        type="date"
+                        className="date-filter-input"
+                        placeholder="End"
+                        value={dateFilterRangeEnd}
+                        onChange={(e) => setDateFilterRangeEnd(e.target.value)}
+                        title="Range End Date"
+                      />
+                    </div>
+                  )}
+
+                  {/* Active Filter Summary Badge & Reset */}
+                  {dateFilterActiveSummary && (
+                    <div className="date-filter-active-wrap">
                       <span className="date-filter-active-label">
-                        Showing: {dateFilterMode === "today" ? getTodayISODate() : dateFilterValue}
+                        Showing: <strong>{dateFilterActiveSummary.label}</strong>
                       </span>
-                    )}
-                  </div>
-                )}
+                      <span className="date-filter-count-badge">
+                        {dateFilterActiveSummary.countText}
+                      </span>
+                      <button
+                        className="date-filter-reset-btn"
+                        onClick={() => {
+                          setDateFilterMode("all");
+                          setDateFilterValue("");
+                          setDateFilterRangeStart("");
+                          setDateFilterRangeEnd("");
+                        }}
+                        title="Clear date filter and show all tasks"
+                      >
+                        <X size={11} />
+                        Clear
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Filter Behavior Toggle for Kanban & Tasks views */}
+                  {(activeView === "kanban" || activeView === "tasks") && dateFilterMode !== "all" && (
+                    <div className="date-filter-behavior-group">
+                      <span className="date-filter-behavior-label">Mode:</span>
+                      <button
+                        className={`date-filter-behavior-btn ${dateFilterBehavior === "dim" ? "is-active" : ""}`}
+                        onClick={() => setDateFilterBehavior("dim")}
+                        title="Dim non-matching tasks"
+                      >
+                        Dim
+                      </button>
+                      <button
+                        className={`date-filter-behavior-btn ${dateFilterBehavior === "hide" ? "is-active" : ""}`}
+                        onClick={() => setDateFilterBehavior("hide")}
+                        title="Only show matching tasks"
+                      >
+                        Filter
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* ── GANTT VIEW ── */}
                 {activeView === "gantt" && (
@@ -1767,14 +1914,20 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                             return t.status === col.id;
                           })
                         );
+                        const visibleTasks = dateFilterMode !== "all" && dateFilterBehavior === "hide"
+                          ? colTasks.filter(isTaskMatchingDateFilter)
+                          : colTasks;
+                        const matchingCount = colTasks.filter(isTaskMatchingDateFilter).length;
                         return (
                           <div key={col.id} className="kanban-column">
                             <div className="kanban-col-header">
                               <span className="kanban-col-title">{col.label}</span>
-                              <span className="kanban-col-count">{colTasks.length}</span>
+                              <span className="kanban-col-count">
+                                {dateFilterMode !== "all" ? `${matchingCount}/${colTasks.length}` : colTasks.length}
+                              </span>
                             </div>
                             <div className="kanban-card-list">
-                              {colTasks.map((t) => {
+                              {visibleTasks.map((t) => {
                                 const cat = parsedData.categories?.[t.category];
                                 const catColor = cat?.color || "var(--jantt-accent)";
                                 const isCompleted = t.status === "completed";
@@ -2056,181 +2209,386 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                   </div>
                 )}
 
-                {/* ── TODAY VIEW ── */}
-                {activeView === "today" && (
-                  <div className="today-view-container">
-                    <div className="today-view-header">
-                      <div className="today-view-title-section">
-                        <Star size={20} style={{ color: "var(--jantt-accent)" }} />
-                        <h2 className="today-view-title">Today's Focus</h2>
-                        <span className="today-view-date-badge">{getTodayISODate()}</span>
-                        <span className="today-task-count-badge">
-                          {parsedData.tasks.filter((t) => isTaskOnDate(t.start, t.end, getTodayISODate())).length} tasks active today
-                        </span>
+                {/* ── TASKS VIEW (Todo List & Detailed Task Cards) ── */}
+                {activeView === "tasks" && (
+                  <div className="tasks-view-container">
+                    {/* Header with Title, Stats, Search, View Mode, Person Filter, Add Task */}
+                    <div className="tasks-view-header">
+                      <div className="tasks-view-title-section">
+                        <CheckSquare size={22} style={{ color: "var(--jantt-accent)" }} />
+                        <div>
+                          <h2 className="tasks-view-title">Tasks &amp; Detailed Todo</h2>
+                          <span className="tasks-view-subtitle">
+                            {parsedData.tasks.filter(isTaskMatchingDateFilter).length} task{parsedData.tasks.filter(isTaskMatchingDateFilter).length === 1 ? "" : "s"}
+                            {dateFilterMode !== "all" ? " matching active date filter" : " in project"}
+                            {" • "}
+                            {parsedData.tasks.filter(isTaskMatchingDateFilter).filter((t) => t.status === "completed").length} completed
+                            {" • "}
+                            {parsedData.tasks.filter(isTaskMatchingDateFilter).filter((t) => t.status === "in-progress").length} in progress
+                          </span>
+                        </div>
                       </div>
-                      <div className="today-view-person-filter">
-                        <Users size={13} />
-                        <select
-                          className="today-person-select"
-                          value={selectedPersonFilter}
-                          onChange={(e) => setSelectedPersonFilter(e.target.value)}
-                        >
-                          <option value="all">All People &amp; Teams</option>
-                          {teams.length > 0 && (
-                            <optgroup label="Teams / Squads">
-                              {teams.map((tm) => (
-                                <option key={tm.id} value={`team:${tm.id}`}>
-                                  Team: {tm.name}
-                                </option>
-                              ))}
-                            </optgroup>
+
+                      <div className="tasks-view-toolbar">
+                        {/* Search Filter */}
+                        <div className="tasks-search-wrap">
+                          <input
+                            type="text"
+                            className="tasks-search-input"
+                            placeholder="Search tasks, WBS, tags..."
+                            value={tasksSearchQuery}
+                            onChange={(e) => setTasksSearchQuery(e.target.value)}
+                          />
+                          {tasksSearchQuery && (
+                            <button className="tasks-search-clear" onClick={() => setTasksSearchQuery("")}>✕</button>
                           )}
-                          {people.length > 0 && (
-                            <optgroup label="Team Members">
-                              {people.map((p) => {
-                                const pTeam = resolveTeamById(teams, p.teamId);
-                                return (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name}{p.role ? ` (${p.role})` : ""}{pTeam ? ` • ${pTeam.name}` : ""}
+                        </div>
+
+                        {/* Mode Selector: Cards vs Todo Checklist */}
+                        <div className="tasks-mode-group">
+                          <button
+                            className={`tasks-mode-btn ${tasksViewMode === "cards" ? "is-active" : ""}`}
+                            onClick={() => setTasksViewMode("cards")}
+                            title="Display as detailed task cards"
+                          >
+                            <Kanban size={12} />
+                            Cards
+                          </button>
+                          <button
+                            className={`tasks-mode-btn ${tasksViewMode === "todo" ? "is-active" : ""}`}
+                            onClick={() => setTasksViewMode("todo")}
+                            title="Display as interactive Todo checklist"
+                          >
+                            <ListTodo size={12} />
+                            Todo List
+                          </button>
+                        </div>
+
+                        {/* Person / Team Filter */}
+                        <div className="today-view-person-filter">
+                          <Users size={13} />
+                          <select
+                            className="today-person-select"
+                            value={selectedPersonFilter}
+                            onChange={(e) => setSelectedPersonFilter(e.target.value)}
+                          >
+                            <option value="all">All People &amp; Teams</option>
+                            {teams.length > 0 && (
+                              <optgroup label="Teams / Squads">
+                                {teams.map((tm) => (
+                                  <option key={tm.id} value={`team:${tm.id}`}>
+                                    Team: {tm.name}
                                   </option>
-                                );
-                              })}
-                            </optgroup>
-                          )}
-                        </select>
+                                ))}
+                              </optgroup>
+                            )}
+                            {people.length > 0 && (
+                              <optgroup label="Team Members">
+                                {people.map((p) => {
+                                  const pTeam = resolveTeamById(teams, p.teamId);
+                                  return (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name}{p.role ? ` (${p.role})` : ""}{pTeam ? ` • ${pTeam.name}` : ""}
+                                    </option>
+                                  );
+                                })}
+                              </optgroup>
+                            )}
+                          </select>
+                        </div>
+
+                        {/* + Add Task Button */}
+                        <button
+                          className="btn-nav is-primary"
+                          style={{ padding: "5px 10px", borderRadius: "7px", fontSize: "11.5px" }}
+                          onClick={handleAddNewTask}
+                          title="Create a new task in this project"
+                        >
+                          <Plus size={12} />
+                          <span>Add Task</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div className="today-task-grid">
-                      {(() => {
-                        const today = getTodayISODate();
-                        let todayTasks = parsedData.tasks.filter((t) => isTaskOnDate(t.start, t.end, today));
-                        if (selectedPersonFilter !== "all") {
-                          if (selectedPersonFilter.startsWith("team:")) {
-                            const targetTeamId = selectedPersonFilter.replace("team:", "");
-                            todayTasks = todayTasks.filter((t) => {
-                              const assigneeInfo = resolveTaskAssignee(t, people, teams);
-                              return assigneeInfo.team?.id === targetTeamId || t.teamId === targetTeamId;
-                            });
-                          } else {
-                            todayTasks = todayTasks.filter((t) => {
+                    {/* Tasks Content: Checklist or Cards */}
+                    {(() => {
+                      let tasksToDisplay = parsedData.tasks.filter(isTaskMatchingDateFilter);
+
+                      if (selectedPersonFilter !== "all") {
+                        if (selectedPersonFilter.startsWith("team:")) {
+                          const targetTeamId = selectedPersonFilter.replace("team:", "");
+                          tasksToDisplay = tasksToDisplay.filter((t) => {
+                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                            return assigneeInfo.team?.id === targetTeamId || t.teamId === targetTeamId;
+                          });
+                        } else {
+                          tasksToDisplay = tasksToDisplay.filter((t) => {
+                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                            return (
+                              t.assignee === selectedPersonFilter ||
+                              assigneeInfo.person?.id === selectedPersonFilter ||
+                              assigneeInfo.person?.name === selectedPersonFilter
+                            );
+                          });
+                        }
+                      }
+
+                      if (tasksSearchQuery.trim()) {
+                        const q = tasksSearchQuery.toLowerCase();
+                        tasksToDisplay = tasksToDisplay.filter((t) =>
+                          (t.label || t.name || t.id).toLowerCase().includes(q) ||
+                          (t.wbs || "").toLowerCase().includes(q) ||
+                          (t.category || "").toLowerCase().includes(q) ||
+                          (t.assignee || "").toLowerCase().includes(q)
+                        );
+                      }
+
+                      if (tasksToDisplay.length === 0) {
+                        return (
+                          <div className="today-empty-state">
+                            <CheckCircle2 size={48} style={{ color: "#10B981" }} />
+                            <h3>All Clear!</h3>
+                            <p>
+                              No tasks matching your active date filter and search criteria.
+                              {dateFilterMode !== "all" && (
+                                <button
+                                  className="date-filter-reset-btn"
+                                  style={{ marginTop: "12px", display: "inline-flex" }}
+                                  onClick={() => setDateFilterMode("all")}
+                                >
+                                  Show All Tasks
+                                </button>
+                              )}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      if (tasksViewMode === "todo") {
+                        return (
+                          <div className="tasks-todo-list">
+                            {tasksToDisplay.map((t) => {
+                              const cat = parsedData.categories?.[t.category];
+                              const catColor = cat?.color || "var(--jantt-accent)";
+                              const isCompleted = t.status === "completed";
                               const assigneeInfo = resolveTaskAssignee(t, people, teams);
                               return (
-                                t.assignee === selectedPersonFilter ||
-                                assigneeInfo.person?.id === selectedPersonFilter ||
-                                assigneeInfo.person?.name === selectedPersonFilter
-                              );
-                            });
-                          }
-                        }
-                        if (todayTasks.length === 0) {
-                          return (
-                            <div className="today-empty-state">
-                              <CheckCircle2 size={48} style={{ color: "#10B981" }} />
-                              <h3>All Clear!</h3>
-                              <p>No tasks scheduled for today{selectedPersonFilter !== "all" ? " for this selection" : ""}.</p>
-                            </div>
-                          );
-                        }
-                        return todayTasks.map((t) => {
-                          const cat = parsedData.categories?.[t.category];
-                          const catColor = cat?.color || "var(--jantt-accent)";
-                          const isCompleted = t.status === "completed";
-                          const assigneeInfo = resolveTaskAssignee(t, people, teams);
-                          return (
-                            <div key={t.id} className={`today-task-card ${isCompleted ? "is-completed" : ""}`} style={{ borderTopColor: catColor }}>
-                              <div className="today-card-header">
-                                <div className="today-card-category">
-                                  <span className="kanban-cat-dot" style={{ background: catColor }} />
-                                  <span>{cat?.label || t.category}</span>
-                                </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                  {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
-                                  {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
-                                </div>
-                              </div>
-                              <h3 className="today-card-title">{t.label || t.name || t.id}</h3>
-                              <div className="today-card-meta">
-                                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                  <Calendar size={11} /> {t.start} → {t.end}
-                                </span>
-                                {t.assignee && (
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                                    <span
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        width: "18px",
-                                        height: "18px",
-                                        borderRadius: "50%",
-                                        background: assigneeInfo.avatarColor,
-                                        color: "#FFFFFF",
-                                        fontSize: "10px",
-                                        fontWeight: 700
+                                <div key={t.id} className={`tasks-todo-row ${isCompleted ? "is-completed" : ""}`} style={{ borderLeftColor: catColor }}>
+                                  <div className="tasks-todo-left">
+                                    <button
+                                      className={`tasks-checkbox-btn ${isCompleted ? "is-checked" : ""}`}
+                                      onClick={() => {
+                                        const nextStatus = isCompleted ? "in-progress" : "completed";
+                                        const nextProgress = isCompleted ? 0 : 1.0;
+                                        const updatedTasks = parsedData.tasks.map((item) =>
+                                          item.id === t.id ? { ...item, status: nextStatus, progress: nextProgress } : item
+                                        );
+                                        handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                                      }}
+                                      title={isCompleted ? "Mark as in progress" : "Mark as completed"}
+                                    >
+                                      {isCompleted ? (
+                                        <CheckCircle2 size={18} />
+                                      ) : (
+                                        <div style={{ width: 16, height: 16, border: "2px solid var(--jantt-border-strong)", borderRadius: 4 }} />
+                                      )}
+                                    </button>
+                                    <div className="tasks-todo-body">
+                                      <div className="tasks-todo-title-wrap">
+                                        {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
+                                        <span className="kanban-cat-dot" style={{ background: catColor }} />
+                                        <span className="kanban-cat-label" style={{ fontSize: "11px" }}>{cat?.label || t.category}</span>
+                                        <span className={`tasks-todo-title ${isCompleted ? "is-struck" : ""}`}>
+                                          {t.label || t.name || t.id}
+                                        </span>
+                                        {t.priority && (
+                                          <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>
+                                        )}
+                                      </div>
+                                      <div className="tasks-todo-meta">
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                          <Calendar size={11} /> {t.start} → {t.end}
+                                        </span>
+                                        {t.assignee && (
+                                          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                            <span style={{ width: 14, height: 14, borderRadius: "50%", background: assigneeInfo.avatarColor, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "8px", fontWeight: 700 }}>
+                                              {assigneeInfo.initials}
+                                            </span>
+                                            <span>{assigneeInfo.displayName}</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="tasks-todo-right">
+                                    <select
+                                      className="kanban-status-select"
+                                      value={t.status || "not-started"}
+                                      onChange={(e) => {
+                                        const newStatus = e.target.value;
+                                        let newProgress = t.progress;
+                                        if (newStatus === "completed") newProgress = 1.0;
+                                        else if (newStatus === "submitted" && (t.progress ?? 0) < 0.75) newProgress = 0.75;
+                                        else if (newStatus === "not-started") newProgress = 0;
+                                        const updatedTasks = parsedData.tasks.map((item) =>
+                                          item.id === t.id ? { ...item, status: newStatus, progress: newProgress } : item
+                                        );
+                                        handleChartCommit({ ...parsedData, tasks: updatedTasks });
                                       }}
                                     >
-                                      {assigneeInfo.initials}
-                                    </span>
-                                    <span style={{ fontWeight: 600, color: "var(--jantt-text)" }}>{assigneeInfo.displayName}</span>
-                                    {assigneeInfo.role && (
-                                      <span style={{ color: "var(--jantt-text-muted)", fontSize: "11px" }}>({assigneeInfo.role})</span>
-                                    )}
-                                    {assigneeInfo.team && (
+                                      <option value="not-started">To Do</option>
+                                      <option value="in-progress">In Progress</option>
+                                      <option value="submitted">Submitted</option>
+                                      <option value="completed">Completed ✓</option>
+                                    </select>
+                                    <button
+                                      className="kanban-sort-remove-btn"
+                                      title="Delete task"
+                                      onClick={() => {
+                                        const updatedTasks = parsedData.tasks.filter((item) => item.id !== t.id);
+                                        const resolved = resolveSchedule(updatedTasks, parsedData.meta?.defaultGapDays ?? 2);
+                                        handleChartCommit({ ...parsedData, tasks: resolved });
+                                      }}
+                                    >
+                                      <Trash2 size={13} style={{ color: "var(--jantt-text-muted)" }} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+
+                      // Otherwise Detailed Cards mode
+                      return (
+                        <div className="today-task-grid">
+                          {tasksToDisplay.map((t) => {
+                            const cat = parsedData.categories?.[t.category];
+                            const catColor = cat?.color || "var(--jantt-accent)";
+                            const isCompleted = t.status === "completed";
+                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                            return (
+                              <div key={t.id} className={`today-task-card ${isCompleted ? "is-completed" : ""}`} style={{ borderTopColor: catColor }}>
+                                <div className="today-card-header">
+                                  <div className="today-card-category">
+                                    <span className="kanban-cat-dot" style={{ background: catColor }} />
+                                    <span>{cat?.label || t.category}</span>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
+                                    {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
+                                    <button
+                                      className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`}
+                                      onClick={() => {
+                                        const nextStatus = isCompleted ? "in-progress" : "completed";
+                                        const nextProgress = isCompleted ? 0 : 1.0;
+                                        const updatedTasks = parsedData.tasks.map((item) =>
+                                          item.id === t.id ? { ...item, status: nextStatus, progress: nextProgress } : item
+                                        );
+                                        handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                                      }}
+                                    >
+                                      {isCompleted ? <Check size={11} /> : null}
+                                      <span>{isCompleted ? "Done" : "Check"}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                                <h3 className="today-card-title">{t.label || t.name || t.id}</h3>
+                                <div className="today-card-meta">
+                                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <Calendar size={11} /> {t.start} → {t.end}
+                                  </span>
+                                  {t.assignee && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
                                       <span
                                         style={{
-                                          fontSize: "9.5px",
-                                          fontWeight: 700,
-                                          background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1F`,
-                                          color: assigneeInfo.team.color || "var(--jantt-accent)",
-                                          padding: "2px 6px",
-                                          borderRadius: "100px",
-                                          border: `1px solid ${assigneeInfo.team.color || "var(--jantt-accent)"}40`
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          width: "18px",
+                                          height: "18px",
+                                          borderRadius: "50%",
+                                          background: assigneeInfo.avatarColor,
+                                          color: "#FFFFFF",
+                                          fontSize: "10px",
+                                          fontWeight: 700
                                         }}
                                       >
-                                        {assigneeInfo.team.name}
+                                        {assigneeInfo.initials}
                                       </span>
-                                    )}
+                                      <span style={{ fontWeight: 600, color: "var(--jantt-text)" }}>{assigneeInfo.displayName}</span>
+                                      {assigneeInfo.role && (
+                                        <span style={{ color: "var(--jantt-text-muted)", fontSize: "11px" }}>({assigneeInfo.role})</span>
+                                      )}
+                                      {assigneeInfo.team && (
+                                        <span
+                                          style={{
+                                            fontSize: "9.5px",
+                                            fontWeight: 700,
+                                            background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1F`,
+                                            color: assigneeInfo.team.color || "var(--jantt-accent)",
+                                            padding: "2px 6px",
+                                            borderRadius: "100px",
+                                            border: `1px solid ${assigneeInfo.team.color || "var(--jantt-accent)"}40`
+                                          }}
+                                        >
+                                          {assigneeInfo.team.name}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                {isCompleted ? (
+                                  <div className="today-card-complete">✓ Completed</div>
+                                ) : (
+                                  <div className="today-card-progress">
+                                    <div className="today-prog-bar-wrap">
+                                      <div className="today-prog-bar-fill" style={{ width: `${Math.round((t.progress ?? 0) * 100)}%`, background: catColor }} />
+                                    </div>
+                                    <span className="today-prog-pct">{Math.round((t.progress ?? 0) * 100)}%</span>
                                   </div>
                                 )}
-                              </div>
-                              {isCompleted ? (
-                                <div className="today-card-complete">✓ Completed</div>
-                              ) : (
-                                <div className="today-card-progress">
-                                  <div className="today-prog-bar-wrap">
-                                    <div className="today-prog-bar-fill" style={{ width: `${Math.round((t.progress ?? 0) * 100)}%`, background: catColor }} />
-                                  </div>
-                                  <span className="today-prog-pct">{Math.round((t.progress ?? 0) * 100)}%</span>
+                                <div className="today-card-actions" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                  <select
+                                    className="kanban-status-select"
+                                    value={t.status || "not-started"}
+                                    onChange={(e) => {
+                                      const newStatus = e.target.value;
+                                      let newProgress = t.progress;
+                                      if (newStatus === "completed") newProgress = 1.0;
+                                      else if (newStatus === "submitted" && (t.progress ?? 0) < 0.75) newProgress = 0.75;
+                                      else if (newStatus === "not-started") newProgress = 0;
+                                      const updatedTasks = parsedData.tasks.map((item) =>
+                                        item.id === t.id ? { ...item, status: newStatus, progress: newProgress } : item
+                                      );
+                                      handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                                    }}
+                                  >
+                                    <option value="not-started">To Do</option>
+                                    <option value="in-progress">In Progress</option>
+                                    <option value="submitted">Submitted</option>
+                                    <option value="completed">Completed ✓</option>
+                                  </select>
+                                  <button
+                                    className="kanban-sort-remove-btn"
+                                    title="Delete task"
+                                    onClick={() => {
+                                      const updatedTasks = parsedData.tasks.filter((item) => item.id !== t.id);
+                                      const resolved = resolveSchedule(updatedTasks, parsedData.meta?.defaultGapDays ?? 2);
+                                      handleChartCommit({ ...parsedData, tasks: resolved });
+                                    }}
+                                  >
+                                    <Trash2 size={13} style={{ color: "var(--jantt-text-muted)" }} />
+                                  </button>
                                 </div>
-                              )}
-                              <div className="today-card-actions">
-                                <select
-                                  className="kanban-status-select"
-                                  value={t.status || "not-started"}
-                                  onChange={(e) => {
-                                    const newStatus = e.target.value;
-                                    let newProgress = t.progress;
-                                    if (newStatus === "completed") newProgress = 1.0;
-                                    else if (newStatus === "submitted" && (t.progress ?? 0) < 0.75) newProgress = 0.75;
-                                    else if (newStatus === "not-started") newProgress = 0;
-                                    const updatedTasks = parsedData.tasks.map((item) =>
-                                      item.id === t.id ? { ...item, status: newStatus, progress: newProgress } : item
-                                    );
-                                    handleChartCommit({ ...parsedData, tasks: updatedTasks });
-                                  }}
-                                >
-                                  <option value="not-started">To Do</option>
-                                  <option value="in-progress">In Progress</option>
-                                  <option value="submitted">Submitted / Review</option>
-                                  <option value="completed">Mark as Completed ✓</option>
-                                </select>
                               </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
