@@ -350,6 +350,54 @@
   font-family: var(--jantt-font-sans);
 }
 
+/* Active Date Filter Pill */
+.jantt-date-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--jantt-accent);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--jantt-font-sans);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.35));
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  user-select: none;
+}
+
+.jantt-date-filter-badge:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.jantt-date-filter-icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.9;
+}
+
+.jantt-date-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.jantt-date-filter-clear:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 /* Chart Main Body (Scroll Container) */
 .jantt-body-wrap {
   display: flex;
@@ -570,6 +618,28 @@
   padding: 2px 0;
   position: relative;
   overflow: visible;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jantt-day-cell:hover {
+  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.15));
+  color: var(--jantt-accent);
+}
+
+.jantt-day-cell.is-date-selected {
+  background: var(--jantt-accent) !important;
+  color: #FFFFFF !important;
+  font-weight: 800;
+  box-shadow: 0 0 12px var(--jantt-accent-glow, rgba(56, 189, 248, 0.5));
+  z-index: 7;
+}
+
+.jantt-day-cell.is-date-selected .jantt-day-name,
+.jantt-day-cell.is-date-selected .jantt-day-num,
+.jantt-day-cell.is-date-selected .jantt-boundary-marker {
+  color: #FFFFFF !important;
 }
 
 .jantt-day-name {
@@ -667,6 +737,13 @@
 
 .jantt-grid-day-col.is-weekend {
   background: transparent;
+}
+
+.jantt-grid-day-col.is-selected-date-col {
+  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.09));
+  border-left: 1px dashed var(--jantt-accent);
+  border-right: 1px dashed var(--jantt-accent);
+  z-index: 2;
 }
 
 /* Today Line */

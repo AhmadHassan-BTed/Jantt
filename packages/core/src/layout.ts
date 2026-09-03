@@ -17,6 +17,7 @@ import {
   addDays,
   diffDays,
   getTodayISODate,
+  getTodayProgressFraction,
   isWeekend,
   maxISODate,
   minISODate,
@@ -38,7 +39,7 @@ const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
   year: 1.5
 };
 
-const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns">> = {
+const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime">> = {
   dayWidth: 32,
   rowHeight: 46,
   rowHeightMode: "fit",
@@ -69,7 +70,10 @@ export function layout(
 
   const defaultDayWidth = SCALE_DAY_WIDTHS[scale] || 32;
 
-  const viewport: Required<Omit<ViewportOptions, "columns">> & { columns?: ViewportOptions["columns"] } = {
+  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime">> & {
+    columns?: ViewportOptions["columns"];
+    currentTime?: Date;
+  } = {
     ...DEFAULT_VIEWPORT,
     dayWidth: viewportOptions.dayWidth || defaultDayWidth,
     scale,
@@ -83,7 +87,8 @@ export function layout(
     labelWidth: viewportOptions.labelWidth || DEFAULT_VIEWPORT.labelWidth,
     headerHeight: viewportOptions.headerHeight || DEFAULT_VIEWPORT.headerHeight,
     startDate: viewportOptions.startDate || "",
-    endDate: viewportOptions.endDate || ""
+    endDate: viewportOptions.endDate || "",
+    currentTime: viewportOptions.currentTime
   };
 
   // Determine overall timeline bounds dynamically based on active tasks
@@ -301,7 +306,8 @@ export function layout(
     const isTaskBoundary = taskBoundaryDates.has(dStr);
 
     if (isTodayDay) {
-      todayX = dayX + viewport.dayWidth / 2;
+      const dayProgress = getTodayProgressFraction(viewport.currentTime);
+      todayX = Math.round((dayX + viewport.dayWidth * dayProgress) * 10) / 10;
     }
 
     const dayNumber = dObj.getUTCDate();

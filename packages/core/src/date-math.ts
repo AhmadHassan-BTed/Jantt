@@ -113,6 +113,21 @@ export function getTodayISODate(): string {
 }
 
 /**
+ * Returns the fractional progress through today [0, 1).
+ * At 00:00 (start of day), returns 0.0 (leftmost edge of today's column).
+ * At 12:00 (noon), returns 0.5 (center of today's column).
+ * Approaching 23:59:59, approaches 1.0 (rightmost edge of today's column).
+ */
+export function getTodayProgressFraction(now: Date = new Date()): number {
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const ms = now.getMilliseconds();
+  const totalSeconds = hours * 3600 + minutes * 60 + seconds + ms / 1000;
+  return Math.min(Math.max(totalSeconds / 86400, 0), 0.9999);
+}
+
+/**
  * Returns the month name alone (e.g. 'September' or 'Sep')
  */
 export function getMonthNameOnly(dateStr: string, full = true): string {

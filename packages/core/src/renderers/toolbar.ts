@@ -11,6 +11,7 @@ export interface ToolbarProps {
   criticalCount: number;
   searchQuery: string;
   autoCascade: boolean;
+  selectedDate?: string | null;
   onScaleChange: (scale: TimeScale) => void;
   onRoutingChange: (routing: LinkRoutingStyle) => void;
   onRowHeightModeChange: (mode: RowHeightMode) => void;
@@ -19,6 +20,7 @@ export interface ToolbarProps {
   onAutoCascadeToggle: () => void;
   onAddTask?: () => void;
   onSearchChange: (query: string) => void;
+  onClearDateFilter?: () => void;
 }
 
 /**
@@ -202,6 +204,32 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     props.onSearchChange((e.target as HTMLInputElement).value);
   });
   controls.appendChild(searchBox);
+
+  // Active Date Filter Badge
+  if (props.selectedDate) {
+    const dateFilterBadge = document.createElement("div");
+    dateFilterBadge.className = "jantt-date-filter-badge";
+    dateFilterBadge.title = `Filtered to ${props.selectedDate} — click to clear filter`;
+    dateFilterBadge.innerHTML = `
+      <span class="jantt-date-filter-icon">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      </span>
+      <span class="jantt-date-filter-text">${escapeHtml(props.selectedDate)}</span>
+      <button type="button" class="jantt-date-filter-clear" aria-label="Clear date filter" title="Clear filter">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    `;
+    dateFilterBadge.addEventListener("click", () => props.onClearDateFilter?.());
+    controls.appendChild(dateFilterBadge);
+  }
 
   toolbar.appendChild(controls);
   return toolbar;

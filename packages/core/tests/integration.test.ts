@@ -6,6 +6,7 @@ import { exportToCsv } from "../src/exporter";
 import { createTaskSidebar } from "../src/sidebar";
 import { createTooltipController } from "../src/renderers/tooltip";
 import { renderTimelineGrid } from "../src/renderers/timeline-grid";
+import { renderJantt } from "../src/renderer";
 import { JanttData, Task } from "../src/types";
 import basicJson from "../../../examples/basic.json";
 import academicJson from "../../../examples/academic-roadmap.json";
@@ -323,5 +324,107 @@ describe("Stress & Boundary Tests", () => {
 
     const rowLines = gridLayer.querySelectorAll(".jantt-grid-row");
     expect(rowLines.length).toBe(layoutRes.tasks.length);
+  });
+
+  describe("Dynamic Today's Line Intra-Day Progress", () => {
+    it("starts at column left edge at 00:00 and moves rightward as day progresses", () => {
+      const midnight = new Date();
+      midnight.setHours(0, 0, 0, 0);
+
+      const noon = new Date();
+      noon.setHours(12, 0, 0, 0);
+
+      const evening = new Date();
+      evening.setHours(18, 0, 0, 0);
+
+      const resMidnight = layout(basicJson as JanttData, { dayWidth: 40, currentTime: midnight });
+      const resNoon = layout(basicJson as JanttData, { dayWidth: 40, currentTime: noon });
+      const resEvening = layout(basicJson as JanttData, { dayWidth: 40, currentTime: evening });
+
+      const todayDay = resMidnight.header.days.find((d) => d.isToday);
+      expect(todayDay).toBeDefined();
+
+      const colLeft = todayDay!.x;
+      // At midnight, todayX starts at the left-most edge of the column
+      expect(resMidnight.header.todayX).toBe(colLeft);
+
+      // At noon, todayX is approximately halfway across the column (colLeft + 20px)
+      expect(resNoon.header.todayX).toBeCloseTo(colLeft + 20, 0);
+
+      // At evening (18:00), todayX is 3/4 across the column (colLeft + 30px)
+      expect(resEvening.header.todayX).toBeCloseTo(colLeft + 30, 0);
+
+      // As time advances, todayX strictly increases towards the right
+      expect(resMidnight.header.todayX!).toBeLessThan(resNoon.header.todayX!);
+      expect(resNoon.header.todayX!).toBeLessThan(resEvening.header.todayX!);
+    });
+  });
+
+  describe("Interactive Day Header Click to Filter by Date", () => {
+    it("filters tasks to only those active on the clicked date and toggles off on re-click", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const testData: JanttData = {
+        tasks: [
+          { id: "t1", label: "Task 1", start: "2026-09-01", end: "2026-09-05" },
+          { id: "t2", label: "Task 2", start: "2026-09-06", end: "2026-09-10" },
+          { id: "t3", label: "Task 3", start: "2026-09-03", end: "2026-09-08" }
+        ]
+      };
+
+      const chart = renderJantt(container, testData);
+
+      // Initially all 3 tasks are rendered in the grid rows
+      let rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(3);
+
+      // Find the day cell for 2026-09-04
+      const dayCell04 = container.querySelector<HTMLElement>('.jantt-day-cell[data-date="2026-09-04"]');
+      expect(dayCell04).not.toBeNull();
+
+      // Click on 2026-09-04 -> Active tasks are t1 (Sept 1-5) and t3 (Sept 3-8). t2 (Sept 6-10) is excluded.
+      dayCell04!.click();
+
+      expect(chart.getSelectedDate?.()).toBe("2026-09-04");
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(2);
+
+      // Active date badge should be visible in toolbar
+      const badge = container.querySelector(".jantt-date-filter-badge");
+      expect(badge).not.toBeNull();
+      expect(badge?.textContent).toContain("2026-09-04");
+
+      // The day cell should have the active selection class
+      const activeCell = container.querySelector(".jantt-day-cell.is-date-selected");
+      expect(activeCell).not.toBeNull();
+      expect(activeCell?.getAttribute("data-date")).toBe("2026-09-04");
+
+      // Re-clicking the day cell clears the filter and restores all 3 tasks
+      const reCell04 = container.querySelector<HTMLElement>('.jantt-day-cell[data-date="2026-09-04"]');
+      reCell04!.click();
+
+      expect(chart.getSelectedDate?.()).toBeNull();
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(3);
+
+      // Programmatic filtering via filterByDate
+      chart.filterByDate?.("2026-09-09");
+      expect(chart.getSelectedDate?.()).toBe("2026-09-09");
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      // Active on Sept 9: t2 (Sept 6-10)
+      expect(rows.length).toBe(1);
+
+      // Clicking clear button on badge clears filter
+      const clearBtn = container.querySelector<HTMLButtonElement>(".jantt-date-filter-clear");
+      expect(clearBtn).not.toBeNull();
+      clearBtn!.click();
+      expect(chart.getSelectedDate?.()).toBeNull();
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(3);
+
+      chart.destroy();
+      document.body.removeChild(container);
+    });
   });
 });
