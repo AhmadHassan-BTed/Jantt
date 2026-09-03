@@ -251,6 +251,91 @@
   opacity: 0.7;
 }
 
+/* Unified Row Height Strip (Vertical Scale & Presets outside) */
+.jantt-rowheight-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--jantt-surface-solid, rgba(0, 0, 0, 0.22));
+  border: 1px solid var(--jantt-border);
+  border-radius: 100px;
+  padding: 3px 10px;
+  box-sizing: border-box;
+  height: 30px;
+}
+
+.jantt-theme-light .jantt-rowheight-strip {
+  background: rgba(15, 23, 42, 0.05);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.jantt-rowheight-strip .jantt-scale-group {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.jantt-rowheight-icon {
+  display: flex;
+  align-items: center;
+  color: var(--jantt-text-muted);
+}
+
+.jantt-rowheight-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 55px;
+  height: 4px;
+  background: var(--jantt-border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  margin: 0 2px;
+  transition: background 0.15s ease;
+}
+
+.jantt-rowheight-slider:focus {
+  background: var(--jantt-border-focus, var(--jantt-accent));
+}
+
+.jantt-rowheight-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--jantt-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jantt-rowheight-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.5));
+}
+
+.jantt-rowheight-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--jantt-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jantt-rowheight-label {
+  font-size: 10px;
+  font-family: var(--jantt-font-mono);
+  font-weight: 700;
+  color: var(--jantt-text-dim, var(--jantt-text-muted));
+  min-width: 26px;
+  text-align: right;
+  user-select: none;
+}
+
 /* Scale & Routing Segmented Controls */
 .jantt-scale-group {
   display: flex;
@@ -640,7 +725,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.jantt-settings-switch-row:hover {
+  background: var(--jantt-surface-hover);
 }
 
 .jantt-settings-switch-info {
