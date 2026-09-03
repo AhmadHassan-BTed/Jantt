@@ -1,4 +1,6 @@
 import { JanttMeta, TimeScale, LinkRoutingStyle, RowHeightMode } from "../types";
+import { escapeHtml } from "../utils";
+import { DAY_WIDTH_MIN, DAY_WIDTH_MAX } from "../constants";
 
 export interface ToolbarProps {
   meta?: JanttMeta;
@@ -70,7 +72,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
     </button>
-    <input type="range" class="jantt-zoom-slider" min="1.2" max="75" step="0.5" value="${props.dayWidth}" />
+    <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.5" value="${props.dayWidth}" />
     <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -93,12 +95,12 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 
   zoomOutBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    props.onDayWidthChange(Math.max(1.2, Math.round((props.dayWidth / 1.25) * 10) / 10));
+    props.onDayWidthChange(Math.max(DAY_WIDTH_MIN, Math.round((props.dayWidth / 1.25) * 10) / 10));
   });
 
   zoomInBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    props.onDayWidthChange(Math.min(75, Math.round((props.dayWidth * 1.25) * 10) / 10));
+    props.onDayWidthChange(Math.min(DAY_WIDTH_MAX, Math.round((props.dayWidth * 1.25) * 10) / 10));
   });
 
   controls.appendChild(zoomSliderWrap);
@@ -278,13 +280,4 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 
   toolbar.appendChild(controls);
   return toolbar;
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }

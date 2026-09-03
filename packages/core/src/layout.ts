@@ -9,7 +9,6 @@ import {
   HeaderWeek,
   HeaderDay,
   JanttLayoutResult,
-  Category,
   TimeScale,
   LinkRoutingStyle
 } from "./types";
@@ -24,20 +23,17 @@ import {
   parseISODate
 } from "./date-math";
 import { calculateCriticalPath, getTaskDependencies } from "./resolver";
+import { clampDayWidth, getTaskDisplayName } from "./utils";
+import {
+  DEFAULT_CATEGORY,
+  SCALE_DAY_WIDTHS,
+  DEFAULT_ROW_HEIGHT,
+  DEFAULT_LABEL_WIDTH,
+  DEFAULT_HEADER_HEIGHT,
+  MULTI_YEAR_HEADER_HEIGHT
+} from "./constants";
 
-const DEFAULT_CATEGORY: Category = {
-  label: "General",
-  color: "#3B82F6",
-  soft: "#1E293B"
-};
-
-export const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
-  day: 36,
-  week: 18,
-  month: 7,
-  quarter: 3,
-  year: 1.5
-};
+export { SCALE_DAY_WIDTHS };
 
 /**
  * Derives the optimal header scale tier from a continuous day width in pixels.
@@ -57,10 +53,10 @@ export function getScaleFromDayWidth(dayWidth: number): TimeScale {
 
 const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> = {
   dayWidth: 32,
-  rowHeight: 46,
+  rowHeight: DEFAULT_ROW_HEIGHT,
   rowHeightMode: "fit",
-  labelWidth: 340,
-  headerHeight: 58,
+  labelWidth: DEFAULT_LABEL_WIDTH,
+  headerHeight: DEFAULT_HEADER_HEIGHT,
   startDate: "",
   endDate: "",
   scale: "day",
@@ -86,13 +82,13 @@ export function layout(
   let dayWidth: number;
 
   if (viewportOptions.dayWidth !== undefined && viewportOptions.scale === undefined) {
-    dayWidth = Math.max(0.8, Math.min(120, viewportOptions.dayWidth));
+    dayWidth = clampDayWidth(viewportOptions.dayWidth);
     scale = getScaleFromDayWidth(dayWidth);
   } else if (viewportOptions.scale !== undefined && viewportOptions.dayWidth === undefined) {
     scale = viewportOptions.scale;
     dayWidth = SCALE_DAY_WIDTHS[scale] || 32;
   } else if (viewportOptions.dayWidth !== undefined && viewportOptions.scale !== undefined) {
-    dayWidth = Math.max(0.8, Math.min(120, viewportOptions.dayWidth));
+    dayWidth = clampDayWidth(viewportOptions.dayWidth);
     scale = getScaleFromDayWidth(dayWidth);
   } else {
     scale = data.meta?.scale || "day";
@@ -123,7 +119,7 @@ export function layout(
   };
 
   // Determine overall timeline bounds dynamically based on active tasks
-  const todayStr = getTodayISODate();
+  const todayStr = getTodayISODate(viewport.currentTime);
   let minTaskStart = tasks[0]?.start || todayStr;
   let maxTaskEnd = tasks[0]?.end || minTaskStart;
 
@@ -229,7 +225,7 @@ export function layout(
     }
 
     const cat = categories[task.category] || DEFAULT_CATEGORY;
-    const displayLabel = task.label || task.name || task.id;
+    const displayLabel = getTaskDisplayName(task);
     const isCritical = criticalTaskIds.has(task.id);
 
     let baselineLayout: TaskLayout["baselineLayout"] | undefined;
@@ -436,7 +432,7 @@ export function layout(
     });
   }
 
-  const computedHeaderHeight = spansMultipleYears ? 78 : 58;
+  const computedHeaderHeight = spansMultipleYears ? MULTI_YEAR_HEADER_HEIGHT : DEFAULT_HEADER_HEIGHT;
 
   const header: GridHeader = {
     years,

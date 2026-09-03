@@ -1,6 +1,8 @@
 import { JanttData, Task, JanttOptions, TaskLayout } from "./types";
 import { addDays, diffDays } from "./date-math";
 import { resolveSchedule, getTaskDependencies } from "./resolver";
+import { getEffectiveGap } from "./utils";
+import { DEFAULT_GAP_DAYS } from "./constants";
 
 export type DragMode = "move" | "resize" | "progress" | "link" | "split" | "marquee";
 
@@ -50,7 +52,7 @@ export class InteractionController {
     this.data = data;
     this.options = options;
     this.dayWidth = dayWidth;
-    this.defaultGapDays = data.meta?.defaultGapDays ?? 2;
+    this.defaultGapDays = data.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS;
     this.onRenderRequest = onRenderRequest;
     this.openModalHandler = openModalHandler;
     this.onLiveLinkUpdate = onLiveLinkUpdate;
@@ -63,7 +65,7 @@ export class InteractionController {
   public updateData(newData: JanttData, dayWidth?: number) {
     this.data = newData;
     if (dayWidth) this.dayWidth = dayWidth;
-    this.defaultGapDays = newData.meta?.defaultGapDays ?? 2;
+    this.defaultGapDays = newData.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS;
   }
 
   public getSelectedTaskIds(): Set<string> {
@@ -348,7 +350,7 @@ export class InteractionController {
           for (const depId of deps) {
             const prereq = this.data.tasks.find((t) => t.id === depId);
             if (prereq) {
-              const minAllowed = addDays(prereq.end, task.gapDays ?? this.defaultGapDays);
+              const minAllowed = addDays(prereq.end, getEffectiveGap(task, this.defaultGapDays));
               if (diffDays(minAllowed, newStart) < 0) {
                 newStart = minAllowed;
               }
