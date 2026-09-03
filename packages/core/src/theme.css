@@ -996,20 +996,37 @@
 .jantt-col-resize-handle {
   position: absolute;
   top: 0;
-  right: 0;
-  width: 6px;
+  right: -5px;
+  width: 11px;
   height: 100%;
   cursor: col-resize;
-  z-index: 10;
+  z-index: 15;
   touch-action: none;
   user-select: none;
-  transition: background 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.jantt-col-resize-handle:hover,
-.jantt-col-resize-handle:active {
+.jantt-col-resize-handle::after {
+  content: "";
+  width: 2px;
+  height: 65%;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jantt-col-resize-handle:hover::after,
+.jantt-col-resize-handle:active::after {
   background: var(--jantt-accent);
-  box-shadow: 0 0 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.6));
+  box-shadow: 0 0 6px var(--jantt-accent-glow, rgba(56, 189, 248, 0.6));
+}
+
+.jantt-day-cell:hover,
+.jantt-month-cell:hover {
+  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.08));
+  cursor: col-resize;
 }
 
 .jantt-day-name {

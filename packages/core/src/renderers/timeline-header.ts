@@ -1,23 +1,104 @@
 import { GridHeader } from "../types";
+import { clampDayWidth } from "../utils";
 
 export interface TimelineHeaderOptions {
   selectedDate?: string | null;
   dayWidth?: number;
   onDateClick?: (dateStr: string) => void;
-  onColumnResize?: (newDayWidth: number) => void;
+  onColumnResize?: (newDayWidth: number, clientX?: number) => void;
+}
+
+/**
+ * Starts a smooth, cursor-anchored timeline column drag session.
+ * Attaches pointer events to window so DOM re-rendering never interrupts active dragging.
+ */
+function startColumnDragSession(
+  initialPointerEvt: PointerEvent,
+  startDayWidth: number,
+  mode: "handle" | "cell",
+  onResize?: (newDayWidth: number, clientX: number) => void,
+  onDragStateChange?: (didMove: boolean) => void
+) {
+  // Only trigger on primary left click
+  if (initialPointerEvt.button !== 0) return;
+
+  initialPointerEvt.preventDefault();
+  initialPointerEvt.stopPropagation();
+
+  const startX = initialPointerEvt.clientX;
+  const startY = initialPointerEvt.clientY;
+  const initialWidth = startDayWidth;
+  let hasMoved = false;
+  let rafPending = false;
+
+  const prevCursor = document.body.style.cursor;
+  const prevUserSelect = document.body.style.userSelect;
+
+  const onPointerMove = (e: PointerEvent) => {
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+
+    if (!hasMoved) {
+      const threshold = mode === "handle" ? 2 : 4;
+      if (Math.abs(deltaX) >= threshold || (mode === "handle" && Math.abs(deltaY) >= threshold)) {
+        hasMoved = true;
+        onDragStateChange?.(true);
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+      }
+    }
+
+    if (hasMoved && onResize) {
+      if (!rafPending) {
+        rafPending = true;
+        requestAnimationFrame(() => {
+          rafPending = false;
+          let newWidth: number;
+          if (mode === "handle") {
+            // Direct width delta from border handle
+            newWidth = clampDayWidth(initialWidth + deltaX);
+          } else {
+            // Exponential continuous zoom curve when holding the column body:
+            // Dragging right stretches columns (zooms in), dragging left compresses (zooms out)
+            const factor = Math.exp(deltaX / 140);
+            newWidth = clampDayWidth(initialWidth * factor);
+          }
+          onResize(newWidth, startX);
+        });
+      }
+    }
+  };
+
+  const onPointerUp = () => {
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
+
+    document.body.style.cursor = prevCursor;
+    document.body.style.userSelect = prevUserSelect;
+  };
+
+  window.addEventListener("pointermove", onPointerMove, { passive: true });
+  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
 }
 
 /**
  * Renders the multi-tier sticky timeline header (Years, Months, Weekdays, Dates).
  * Dynamically adapts the days tier to prevent text squishing on zoomed-out scales (Month, Quarter, Year)
  * by only rendering legible boundary dates where tasks start or finish.
- * Day cells are interactive and clickable to filter tasks active on that date,
- * and column borders have draggable resize handles for continuous timeline zooming.
+ *
+ * Supports dual-mode smooth column resizing:
+ * 1. Grabbing visible col-resize handles on column borders.
+ * 2. Holding and dragging horizontally anywhere on column headers to smoothly stretch/compress timeline zoom.
+ * Clicking a date without dragging filters tasks active on that date.
  */
 export function renderTimelineHeader(header: GridHeader, options?: TimelineHeaderOptions): HTMLElement {
   const timelineHeader = document.createElement("div");
   timelineHeader.className = "jantt-timeline-header";
   timelineHeader.style.height = `${header.totalHeight}px`;
+
+  const currentDayW = options?.dayWidth || header.days[0]?.width || 36;
 
   // 1. Years tier (rendered when timeline spans multiple years)
   if (header.spansMultipleYears && header.years.length > 0) {
@@ -41,38 +122,21 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     mCell.className = "jantt-month-cell";
     mCell.style.width = `${m.width}px`;
     mCell.textContent = m.label;
+    mCell.title = "Drag to smoothly zoom timeline";
 
-    // Draggable resize handle for month tier
+    // Allow holding the month cell itself to stretch / zoom
     if (options?.onColumnResize) {
+      mCell.addEventListener("pointerdown", (e) => {
+        if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
+        startColumnDragSession(e, currentDayW, "cell", options.onColumnResize);
+      });
+
+      // Draggable resize handle for month tier
       const mResizeHandle = document.createElement("div");
       mResizeHandle.className = "jantt-col-resize-handle";
-      mResizeHandle.title = "Drag to zoom timeline";
+      mResizeHandle.title = "Drag to resize column width / zoom timeline";
       mResizeHandle.addEventListener("pointerdown", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        try { mResizeHandle.setPointerCapture(e.pointerId); } catch {}
-
-        const startX = e.clientX;
-        const currentDayW = options.dayWidth || 7;
-        const approxDaysInMonth = Math.max(1, Math.round(m.width / currentDayW));
-
-        const onPointerMove = (moveEvt: PointerEvent) => {
-          const deltaX = moveEvt.clientX - startX;
-          const newTotalMonthWidth = Math.max(20, m.width + deltaX);
-          const newDayWidth = Math.max(1.2, Math.min(100, Math.round((newTotalMonthWidth / approxDaysInMonth) * 10) / 10));
-          options.onColumnResize?.(newDayWidth);
-        };
-
-        const onPointerUp = (upEvt: PointerEvent) => {
-          try { mResizeHandle.releasePointerCapture(upEvt.pointerId); } catch {}
-          mResizeHandle.removeEventListener("pointermove", onPointerMove);
-          mResizeHandle.removeEventListener("pointerup", onPointerUp);
-          mResizeHandle.removeEventListener("pointercancel", onPointerUp);
-        };
-
-        mResizeHandle.addEventListener("pointermove", onPointerMove);
-        mResizeHandle.addEventListener("pointerup", onPointerUp);
-        mResizeHandle.addEventListener("pointercancel", onPointerUp);
+        startColumnDragSession(e, currentDayW, "handle", options.onColumnResize);
       });
       mCell.appendChild(mResizeHandle);
     }
@@ -97,23 +161,46 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     } ${isSelected ? "is-date-selected" : ""}`;
     dCell.style.width = `${d.width}px`;
     dCell.title = isSelected
-      ? `${d.dateStr} (Active filter — click to clear)`
+      ? `${d.dateStr} (Active filter — click to clear, or drag to zoom)`
       : isBoundary
-      ? `${d.dateStr} (Task boundary date — click to show tasks on this date)`
-      : `${d.dateStr} (Click to show tasks on this date)`;
+      ? `${d.dateStr} (Task boundary date — click to show tasks, or drag to zoom)`
+      : `${d.dateStr} (Click to show tasks, or drag to zoom)`;
     dCell.setAttribute("data-date", d.dateStr);
 
+    let cellDragMoved = false;
+
+    // Support holding the column to zoom
+    if (options?.onColumnResize) {
+      dCell.addEventListener("pointerdown", (e) => {
+        if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
+        cellDragMoved = false;
+        startColumnDragSession(
+          e,
+          currentDayW,
+          "cell",
+          options.onColumnResize,
+          (didMove) => {
+            cellDragMoved = didMove;
+          }
+        );
+      });
+    }
+
+    // Support standard click to filter date (suppressed if a drag actually moved)
     if (options?.onDateClick) {
       dCell.addEventListener("click", (e) => {
-        // Prevent click when dragging resize handle
         if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
+        if (cellDragMoved) {
+          cellDragMoved = false;
+          return;
+        }
         e.stopPropagation();
         options.onDateClick!(d.dateStr);
       });
     }
 
     if (isZoomedOut) {
-      // On Month/Quarter/Year scales: show legible markers on task start/finish boundary dates, today, or active selected date
+      // On Month/Quarter/Year scales: show legible markers on task boundary dates, today, or active selected date
       if (isSelected || isBoundary || d.isToday || d.dayOfMonth === 1) {
         dCell.innerHTML = `<span class="jantt-boundary-marker ${d.isToday ? "is-today-marker" : ""} ${isSelected ? "is-selected-marker" : ""}" title="${d.dateStr}">${d.dayOfMonth}</span>`;
       } else {
@@ -134,35 +221,13 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       `;
     }
 
-    // Draggable resize handle for day tier
-    if (options?.onColumnResize && d.width >= 10) {
+    // Draggable resize handle for day tier (available on all scales where cell is at least 6px)
+    if (options?.onColumnResize && d.width >= 6) {
       const dResizeHandle = document.createElement("div");
       dResizeHandle.className = "jantt-col-resize-handle";
       dResizeHandle.title = "Drag to resize column width / zoom timeline";
       dResizeHandle.addEventListener("pointerdown", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        try { dResizeHandle.setPointerCapture(e.pointerId); } catch {}
-
-        const startX = e.clientX;
-        const initialWidth = d.width;
-
-        const onPointerMove = (moveEvt: PointerEvent) => {
-          const deltaX = moveEvt.clientX - startX;
-          const newDayWidth = Math.max(1.2, Math.min(100, Math.round((initialWidth + deltaX) * 10) / 10));
-          options.onColumnResize?.(newDayWidth);
-        };
-
-        const onPointerUp = (upEvt: PointerEvent) => {
-          try { dResizeHandle.releasePointerCapture(upEvt.pointerId); } catch {}
-          dResizeHandle.removeEventListener("pointermove", onPointerMove);
-          dResizeHandle.removeEventListener("pointerup", onPointerUp);
-          dResizeHandle.removeEventListener("pointercancel", onPointerUp);
-        };
-
-        dResizeHandle.addEventListener("pointermove", onPointerMove);
-        dResizeHandle.addEventListener("pointerup", onPointerUp);
-        dResizeHandle.addEventListener("pointercancel", onPointerUp);
+        startColumnDragSession(e, currentDayW, "handle", options.onColumnResize);
       });
       dCell.appendChild(dResizeHandle);
     }

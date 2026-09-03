@@ -584,6 +584,58 @@ describe("Stress & Boundary Tests", () => {
 
       expect(chart.getDayWidth?.()).toBeGreaterThan(initialWidth);
 
+      // Test holding the day cell and dragging horizontally to stretch columns smoothly
+      const PEvent = (typeof PointerEvent !== "undefined" ? PointerEvent : MouseEvent);
+      const dayCell = container.querySelector<HTMLElement>(".jantt-day-cell");
+      expect(dayCell).not.toBeNull();
+      const preDragWidth = chart.getDayWidth?.() || 20;
+
+      // Pointer down on day cell
+      dayCell!.dispatchEvent(new PEvent("pointerdown", {
+        clientX: 100,
+        clientY: 20,
+        button: 0,
+        bubbles: true
+      }));
+
+      // Pointer move on window (drag right by 50px to stretch/zoom in)
+      window.dispatchEvent(new PEvent("pointermove", {
+        clientX: 150,
+        clientY: 20,
+        bubbles: true
+      }));
+
+      // Pointer up on window
+      window.dispatchEvent(new PEvent("pointerup", {
+        clientX: 150,
+        clientY: 20,
+        bubbles: true
+      }));
+
+      // Test border resize handle dragging
+      const handle = container.querySelector<HTMLElement>(".jantt-col-resize-handle");
+      expect(handle).not.toBeNull();
+      const preHandleWidth = chart.getDayWidth?.() || 20;
+
+      handle!.dispatchEvent(new PEvent("pointerdown", {
+        clientX: 200,
+        clientY: 20,
+        button: 0,
+        bubbles: true
+      }));
+
+      window.dispatchEvent(new PEvent("pointermove", {
+        clientX: 220,
+        clientY: 20,
+        bubbles: true
+      }));
+
+      window.dispatchEvent(new PEvent("pointerup", {
+        clientX: 220,
+        clientY: 20,
+        bubbles: true
+      }));
+
       chart.destroy();
       document.body.removeChild(container);
     });
