@@ -164,6 +164,127 @@ body {
   box-shadow: 0 0 0 2px var(--jantt-accent-glow, rgba(56, 189, 248, 0.2));
 }
 
+/* Grouped Plan Management Control Center */
+.nav-plan-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  padding: 2px 4px 2px 8px;
+  gap: 6px;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.nav-plan-group:focus-within {
+  border-color: var(--jantt-accent, #38BDF8);
+  box-shadow: 0 0 0 2px var(--jantt-accent-glow, rgba(56, 189, 248, 0.2));
+}
+
+.nav-plan-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-plan-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--jantt-text-muted, #94A3B8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nav-plan-select {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 4px 6px !important;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jantt-text, #F8FAFC);
+  max-width: 175px;
+  cursor: pointer;
+}
+
+.nav-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border-left: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
+  padding-left: 4px;
+}
+
+.btn-plan-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--jantt-text-muted, #94A3B8);
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.btn-plan-action:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-text, #F8FAFC);
+}
+
+.btn-plan-action.is-add {
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
+  color: var(--jantt-accent, #38BDF8);
+  border-color: var(--jantt-accent-glow, rgba(56, 189, 248, 0.3));
+}
+
+.btn-plan-action.is-add:hover {
+  background: var(--jantt-accent, #38BDF8);
+  color: #FFFFFF;
+}
+
+.btn-plan-action.is-delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444 !important;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Grouped Data I/O (Import & Export) */
+.nav-io-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.nav-export-split {
+  display: inline-flex;
+  background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
+  border-radius: 9px;
+  padding: 1px;
+  gap: 1px;
+}
+
+.nav-export-split .btn-nav {
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.nav-export-split .btn-nav:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-accent, #38BDF8);
+}
+
 .btn-nav {
   display: inline-flex;
   align-items: center;

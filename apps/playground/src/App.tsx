@@ -1318,164 +1318,163 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
           </button>
 
 
-          {/* Plan / Project Selector */}
-          <div className="nav-select-group">
-            <label htmlFor="project-select">Plan:</label>
-            <select
-              id="project-select"
-              className="select-input"
-              value={activeProjectId}
-              onChange={(e) => handleSelectProject(e.target.value)}
-            >
-              <optgroup label="Templates">
-                <option value="default">{DEFAULT_TEMPLATE.name}</option>
-              </optgroup>
-              {customProjects.filter((p) => p.source !== "linked").length > 0 && (
-                <optgroup label={`💻 Local Plans (${customProjects.filter((p) => p.source !== "linked").length})`}>
-                  {customProjects
-                    .filter((p) => p.source !== "linked")
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.data?.tasks?.length || 0} tasks)
-                      </option>
-                    ))}
+          {/* Plan Control Center — Grouped Cohesive Unit */}
+          <div className="nav-plan-group">
+            <div className="nav-plan-select-wrap">
+              <label htmlFor="project-select" className="nav-plan-label">Plan:</label>
+              <select
+                id="project-select"
+                className="select-input nav-plan-select"
+                value={activeProjectId}
+                onChange={(e) => handleSelectProject(e.target.value)}
+                title="Select Active Project Plan"
+              >
+                <optgroup label="Templates">
+                  <option value="default">{DEFAULT_TEMPLATE.name}</option>
                 </optgroup>
+                {customProjects.filter((p) => p.source !== "linked").length > 0 && (
+                  <optgroup label={`💻 Local Plans (${customProjects.filter((p) => p.source !== "linked").length})`}>
+                    {customProjects
+                      .filter((p) => p.source !== "linked")
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.data?.tasks?.length || 0} tasks)
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                {customProjects.filter((p) => p.source === "linked").length > 0 && (
+                  <optgroup label={`☁️ Linked Cloud Plans (${customProjects.filter((p) => p.source === "linked").length})`}>
+                    {customProjects
+                      .filter((p) => p.source === "linked")
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          ☁️ {p.name} ({p.data?.tasks?.length || 0} tasks)
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+
+            <div className="nav-plan-actions">
+              {/* + Add Plan Button */}
+              <button
+                className="btn-plan-action is-add"
+                onClick={handleOpenAddPlanModal}
+                title="Create a new blank plan, clone existing, or use a template"
+              >
+                <Plus size={13} />
+                <span>Plan</span>
+              </button>
+
+              {/* Link Cloud Plan Button */}
+              <button
+                className="btn-plan-action"
+                onClick={handleOpenLinkCloudModal}
+                title="Link and sync a remote plan from Google Drive, GitHub, Dropbox or direct URL"
+              >
+                <Cloud size={13} style={{ color: "var(--jantt-accent)" }} />
+              </button>
+
+              {/* Linked Cloud Plan Controls (when active plan is linked) */}
+              {customProjects.some((p) => p.id === activeProjectId && p.source === "linked") && (() => {
+                const linkedActive = customProjects.find((p) => p.id === activeProjectId)!;
+                return (
+                  <>
+                    <button
+                      className="btn-plan-action is-sync"
+                      onClick={handleSyncActiveProject}
+                      disabled={isSyncingProject}
+                      title={`Re-fetch and update this plan from the cloud URL (Last synced: ${formatRelativeTime(linkedActive.lastSyncedAt)})`}
+                    >
+                      <RefreshCw size={12} className={isSyncingProject ? "spin-sync-icon" : ""} />
+                    </button>
+                    <button
+                      className="btn-plan-action"
+                      onClick={handleForkToLocalPlan}
+                      title="Create an editable local copy of this cloud plan"
+                    >
+                      <GitFork size={12} />
+                    </button>
+                    {linkedActive.sourceUrl && (
+                      <a
+                        href={linkedActive.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-plan-action"
+                        title="Open original cloud link in new tab"
+                      >
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Delete / Unlink Active Plan Button */}
+              {activeProjectId !== "default" && (
+                <button
+                  className="btn-plan-action is-delete"
+                  style={{ color: "#EF4444" }}
+                  onClick={() => handleDeleteProject(activeProjectId)}
+                  title={
+                    customProjects.find((p) => p.id === activeProjectId)?.source === "linked"
+                      ? "Unlink this cloud plan from browser storage"
+                      : "Delete this custom plan from browser memory"
+                  }
+                >
+                  <Trash2 size={12} />
+                </button>
               )}
-              {customProjects.filter((p) => p.source === "linked").length > 0 && (
-                <optgroup label={`☁️ Linked Cloud Plans (${customProjects.filter((p) => p.source === "linked").length})`}>
-                  {customProjects
-                    .filter((p) => p.source === "linked")
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        ☁️ {p.name} ({p.data?.tasks?.length || 0} tasks)
-                      </option>
-                    ))}
-                </optgroup>
-              )}
-            </select>
+            </div>
           </div>
 
-          {/* + Add Plan Button */}
-          <button
-            className="btn-prompt"
-            style={{ background: "var(--jantt-accent)", color: "#FFFFFF", fontWeight: 700 }}
-            onClick={handleOpenAddPlanModal}
-            title="Create a new blank plan, clone existing, or use a template"
-          >
-            <Plus size={14} />
-            <span>Add Plan</span>
-          </button>
-
-          {/* Link Cloud Plan Button */}
+          {/* People (Team) Manager Button */}
           <button
             className="btn-nav"
-            onClick={handleOpenLinkCloudModal}
-            title="Link and sync a remote plan from Google Drive, GitHub, Dropbox or direct URL"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            onClick={() => setShowPeopleModal(true)}
+            title="Manage team members and assignees"
           >
-            <Cloud size={13} style={{ color: "var(--jantt-accent)" }} />
-            <span>Link Cloud Plan</span>
+            <Users size={13} />
+            <span>People{people.length > 0 ? ` (${people.length})` : ""}</span>
           </button>
 
-          {/* Linked Cloud Plan Controls (when active plan is linked) */}
-          {customProjects.some((p) => p.id === activeProjectId && p.source === "linked") && (() => {
-            const linkedActive = customProjects.find((p) => p.id === activeProjectId)!;
-            return (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "var(--jantt-accent)",
-                    background: "rgba(56, 189, 248, 0.12)",
-                    padding: "2px 8px",
-                    borderRadius: "12px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px"
-                  }}
-                  title={`Source URL: ${linkedActive.sourceUrl || "Cloud"}\nLast synced: ${linkedActive.lastSyncedAt || "Never"}`}
-                >
-                  <Cloud size={11} />
-                  <span>Synced: {formatRelativeTime(linkedActive.lastSyncedAt)}</span>
-                </span>
+          {/* Data I/O Group (Import & Export) */}
+          <div className="nav-io-group">
+            {/* Hidden File Input for JSON Import */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".json,application/json"
+              onChange={handleImportJsonFile}
+              style={{ display: "none" }}
+            />
 
-                <button
-                  className="btn-nav"
-                  onClick={handleSyncActiveProject}
-                  disabled={isSyncingProject}
-                  title="Re-fetch and update this plan from the cloud URL"
-                  style={{ color: "var(--jantt-accent)", fontWeight: 600 }}
-                >
-                  <RefreshCw size={13} className={isSyncingProject ? "spin-sync-icon" : ""} />
-                  <span>{isSyncingProject ? "Syncing..." : "Sync"}</span>
-                </button>
-
-                <button
-                  className="btn-nav"
-                  onClick={handleForkToLocalPlan}
-                  title="Create an editable local copy of this cloud plan"
-                >
-                  <GitFork size={13} />
-                  <span>Fork</span>
-                </button>
-
-                {linkedActive.sourceUrl && (
-                  <a
-                    href={linkedActive.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-nav"
-                    title="Open original cloud link in new tab"
-                    style={{ padding: "6px 8px", display: "inline-flex", alignItems: "center" }}
-                  >
-                    <ExternalLink size={13} />
-                  </a>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Delete / Unlink Active Plan Button */}
-          {activeProjectId !== "default" && (
+            {/* Import JSON Button */}
             <button
               className="btn-nav"
-              style={{ color: "#EF4444" }}
-              onClick={() => handleDeleteProject(activeProjectId)}
-              title={
-                customProjects.find((p) => p.id === activeProjectId)?.source === "linked"
-                  ? "Unlink this cloud plan from browser storage"
-                  : "Delete this custom plan from browser memory"
-              }
+              onClick={() => fileInputRef.current?.click()}
+              title="Import a Jantt JSON file from your computer"
             >
-              <Trash2 size={13} />
-              <span>
-                {customProjects.find((p) => p.id === activeProjectId)?.source === "linked"
-                  ? "Unlink"
-                  : "Delete Plan"}
-              </span>
+              <Upload size={13} />
+              <span>Import</span>
             </button>
-          )}
 
+            <div className="nav-export-split">
+              {/* Download JSON Button */}
+              <button className="btn-nav" onClick={handleDownloadJson} title="Download Jantt JSON file">
+                <Download size={13} />
+                <span>JSON</span>
+              </button>
 
-          {/* Hidden File Input for JSON Import */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept=".json,application/json"
-            onChange={handleImportJsonFile}
-            style={{ display: "none" }}
-          />
-
-          {/* Import JSON Button */}
-          <button
-            className="btn-nav"
-            onClick={() => fileInputRef.current?.click()}
-            title="Import a Jantt JSON file from your computer"
-          >
-            <Upload size={13} />
-            <span>Import</span>
-          </button>
+              {/* Export CSV Button */}
+              <button className="btn-nav" onClick={handleExportCsv} title="Export RFC-4180 CSV / Excel spreadsheet">
+                <FileSpreadsheet size={13} />
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
 
           {/* Theme Selector */}
           <div className="nav-select-group">
@@ -1502,18 +1501,6 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
           >
             <Sparkles size={14} />
             <span>AI Prompt</span>
-          </button>
-
-          {/* Download JSON Button */}
-          <button className="btn-nav" onClick={handleDownloadJson} title="Download Jantt JSON file">
-            <Download size={14} />
-            <span>JSON</span>
-          </button>
-
-          {/* Export CSV Button */}
-          <button className="btn-nav" onClick={handleExportCsv} title="Export RFC-4180 CSV / Excel spreadsheet">
-            <FileSpreadsheet size={14} />
-            <span>CSV</span>
           </button>
         </div>
       </header>
@@ -1664,23 +1651,8 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 
                 {/* ── GANTT VIEW ── */}
                 {activeView === "gantt" && (
-                  <>
-                    {/* Date Filter Bar for Gantt (separate to keep it at top of Gantt toolbar area) */}
-                    <div className="date-filter-bar">
-                      <div className="date-filter-tabs">
-                        <button className={`date-filter-tab ${dateFilterMode === "all" ? "is-active" : ""}`} onClick={() => setDateFilterMode("all")}>All Tasks</button>
-                        <button className={`date-filter-tab ${dateFilterMode === "today" ? "is-active" : ""}`} onClick={() => setDateFilterMode("today")}><Clock size={11} />Today</button>
-                        <button className={`date-filter-tab ${dateFilterMode === "date" ? "is-active" : ""}`} onClick={() => setDateFilterMode("date")}><Calendar size={11} />Pick Date</button>
-                      </div>
-                      {dateFilterMode === "date" && (
-                        <input type="date" className="date-filter-input" value={dateFilterValue} onChange={(e) => setDateFilterValue(e.target.value)} />
-                      )}
-                      {dateFilterMode !== "all" && (
-                        <span className="date-filter-active-label">Showing: {dateFilterMode === "today" ? getTodayISODate() : dateFilterValue}</span>
-                      )}
-                    </div>
-                    <Jantt
-                      data={parsedData}
+                  <Jantt
+                    data={parsedData}
                       onCommit={handleChartCommit}
                       onTaskAdd={handleAddNewTask}
                       selectedDate={dateFilterActiveDate}
@@ -1721,7 +1693,6 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       theme={activeTheme.vars}
                       themeClassName={activeTheme.className}
                     />
-                  </>
                 )}
 
                 {/* ── KANBAN VIEW ── */}

@@ -87,24 +87,33 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 10px 18px;
   background: var(--jantt-surface);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--jantt-border);
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
   z-index: 30;
+  position: relative;
+}
+
+/* Zone 1: Left (Title & Task Badge) */
+.jantt-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .jantt-title-block {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .jantt-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--jantt-text);
   letter-spacing: -0.015em;
@@ -114,228 +123,39 @@
   font-size: 11px;
   font-family: var(--jantt-font-mono);
   font-weight: 600;
-  padding: 3px 9px;
+  padding: 2px 8px;
   border-radius: 100px;
   background: var(--jantt-accent-glow);
   color: var(--jantt-accent);
   border: 1px solid currentColor;
 }
 
-.jantt-toolbar-controls {
+/* Zone 2: Center (Zoom Strip, Critical Path, Date Filter Badge) */
+.jantt-toolbar-center {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  flex: 1 1 auto;
 }
 
-/* Scale & Routing Segmented Controls */
-.jantt-scale-group {
-  display: flex;
+/* Unified Zoom Strip (Slider + Presets in one continuous container) */
+.jantt-zoom-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--jantt-surface-solid, rgba(0, 0, 0, 0.22));
   border: 1px solid var(--jantt-border);
   border-radius: 100px;
-  padding: 3px;
-  gap: 2px;
+  padding: 3px 10px;
+  box-sizing: border-box;
+  height: 30px;
 }
 
-.jantt-theme-light .jantt-scale-group {
-  background: rgba(15, 23, 42, 0.06);
+.jantt-theme-light .jantt-zoom-strip {
+  background: rgba(15, 23, 42, 0.05);
   border-color: rgba(15, 23, 42, 0.12);
-}
-
-.jantt-scale-btn {
-  background: transparent;
-  border: none;
-  color: var(--jantt-text-muted);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 4px 11px;
-  border-radius: 100px;
-  cursor: pointer;
-  transition: all 0.16s ease;
-  text-transform: capitalize;
-}
-
-.jantt-scale-btn:hover {
-  color: var(--jantt-text);
-}
-
-.jantt-scale-btn.is-active {
-  background: var(--jantt-accent);
-  color: #FFFFFF;
-  font-weight: 700;
-  box-shadow: 0 2px 6px var(--jantt-accent-glow, rgba(0, 0, 0, 0.2));
-}
-
-.jantt-theme-dark .jantt-scale-btn.is-active {
-  color: #000000;
-}
-
-.jantt-theme-light .jantt-scale-btn.is-active {
-  color: #FFFFFF;
-}
-
-/* Critical Path Toggle */
-.jantt-critical-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--jantt-surface);
-  border: 1px solid var(--jantt-border);
-  color: var(--jantt-text-muted);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 100px;
-  cursor: pointer;
-  transition: all 0.16s ease;
-}
-
-.jantt-critical-btn:hover {
-  border-color: var(--jantt-border-strong);
-  color: var(--jantt-text);
-}
-
-.jantt-critical-btn.is-active {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--jantt-critical);
-  border-color: var(--jantt-critical);
-  box-shadow: 0 0 12px var(--jantt-critical-glow);
-}
-
-/* Toolbar Add Task Button */
-.jantt-add-task-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--jantt-accent);
-  color: #FFFFFF;
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 5px 12px;
-  border-radius: 100px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all 0.16s ease;
-  box-shadow: 0 2px 6px var(--jantt-accent-glow);
-}
-
-.jantt-theme-dark .jantt-add-task-btn {
-  color: #000000;
-}
-
-.jantt-theme-light .jantt-add-task-btn {
-  color: #FFFFFF;
-}
-
-.jantt-add-task-btn:hover {
-  opacity: 0.92;
-  transform: scale(1.02);
-  box-shadow: 0 0 12px var(--jantt-accent-glow);
-}
-
-.jantt-add-task-btn:active {
-  transform: scale(0.98);
-}
-
-/* Add Task Table Bottom Row */
-.jantt-label-add-row {
-  border-bottom: 1px dashed var(--jantt-border-subtle);
-  background: transparent;
-  opacity: 0.85;
-  transition: opacity 0.15s ease, background 0.15s ease;
-}
-
-.jantt-label-add-row:hover {
-  opacity: 1;
-  background: var(--jantt-surface-hover);
-}
-
-/* Row Height Custom Input */
-.jantt-rowheight-input-wrap {
-  display: inline-flex;
-  align-items: center;
-  background: var(--jantt-bg);
-  border: 1px solid var(--jantt-border);
-  border-radius: 8px;
-  padding: 2px 6px;
-  gap: 3px;
-  height: 28px;
-  box-sizing: border-box;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.jantt-rowheight-input-wrap:focus-within {
-  border-color: var(--jantt-accent);
-  box-shadow: 0 0 0 2px var(--jantt-accent-glow);
-}
-
-.jantt-rowheight-input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--jantt-text);
-  font-size: 11.5px;
-  width: 32px;
-  font-family: var(--jantt-font-mono);
-  font-weight: 600;
-  text-align: center;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.jantt-rowheight-input::-webkit-outer-spin-button,
-.jantt-rowheight-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  appearance: none;
-  margin: 0;
-}
-
-.jantt-rowheight-unit {
-  font-size: 10.5px;
-  color: var(--jantt-text-muted);
-  font-family: var(--jantt-font-mono);
-  font-weight: 600;
-}
-
-.jantt-rowheight-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--jantt-text-muted);
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-  padding: 0;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.jantt-rowheight-btn:hover {
-  background: var(--jantt-surface-hover);
-  color: var(--jantt-accent);
-}
-
-.jantt-rowheight-btn:active {
-  transform: scale(0.92);
-}
-
-/* Continuous Zoom Slider */
-.jantt-zoom-slider-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--jantt-surface-solid);
-  border: 1px solid var(--jantt-border);
-  border-radius: 8px;
-  padding: 3px 8px;
-  box-sizing: border-box;
-  height: 28px;
 }
 
 .jantt-zoom-btn {
@@ -366,7 +186,7 @@
 .jantt-zoom-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 76px;
+  width: 70px;
   height: 4px;
   background: var(--jantt-border);
   border-radius: 2px;
@@ -417,10 +237,143 @@
   font-size: 10px;
   font-family: var(--jantt-font-mono);
   font-weight: 700;
-  color: var(--jantt-text-dim);
-  min-width: 28px;
+  color: var(--jantt-text-dim, var(--jantt-text-muted));
+  min-width: 26px;
   text-align: right;
   user-select: none;
+}
+
+.jantt-zoom-strip-divider {
+  width: 1px;
+  height: 15px;
+  background: var(--jantt-border);
+  margin: 0 3px;
+  opacity: 0.7;
+}
+
+/* Scale & Routing Segmented Controls */
+.jantt-scale-group {
+  display: flex;
+  background: var(--jantt-surface-solid, rgba(0, 0, 0, 0.22));
+  border: 1px solid var(--jantt-border);
+  border-radius: 100px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.jantt-zoom-strip .jantt-scale-group {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.jantt-theme-light .jantt-scale-group {
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.jantt-scale-btn {
+  background: transparent;
+  border: none;
+  color: var(--jantt-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  text-transform: capitalize;
+}
+
+.jantt-scale-btn:hover {
+  color: var(--jantt-text);
+}
+
+.jantt-scale-btn.is-active {
+  background: var(--jantt-accent);
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 2px 6px var(--jantt-accent-glow, rgba(0, 0, 0, 0.2));
+}
+
+.jantt-theme-dark .jantt-scale-btn.is-active {
+  color: #000000;
+}
+
+.jantt-theme-light .jantt-scale-btn.is-active {
+  color: #FFFFFF;
+}
+
+/* Critical Path Toggle */
+.jantt-critical-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--jantt-surface);
+  border: 1px solid var(--jantt-border);
+  color: var(--jantt-text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.jantt-critical-btn:hover {
+  border-color: var(--jantt-border-strong);
+  color: var(--jantt-text);
+}
+
+.jantt-critical-btn.is-active {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--jantt-critical);
+  border-color: var(--jantt-critical);
+  box-shadow: 0 0 12px var(--jantt-critical-glow);
+}
+
+/* Zone 3: Right (Search, Add Task, Settings) */
+.jantt-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Toolbar Add Task Button */
+.jantt-add-task-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--jantt-accent);
+  color: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 100px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  box-shadow: 0 2px 6px var(--jantt-accent-glow);
+}
+
+.jantt-theme-dark .jantt-add-task-btn {
+  color: #000000;
+}
+
+.jantt-theme-light .jantt-add-task-btn {
+  color: #FFFFFF;
+}
+
+.jantt-add-task-btn:hover {
+  opacity: 0.92;
+  transform: scale(1.02);
+  box-shadow: 0 0 12px var(--jantt-accent-glow);
+}
+
+.jantt-add-task-btn:active {
+  transform: scale(0.98);
 }
 
 /* Search Bar */
@@ -429,10 +382,16 @@
   align-items: center;
   background: var(--jantt-bg);
   border: 1px solid var(--jantt-border);
-  border-radius: 10px;
+  border-radius: 100px;
   padding: 4px 10px;
   gap: 6px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.jantt-search-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--jantt-text-muted);
 }
 
 .jantt-search-box:focus-within {
@@ -445,9 +404,300 @@
   border: none;
   outline: none;
   color: var(--jantt-text);
-  font-size: 12px;
-  width: 135px;
+  font-size: 11.5px;
+  width: 115px;
   font-family: var(--jantt-font-sans);
+}
+
+.jantt-search-input::placeholder {
+  color: var(--jantt-text-muted);
+  opacity: 0.8;
+}
+
+/* Settings Trigger Button & Wrap */
+.jantt-settings-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.jantt-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--jantt-surface);
+  border: 1px solid var(--jantt-border);
+  color: var(--jantt-text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.jantt-settings-btn:hover {
+  border-color: var(--jantt-border-strong);
+  color: var(--jantt-text);
+  background: var(--jantt-surface-hover);
+}
+
+.jantt-settings-btn.is-active {
+  background: var(--jantt-accent);
+  color: #FFFFFF;
+  border-color: var(--jantt-accent);
+  box-shadow: 0 0 10px var(--jantt-accent-glow);
+}
+
+.jantt-theme-dark .jantt-settings-btn.is-active {
+  color: #000000;
+}
+
+/* Floating Chart Settings Popover */
+.jantt-settings-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 310px;
+  background: var(--jantt-surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--jantt-border-strong, var(--jantt-border));
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  padding: 14px 16px;
+  z-index: 100;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.jantt-settings-popover.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.jantt-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.jantt-settings-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--jantt-text);
+}
+
+.jantt-settings-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--jantt-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.jantt-settings-close-btn:hover {
+  color: var(--jantt-text);
+  background: var(--jantt-surface-hover);
+}
+
+.jantt-settings-section {
+  margin-bottom: 8px;
+}
+
+.jantt-settings-section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--jantt-text-muted);
+  margin-bottom: 8px;
+}
+
+.jantt-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.jantt-settings-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--jantt-text);
+}
+
+.jantt-settings-slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jantt-settings-val-badge {
+  font-family: var(--jantt-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--jantt-accent);
+  background: var(--jantt-accent-glow);
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--jantt-border-strong, transparent);
+}
+
+.jantt-settings-slider-wrap {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.jantt-settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  background: var(--jantt-border);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.jantt-settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--jantt-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease;
+}
+
+.jantt-settings-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.jantt-settings-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--jantt-accent);
+  cursor: pointer;
+}
+
+.jantt-settings-presets {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.jantt-preset-btn {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--jantt-border);
+  background: var(--jantt-surface-solid);
+  color: var(--jantt-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.jantt-preset-btn:hover {
+  color: var(--jantt-text);
+  border-color: var(--jantt-accent);
+  background: var(--jantt-surface-hover);
+}
+
+.jantt-preset-btn.is-active {
+  background: var(--jantt-accent-glow);
+  color: var(--jantt-accent);
+  border-color: var(--jantt-accent);
+}
+
+.jantt-settings-divider {
+  height: 1px;
+  background: var(--jantt-border);
+  margin: 10px 0;
+  opacity: 0.7;
+}
+
+.jantt-settings-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.jantt-settings-switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.jantt-settings-switch-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--jantt-text);
+}
+
+.jantt-settings-switch-sub {
+  font-size: 10px;
+  color: var(--jantt-text-muted);
+  line-height: 1.3;
+}
+
+/* Modern iOS / macOS Style Toggle Switch */
+.jantt-toggle-switch {
+  width: 36px;
+  height: 20px;
+  border-radius: 100px;
+  background: var(--jantt-border-strong, rgba(255, 255, 255, 0.2));
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  padding: 2px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.jantt-theme-light .jantt-toggle-switch {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.jantt-toggle-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.jantt-toggle-switch.is-active {
+  background: var(--jantt-accent);
+  box-shadow: 0 0 8px var(--jantt-accent-glow);
+}
+
+.jantt-toggle-switch.is-active .jantt-toggle-thumb {
+  transform: translateX(16px);
 }
 
 /* Active Date Filter Pill */
