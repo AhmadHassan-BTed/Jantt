@@ -426,5 +426,62 @@ describe("Stress & Boundary Tests", () => {
       chart.destroy();
       document.body.removeChild(container);
     });
+
+    it("preserves selected date filter when zoom scale changes from month to day and vice versa", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const testData: JanttData = {
+        tasks: [
+          { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+          { id: "t2", label: "Task 2", category: "dev", start: "2026-09-06", end: "2026-09-10" }
+        ]
+      };
+
+      let reportedViewport: any = null;
+      const chart = renderJantt(container, testData, {
+        viewport: { scale: "month" },
+        onViewportChange: (vp) => {
+          reportedViewport = vp;
+        }
+      });
+
+      // Filter by date
+      chart.filterByDate?.("2026-09-03");
+      expect(chart.getSelectedDate?.()).toBe("2026-09-03");
+      let rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(1); // Only t1
+
+      // Find the "Day" scale button in toolbar and click it
+      const dayScaleBtn = Array.from(container.querySelectorAll<HTMLButtonElement>(".jantt-scale-btn")).find(
+        (b) => b.textContent?.trim().toLowerCase() === "day"
+      );
+      expect(dayScaleBtn).toBeDefined();
+      dayScaleBtn!.click();
+
+      // Selected date MUST be preserved across scale switch
+      expect(chart.getSelectedDate?.()).toBe("2026-09-03");
+      expect(reportedViewport?.scale).toBe("day");
+      expect(reportedViewport?.selectedDate).toBe("2026-09-03");
+
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(1); // Still filtered to t1
+
+      // Switch back to "Month"
+      const monthScaleBtn = Array.from(container.querySelectorAll<HTMLButtonElement>(".jantt-scale-btn")).find(
+        (b) => b.textContent?.trim().toLowerCase() === "month"
+      );
+      expect(monthScaleBtn).toBeDefined();
+      monthScaleBtn!.click();
+
+      expect(chart.getSelectedDate?.()).toBe("2026-09-03");
+      expect(reportedViewport?.scale).toBe("month");
+      expect(reportedViewport?.selectedDate).toBe("2026-09-03");
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(1);
+
+      chart.destroy();
+      document.body.removeChild(container);
+    });
   });
 });

@@ -44,7 +44,7 @@ export function renderJantt(
   let showBaselines = currentOptions.viewport?.showBaselines ?? (currentData.meta?.showBaselines ?? true);
   let labelWidth = currentOptions.viewport?.labelWidth || 340;
   let filterQuery = currentOptions.searchQuery || "";
-  let selectedDateFilter: string | null = currentOptions.selectedDate || null;
+  let selectedDateFilter: string | null = currentOptions.selectedDate ?? currentOptions.viewport?.selectedDate ?? null;
 
   container.innerHTML = "";
   const root = document.createElement("div");
@@ -206,7 +206,8 @@ export function renderJantt(
         rowHeightMode,
         showCriticalPath: showCritical,
         showBaselines,
-        labelWidth
+        labelWidth,
+        selectedDate: selectedDateFilter
       }
     );
 
@@ -276,7 +277,8 @@ export function renderJantt(
           rowHeight: customRowHeight,
           rowHeightMode,
           showCriticalPath: showCritical,
-          showBaselines
+          showBaselines,
+          selectedDate: selectedDateFilter
         });
         render();
       },
@@ -288,7 +290,8 @@ export function renderJantt(
           rowHeight: customRowHeight,
           rowHeightMode,
           showCriticalPath: showCritical,
-          showBaselines
+          showBaselines,
+          selectedDate: selectedDateFilter
         });
         render();
       },
@@ -300,7 +303,8 @@ export function renderJantt(
           rowHeight: customRowHeight,
           rowHeightMode: mode,
           showCriticalPath: showCritical,
-          showBaselines
+          showBaselines,
+          selectedDate: selectedDateFilter
         });
         render();
       },
@@ -313,7 +317,8 @@ export function renderJantt(
           rowHeight: h,
           rowHeightMode: "custom",
           showCriticalPath: showCritical,
-          showBaselines
+          showBaselines,
+          selectedDate: selectedDateFilter
         });
         render();
       },
@@ -325,7 +330,8 @@ export function renderJantt(
           rowHeight: customRowHeight,
           rowHeightMode,
           showCriticalPath: showCritical,
-          showBaselines
+          showBaselines,
+          selectedDate: selectedDateFilter
         });
         render();
       },
@@ -336,6 +342,16 @@ export function renderJantt(
       selectedDate: selectedDateFilter,
       onClearDateFilter: () => {
         selectedDateFilter = null;
+        currentOptions.onClearDateFilter?.();
+        currentOptions.onViewportChange?.({
+          scale: currentScale,
+          linkRouting: currentRouting,
+          rowHeight: customRowHeight,
+          rowHeightMode,
+          showCriticalPath: showCritical,
+          showBaselines,
+          selectedDate: null
+        });
         render();
       },
       onSearchChange: (q) => {
@@ -365,6 +381,15 @@ export function renderJantt(
       onDateClick: (dateStr: string) => {
         selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
         currentOptions.onDateClick?.(dateStr);
+        currentOptions.onViewportChange?.({
+          scale: currentScale,
+          linkRouting: currentRouting,
+          rowHeight: customRowHeight,
+          rowHeightMode,
+          showCriticalPath: showCritical,
+          showBaselines,
+          selectedDate: selectedDateFilter
+        });
         render();
       }
     });
@@ -524,7 +549,11 @@ export function renderJantt(
         if (newOpts.viewport?.rowHeightMode !== undefined) rowHeightMode = newOpts.viewport.rowHeightMode;
         if (newOpts.viewport?.showCriticalPath !== undefined) showCritical = newOpts.viewport.showCriticalPath;
         if (newOpts.viewport?.showBaselines !== undefined) showBaselines = newOpts.viewport.showBaselines;
-        if (newOpts.selectedDate !== undefined) selectedDateFilter = newOpts.selectedDate;
+        if (newOpts.selectedDate !== undefined) {
+          selectedDateFilter = newOpts.selectedDate;
+        } else if (newOpts.viewport?.selectedDate !== undefined) {
+          selectedDateFilter = newOpts.viewport.selectedDate;
+        }
         tooltip.updateTheme(currentOptions.theme, currentOptions.themeClassName);
       }
       render();
@@ -539,6 +568,15 @@ export function renderJantt(
     getData: () => currentData,
     filterByDate: (dateStr: string | null) => {
       selectedDateFilter = dateStr;
+      currentOptions.onViewportChange?.({
+        scale: currentScale,
+        linkRouting: currentRouting,
+        rowHeight: customRowHeight,
+        rowHeightMode,
+        showCriticalPath: showCritical,
+        showBaselines,
+        selectedDate: selectedDateFilter
+      });
       render();
     },
     getSelectedDate: () => selectedDateFilter

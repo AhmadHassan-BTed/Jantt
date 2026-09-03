@@ -649,7 +649,7 @@ export function App() {
       });
     });
     return () => cancelAnimationFrame(handle);
-  }, [activeView, dateFilterMode, dateFilterValue, parsedData, isTaskMatchingDateFilter]);
+  }, [activeView, currentScale, dateFilterMode, dateFilterValue, parsedData, isTaskMatchingDateFilter]);
 
 
 
@@ -1682,6 +1682,18 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       data={parsedData}
                       onCommit={handleChartCommit}
                       onTaskAdd={handleAddNewTask}
+                      selectedDate={dateFilterActiveDate}
+                      onDateClick={(clickedDate) => {
+                        if (clickedDate === getTodayISODate()) {
+                          setDateFilterMode((prev) => (prev === "today" ? "all" : "today"));
+                        } else {
+                          setDateFilterMode((prev) => (prev === "date" && dateFilterValue === clickedDate ? "all" : "date"));
+                          setDateFilterValue(clickedDate);
+                        }
+                      }}
+                      onClearDateFilter={() => {
+                        setDateFilterMode("all");
+                      }}
                       onViewportChange={(vp) => {
                         if (vp.scale) setCurrentScale(vp.scale);
                         if (vp.linkRouting) setLinkRouting(vp.linkRouting);
@@ -1689,8 +1701,18 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                         if (vp.rowHeightMode !== undefined) setRowHeightMode(vp.rowHeightMode);
                         if (vp.showCriticalPath !== undefined) setShowCriticalPath(vp.showCriticalPath);
                         if (vp.showBaselines !== undefined) setShowBaselines(vp.showBaselines);
+                        if (vp.selectedDate !== undefined) {
+                          if (vp.selectedDate === null) {
+                            setDateFilterMode("all");
+                          } else if (vp.selectedDate === getTodayISODate()) {
+                            setDateFilterMode("today");
+                          } else {
+                            setDateFilterMode("date");
+                            setDateFilterValue(vp.selectedDate);
+                          }
+                        }
                       }}
-                      viewport={{ scale: currentScale, linkRouting, rowHeight, rowHeightMode, showCriticalPath, showBaselines }}
+                      viewport={{ scale: currentScale, linkRouting, rowHeight, rowHeightMode, showCriticalPath, showBaselines, selectedDate: dateFilterActiveDate }}
                       theme={activeTheme.vars}
                       themeClassName={activeTheme.className}
                     />

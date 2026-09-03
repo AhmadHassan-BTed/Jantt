@@ -39,7 +39,7 @@ const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
   year: 1.5
 };
 
-const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime">> = {
+const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> = {
   dayWidth: 32,
   rowHeight: 46,
   rowHeightMode: "fit",
@@ -70,9 +70,10 @@ export function layout(
 
   const defaultDayWidth = SCALE_DAY_WIDTHS[scale] || 32;
 
-  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime">> & {
+  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> & {
     columns?: ViewportOptions["columns"];
     currentTime?: Date;
+    selectedDate?: string | null;
   } = {
     ...DEFAULT_VIEWPORT,
     dayWidth: viewportOptions.dayWidth || defaultDayWidth,
@@ -88,7 +89,8 @@ export function layout(
     headerHeight: viewportOptions.headerHeight || DEFAULT_VIEWPORT.headerHeight,
     startDate: viewportOptions.startDate || "",
     endDate: viewportOptions.endDate || "",
-    currentTime: viewportOptions.currentTime
+    currentTime: viewportOptions.currentTime,
+    selectedDate: viewportOptions.selectedDate
   };
 
   // Determine overall timeline bounds dynamically based on active tasks
@@ -103,6 +105,12 @@ export function layout(
       if (t.baseline?.start) minTaskStart = minISODate(minTaskStart, t.baseline.start);
       if (t.baseline?.end) maxTaskEnd = maxISODate(maxTaskEnd, t.baseline.end);
     });
+  }
+
+  // Ensure selectedDate is always within calculated timeline runway
+  if (viewport.selectedDate) {
+    minTaskStart = minISODate(minTaskStart, viewport.selectedDate);
+    maxTaskEnd = maxISODate(maxTaskEnd, viewport.selectedDate);
   }
 
   // Generous runway buffer (scale-dependent)

@@ -156,6 +156,7 @@ export interface ViewportOptions {
   showCriticalPath?: boolean;
   showBaselines?: boolean;
   currentTime?: Date;
+  selectedDate?: string | null;
   columns?: GridColumn[];
 }
 
@@ -244,7 +245,11 @@ export interface JanttLayoutResult {
   tasks: TaskLayout[];
   dependencies: DependencyLine[];
   header: GridHeader;
-  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime">> & { columns?: GridColumn[]; currentTime?: Date };
+  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> & {
+    columns?: GridColumn[];
+    currentTime?: Date;
+    selectedDate?: string | null;
+  };
   canvasWidth: number;
   canvasHeight: number;
   criticalTaskIds: Set<string>;
@@ -264,6 +269,7 @@ export interface JanttOptions {
   onViewportChange?: (viewport: ViewportOptions) => void;
   onTaskClick?: (task: Task) => void;
   onDateClick?: (dateStr: string) => void;
+  onClearDateFilter?: () => void;
   onTaskDelete?: (taskId: string) => void;
   onTaskAdd?: (newTask: Task) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;

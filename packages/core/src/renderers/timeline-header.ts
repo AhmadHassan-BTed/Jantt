@@ -72,16 +72,16 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     }
 
     if (isZoomedOut) {
-      // On Month/Quarter/Year scales: ONLY show legible markers on task start/finish boundary dates or today
-      if (isBoundary || d.isToday || d.dayOfMonth === 1) {
-        dCell.innerHTML = `<span class="jantt-boundary-marker ${d.isToday ? "is-today-marker" : ""}" title="${d.dateStr}">${d.dayOfMonth}</span>`;
+      // On Month/Quarter/Year scales: show legible markers on task start/finish boundary dates, today, or active selected date
+      if (isSelected || isBoundary || d.isToday || d.dayOfMonth === 1) {
+        dCell.innerHTML = `<span class="jantt-boundary-marker ${d.isToday ? "is-today-marker" : ""} ${isSelected ? "is-selected-marker" : ""}" title="${d.dateStr}">${d.dayOfMonth}</span>`;
       } else {
         dCell.innerHTML = "";
       }
     } else if (isCompactWeek && d.width < 22) {
-      // On compact Week scale: show day numbers on task boundaries, Mondays, or 1st of month
-      if (isBoundary || d.isToday || d.dayOfWeek === 1 || d.dayOfMonth === 1) {
-        dCell.innerHTML = `<span class="jantt-day-num ${isBoundary ? "is-boundary-num" : ""}">${d.label}</span>`;
+      // On compact Week scale: show day numbers on task boundaries, Mondays, 1st of month, today, or active selected date
+      if (isSelected || isBoundary || d.isToday || d.dayOfWeek === 1 || d.dayOfMonth === 1) {
+        dCell.innerHTML = `<span class="jantt-day-num ${isBoundary || isSelected ? "is-boundary-num" : ""}">${d.label}</span>`;
       } else {
         dCell.innerHTML = "";
       }
