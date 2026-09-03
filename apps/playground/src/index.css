@@ -1291,23 +1291,71 @@ body {
    ========================================================================== */
 .jantt-task-dimmed,
 .jantt-bar-group.jantt-task-dimmed,
-g[data-task-id].jantt-task-dimmed {
+g[data-task-id].jantt-task-dimmed,
+div[data-row-id].jantt-task-dimmed,
+div[data-grid-row-id].jantt-task-dimmed {
   opacity: 0.18 !important;
   filter: grayscale(0.85);
   transition: opacity 0.2s ease, filter 0.2s ease;
 }
 
 .kanban-card-dimmed {
-  opacity: 0.22 !important;
+  opacity: 0.28 !important;
   filter: grayscale(0.85);
   transform: scale(0.98);
   transition: all 0.2s ease;
+}
+
+.kanban-card-dimmed:hover {
+  opacity: 0.75 !important;
+  filter: grayscale(0.2);
+}
+
+.tasks-todo-row.is-dimmed {
+  opacity: 0.32 !important;
+  filter: grayscale(0.85);
+  transition: all 0.2s ease;
+}
+
+.tasks-todo-row.is-dimmed:hover {
+  opacity: 0.85 !important;
+  filter: grayscale(0.2);
+}
+
+.today-task-card.is-dimmed {
+  opacity: 0.32 !important;
+  filter: grayscale(0.85);
+  transition: all 0.2s ease;
+}
+
+.today-task-card.is-dimmed:hover {
+  opacity: 0.85 !important;
+  filter: grayscale(0.2);
 }
 
 .summary-row-dimmed {
   opacity: 0.22 !important;
   filter: grayscale(0.85);
   transition: opacity 0.2s ease;
+}
+
+.summary-row-dimmed:hover {
+  opacity: 0.8 !important;
+  filter: grayscale(0.2);
+}
+
+.task-dimmed-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--jantt-text-muted);
+  border: 1px dashed var(--jantt-border);
+  letter-spacing: 0.02em;
+  user-select: none;
 }
 
 /* ==========================================================================

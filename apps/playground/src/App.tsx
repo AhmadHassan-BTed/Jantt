@@ -61,7 +61,8 @@ import {
   Loader2,
   CheckSquare,
   ListTodo,
-  Filter
+  Filter,
+  EyeOff
 } from "lucide-react";
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
@@ -533,6 +534,28 @@ export function App() {
     return parsedData.tasks.filter(isTaskMatchingDateFilter).length;
   }, [parsedData, isTaskMatchingDateFilter]);
 
+  // Derived Gantt dataset according to dateFilterBehavior ("dim" vs "hide")
+  const ganttDisplayData = useMemo(() => {
+    if (!parsedData) return parsedData;
+    if (dateFilterMode === "all" || dateFilterBehavior === "dim") {
+      return parsedData;
+    }
+    // "hide" / Filter Mode: Only provide tasks matching active date filter
+    return {
+      ...parsedData,
+      tasks: parsedData.tasks.filter(isTaskMatchingDateFilter)
+    };
+  }, [parsedData, dateFilterMode, dateFilterBehavior, isTaskMatchingDateFilter]);
+
+  // Derived tasks for KPI metrics according to dateFilterBehavior
+  const summaryKpiTasks = useMemo(() => {
+    if (!parsedData) return [];
+    if (dateFilterMode !== "all" && dateFilterBehavior === "hide") {
+      return parsedData.tasks.filter(isTaskMatchingDateFilter);
+    }
+    return parsedData.tasks;
+  }, [parsedData, dateFilterMode, dateFilterBehavior, isTaskMatchingDateFilter]);
+
   const dateFilterActiveSummary = useMemo(() => {
     if (dateFilterMode === "all") return null;
     const total = parsedData?.tasks.length || 0;
@@ -551,8 +574,12 @@ export function App() {
   // ── Derived State: Summary Sorted Tasks (with progress auto-sync) ─────────
   const sortedSummaryTasks = useMemo(() => {
     if (!parsedData) return [];
+    let baseTasks = parsedData.tasks;
+    if (dateFilterMode !== "all" && dateFilterBehavior === "hide") {
+      baseTasks = baseTasks.filter(isTaskMatchingDateFilter);
+    }
     // Apply status → progress auto-sync
-    let tasks = parsedData.tasks.map((t) => {
+    let tasks = baseTasks.map((t) => {
       if (t.status === "completed") return { ...t, progress: 1.0 };
       if (t.status === "submitted" && (t.progress ?? 0) < 0.75) return { ...t, progress: 0.75 };
       if (t.status === "not-started" && (t.progress ?? 0) > 0) return { ...t, progress: 0 };
@@ -686,16 +713,16 @@ export function App() {
 
   // Apply Gantt date filter dimming via DOM after render
   useEffect(() => {
-    if (activeView !== "gantt" || dateFilterMode === "all") {
-      // Remove all dimming when switching to "all"
-      document.querySelectorAll<HTMLElement>("[data-task-id]").forEach((el) => {
+    if (activeView !== "gantt" || dateFilterMode === "all" || dateFilterBehavior === "hide") {
+      // Remove all dimming when switching to "all" or in "hide" (Filter) mode
+      document.querySelectorAll<HTMLElement>("[data-task-id], [data-row-id], [data-grid-row-id]").forEach((el) => {
         el.classList.remove("jantt-task-dimmed");
       });
       return;
     }
     const handle = requestAnimationFrame(() => {
-      document.querySelectorAll<HTMLElement>("[data-task-id]").forEach((el) => {
-        const taskId = el.dataset.taskId;
+      document.querySelectorAll<HTMLElement>("[data-task-id], [data-row-id], [data-grid-row-id]").forEach((el) => {
+        const taskId = el.dataset.taskId || el.dataset.rowId || el.dataset.gridRowId;
         const task = parsedData?.tasks.find((t) => t.id === taskId);
         if (task && !isTaskMatchingDateFilter(task)) {
           el.classList.add("jantt-task-dimmed");
@@ -705,7 +732,7 @@ export function App() {
       });
     });
     return () => cancelAnimationFrame(handle);
-  }, [activeView, currentScale, dateFilterMode, dateFilterValue, parsedData, isTaskMatchingDateFilter]);
+  }, [activeView, currentScale, currentDayWidth, dateFilterMode, dateFilterValue, dateFilterBehavior, dateFilterRangeStart, dateFilterRangeEnd, parsedData, isTaskMatchingDateFilter]);
 
 
 
@@ -1774,22 +1801,24 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                     </div>
                   )}
 
-                  {/* Filter Behavior Toggle for Kanban & Tasks views */}
-                  {(activeView === "kanban" || activeView === "tasks") && dateFilterMode !== "all" && (
+                  {/* Universal Filter Behavior Toggle (Dim vs Filter) across all views */}
+                  {dateFilterMode !== "all" && (
                     <div className="date-filter-behavior-group">
                       <span className="date-filter-behavior-label">Mode:</span>
                       <button
                         className={`date-filter-behavior-btn ${dateFilterBehavior === "dim" ? "is-active" : ""}`}
                         onClick={() => setDateFilterBehavior("dim")}
-                        title="Dim non-matching tasks"
+                        title="Dim Mode: Keep all tasks visible, fade non-matching tasks"
                       >
+                        <EyeOff size={11} />
                         Dim
                       </button>
                       <button
                         className={`date-filter-behavior-btn ${dateFilterBehavior === "hide" ? "is-active" : ""}`}
                         onClick={() => setDateFilterBehavior("hide")}
-                        title="Only show matching tasks"
+                        title="Filter Mode: Only show tasks matching the active date filter"
                       >
+                        <Filter size={11} />
                         Filter
                       </button>
                     </div>
@@ -1797,12 +1826,12 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                 </div>
 
                 {/* ── GANTT VIEW ── */}
-                {activeView === "gantt" && (
+                {activeView === "gantt" && ganttDisplayData && (
                   <Jantt
-                    data={parsedData}
+                    data={ganttDisplayData}
                       onCommit={handleChartCommit}
                       onTaskAdd={handleAddNewTask}
-                      selectedDate={dateFilterActiveDate}
+                      selectedDate={null}
                       onDateClick={(clickedDate) => {
                         if (clickedDate === getTodayISODate()) {
                           setDateFilterMode((prev) => (prev === "today" ? "all" : "today"));
@@ -1931,7 +1960,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                 const cat = parsedData.categories?.[t.category];
                                 const catColor = cat?.color || "var(--jantt-accent)";
                                 const isCompleted = t.status === "completed";
-                                const isDimmed = !isTaskMatchingDateFilter(t);
+                                const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                                 const assigneeInfo = resolveTaskAssignee(t, people, teams);
                                 return (
                                   <div key={t.id} className={`kanban-card ${isDimmed ? "kanban-card-dimmed" : ""}`}>
@@ -1941,6 +1970,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                         <span className="kanban-cat-label">{cat?.label || t.category}</span>
                                       </div>
                                       <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                        {isDimmed && (
+                                          <span className="task-dimmed-tag" title="Task duration falls outside active date filter">
+                                            Outside Date
+                                          </span>
+                                        )}
                                         {t.priority && (
                                           <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>
                                         )}
@@ -2045,7 +2079,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                         <div className="kpi-data">
                           <span className="kpi-label">Total Estimated Budget</span>
                           <span className="kpi-value">
-                            ${parsedData.tasks.reduce((sum, t) => sum + (t.estimatedCost || 0), 0).toLocaleString()}
+                            ${summaryKpiTasks.reduce((sum, t) => sum + (t.estimatedCost || 0), 0).toLocaleString()}
                           </span>
                         </div>
                       </div>
@@ -2057,8 +2091,8 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                           <span className="kpi-label">Project Progress</span>
                           <span className="kpi-value">
                             {Math.round(
-                              (parsedData.tasks.reduce((sum, t) => sum + (t.status === "completed" ? 1 : (t.progress || 0)), 0) /
-                                Math.max(parsedData.tasks.length, 1)) *
+                              (summaryKpiTasks.reduce((sum, t) => sum + (t.status === "completed" ? 1 : (t.progress || 0)), 0) /
+                                Math.max(summaryKpiTasks.length, 1)) *
                               100
                             )}%
                           </span>
@@ -2070,7 +2104,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                         </div>
                         <div className="kpi-data">
                           <span className="kpi-label">Total Active Tasks</span>
-                          <span className="kpi-value">{parsedData.tasks.length}</span>
+                          <span className="kpi-value">{summaryKpiTasks.length}</span>
                         </div>
                       </div>
                       <div className="summary-kpi-card">
@@ -2079,7 +2113,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                         </div>
                         <div className="kpi-data">
                           <span className="kpi-label">Milestones Tracked</span>
-                          <span className="kpi-value">{parsedData.tasks.filter((t) => t.milestone).length}</span>
+                          <span className="kpi-value">{summaryKpiTasks.filter((t) => t.milestone).length}</span>
                         </div>
                       </div>
                     </div>
@@ -2312,7 +2346,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 
                     {/* Tasks Content: Checklist or Cards */}
                     {(() => {
-                      let tasksToDisplay = parsedData.tasks.filter(isTaskMatchingDateFilter);
+                      let tasksToDisplay = dateFilterMode !== "all" && dateFilterBehavior === "hide"
+                        ? parsedData.tasks.filter(isTaskMatchingDateFilter)
+                        : parsedData.tasks;
 
                       if (selectedPersonFilter !== "all") {
                         if (selectedPersonFilter.startsWith("team:")) {
@@ -2371,9 +2407,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                               const cat = parsedData.categories?.[t.category];
                               const catColor = cat?.color || "var(--jantt-accent)";
                               const isCompleted = t.status === "completed";
+                              const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                               const assigneeInfo = resolveTaskAssignee(t, people, teams);
                               return (
-                                <div key={t.id} className={`tasks-todo-row ${isCompleted ? "is-completed" : ""}`} style={{ borderLeftColor: catColor }}>
+                                <div key={t.id} className={`tasks-todo-row ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`} style={{ borderLeftColor: catColor }}>
                                   <div className="tasks-todo-left">
                                     <button
                                       className={`tasks-checkbox-btn ${isCompleted ? "is-checked" : ""}`}
@@ -2401,6 +2438,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                         <span className={`tasks-todo-title ${isCompleted ? "is-struck" : ""}`}>
                                           {t.label || t.name || t.id}
                                         </span>
+                                        {isDimmed && (
+                                          <span className="task-dimmed-tag" title="Task duration falls outside active date filter">
+                                            Outside Date Filter
+                                          </span>
+                                        )}
                                         {t.priority && (
                                           <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>
                                         )}
@@ -2468,13 +2510,19 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                             const cat = parsedData.categories?.[t.category];
                             const catColor = cat?.color || "var(--jantt-accent)";
                             const isCompleted = t.status === "completed";
+                            const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                             const assigneeInfo = resolveTaskAssignee(t, people, teams);
                             return (
-                              <div key={t.id} className={`today-task-card ${isCompleted ? "is-completed" : ""}`} style={{ borderTopColor: catColor }}>
+                              <div key={t.id} className={`today-task-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`} style={{ borderTopColor: catColor }}>
                                 <div className="today-card-header">
                                   <div className="today-card-category">
                                     <span className="kanban-cat-dot" style={{ background: catColor }} />
                                     <span>{cat?.label || t.category}</span>
+                                    {isDimmed && (
+                                      <span className="task-dimmed-tag" title="Task duration falls outside active date filter">
+                                        Outside Date
+                                      </span>
+                                    )}
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                     {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
