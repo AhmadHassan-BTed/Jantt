@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { validate } from "../src/validator";
 import { resolveSchedule, calculateCriticalPath } from "../src/resolver";

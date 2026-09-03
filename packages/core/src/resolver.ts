@@ -1,5 +1,7 @@
 import { Task } from "./types";
 import { addDays, diffDays } from "./date-math";
+import { getEffectiveGap } from "./utils";
+import { DEFAULT_GAP_DAYS } from "./constants";
 
 /**
  * Normalizes task dependencies into a clean string array.
@@ -35,22 +37,25 @@ export function getTaskDependencies(task: Task | { dependsOn?: string | string[]
  * Locked tasks (`locked: true`) are never moved.
  *
  * @param tasks - The array of tasks to resolve.
- * @param _defaultGapDays - Default spacing between sibling tasks (default: 2).
+ * @param defaultGapDays - Default spacing between sibling tasks (default: 2).
  * @returns A fresh, schedule-consistent array of tasks.
  */
-export function resolveSchedule(tasks: Task[], _defaultGapDays = 2): Task[] {
+export function resolveSchedule(tasks: Task[], defaultGapDays = DEFAULT_GAP_DAYS): Task[] {
   if (!Array.isArray(tasks) || tasks.length === 0) {
     return [];
   }
 
-  // Clone tasks so the function is pure and does not mutate inputs
+  // Pure deep clone of tasks ensuring nested objects (baseline, fields, dependsOn) are not mutated
   const byId = Object.fromEntries(
     tasks.map((t) => [
       t.id,
       {
         ...t,
         start: t.start,
-        end: t.end
+        end: t.end,
+        baseline: t.baseline ? { ...t.baseline } : undefined,
+        fields: t.fields ? { ...t.fields } : undefined,
+        dependsOn: Array.isArray(t.dependsOn) ? [...t.dependsOn] : t.dependsOn
       }
     ])
   );
@@ -66,7 +71,7 @@ export function resolveSchedule(tasks: Task[], _defaultGapDays = 2): Task[] {
       let calculatedMinStart: string | null = null;
 
       if (explicitDeps.length > 0) {
-        const gap = t.gapDays ?? t.minGapDays ?? 0;
+        const gap = getEffectiveGap(t, defaultGapDays);
 
         for (const depId of explicitDeps) {
           const prereq = byId[depId];
@@ -148,8 +153,11 @@ export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
   });
 
   // Backward pass propagation
-  for (let pass = 0; pass < 16; pass++) {
-    tasks.forEach((t) => {
+  // Reverse tasks array for backward pass so downstream leaf tasks are processed first
+  const reversedTasks = [...tasks].reverse();
+  for (let pass = 0; pass < 24; pass++) {
+    let changed = false;
+    reversedTasks.forEach((t) => {
       const deps = dependentsMap.get(t.id) || [];
       if (deps.length > 0) {
         let minRequiredLateFinish: string | null = null;
@@ -159,7 +167,7 @@ export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
           const depLF = lateFinishMap.get(depId) || depTask.end;
           const depDuration = Math.max(diffDays(depTask.start, depTask.end), 0);
           const depLS = addDays(depLF, -depDuration);
-          const gap = depTask.gapDays ?? depTask.minGapDays ?? 0;
+          const gap = getEffectiveGap(depTask, 0);
           const requiredLF = addDays(depLS, -gap);
 
           if (!minRequiredLateFinish || diffDays(requiredLF, minRequiredLateFinish) > 0) {
@@ -167,11 +175,14 @@ export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
           }
         });
 
-        if (minRequiredLateFinish) {
+        if (minRequiredLateFinish && lateFinishMap.get(t.id) !== minRequiredLateFinish) {
           lateFinishMap.set(t.id, minRequiredLateFinish);
+          changed = true;
         }
       }
     });
+
+    if (!changed) break;
   }
 
   // Calculate slack and identify critical tasks

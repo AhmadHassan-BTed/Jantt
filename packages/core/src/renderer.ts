@@ -4,6 +4,18 @@ import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
 import { resolveSchedule, getTaskDependencies } from "./resolver";
 import { addDays, getTodayISODate, isTaskOnDate, parseISODate } from "./date-math";
+import { clampDayWidth, buildViewportSnapshot } from "./utils";
+import {
+  DEFAULT_GAP_DAYS,
+  DEFAULT_ROW_HEIGHT,
+  DEFAULT_LABEL_WIDTH,
+  DEFAULT_HEADER_HEIGHT,
+  MULTI_YEAR_HEADER_HEIGHT,
+  TOOLBAR_HEIGHT,
+  ADD_ROW_HEIGHT,
+  MIN_ROW_HEIGHT,
+  MAX_ROW_HEIGHT
+} from "./constants";
 import {
   renderToolbar,
   renderGridTable,
@@ -18,10 +30,10 @@ export interface JanttInstance {
   update: (data: JanttData, options?: Partial<JanttOptions>) => void;
   destroy: () => void;
   getData: () => JanttData;
-  filterByDate?: (dateStr: string | null) => void;
-  getSelectedDate?: () => string | null;
-  setDayWidth?: (dayWidth: number) => void;
-  getDayWidth?: () => number;
+  filterByDate: (dateStr: string | null) => void;
+  getSelectedDate: () => string | null;
+  setDayWidth: (dayWidth: number) => void;
+  getDayWidth: () => number;
 }
 
 /**
@@ -35,7 +47,7 @@ export function renderJantt(
 ): JanttInstance {
   let currentData: JanttData = {
     ...initialData,
-    tasks: resolveSchedule(initialData.tasks || [], initialData.meta?.defaultGapDays ?? 2)
+    tasks: resolveSchedule(initialData.tasks || [], initialData.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS)
   };
   let currentOptions: JanttOptions = { ...options };
   let currentScale: TimeScale = currentOptions.viewport?.scale || currentData.meta?.scale || "day";
@@ -45,27 +57,34 @@ export function renderJantt(
     36;
   let currentRouting: LinkRoutingStyle = currentOptions.viewport?.linkRouting || currentData.meta?.linkRouting || "orthogonal";
   let rowHeightMode: RowHeightMode = currentOptions.viewport?.rowHeightMode || "fit";
-  let customRowHeight: number = currentOptions.viewport?.rowHeight || 46;
+  let customRowHeight: number = currentOptions.viewport?.rowHeight || DEFAULT_ROW_HEIGHT;
   let showCritical = currentOptions.viewport?.showCriticalPath ?? (currentData.meta?.showCriticalPath ?? false);
   let showBaselines = currentOptions.viewport?.showBaselines ?? (currentData.meta?.showBaselines ?? true);
-  let labelWidth = currentOptions.viewport?.labelWidth || 340;
+  let labelWidth = currentOptions.viewport?.labelWidth || DEFAULT_LABEL_WIDTH;
   let filterQuery = currentOptions.searchQuery || "";
   let selectedDateFilter: string | null = currentOptions.selectedDate ?? currentOptions.viewport?.selectedDate ?? null;
 
+  const broadcastViewportChange = () => {
+    currentOptions.onViewportChange?.(
+      buildViewportSnapshot({
+        scale: currentScale,
+        dayWidth: currentDayWidth,
+        linkRouting: currentRouting,
+        rowHeight: customRowHeight,
+        rowHeightMode,
+        showCriticalPath: showCritical,
+        showBaselines,
+        selectedDate: selectedDateFilter,
+        labelWidth
+      })
+    );
+  };
+
   const handleDayWidthChange = (newWidth: number) => {
-    currentDayWidth = Math.max(1.2, Math.min(100, Math.round(newWidth * 10) / 10));
+    currentDayWidth = clampDayWidth(newWidth);
     currentScale = getScaleFromDayWidth(currentDayWidth);
     currentOptions.onDayWidthChange?.(currentDayWidth);
-    currentOptions.onViewportChange?.({
-      scale: currentScale,
-      dayWidth: currentDayWidth,
-      linkRouting: currentRouting,
-      rowHeight: customRowHeight,
-      rowHeightMode,
-      showCriticalPath: showCritical,
-      showBaselines,
-      selectedDate: selectedDateFilter
-    });
+    broadcastViewportChange();
     render();
   };
 
@@ -202,20 +221,20 @@ export function renderJantt(
     let effectiveRowHeight = customRowHeight;
     if (rowHeightMode === "fit") {
       const containerH = container.clientHeight || root.clientHeight || 550;
-      let minStart = displayTasks[0]?.start || getTodayISODate();
+      let minStart = displayTasks[0]?.start || getTodayISODate(currentOptions.viewport?.currentTime);
       let maxEnd = displayTasks[displayTasks.length - 1]?.end || minStart;
       displayTasks.forEach((t) => {
         if (t.start && t.start < minStart) minStart = t.start;
         if (t.end && t.end > maxEnd) maxEnd = t.end;
       });
       const spansMulti = parseISODate(minStart).getUTCFullYear() !== parseISODate(maxEnd).getUTCFullYear();
-      const headerH = spansMulti ? 78 : (currentOptions.viewport?.headerHeight || 58);
-      const toolbarH = 50;
-      const addRowH = currentOptions.readOnly ? 0 : 38;
+      const headerH = spansMulti ? MULTI_YEAR_HEADER_HEIGHT : (currentOptions.viewport?.headerHeight || DEFAULT_HEADER_HEIGHT);
+      const toolbarH = TOOLBAR_HEIGHT;
+      const addRowH = currentOptions.readOnly ? 0 : ADD_ROW_HEIGHT;
       const borderBuffer = 6;
       const availH = Math.max(containerH - headerH - toolbarH - addRowH - borderBuffer, 100);
       const count = Math.max(displayTasks.length, 1);
-      effectiveRowHeight = Math.max(26, Math.min(140, Math.floor(availH / count)));
+      effectiveRowHeight = Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT, Math.floor(availH / count)));
     }
 
     // 3. Coordinate Layout Calculation
@@ -298,69 +317,28 @@ export function renderJantt(
         currentScale = s;
         currentDayWidth = SCALE_DAY_WIDTHS[s] || 36;
         currentOptions.onDayWidthChange?.(currentDayWidth);
-        currentOptions.onViewportChange?.({
-          scale: currentScale,
-          dayWidth: currentDayWidth,
-          linkRouting: currentRouting,
-          rowHeight: customRowHeight,
-          rowHeightMode,
-          showCriticalPath: showCritical,
-          showBaselines,
-          selectedDate: selectedDateFilter
-        });
+        broadcastViewportChange();
         render();
       },
       onRoutingChange: (r) => {
         currentRouting = r;
-        currentOptions.onViewportChange?.({
-          scale: currentScale,
-          linkRouting: currentRouting,
-          rowHeight: customRowHeight,
-          rowHeightMode,
-          showCriticalPath: showCritical,
-          showBaselines,
-          selectedDate: selectedDateFilter
-        });
+        broadcastViewportChange();
         render();
       },
       onRowHeightModeChange: (mode) => {
         rowHeightMode = mode;
-        currentOptions.onViewportChange?.({
-          scale: currentScale,
-          linkRouting: currentRouting,
-          rowHeight: customRowHeight,
-          rowHeightMode: mode,
-          showCriticalPath: showCritical,
-          showBaselines,
-          selectedDate: selectedDateFilter
-        });
+        broadcastViewportChange();
         render();
       },
       onRowHeightChange: (h) => {
         customRowHeight = h;
         rowHeightMode = "custom";
-        currentOptions.onViewportChange?.({
-          scale: currentScale,
-          linkRouting: currentRouting,
-          rowHeight: h,
-          rowHeightMode: "custom",
-          showCriticalPath: showCritical,
-          showBaselines,
-          selectedDate: selectedDateFilter
-        });
+        broadcastViewportChange();
         render();
       },
       onCriticalToggle: () => {
         showCritical = !showCritical;
-        currentOptions.onViewportChange?.({
-          scale: currentScale,
-          linkRouting: currentRouting,
-          rowHeight: customRowHeight,
-          rowHeightMode,
-          showCriticalPath: showCritical,
-          showBaselines,
-          selectedDate: selectedDateFilter
-        });
+        broadcastViewportChange();
         render();
       },
       onAutoCascadeToggle: () => {
@@ -371,15 +349,7 @@ export function renderJantt(
       onClearDateFilter: () => {
         selectedDateFilter = null;
         currentOptions.onClearDateFilter?.();
-        currentOptions.onViewportChange?.({
-          scale: currentScale,
-          linkRouting: currentRouting,
-          rowHeight: customRowHeight,
-          rowHeightMode,
-          showCriticalPath: showCritical,
-          showBaselines,
-          selectedDate: null
-        });
+        broadcastViewportChange();
         render();
       },
       onSearchChange: (q) => {
@@ -406,21 +376,12 @@ export function renderJantt(
         const mouseContentX = mouseViewportX + bodyWrap.scrollLeft;
 
         const prevDayWidth = currentDayWidth;
-        const newDayWidth = Math.max(1.2, Math.min(100, Math.round((currentDayWidth * zoomFactor) * 10) / 10));
+        const newDayWidth = clampDayWidth(currentDayWidth * zoomFactor);
         if (newDayWidth !== prevDayWidth) {
           currentDayWidth = newDayWidth;
           currentScale = getScaleFromDayWidth(currentDayWidth);
           currentOptions.onDayWidthChange?.(currentDayWidth);
-          currentOptions.onViewportChange?.({
-            scale: currentScale,
-            dayWidth: currentDayWidth,
-            linkRouting: currentRouting,
-            rowHeight: customRowHeight,
-            rowHeightMode,
-            showCriticalPath: showCritical,
-            showBaselines,
-            selectedDate: selectedDateFilter
-          });
+          broadcastViewportChange();
 
           const ratio = newDayWidth / prevDayWidth;
           const newScrollLeft = Math.max(0, mouseContentX * ratio - mouseViewportX);
@@ -449,16 +410,7 @@ export function renderJantt(
       onDateClick: (dateStr: string) => {
         selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
         currentOptions.onDateClick?.(dateStr);
-        currentOptions.onViewportChange?.({
-          scale: currentScale,
-          dayWidth: currentDayWidth,
-          linkRouting: currentRouting,
-          rowHeight: customRowHeight,
-          rowHeightMode,
-          showCriticalPath: showCritical,
-          showBaselines,
-          selectedDate: selectedDateFilter
-        });
+        broadcastViewportChange();
         render();
       }
     });
@@ -643,16 +595,7 @@ export function renderJantt(
     getData: () => currentData,
     filterByDate: (dateStr: string | null) => {
       selectedDateFilter = dateStr;
-      currentOptions.onViewportChange?.({
-        scale: currentScale,
-        dayWidth: currentDayWidth,
-        linkRouting: currentRouting,
-        rowHeight: customRowHeight,
-        rowHeightMode,
-        showCriticalPath: showCritical,
-        showBaselines,
-        selectedDate: selectedDateFilter
-      });
+      broadcastViewportChange();
       render();
     },
     getSelectedDate: () => selectedDateFilter,

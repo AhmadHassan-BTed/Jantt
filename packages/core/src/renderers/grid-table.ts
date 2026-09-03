@@ -1,5 +1,6 @@
 import { TaskLayout, Task } from "../types";
 import { InteractionController } from "../controller";
+import { escapeHtml } from "../utils";
 
 export interface GridTableProps {
   taskLayouts: TaskLayout[];
@@ -115,13 +116,4 @@ export function renderGridTable(props: GridTableProps): {
   });
 
   return { labelCol, splitter };
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { JanttData, Task, ViewportOptions, renderJantt, JanttInstance } from "@jantt/core";
+import { JanttData, Task, ViewportOptions, JanttOptions, renderJantt, JanttInstance } from "@jantt/core";
 
 export interface JanttProps {
   data: JanttData;
@@ -54,29 +54,60 @@ export const Jantt: React.FC<JanttProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<JanttInstance | null>(null);
 
+  // Keep latest callbacks in ref to eliminate stale closure bugs
+  const callbacksRef = useRef({
+    onChange,
+    onCommit,
+    onViewportChange,
+    onTaskClick,
+    onTaskDelete,
+    onTaskAdd,
+    onDateClick,
+    onClearDateFilter,
+    onDayWidthChange,
+    renderDetail
+  });
+
+  callbacksRef.current = {
+    onChange,
+    onCommit,
+    onViewportChange,
+    onTaskClick,
+    onTaskDelete,
+    onTaskAdd,
+    onDateClick,
+    onClearDateFilter,
+    onDayWidthChange,
+    renderDetail
+  };
+
+  const getForwardingOptions = (): JanttOptions => ({
+    viewport,
+    theme,
+    themeClassName,
+    className,
+    readOnly,
+    sidebarContainer,
+    selectedDate,
+    onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
+    onClearDateFilter: () => callbacksRef.current.onClearDateFilter?.(),
+    onDayWidthChange: (w: number) => callbacksRef.current.onDayWidthChange?.(w),
+    onChange: (draft: JanttData) => callbacksRef.current.onChange?.(draft),
+    onCommit: (final: JanttData) => callbacksRef.current.onCommit?.(final),
+    onViewportChange: (vp: ViewportOptions) => callbacksRef.current.onViewportChange?.(vp),
+    onTaskClick: (t: Task) => callbacksRef.current.onTaskClick?.(t),
+    onTaskDelete: (id: string) => callbacksRef.current.onTaskDelete?.(id),
+    onTaskAdd: (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask),
+    renderDetail: callbacksRef.current.renderDetail
+      ? (task, container, api) => callbacksRef.current.renderDetail?.(task, container, api)
+      : undefined
+  });
+
   // Mount/unmount lifecycle
   useEffect(() => {
     if (!containerRef.current) return;
 
-    instanceRef.current = renderJantt(containerRef.current, data, {
-      viewport,
-      theme,
-      themeClassName,
-      className,
-      readOnly,
-      sidebarContainer,
-      selectedDate,
-      onDateClick,
-      onClearDateFilter,
-      onDayWidthChange,
-      onChange,
-      onCommit,
-      onViewportChange,
-      onTaskClick,
-      onTaskDelete,
-      onTaskAdd,
-      renderDetail
-    });
+    instanceRef.current = renderJantt(containerRef.current, data, getForwardingOptions());
 
     return () => {
       instanceRef.current?.destroy();
@@ -84,30 +115,21 @@ export const Jantt: React.FC<JanttProps> = ({
     };
   }, []);
 
-  // Update on data/options change
+  // Update on data or configuration changes
   useEffect(() => {
     if (instanceRef.current) {
-      instanceRef.current.update(data, {
-        viewport,
-        theme,
-        themeClassName,
-        className,
-        readOnly,
-        sidebarContainer,
-        selectedDate,
-        onDateClick,
-        onClearDateFilter,
-        onDayWidthChange,
-        onChange,
-        onCommit,
-        onViewportChange,
-        onTaskClick,
-        onTaskDelete,
-        onTaskAdd,
-        renderDetail
-      });
+      instanceRef.current.update(data, getForwardingOptions());
     }
-  }, [data, viewport, theme, themeClassName, className, readOnly, sidebarContainer, selectedDate, onDateClick, onClearDateFilter, onDayWidthChange, onChange, onCommit, onViewportChange, onTaskClick, onTaskDelete, onTaskAdd, renderDetail]);
+  }, [
+    data,
+    viewport,
+    theme,
+    themeClassName,
+    className,
+    readOnly,
+    sidebarContainer,
+    selectedDate
+  ]);
 
   return (
     <div

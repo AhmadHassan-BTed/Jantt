@@ -1,6 +1,7 @@
 import { Task, Category, CategoriesMap } from "./types";
 import { diffDays, addDays } from "./date-math";
 import { getTaskDependencies } from "./resolver";
+import { escapeHtml } from "./utils";
 
 export interface TaskSidebarOptions {
   task: Task;
@@ -409,10 +410,12 @@ function renderDefaultSidebarContent(
       currentDeps.forEach((depId) => {
         const prereq = allTasks.find((t) => t.id === depId);
         if (prereq && prereq.end && curStart) {
-          if (diffDays(prereq.end, curStart) > 0) {
+          const reqMinStart = addDays(prereq.end, task.gapDays ?? 0);
+          // Timing conflict: task start is earlier than prerequisite end + gap
+          if (diffDays(reqMinStart, curStart) < 0) {
             conflicts.push({
               depId,
-              prereqEnd: prereq.end,
+              prereqEnd: reqMinStart,
               prereqLabel: prereq.label || prereq.name || prereq.id
             });
           }
@@ -662,13 +665,4 @@ function renderCustomFieldsHtml(fields?: Record<string, unknown>, readOnly = fal
       `;
     })
     .join("");
-}
-
-function escapeHtml(str: string): string {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
