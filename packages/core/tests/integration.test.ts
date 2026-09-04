@@ -360,7 +360,7 @@ describe("Stress & Boundary Tests", () => {
       expect(resNoon.header.todayX!).toBeLessThan(resEvening.header.todayX!);
     });
 
-    it("anchors the Today marker in the sticky header and renders a clean vertical guide line in the grid without task bar occlusion", () => {
+    it("renders a clean vertical Today guide line at todayX without any text tag or badge", () => {
       const container = document.createElement("div");
       document.body.appendChild(container);
 
@@ -379,29 +379,18 @@ describe("Stress & Boundary Tests", () => {
         }
       });
 
-      // 1. Sticky timeline header contains the Today marker pin
-      const headerMarker = container.querySelector<HTMLElement>(".jantt-header-today-marker");
-      expect(headerMarker).not.toBeNull();
-      expect(headerMarker?.querySelector(".jantt-header-today-pill")?.textContent).toBe("Today");
-      expect(headerMarker?.querySelector(".jantt-header-today-arrow")).not.toBeNull();
-
-      // 2. The header marker is positioned at todayX
+      // 1. Clean vertical Today guide line is rendered at todayX
       const todayLine = container.querySelector<HTMLElement>(".jantt-today-line");
       expect(todayLine).not.toBeNull();
-      expect(headerMarker?.style.left).toBe(todayLine?.style.left);
+      expect(todayLine?.style.left).toBeTruthy();
 
-      // 3. Grid todayLine does NOT contain an inline badge that occludes task bars
-      expect(todayLine?.querySelector(".jantt-today-badge")).toBeNull();
+      // 2. No text badge or tag saying Today is rendered anywhere in the grid or header
+      expect(container.querySelector(".jantt-today-badge")).toBeNull();
+      expect(container.querySelector(".jantt-header-today-marker")).toBeNull();
 
-      // 4. Clicking the header Today marker filters active tasks
-      headerMarker?.click();
-      let rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
-      expect(rows.length).toBe(1);
-
-      // 5. Clicking again clears the filter
-      headerMarker?.click();
-      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
-      expect(rows.length).toBe(2);
+      // 3. The today day column in the header has the is-today class for clean date styling
+      const todayDayCell = container.querySelector<HTMLElement>(".jantt-day-cell.is-today");
+      expect(todayDayCell).not.toBeNull();
 
       chart.destroy();
       container.remove();
