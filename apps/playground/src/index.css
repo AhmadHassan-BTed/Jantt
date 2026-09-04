@@ -1129,6 +1129,164 @@ select option,
 }
 
 /* ==========================================================================
+   Settings & Auto-Save Modal — Premium Clean Card Architecture
+   ========================================================================== */
+.settings-modal-card {
+  max-width: 520px;
+  width: 92%;
+  background: var(--jantt-surface, #FFFFFF);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--jantt-border-strong, #CBD5E1);
+  border-radius: 16px;
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--jantt-border-subtle, rgba(0, 0, 0, 0.05));
+  overflow: hidden;
+  animation: jantt-scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.12));
+  border: 1px solid var(--jantt-border-strong, rgba(56, 189, 248, 0.25));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--jantt-accent, #38BDF8);
+  flex-shrink: 0;
+}
+
+.settings-hero-card {
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.settings-hero-card.is-saved {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.settings-hero-card.is-saving {
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.1));
+  border: 1px solid var(--jantt-border-strong, rgba(56, 189, 248, 0.3));
+}
+
+.settings-hero-card.is-pending {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--jantt-text-muted, #94A3B8);
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.settings-cadence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.settings-cadence-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  background: var(--jantt-surface, #F8FAFC);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.settings-cadence-item:hover {
+  background: var(--jantt-surface-hover, rgba(56, 189, 248, 0.05));
+  border-color: var(--jantt-accent, #38BDF8);
+  transform: translateY(-1px);
+}
+
+.settings-cadence-item.is-selected {
+  background: var(--jantt-surface-hover, rgba(56, 189, 248, 0.1));
+  border-color: var(--jantt-accent, #38BDF8);
+  box-shadow: 0 0 0 1px var(--jantt-accent, #38BDF8), 0 2px 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
+}
+
+.settings-radio-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--jantt-border-strong, #94A3B8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  background: transparent;
+}
+
+.settings-cadence-item.is-selected .settings-radio-indicator {
+  border-color: var(--jantt-accent, #38BDF8);
+  background: var(--jantt-accent, #38BDF8);
+  box-shadow: 0 0 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.4));
+}
+
+.settings-radio-inner-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.2s ease;
+}
+
+.settings-cadence-item.is-selected .settings-radio-inner-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.settings-badge-rec {
+  font-size: 10px;
+  font-weight: 700;
+  color: #10B981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 1px 7px;
+  border-radius: 100px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.settings-storage-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--jantt-surface, #F8FAFC);
+  border: 1px solid var(--jantt-border-subtle, #E2E8F0);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+/* ==========================================================================
    Kanban Board View — Swiss Modernist Cards & Columns
    ========================================================================== */
 .kanban-view-container {
