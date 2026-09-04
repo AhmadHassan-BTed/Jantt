@@ -182,7 +182,8 @@ describe("Theme Architecture & ThemeManager Subsystem", () => {
 
     const beenie = themeManager.getTheme("beenie");
     expect(beenie).toBeDefined();
-    expect(beenie?.name).toBe("Beenie");
+    expect(beenie?.name).toBe("Pink Beenie");
+    expect(beenie?.label).toBe("Pink Beenie");
     expect(beenie?.mode).toBe("light");
     expect(beenie?.vars["--jantt-bg"]).toBe("#FFF5F8");
     expect(beenie?.vars["--jantt-accent"]).toBe("#EC4899");

@@ -2,8 +2,8 @@ import { ThemeDefinition } from "./types";
 
 export const beenieTheme: ThemeDefinition = {
   id: "beenie",
-  name: "Beenie",
-  label: "Beenie",
+  name: "Pink Beenie",
+  label: "Pink Beenie",
   mode: "light",
   className: "jantt-theme-beenie",
   description: "Enchanting cherry blossom aesthetic with soft petal pinks, porcelain white, floral accents, and delicate blossom glow.",
