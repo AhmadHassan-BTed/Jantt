@@ -51,6 +51,8 @@ export interface ViewportSnapshotState {
   showBaselines: boolean;
   autoCascade?: boolean;
   selectedDate: string | null;
+  showDateFilterBadge?: boolean;
+  filterTasksByDate?: boolean;
   labelWidth?: number;
   headerHeight?: number;
 }
@@ -69,6 +71,8 @@ export function buildViewportSnapshot(state: ViewportSnapshotState): ViewportOpt
     showBaselines: state.showBaselines,
     autoCascade: state.autoCascade,
     selectedDate: state.selectedDate,
+    ...(state.showDateFilterBadge !== undefined ? { showDateFilterBadge: state.showDateFilterBadge } : {}),
+    ...(state.filterTasksByDate !== undefined ? { filterTasksByDate: state.filterTasksByDate } : {}),
     ...(state.labelWidth !== undefined ? { labelWidth: state.labelWidth } : {}),
     ...(state.headerHeight !== undefined ? { headerHeight: state.headerHeight } : {})
   };

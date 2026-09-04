@@ -11,6 +11,8 @@ export interface JanttProps {
   onTaskAdd?: (newTask: Task) => void;
   sidebarContainer?: HTMLElement | string;
   selectedDate?: string | null;
+  showDateFilterBadge?: boolean;
+  filterTasksByDate?: boolean;
   onDateClick?: (dateStr: string) => void;
   onClearDateFilter?: () => void;
   onDayWidthChange?: (dayWidth: number) => void;
@@ -40,6 +42,8 @@ export const Jantt: React.FC<JanttProps> = ({
   onTaskAdd,
   sidebarContainer,
   selectedDate,
+  showDateFilterBadge,
+  filterTasksByDate,
   onDateClick,
   onClearDateFilter,
   onDayWidthChange,
@@ -89,6 +93,8 @@ export const Jantt: React.FC<JanttProps> = ({
     readOnly,
     sidebarContainer,
     selectedDate,
+    showDateFilterBadge,
+    filterTasksByDate,
     onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
     onClearDateFilter: () => callbacksRef.current.onClearDateFilter?.(),
     onDayWidthChange: (w: number) => callbacksRef.current.onDayWidthChange?.(w),
@@ -131,13 +137,17 @@ export const Jantt: React.FC<JanttProps> = ({
     viewport?.showBaselines,
     viewport?.autoCascade,
     viewport?.selectedDate,
+    viewport?.showDateFilterBadge,
+    viewport?.filterTasksByDate,
     viewport?.labelWidth,
     theme,
     themeClassName,
     className,
     readOnly,
     sidebarContainer,
-    selectedDate
+    selectedDate,
+    showDateFilterBadge,
+    filterTasksByDate
   ]);
 
   return (

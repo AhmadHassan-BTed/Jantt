@@ -331,13 +331,9 @@ export function App() {
                   <Jantt
                     data={ganttDisplayData}
                     onCommit={handleGanttCommit}
-                    selectedDate={
-                      dateFilter.dateFilterMode === "all"
-                        ? null
-                        : dateFilter.dateFilterBehavior === "hide"
-                        ? dateFilter.dateFilterActiveDate
-                        : null
-                    }
+                    showDateFilterBadge={false}
+                    filterTasksByDate={false}
+                    selectedDate={dateFilter.dateFilterActiveDate}
                     onDateClick={(clickedDate) => {
                       if (clickedDate === getTodayISODate()) {
                         dateFilter.setDateFilterMode((prev) => (prev === "today" ? "all" : "today"));
@@ -383,7 +379,9 @@ export function App() {
                       showCriticalPath: viewport.showCriticalPath,
                       showBaselines: viewport.showBaselines,
                       autoCascade: viewport.autoCascade,
-                      selectedDate: dateFilter.dateFilterActiveDate
+                      selectedDate: dateFilter.dateFilterActiveDate,
+                      showDateFilterBadge: false,
+                      filterTasksByDate: false
                     }}
                     theme={viewport.activeTheme.vars}
                     themeClassName={viewport.activeTheme.className}

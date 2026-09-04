@@ -623,6 +623,52 @@ describe("Stress & Boundary Tests", () => {
       document.body.removeChild(container);
     });
 
+    it("respects showDateFilterBadge: false and filterTasksByDate: false for externally controlled filters", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const testData: JanttData = {
+        tasks: [
+          { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+          { id: "t2", label: "Task 2", category: "dev", start: "2026-09-06", end: "2026-09-10" },
+          { id: "t3", label: "Task 3", category: "dev", start: "2026-09-03", end: "2026-09-08" }
+        ]
+      };
+
+      let clickedDate: string | null = null;
+      const chart = renderJantt(container, testData, {
+        showDateFilterBadge: false,
+        filterTasksByDate: false,
+        selectedDate: "2026-09-04",
+        onDateClick: (d) => {
+          clickedDate = d;
+        }
+      });
+
+      // 1. Tasks are NOT filtered down by Jantt Core (remains 3 tasks, preserving external control)
+      let rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(3);
+
+      // 2. Toolbar does NOT display the duplicate date filter badge
+      const badge = container.querySelector(".jantt-date-filter-badge");
+      expect(badge).toBeNull();
+
+      // 3. Day cell on timeline header still receives the is-date-selected class for visual feedback
+      const activeCell = container.querySelector(".jantt-day-cell.is-date-selected");
+      expect(activeCell).not.toBeNull();
+      expect(activeCell?.getAttribute("data-date")).toBe("2026-09-04");
+
+      // 4. Clicking a date delegates to onDateClick without internally mutating tasks
+      const dayCell06 = container.querySelector<HTMLElement>('.jantt-day-cell[data-date="2026-09-06"]');
+      dayCell06?.click();
+      expect(clickedDate).toBe("2026-09-06");
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(3);
+
+      chart.destroy();
+      document.body.removeChild(container);
+    });
+
     it("preserves selected date filter when zoom scale changes from month to day and vice versa", () => {
       const container = document.createElement("div");
       document.body.appendChild(container);
