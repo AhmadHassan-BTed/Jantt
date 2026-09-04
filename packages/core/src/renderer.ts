@@ -232,6 +232,7 @@ export function renderJantt(
 
     // 1. Compute master critical path across complete schedule graph before any display filtering
     const masterCriticalResult = calculateCriticalPath(currentData.tasks);
+    root.classList.toggle("jantt-show-critical", showCritical);
 
     // 2. Task Search / Filtering for display
     let displayTasks = currentData.tasks;
@@ -508,6 +509,7 @@ export function renderJantt(
       rowHeight: viewport.rowHeight,
       gridContainer,
       controller,
+      showCritical,
       people: currentData.people,
       teams: currentData.teams,
       onTaskClick: openTaskSidebar,
@@ -522,6 +524,7 @@ export function renderJantt(
       taskLayouts,
       rowHeight: viewport.rowHeight,
       showToday: viewport.showToday,
+      showCritical,
       hasAddRow,
       selectedDate: selectedDateFilter
     });

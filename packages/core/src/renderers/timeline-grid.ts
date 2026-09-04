@@ -5,6 +5,7 @@ export interface TimelineGridProps {
   taskLayouts: TaskLayout[];
   rowHeight: number;
   showToday: boolean;
+  showCritical?: boolean;
   hasAddRow?: boolean;
   selectedDate?: string | null;
 }
@@ -33,8 +34,9 @@ export function renderTimelineGrid(props: TimelineGridProps): {
 
   // 2. Low-opacity horizontal row boundary lines extending across the timeline
   props.taskLayouts.forEach((item) => {
+    const isCrit = Boolean(props.showCritical && item.isCritical);
     const rowLine = document.createElement("div");
-    rowLine.className = "jantt-grid-row";
+    rowLine.className = `jantt-grid-row ${isCrit ? "is-critical" : ""}`.trim();
     rowLine.style.height = `${props.rowHeight}px`;
     rowLine.setAttribute("data-grid-row-id", item.task.id);
     gridLayer.appendChild(rowLine);

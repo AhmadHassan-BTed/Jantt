@@ -10,6 +10,7 @@ export interface GridTableProps {
   rowHeight: number;
   gridContainer: HTMLElement;
   controller: InteractionController;
+  showCritical?: boolean;
   people?: Person[];
   teams?: Team[];
   onTaskClick: (task: Task) => void;
@@ -41,8 +42,9 @@ export function renderGridTable(props: GridTableProps): {
   // Rows
   props.taskLayouts.forEach((item) => {
     const isDone = isTaskDone(item.task);
+    const isCrit = Boolean(props.showCritical && item.isCritical);
     const row = document.createElement("div");
-    row.className = `jantt-label-row ${isDone ? "is-done" : ""}`;
+    row.className = `jantt-label-row ${isDone ? "is-done" : ""} ${isCrit ? "is-critical" : ""}`;
     row.style.height = `${props.rowHeight}px`;
     row.setAttribute("data-row-id", item.task.id);
 

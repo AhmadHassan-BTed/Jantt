@@ -146,6 +146,19 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       content.appendChild(uPill);
     }
 
+    if (props.showCritical && item.isCritical) {
+      const critPill = document.createElement("span");
+      critPill.className = "jantt-critical-pill";
+      critPill.title = "Critical Path: task controls project completion date";
+      critPill.innerHTML = `
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        <span>Critical</span>
+      `;
+      content.appendChild(critPill);
+    }
+
     if (!props.readOnly) {
       const lockBtn = document.createElement("button");
       lockBtn.className = `jantt-task-lock-btn ${item.task.locked ? "is-locked" : ""}`;
