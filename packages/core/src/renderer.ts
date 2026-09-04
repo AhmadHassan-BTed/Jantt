@@ -3,7 +3,7 @@ import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS }
 import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
 import { resolveSchedule, getTaskDependencies } from "./resolver";
-import { addDays, getTodayISODate, isTaskOnDate, parseISODate } from "./date-math";
+import { addDays, diffDays, getTodayISODate, isTaskOnDate, parseISODate } from "./date-math";
 import { clampDayWidth, buildViewportSnapshot } from "./utils";
 import {
   DEFAULT_GAP_DAYS,
@@ -81,7 +81,25 @@ export function renderJantt(
     );
   };
 
-  const handleDayWidthChange = (newWidth: number, anchorClientX?: number) => {
+  let renderedDayWidth: number = currentDayWidth;
+  let renderedStartDate: string = "";
+  let dragAnchorLeftmostDays: number | null = null;
+  let dragAnchorStartDate: string = "";
+
+  const handleColumnResizeStart = () => {
+    const bodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
+    if (bodyWrap && renderedDayWidth > 0 && renderedStartDate) {
+      dragAnchorLeftmostDays = bodyWrap.scrollLeft / renderedDayWidth;
+      dragAnchorStartDate = renderedStartDate;
+    }
+  };
+
+  const handleColumnResizeEnd = () => {
+    dragAnchorLeftmostDays = null;
+    dragAnchorStartDate = "";
+  };
+
+  const handleDayWidthChange = (newWidth: number) => {
     const prevDayWidth = currentDayWidth;
     const clamped = clampDayWidth(newWidth);
     if (clamped === prevDayWidth) return;
@@ -91,22 +109,7 @@ export function renderJantt(
     currentOptions.onDayWidthChange?.(currentDayWidth);
     broadcastViewportChange();
 
-    const bodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
-    let newScrollLeft: number | null = null;
-    if (bodyWrap && anchorClientX !== undefined) {
-      const rect = bodyWrap.getBoundingClientRect();
-      const mouseViewportX = anchorClientX - rect.left;
-      const mouseContentX = mouseViewportX + bodyWrap.scrollLeft;
-      const ratio = currentDayWidth / prevDayWidth;
-      newScrollLeft = Math.max(0, mouseContentX * ratio - mouseViewportX);
-    }
-
     render();
-
-    if (newScrollLeft !== null) {
-      const newBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
-      if (newBodyWrap) newBodyWrap.scrollLeft = newScrollLeft;
-    }
   };
 
   container.innerHTML = "";
@@ -220,6 +223,7 @@ export function renderJantt(
     const prevBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
     const savedScrollLeft = prevBodyWrap ? prevBodyWrap.scrollLeft : 0;
     const savedScrollTop = prevBodyWrap ? prevBodyWrap.scrollTop : 0;
+    const hadPreviousRender = prevBodyWrap !== null && renderedStartDate !== "" && renderedDayWidth > 0;
 
     // 1. Task Search / Filtering
     let displayTasks = currentData.tasks;
@@ -284,6 +288,24 @@ export function renderJantt(
       canvasHeight,
       criticalTaskIds
     } = layoutResult;
+
+    const newStartDate = layoutResult.viewport.startDate;
+
+    let targetScrollLeft: number = savedScrollLeft;
+    if (hadPreviousRender) {
+      if (dragAnchorLeftmostDays !== null && dragAnchorStartDate) {
+        // Continuous column header drag session: anchor to drag start to prevent floating drift
+        const startDeltaDays = diffDays(newStartDate, dragAnchorStartDate);
+        const newLeftmostDays = Math.max(0, dragAnchorLeftmostDays + startDeltaDays);
+        targetScrollLeft = Math.max(0, Math.round(newLeftmostDays * currentDayWidth));
+      } else if (currentDayWidth !== renderedDayWidth || newStartDate !== renderedStartDate) {
+        // Discrete zoom / scale changes / wheel / slider
+        const prevLeftmostDays = savedScrollLeft / renderedDayWidth;
+        const startDeltaDays = diffDays(newStartDate, renderedStartDate);
+        const newLeftmostDays = Math.max(0, prevLeftmostDays + startDeltaDays);
+        targetScrollLeft = Math.max(0, Math.round(newLeftmostDays * currentDayWidth));
+      }
+    }
 
     // 3. Controller State Machine Setup
     if (!controller) {
@@ -401,30 +423,14 @@ export function renderJantt(
       bodyWrap.style.overflowY = "hidden";
     }
 
-    // Ctrl + Wheel / Cmd + Wheel zoom anchored to cursor
+    // Ctrl + Wheel / Cmd + Wheel zoom pivoted from leftmost visible edge
     bodyWrap.addEventListener("wheel", (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-        const rect = bodyWrap.getBoundingClientRect();
-        const mouseViewportX = e.clientX - rect.left;
-        const mouseContentX = mouseViewportX + bodyWrap.scrollLeft;
-
-        const prevDayWidth = currentDayWidth;
         const newDayWidth = clampDayWidth(currentDayWidth * zoomFactor);
-        if (newDayWidth !== prevDayWidth) {
-          currentDayWidth = newDayWidth;
-          currentScale = getScaleFromDayWidth(currentDayWidth);
-          currentOptions.onDayWidthChange?.(currentDayWidth);
-          broadcastViewportChange();
-
-          const ratio = newDayWidth / prevDayWidth;
-          const newScrollLeft = Math.max(0, mouseContentX * ratio - mouseViewportX);
-          render();
-          requestAnimationFrame(() => {
-            const newBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
-            if (newBodyWrap) newBodyWrap.scrollLeft = newScrollLeft;
-          });
+        if (newDayWidth !== currentDayWidth) {
+          handleDayWidthChange(newDayWidth);
         }
       }
     }, { passive: false });
@@ -441,7 +447,9 @@ export function renderJantt(
     const timelineHeader = renderTimelineHeader(header, {
       selectedDate: selectedDateFilter,
       dayWidth: currentDayWidth,
-      onColumnResize: (w, clientX) => handleDayWidthChange(w, clientX),
+      onColumnResize: (w) => handleDayWidthChange(w),
+      onColumnResizeStart: handleColumnResizeStart,
+      onColumnResizeEnd: handleColumnResizeEnd,
       onDateClick: (dateStr: string) => {
         selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
         currentOptions.onDateClick?.(dateStr);
@@ -552,8 +560,15 @@ export function renderJantt(
     timelineArea.appendChild(gridContainer);
     bodyWrap.appendChild(timelineArea);
 
-    // Restore scroll positions so moving/editing tasks never jumps scrollbars to the beginning
-    if (savedScrollLeft > 0) bodyWrap.scrollLeft = savedScrollLeft;
+    renderedDayWidth = currentDayWidth;
+    renderedStartDate = newStartDate;
+
+    // Restore scroll positions pivoted from leftmost visible edge
+    if (hadPreviousRender) {
+      bodyWrap.scrollLeft = targetScrollLeft;
+    } else if (savedScrollLeft > 0) {
+      bodyWrap.scrollLeft = savedScrollLeft;
+    }
     if (savedScrollTop > 0) bodyWrap.scrollTop = savedScrollTop;
   };
 
