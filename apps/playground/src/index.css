@@ -109,6 +109,78 @@ body {
   border-radius: 100px;
 }
 
+.btn-autosave-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 9px;
+  border-radius: 100px;
+  cursor: pointer;
+  outline: none;
+  border: 1px solid transparent;
+  line-height: 1;
+  user-select: none;
+  background: transparent;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-autosave-badge svg {
+  flex-shrink: 0;
+}
+
+.btn-autosave-badge.is-saved {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.btn-autosave-badge.is-saved:hover {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+.btn-autosave-badge.is-saving {
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.12));
+  color: var(--jantt-accent, #38BDF8);
+  border-color: var(--jantt-border-strong, rgba(56, 189, 248, 0.3));
+}
+
+.btn-autosave-badge.is-saving:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--jantt-accent, #38BDF8);
+}
+
+.btn-autosave-badge.is-pending {
+  background: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.btn-autosave-badge.is-pending:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.45);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+}
+
+.spin-sync-icon {
+  animation: autosave-spin 1s linear infinite;
+}
+
+@keyframes autosave-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
 .nav-controls {
   display: flex;
   align-items: center;
