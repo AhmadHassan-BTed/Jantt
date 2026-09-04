@@ -17,7 +17,8 @@ import {
   type Team,
   resolveTaskAssignee,
   resolveTeamById,
-  resolveSchedule
+  resolveSchedule,
+  syncTaskProgressAndStatus
 } from "@jantt/core";
 import type { DateFilterMode, EffectivePerson } from "../types";
 
@@ -250,9 +251,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           const nextStatus = isCompleted ? "in-progress" : "completed";
-                          const nextProgress = isCompleted ? 0 : 1.0;
+                          const synced = syncTaskProgressAndStatus({ status: nextStatus }, t);
                           const updatedTasks = parsedData.tasks.map((item) =>
-                            item.id === t.id ? { ...item, status: nextStatus as any, progress: nextProgress } : item
+                            item.id === t.id ? { ...item, ...synced } : item
                           );
                           handleChartCommit({ ...parsedData, tasks: updatedTasks });
                         }}
@@ -375,9 +376,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           const nextStatus = isCompleted ? "in-progress" : "completed";
-                          const nextProgress = isCompleted ? 0 : 1.0;
+                          const synced = syncTaskProgressAndStatus({ status: nextStatus }, t);
                           const updatedTasks = parsedData.tasks.map((item) =>
-                            item.id === t.id ? { ...item, status: nextStatus as any, progress: nextProgress } : item
+                            item.id === t.id ? { ...item, ...synced } : item
                           );
                           handleChartCommit({ ...parsedData, tasks: updatedTasks });
                         }}
@@ -453,12 +454,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       onChange={(e) => {
                         e.stopPropagation();
                         const newStatus = e.target.value;
-                        let newProgress = t.progress;
-                        if (newStatus === "completed") newProgress = 1.0;
-                        else if (newStatus === "submitted" && (t.progress ?? 0) < 0.75) newProgress = 0.75;
-                        else if (newStatus === "not-started") newProgress = 0;
+                        const synced = syncTaskProgressAndStatus({ status: newStatus as any }, t);
                         const updatedTasks = parsedData.tasks.map((item) =>
-                          item.id === t.id ? { ...item, status: newStatus as any, progress: newProgress } : item
+                          item.id === t.id ? { ...item, ...synced } : item
                         );
                         handleChartCommit({ ...parsedData, tasks: updatedTasks });
                       }}

@@ -63,14 +63,18 @@ export function useAutoSave({
     setSaveStatus("saved");
   }, []);
 
-  const handleManualSaveNow = useCallback(() => {
+  const flushSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
       window.clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
     }
     executeSave();
+  }, [executeSave]);
+
+  const handleManualSaveNow = useCallback(() => {
+    flushSave();
     showToast("Plan state successfully saved to browser storage!");
-  }, [executeSave, showToast]);
+  }, [flushSave, showToast]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -180,6 +184,7 @@ export function useAutoSave({
     showAutoSaveModal,
     setShowAutoSaveModal,
     handleManualSaveNow,
-    executeSave
+    executeSave,
+    flushSave
   };
 }

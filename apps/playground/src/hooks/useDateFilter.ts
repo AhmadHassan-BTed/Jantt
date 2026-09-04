@@ -30,6 +30,20 @@ export function useDateFilter({
   const [dateFilterRangeEnd, setDateFilterRangeEnd] = useState<string>("");
   const [dateFilterBehavior, setDateFilterBehavior] = useState<"dim" | "hide">("dim");
 
+  const handleSetRangeStart = useCallback((newStart: string) => {
+    setDateFilterRangeStart(newStart);
+    if (newStart && dateFilterRangeEnd && newStart > dateFilterRangeEnd) {
+      setDateFilterRangeEnd(newStart);
+    }
+  }, [dateFilterRangeEnd]);
+
+  const handleSetRangeEnd = useCallback((newEnd: string) => {
+    setDateFilterRangeEnd(newEnd);
+    if (newEnd && dateFilterRangeStart && newEnd < dateFilterRangeStart) {
+      setDateFilterRangeStart(newEnd);
+    }
+  }, [dateFilterRangeStart]);
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.DATE_FILTER_MODE, dateFilterMode);
@@ -162,15 +176,16 @@ export function useDateFilter({
     dateFilterValue,
     setDateFilterValue,
     dateFilterRangeStart,
-    setDateFilterRangeStart,
+    setDateFilterRangeStart: handleSetRangeStart,
     dateFilterRangeEnd,
-    setDateFilterRangeEnd,
+    setDateFilterRangeEnd: handleSetRangeEnd,
     dateFilterBehavior,
     setDateFilterBehavior,
     dateFilterActiveDate,
     isTaskMatchingDateFilter,
     matchingTasksCount,
     summaryKpiTasks,
+    ganttFilteredTasks: summaryKpiTasks,
     dateFilterActiveSummary
   };
 }

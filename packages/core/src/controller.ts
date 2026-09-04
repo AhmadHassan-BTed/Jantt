@@ -1,7 +1,7 @@
 import { JanttData, Task, JanttOptions, TaskLayout } from "./types";
 import { addDays, diffDays } from "./date-math";
 import { resolveSchedule, getTaskDependencies } from "./resolver";
-import { getEffectiveGap } from "./utils";
+import { getEffectiveGap, syncTaskProgressAndStatus } from "./utils";
 import { DEFAULT_GAP_DAYS } from "./constants";
 
 export type DragMode = "move" | "resize" | "progress" | "link" | "split" | "marquee";
@@ -39,6 +39,15 @@ export class InteractionController {
   private openModalHandler: (task: Task) => void;
   private onLiveLinkUpdate?: (wireData: { fromX: number; fromY: number; toX: number; toY: number } | null) => void;
   private onSplitResize?: (newWidth: number) => void;
+  private renderRafId: number | null = null;
+
+  private scheduleRender() {
+    if (this.renderRafId !== null) return;
+    this.renderRafId = window.requestAnimationFrame(() => {
+      this.renderRafId = null;
+      this.onRenderRequest();
+    });
+  }
 
   constructor(
     data: JanttData,
@@ -386,7 +395,9 @@ export class InteractionController {
       const barWidth = Math.max(diffDays(task.start, task.end) * this.dayWidth, 30);
       const deltaRatio = deltaX / barWidth;
       const newProgress = Math.max(0, Math.min(1, (this.dragState.origProgress || 0) + deltaRatio));
-      task.progress = Math.round(newProgress * 100) / 100;
+      const roundedProg = Math.round(newProgress * 100) / 100;
+      const synced = syncTaskProgressAndStatus({ progress: roundedProg }, task);
+      Object.assign(task, synced);
     }
 
     // Auto-scroll when dragging near or past viewport boundaries
@@ -400,7 +411,7 @@ export class InteractionController {
       }
     }
 
-    this.onRenderRequest();
+    this.scheduleRender();
     this.options.onChange?.(this.data);
   }
 
@@ -462,8 +473,18 @@ export class InteractionController {
       return;
     }
 
+    if (this.renderRafId !== null) {
+      window.cancelAnimationFrame(this.renderRafId);
+      this.renderRafId = null;
+    }
+
     const task = this.data.tasks.find((t) => t.id === taskId);
     if (!task) return;
+
+    if (mode === "progress") {
+      const synced = syncTaskProgressAndStatus({ progress: task.progress }, task);
+      Object.assign(task, synced);
+    }
 
     if (!moved && (mode === "move" || mode === "resize")) {
       this.options.onTaskClick?.(task);

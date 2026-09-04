@@ -1,6 +1,6 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useCallback } from "react";
 import { Jantt } from "@jantt/react";
-import { getTodayISODate, type Person, type Team } from "@jantt/core";
+import { getTodayISODate, type Person, type Team, type JanttData } from "@jantt/core";
 
 // Re-export all types, constants, and utilities for external consumers
 export type {
@@ -126,6 +126,8 @@ export function App() {
   onPeopleChangeRef.current = people.setPeople;
   onTeamsChangeRef.current = people.setTeams;
 
+  const flushPendingSaveRef = useRef<() => void>(() => {});
+
   // Project Management (Local & Template CRUD)
   const project = useProjectState({
     initialProjects: loadSavedProjects(),
@@ -139,7 +141,8 @@ export function App() {
     setCurrentScale: viewport.setCurrentScale,
     setShowCriticalPath: viewport.setShowCriticalPath,
     setShowBaselines: viewport.setShowBaselines,
-    showToast: toast.showToast
+    showToast: toast.showToast,
+    flushPendingSave: () => flushPendingSaveRef.current()
   });
 
   // Auto-Save Engine with Configurable Cadence
@@ -150,6 +153,7 @@ export function App() {
     onSaveProject: project.saveProjectData,
     showToast: toast.showToast
   });
+  flushPendingSaveRef.current = autoSave.flushSave;
 
   // Cloud Link & Remote Sync
   const cloud = useCloudSync({
@@ -199,6 +203,31 @@ export function App() {
     jsonText: editor.jsonText,
     showToast: toast.showToast
   });
+
+  // Gantt Dynamic Filtered Viewport & Commit Sync
+  const isHideActive = dateFilter.dateFilterMode !== "all" && dateFilter.dateFilterBehavior === "hide";
+  const ganttDisplayData = useMemo(() => {
+    if (!editor.parsedData) return null;
+    if (!isHideActive) return editor.parsedData;
+    return {
+      ...editor.parsedData,
+      tasks: dateFilter.ganttFilteredTasks
+    };
+  }, [editor.parsedData, isHideActive, dateFilter.ganttFilteredTasks]);
+
+  const handleGanttCommit = useCallback(
+    (updated: JanttData) => {
+      if (!editor.parsedData) return;
+      if (!isHideActive) {
+        editor.handleChartCommit(updated);
+        return;
+      }
+      const updatedMap = new Map(updated.tasks.map((t) => [t.id, t]));
+      const mergedTasks = editor.parsedData.tasks.map((t) => updatedMap.get(t.id) || t);
+      editor.handleChartCommit({ ...editor.parsedData, ...updated, tasks: mergedTasks });
+    },
+    [editor.parsedData, isHideActive, editor.handleChartCommit]
+  );
 
   return (
     <div
@@ -284,10 +313,10 @@ export function App() {
                   setDateFilterBehavior={dateFilter.setDateFilterBehavior}
                 />
 
-                {viewport.activeView === "gantt" && (
+                {viewport.activeView === "gantt" && ganttDisplayData && (
                   <Jantt
-                    data={editor.parsedData}
-                    onCommit={editor.handleChartCommit}
+                    data={ganttDisplayData}
+                    onCommit={handleGanttCommit}
                     selectedDate={
                       dateFilter.dateFilterMode === "all"
                         ? null

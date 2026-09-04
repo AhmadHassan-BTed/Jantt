@@ -1,7 +1,7 @@
 import { Task, Category, CategoriesMap } from "./types";
 import { diffDays, addDays } from "./date-math";
 import { getTaskDependencies } from "./resolver";
-import { escapeHtml } from "./utils";
+import { escapeHtml, syncTaskProgressAndStatus } from "./utils";
 
 export interface TaskSidebarOptions {
   task: Task;
@@ -470,42 +470,69 @@ function renderDefaultSidebarContent(
 
   const updateDuration = () => {
     if (!startInput || !endInput || !durLabel) return;
-    const s = startInput.value;
-    const e = endInput.value;
+    let s = startInput.value;
+    let e = endInput.value;
     if (s && e) {
+      if (diffDays(s, e) < 0) {
+        e = s;
+        endInput.value = e;
+      }
       const days = Math.max(diffDays(s, e), 0);
       durLabel.textContent = `${days} day${days === 1 ? "" : "s"}`;
     }
     checkConflictsAndRenderDeps();
   };
 
-  startInput?.addEventListener("change", updateDuration);
-  endInput?.addEventListener("change", updateDuration);
+  startInput?.addEventListener("change", () => {
+    if (startInput && endInput && startInput.value && endInput.value) {
+      if (diffDays(startInput.value, endInput.value) < 0) {
+        endInput.value = startInput.value;
+      }
+    }
+    updateDuration();
+  });
+
+  endInput?.addEventListener("change", () => {
+    if (startInput && endInput && startInput.value && endInput.value) {
+      if (diffDays(startInput.value, endInput.value) < 0) {
+        startInput.value = endInput.value;
+      }
+    }
+    updateDuration();
+  });
 
   // Initialize dependencies UI
   checkConflictsAndRenderDeps();
 
-  // Progress slider feedback
+  // Progress slider feedback with bidirectional status sync
   const progInput = container.querySelector<HTMLInputElement>("#jantt-sidebar-prog-input");
   const progVal = container.querySelector<HTMLElement>("#jantt-sidebar-prog-val");
-  progInput?.addEventListener("input", () => {
-    if (progVal) progVal.textContent = `${progInput.value}%`;
-  });
+  const statusSelect = container.querySelector<HTMLSelectElement>("#jantt-sidebar-status");
+
+  const syncProgToStatus = () => {
+    if (!progInput || !progVal || !statusSelect) return;
+    const pVal = parseInt(progInput.value, 10);
+    progVal.textContent = `${pVal}%`;
+    const synced = syncTaskProgressAndStatus({ progress: pVal / 100 }, { status: statusSelect.value });
+    if (synced.status && synced.status !== statusSelect.value) {
+      statusSelect.value = synced.status;
+    }
+  };
+
+  progInput?.addEventListener("input", syncProgToStatus);
+  progInput?.addEventListener("change", syncProgToStatus);
 
   // Status change auto-sync with progress
-  const statusSelect = container.querySelector<HTMLSelectElement>("#jantt-sidebar-status");
   statusSelect?.addEventListener("change", () => {
-    if (!progInput || !progVal) return;
-    const s = statusSelect.value;
-    if (s === "completed") {
-      progInput.value = "100";
-      progVal.textContent = "100%";
-    } else if (s === "submitted" && parseInt(progInput.value, 10) < 75) {
-      progInput.value = "75";
-      progVal.textContent = "75%";
-    } else if (s === "not-started") {
-      progInput.value = "0";
-      progVal.textContent = "0%";
+    if (!progInput || !progVal || !statusSelect) return;
+    const synced = syncTaskProgressAndStatus(
+      { status: statusSelect.value },
+      { progress: parseInt(progInput.value, 10) / 100 }
+    );
+    if (synced.progress !== undefined && synced.progress !== null) {
+      const newPct = Math.round(synced.progress * 100);
+      progInput.value = String(newPct);
+      progVal.textContent = `${newPct}%`;
     }
   });
 
@@ -619,7 +646,8 @@ function renderDefaultSidebarContent(
     const costVal = (container.querySelector("#jantt-sidebar-cost") as HTMLInputElement)?.value;
     const estimatedCost = costVal && costVal.trim() !== "" ? parseFloat(costVal) : undefined;
     const notes = (container.querySelector("#jantt-sidebar-notes") as HTMLTextAreaElement)?.value || "";
-    const progress = progInput ? parseInt(progInput.value, 10) / 100 : task.progress;
+    const rawProgress = progInput ? parseInt(progInput.value, 10) / 100 : task.progress;
+    const syncedStatusProg = syncTaskProgressAndStatus({ status, progress: rawProgress }, task);
 
     // Collect custom fields
     const updatedFields: Record<string, unknown> = { ...currentFields };
@@ -634,13 +662,13 @@ function renderDefaultSidebarContent(
       category,
       start,
       end,
-      status,
+      status: syncedStatusProg.status || status,
       assignee,
       priority,
       wbs,
       estimatedCost,
       dependsOn: finalDependsOn,
-      progress,
+      progress: syncedStatusProg.progress !== undefined ? syncedStatusProg.progress : rawProgress,
       notes,
       fields: Object.keys(updatedFields).length > 0 ? updatedFields : undefined
     };

@@ -73,3 +73,65 @@ export function buildViewportSnapshot(state: ViewportSnapshotState): ViewportOpt
     ...(state.headerHeight !== undefined ? { headerHeight: state.headerHeight } : {})
   };
 }
+
+/**
+ * Smartly synchronizes status and progress for a task patch in a bidirectional,
+ * idempotent, and robust manner.
+ */
+export function syncTaskProgressAndStatus(
+  patch: Partial<Task>,
+  currentTask?: Partial<Task>
+): Partial<Task> {
+  const result: Partial<Task> = { ...patch };
+
+  const currentProg =
+    patch.progress !== undefined && patch.progress !== null
+      ? patch.progress
+      : currentTask?.progress ?? 0;
+
+  const currentStatus =
+    patch.status !== undefined
+      ? patch.status
+      : currentTask?.status ?? "not-started";
+
+  // Case 1: Status explicitly provided in patch
+  if (patch.status !== undefined) {
+    if (patch.status === "completed") {
+      result.progress = 1.0;
+    } else if (patch.status === "not-started") {
+      result.progress = 0.0;
+    } else if (patch.status === "submitted") {
+      result.progress = Math.max(0.75, (patch.progress !== undefined ? patch.progress : currentProg) || 0.75);
+    } else if (patch.status === "in-progress") {
+      if (patch.progress === undefined) {
+        if (currentProg <= 0 || currentProg >= 1.0) {
+          result.progress = 0.25;
+        } else {
+          result.progress = currentProg;
+        }
+      }
+    }
+  }
+  // Case 2: Progress explicitly provided in patch (and status was not explicitly updated)
+  else if (patch.progress !== undefined && patch.progress !== null) {
+    const p = Math.max(0, Math.min(1, Math.round(patch.progress * 100) / 100));
+    result.progress = p;
+
+    if (p >= 1.0) {
+      result.status = "completed";
+    } else if (p <= 0) {
+      result.status = "not-started";
+    } else {
+      // 0 < p < 1.0
+      if (currentStatus === "completed" || currentStatus === "not-started") {
+        result.status = "in-progress";
+      } else if (currentStatus === "submitted" && p < 0.75) {
+        result.status = "in-progress";
+      } else {
+        result.status = currentStatus;
+      }
+    }
+  }
+
+  return result;
+}
