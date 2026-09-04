@@ -16,6 +16,7 @@ import {
   isTaskDone
 } from "@jantt/core";
 import type { SummarySortConfig, EffectivePerson } from "../types";
+import { isTaskMatchingPersonFilter } from "../utils";
 
 interface BudgetKpiViewProps {
   parsedData: JanttData;
@@ -27,6 +28,8 @@ interface BudgetKpiViewProps {
   isTaskMatchingDateFilter: (task: Task) => boolean;
   effectivePeople: EffectivePerson[];
   teams: Team[];
+  selectedPersonFilter?: string;
+  dateFilterBehavior?: "dim" | "hide";
 }
 
 export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
@@ -38,7 +41,9 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   sortedSummaryTasks,
   isTaskMatchingDateFilter,
   effectivePeople,
-  teams
+  teams,
+  selectedPersonFilter = "all",
+  dateFilterBehavior = "dim"
 }) => {
   return (
     <div className="summary-view-container">
@@ -151,7 +156,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               const cat = parsedData.categories?.[t.category];
               const isCompleted = isTaskDone(t);
               const effectiveProgress = isCompleted ? 1.0 : (t.progress ?? 0);
-              const isDimmed = !isTaskMatchingDateFilter(t);
+              const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
+              const isDateMatch = isTaskMatchingDateFilter(t);
+              const isPersonFiltering = selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
+              const isDimmed =
+                dateFilterBehavior === "dim" && ((!isDateMatch) || (isPersonFiltering && !isPersonMatch));
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
               return (
                 <tr key={t.id} className={`${isCompleted ? "summary-row-completed" : ""} ${isDimmed ? "summary-row-dimmed" : ""}`.trim()}>

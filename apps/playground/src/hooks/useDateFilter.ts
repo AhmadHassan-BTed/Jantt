@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   type JanttData,
   type Task,
+  type Team,
   type TimeScale,
   getTodayISODate,
   isTaskOnDate
 } from "@jantt/core";
-import type { DateFilterMode, ActiveView } from "../types";
+import type { DateFilterMode, ActiveView, EffectivePerson } from "../types";
 import { STORAGE_KEYS } from "../constants";
+import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
 
 interface UseDateFilterOptions {
   initialMode: DateFilterMode;
@@ -15,6 +17,9 @@ interface UseDateFilterOptions {
   activeView: ActiveView;
   currentScale?: TimeScale;
   currentDayWidth?: number;
+  selectedPersonFilter?: string;
+  effectivePeople?: EffectivePerson[];
+  teams?: Team[];
 }
 
 export function useDateFilter({
@@ -22,7 +27,10 @@ export function useDateFilter({
   parsedData,
   activeView,
   currentScale,
-  currentDayWidth
+  currentDayWidth,
+  selectedPersonFilter = "all",
+  effectivePeople = [],
+  teams = []
 }: UseDateFilterOptions) {
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>(initialMode);
   const [dateFilterValue, setDateFilterValue] = useState<string>(getTodayISODate());
@@ -57,6 +65,11 @@ export function useDateFilter({
     return null;
   }, [dateFilterMode, dateFilterValue, dateFilterRangeStart]);
 
+  const isPersonFiltering =
+    selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
+  const isPersonSorting = selectedPersonFilter === "sort:assignee";
+  const hasActiveFilter = dateFilterMode !== "all" || isPersonFiltering;
+
   const isTaskMatchingDateFilter = useCallback(
     (task: Task): boolean => {
       if (dateFilterMode === "all") return true;
@@ -88,38 +101,86 @@ export function useDateFilter({
     [dateFilterMode, dateFilterValue, dateFilterRangeStart, dateFilterRangeEnd]
   );
 
+  const isTaskMatchingPerson = useCallback(
+    (task: Task): boolean => {
+      return isTaskMatchingPersonFilter(task, selectedPersonFilter, effectivePeople, teams);
+    },
+    [selectedPersonFilter, effectivePeople, teams]
+  );
+
+  const isTaskMatchingActiveFilter = useCallback(
+    (task: Task): boolean => {
+      return isTaskMatchingDateFilter(task) && isTaskMatchingPerson(task);
+    },
+    [isTaskMatchingDateFilter, isTaskMatchingPerson]
+  );
+
   const matchingTasksCount = useMemo(() => {
     if (!parsedData) return 0;
-    return parsedData.tasks.filter(isTaskMatchingDateFilter).length;
-  }, [parsedData, isTaskMatchingDateFilter]);
+    return parsedData.tasks.filter(isTaskMatchingActiveFilter).length;
+  }, [parsedData, isTaskMatchingActiveFilter]);
 
   const summaryKpiTasks = useMemo(() => {
     if (!parsedData) return [];
-    if (dateFilterMode !== "all" && dateFilterBehavior === "hide") {
-      return parsedData.tasks.filter(isTaskMatchingDateFilter);
+    if (hasActiveFilter && dateFilterBehavior === "hide") {
+      return parsedData.tasks.filter(isTaskMatchingActiveFilter);
     }
     return parsedData.tasks;
-  }, [parsedData, dateFilterMode, dateFilterBehavior, isTaskMatchingDateFilter]);
+  }, [parsedData, hasActiveFilter, dateFilterBehavior, isTaskMatchingActiveFilter]);
+
+  const ganttFilteredTasks = useMemo(() => {
+    if (!parsedData) return [];
+    let tasks = parsedData.tasks;
+    if (hasActiveFilter && dateFilterBehavior === "hide") {
+      tasks = tasks.filter(isTaskMatchingActiveFilter);
+    }
+    if (isPersonSorting) {
+      tasks = sortTasksByAssignee(tasks, effectivePeople, teams);
+    }
+    return tasks;
+  }, [parsedData, hasActiveFilter, dateFilterBehavior, isTaskMatchingActiveFilter, isPersonSorting, effectivePeople, teams]);
 
   const dateFilterActiveSummary = useMemo(() => {
-    if (dateFilterMode === "all") return null;
+    if (dateFilterMode === "all" && !isPersonFiltering) return null;
     const total = parsedData?.tasks.length || 0;
     const countText = `${matchingTasksCount} of ${total} tasks active`;
-    if (dateFilterMode === "today") return { label: `Today (${getTodayISODate()})`, countText };
-    if (dateFilterMode === "week") return { label: `This Week`, countText };
-    if (dateFilterMode === "date") return { label: dateFilterValue || "Selected Date", countText };
-    if (dateFilterMode === "range") {
+    let label = "";
+
+    if (dateFilterMode === "today") label = `Today (${getTodayISODate()})`;
+    else if (dateFilterMode === "week") label = `This Week`;
+    else if (dateFilterMode === "date") label = dateFilterValue || "Selected Date";
+    else if (dateFilterMode === "range") {
       const from = dateFilterRangeStart || "Start";
       const to = dateFilterRangeEnd || "End";
-      return { label: `${from} → ${to}`, countText };
+      label = `${from} → ${to}`;
     }
-    return null;
-  }, [dateFilterMode, dateFilterValue, dateFilterRangeStart, dateFilterRangeEnd, matchingTasksCount, parsedData]);
 
-  // Apply Gantt date filter dimming via DOM after render
+    if (isPersonFiltering) {
+      const personName =
+        teams.find((t) => `team:${t.id}` === selectedPersonFilter)?.name ||
+        effectivePeople.find((p) => p.id === selectedPersonFilter)?.name ||
+        selectedPersonFilter;
+      label = label ? `${label} • ${personName}` : personName;
+    }
+
+    return { label, countText };
+  }, [
+    dateFilterMode,
+    dateFilterValue,
+    dateFilterRangeStart,
+    dateFilterRangeEnd,
+    isPersonFiltering,
+    selectedPersonFilter,
+    matchingTasksCount,
+    parsedData,
+    teams,
+    effectivePeople
+  ]);
+
+  // Apply Gantt date & person filter dimming via DOM after render
   useEffect(() => {
     const applyGanttDimming = () => {
-      if (activeView !== "gantt" || dateFilterMode === "all" || dateFilterBehavior === "hide") {
+      if (activeView !== "gantt" || !hasActiveFilter || dateFilterBehavior === "hide") {
         document.querySelectorAll<HTMLElement | SVGElement>("[data-task-id], [data-row-id], [data-grid-row-id], .jantt-dep-path").forEach((el) => {
           el.classList.remove("jantt-task-dimmed");
         });
@@ -129,7 +190,7 @@ export function useDateFilter({
       document.querySelectorAll<HTMLElement>("[data-task-id], [data-row-id], [data-grid-row-id]").forEach((el) => {
         const taskId = el.dataset.taskId || el.dataset.rowId || el.dataset.gridRowId;
         const task = parsedData?.tasks.find((t) => t.id === taskId);
-        if (task && !isTaskMatchingDateFilter(task)) {
+        if (task && !isTaskMatchingActiveFilter(task)) {
           el.classList.add("jantt-task-dimmed");
         } else {
           el.classList.remove("jantt-task-dimmed");
@@ -141,8 +202,8 @@ export function useDateFilter({
         const toId = path.getAttribute("data-to");
         const fromTask = parsedData?.tasks.find((t) => t.id === fromId);
         const toTask = parsedData?.tasks.find((t) => t.id === toId);
-        const isFromMatch = fromTask ? isTaskMatchingDateFilter(fromTask) : true;
-        const isToMatch = toTask ? isTaskMatchingDateFilter(toTask) : true;
+        const isFromMatch = fromTask ? isTaskMatchingActiveFilter(fromTask) : true;
+        const isToMatch = toTask ? isTaskMatchingActiveFilter(toTask) : true;
         if (!isFromMatch || !isToMatch) {
           path.classList.add("jantt-task-dimmed");
         } else {
@@ -166,8 +227,10 @@ export function useDateFilter({
     dateFilterBehavior,
     dateFilterRangeStart,
     dateFilterRangeEnd,
+    selectedPersonFilter,
+    hasActiveFilter,
     parsedData,
-    isTaskMatchingDateFilter
+    isTaskMatchingActiveFilter
   ]);
 
   return {
@@ -183,9 +246,12 @@ export function useDateFilter({
     setDateFilterBehavior,
     dateFilterActiveDate,
     isTaskMatchingDateFilter,
+    isTaskMatchingPerson,
+    isTaskMatchingActiveFilter,
+    hasActiveFilter,
     matchingTasksCount,
     summaryKpiTasks,
-    ganttFilteredTasks: summaryKpiTasks,
+    ganttFilteredTasks,
     dateFilterActiveSummary
   };
 }

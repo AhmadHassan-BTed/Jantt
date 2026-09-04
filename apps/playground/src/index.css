@@ -1287,12 +1287,27 @@ select option,
 .date-filter-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 12px;
   padding: 8px 16px;
   background: var(--jantt-surface, #F8FAFC);
   border-bottom: 1px solid var(--jantt-border, #E2E8F0);
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.date-filter-left-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.date-filter-right-zone {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -1410,10 +1425,9 @@ select option,
 }
 
 .date-filter-behavior-group {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.8));
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
   border-radius: 7px;
@@ -1436,6 +1450,9 @@ select option,
   padding: 2px 7px;
   border-radius: 5px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   transition: all 0.15s ease;
 }
 
@@ -1445,6 +1462,66 @@ select option,
 
 .date-filter-behavior-btn.is-active {
   background: var(--jantt-accent, #38BDF8);
+  color: #FFFFFF;
+}
+
+/* Sort / Filter by People Dropdown in Filter Bar */
+.filter-bar-person-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--jantt-surface-solid, #FFFFFF);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 7px;
+  padding: 3px 8px;
+  transition: all 0.15s ease;
+}
+
+.filter-bar-person-wrap:hover,
+.filter-bar-person-wrap:focus-within {
+  border-color: var(--jantt-accent, #38BDF8);
+  box-shadow: 0 0 0 1px var(--jantt-accent-glow, rgba(56, 189, 248, 0.2));
+}
+
+.filter-bar-person-icon {
+  color: var(--jantt-text-muted, #94A3B8);
+  flex-shrink: 0;
+}
+
+.filter-bar-person-select {
+  background: transparent;
+  border: none;
+  color: var(--jantt-text, #0F172A);
+  font-size: 11.5px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  padding-right: 4px;
+}
+
+.filter-bar-person-select option,
+.filter-bar-person-select optgroup {
+  background: var(--jantt-surface, #1E293B);
+  color: var(--jantt-text, #F8FAFC);
+}
+
+.filter-bar-person-clear {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #EF4444;
+  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.filter-bar-person-clear:hover {
+  background: #EF4444;
   color: #FFFFFF;
 }
 

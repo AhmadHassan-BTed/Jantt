@@ -1,13 +1,16 @@
 import {
   type JanttData,
   type Person,
+  type Task,
+  type Team,
   type TimeScale,
   type LinkRoutingStyle,
   type RowHeightMode,
   validate,
   themeManager,
   getTodayISODate,
-  addDays
+  addDays,
+  resolveTaskAssignee
 } from "@jantt/core";
 import type {
   SavedProject,
@@ -396,3 +399,44 @@ export function getEffectivePeople(data: JanttData | null, registeredPeople: Per
 
   return result;
 }
+
+export function isTaskMatchingPersonFilter(
+  task: Task,
+  selectedPersonFilter: string,
+  effectivePeople: EffectivePerson[],
+  teams: Team[]
+): boolean {
+  if (!selectedPersonFilter || selectedPersonFilter === "all" || selectedPersonFilter.startsWith("sort:")) {
+    return true;
+  }
+  if (selectedPersonFilter.startsWith("team:")) {
+    const targetTeamId = selectedPersonFilter.replace("team:", "");
+    const assigneeInfo = resolveTaskAssignee(task, effectivePeople, teams);
+    return assigneeInfo.team?.id === targetTeamId || task.teamId === targetTeamId;
+  }
+  const targetPerson = effectivePeople.find((p) => p.id === selectedPersonFilter);
+  const assigneeInfo = resolveTaskAssignee(task, effectivePeople, teams);
+  return (
+    task.assignee === selectedPersonFilter ||
+    (targetPerson && task.assignee === targetPerson.name) ||
+    assigneeInfo.person?.id === selectedPersonFilter ||
+    assigneeInfo.person?.name === selectedPersonFilter
+  );
+}
+
+export function sortTasksByAssignee(
+  tasks: Task[],
+  effectivePeople: EffectivePerson[],
+  teams: Team[]
+): Task[] {
+  return [...tasks].sort((a, b) => {
+    const aInfo = resolveTaskAssignee(a, effectivePeople, teams);
+    const bInfo = resolveTaskAssignee(b, effectivePeople, teams);
+    const aName = (aInfo.displayName || a.assignee || "").toLowerCase();
+    const bName = (bInfo.displayName || b.assignee || "").toLowerCase();
+    if (!aName && bName) return 1;
+    if (aName && !bName) return -1;
+    return aName.localeCompare(bName);
+  });
+}
+

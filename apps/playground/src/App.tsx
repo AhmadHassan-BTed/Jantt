@@ -105,15 +105,6 @@ export function App() {
     initialCollapsed: init.initialCollapsed
   });
 
-  // Date Filter Engine & Visual Dimming
-  const dateFilter = useDateFilter({
-    initialMode: init.initialDateFilterMode,
-    parsedData: editor.parsedData,
-    activeView: viewport.activeView,
-    currentScale: viewport.currentScale,
-    currentDayWidth: viewport.currentDayWidth
-  });
-
   // People & Squad Management
   const people = usePeopleTeams({
     initialPeople: (init.initialParsed as any)?.people || [],
@@ -125,6 +116,18 @@ export function App() {
   });
   onPeopleChangeRef.current = people.setPeople;
   onTeamsChangeRef.current = people.setTeams;
+
+  // Date & People Filter Engine & Visual Dimming
+  const dateFilter = useDateFilter({
+    initialMode: init.initialDateFilterMode,
+    parsedData: editor.parsedData,
+    activeView: viewport.activeView,
+    currentScale: viewport.currentScale,
+    currentDayWidth: viewport.currentDayWidth,
+    selectedPersonFilter: people.selectedPersonFilter,
+    effectivePeople: people.effectivePeople,
+    teams: people.teams
+  });
 
   const flushPendingSaveRef = useRef<() => void>(() => {});
 
@@ -205,20 +208,26 @@ export function App() {
   });
 
   // Gantt Dynamic Filtered Viewport & Commit Sync
-  const isHideActive = dateFilter.dateFilterMode !== "all" && dateFilter.dateFilterBehavior === "hide";
+  const isPersonFiltering =
+    people.selectedPersonFilter !== "all" && !people.selectedPersonFilter.startsWith("sort:");
+  const isPersonSorting = people.selectedPersonFilter === "sort:assignee";
+  const isHideActive =
+    (dateFilter.dateFilterMode !== "all" || isPersonFiltering) &&
+    dateFilter.dateFilterBehavior === "hide";
+
   const ganttDisplayData = useMemo(() => {
     if (!editor.parsedData) return null;
-    if (!isHideActive) return editor.parsedData;
+    if (!isHideActive && !isPersonSorting) return editor.parsedData;
     return {
       ...editor.parsedData,
       tasks: dateFilter.ganttFilteredTasks
     };
-  }, [editor.parsedData, isHideActive, dateFilter.ganttFilteredTasks]);
+  }, [editor.parsedData, isHideActive, isPersonSorting, dateFilter.ganttFilteredTasks]);
 
   const handleGanttCommit = useCallback(
     (updated: JanttData) => {
       if (!editor.parsedData) return;
-      if (!isHideActive) {
+      if (!isHideActive && !isPersonSorting) {
         editor.handleChartCommit(updated);
         return;
       }
@@ -226,7 +235,7 @@ export function App() {
       const mergedTasks = editor.parsedData.tasks.map((t) => updatedMap.get(t.id) || t);
       editor.handleChartCommit({ ...editor.parsedData, ...updated, tasks: mergedTasks });
     },
-    [editor.parsedData, isHideActive, editor.handleChartCommit]
+    [editor.parsedData, isHideActive, isPersonSorting, editor.handleChartCommit]
   );
 
   return (
@@ -311,6 +320,11 @@ export function App() {
                   dateFilterActiveSummary={dateFilter.dateFilterActiveSummary}
                   dateFilterBehavior={dateFilter.dateFilterBehavior}
                   setDateFilterBehavior={dateFilter.setDateFilterBehavior}
+                  selectedPersonFilter={people.selectedPersonFilter}
+                  setSelectedPersonFilter={people.setSelectedPersonFilter}
+                  effectivePeople={people.effectivePeople}
+                  teams={people.teams}
+                  tasks={editor.parsedData.tasks}
                 />
 
                 {viewport.activeView === "gantt" && ganttDisplayData && (
@@ -387,6 +401,7 @@ export function App() {
                     isTaskMatchingDateFilter={dateFilter.isTaskMatchingDateFilter}
                     effectivePeople={people.effectivePeople}
                     teams={people.teams}
+                    selectedPersonFilter={people.selectedPersonFilter}
                     openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
                     handleChartCommit={editor.handleChartCommit}
                   />
@@ -424,6 +439,8 @@ export function App() {
                     isTaskMatchingDateFilter={dateFilter.isTaskMatchingDateFilter}
                     effectivePeople={people.effectivePeople}
                     teams={people.teams}
+                    selectedPersonFilter={people.selectedPersonFilter}
+                    dateFilterBehavior={dateFilter.dateFilterBehavior}
                   />
                 )}
               </>

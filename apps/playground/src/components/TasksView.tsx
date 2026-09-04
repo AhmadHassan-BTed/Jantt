@@ -22,6 +22,7 @@ import {
   isTaskDone
 } from "@jantt/core";
 import type { DateFilterMode, EffectivePerson } from "../types";
+import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
 
 interface TasksViewProps {
   parsedData: JanttData;
@@ -132,6 +133,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               onChange={(e) => setSelectedPersonFilter(e.target.value)}
             >
               <option value="all">All People &amp; Teams</option>
+              <option value="sort:assignee">⇅ Sort by Assignee (A-Z)</option>
               {teams.length > 0 && (
                 <optgroup label="Teams / Squads">
                   {teams.map((tm) => (
@@ -177,25 +179,18 @@ export const TasksView: React.FC<TasksViewProps> = ({
             ? parsedData.tasks.filter(isTaskMatchingDateFilter)
             : parsedData.tasks;
 
-        if (selectedPersonFilter !== "all") {
-          if (selectedPersonFilter.startsWith("team:")) {
-            const targetTeamId = selectedPersonFilter.replace("team:", "");
-            tasksToDisplay = tasksToDisplay.filter((t) => {
-              const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
-              return assigneeInfo.team?.id === targetTeamId || t.teamId === targetTeamId;
-            });
-          } else {
-            const targetPerson = effectivePeople.find((p) => p.id === selectedPersonFilter);
-            tasksToDisplay = tasksToDisplay.filter((t) => {
-              const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
-              return (
-                t.assignee === selectedPersonFilter ||
-                (targetPerson && t.assignee === targetPerson.name) ||
-                assigneeInfo.person?.id === selectedPersonFilter ||
-                assigneeInfo.person?.name === selectedPersonFilter
-              );
-            });
-          }
+        const isPersonFiltering =
+          selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
+        const isPersonSorting = selectedPersonFilter === "sort:assignee";
+
+        if (isPersonFiltering && dateFilterBehavior === "hide") {
+          tasksToDisplay = tasksToDisplay.filter((t) =>
+            isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams)
+          );
+        }
+
+        if (isPersonSorting) {
+          tasksToDisplay = sortTasksByAssignee(tasksToDisplay, effectivePeople, teams);
         }
 
         if (tasksSearchQuery.trim()) {
@@ -236,8 +231,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 const cat = parsedData.categories?.[t.category];
                 const catColor = cat?.color || "var(--jantt-accent)";
                 const isCompleted = isTaskDone(t);
+                const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
+                const isDateMatch = isTaskMatchingDateFilter(t);
                 const isDimmed =
-                  dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
+                  dateFilterBehavior === "dim" && ((dateFilterMode !== "all" && !isDateMatch) || (isPersonFiltering && !isPersonMatch));
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 return (
                   <div
@@ -275,8 +272,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                             {t.label || t.name || t.id}
                           </span>
                           {isDimmed && (
-                            <span className="task-dimmed-tag" title="Task duration falls outside active date filter">
-                              Outside Date Filter
+                            <span className="task-dimmed-tag" title="Task falls outside active filter criteria">
+                              {!isPersonMatch ? "Other Assignee" : "Outside Date"}
                             </span>
                           )}
                           {t.priority && (
@@ -349,8 +346,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
               const cat = parsedData.categories?.[t.category];
               const catColor = cat?.color || "var(--jantt-accent)";
               const isCompleted = isTaskDone(t);
+              const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
+              const isDateMatch = isTaskMatchingDateFilter(t);
               const isDimmed =
-                dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
+                dateFilterBehavior === "dim" && ((dateFilterMode !== "all" && !isDateMatch) || (isPersonFiltering && !isPersonMatch));
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
               return (
                 <div
@@ -364,8 +363,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       <span className="kanban-cat-dot" style={{ background: catColor }} />
                       <span>{cat?.label || t.category}</span>
                       {isDimmed && (
-                        <span className="task-dimmed-tag" title="Task duration falls outside active date filter">
-                          Outside Date
+                        <span className="task-dimmed-tag" title="Task falls outside active filter criteria">
+                          {!isPersonMatch ? "Other Assignee" : "Outside Date"}
                         </span>
                       )}
                     </div>

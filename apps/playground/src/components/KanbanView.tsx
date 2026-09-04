@@ -22,6 +22,7 @@ import type {
   DateFilterMode,
   EffectivePerson
 } from "../types";
+import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
 
 interface KanbanViewProps {
   parsedData: JanttData;
@@ -33,6 +34,7 @@ interface KanbanViewProps {
   isTaskMatchingDateFilter: (task: Task) => boolean;
   effectivePeople: EffectivePerson[];
   teams: Team[];
+  selectedPersonFilter?: string;
   openTaskDetailSidebar: (task: Task) => void;
   handleChartCommit: (data: JanttData) => void;
 }
@@ -47,9 +49,20 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   isTaskMatchingDateFilter,
   effectivePeople,
   teams,
+  selectedPersonFilter = "all",
   openTaskDetailSidebar,
   handleChartCommit
 }) => {
+  const isPersonFiltering =
+    selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
+  const isPersonSorting = selectedPersonFilter === "sort:assignee";
+  const hasActiveFilter = dateFilterMode !== "all" || isPersonFiltering;
+
+  const isTaskMatchingPerson = (t: Task) =>
+    isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
+
+  const isTaskActiveMatch = (t: Task) =>
+    isTaskMatchingDateFilter(t) && isTaskMatchingPerson(t);
   return (
     <div className="kanban-outer-wrap">
       {/* Multi-Sort Bar */}
@@ -123,23 +136,26 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             { id: "completed", label: "Completed" }
           ] as const
         ).map((col) => {
-          const colTasks = kanbanMultiSort(
+          let colTasks = kanbanMultiSort(
             parsedData.tasks.filter((t) => {
               if (col.id === "not-started") return !t.status || t.status === "not-started";
               return t.status === col.id;
             })
           );
+          if (isPersonSorting) {
+            colTasks = sortTasksByAssignee(colTasks, effectivePeople, teams);
+          }
           const visibleTasks =
-            dateFilterMode !== "all" && dateFilterBehavior === "hide"
-              ? colTasks.filter(isTaskMatchingDateFilter)
+            hasActiveFilter && dateFilterBehavior === "hide"
+              ? colTasks.filter(isTaskActiveMatch)
               : colTasks;
-          const matchingCount = colTasks.filter(isTaskMatchingDateFilter).length;
+          const matchingCount = colTasks.filter(isTaskActiveMatch).length;
           return (
             <div key={col.id} className="kanban-column">
               <div className="kanban-col-header">
                 <span className="kanban-col-title">{col.label}</span>
                 <span className="kanban-col-count">
-                  {dateFilterMode !== "all" ? `${matchingCount}/${colTasks.length}` : colTasks.length}
+                  {hasActiveFilter ? `${matchingCount}/${colTasks.length}` : colTasks.length}
                 </span>
               </div>
               <div className="kanban-card-list">
@@ -147,8 +163,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                   const cat = parsedData.categories?.[t.category];
                   const catColor = cat?.color || "var(--jantt-accent)";
                   const isCompleted = isTaskDone(t);
+                  const isPersonMatch = isTaskMatchingPerson(t);
+                  const isDateMatch = isTaskMatchingDateFilter(t);
                   const isDimmed =
-                    dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
+                    hasActiveFilter && dateFilterBehavior === "dim" && (!isPersonMatch || !isDateMatch);
                   const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                   return (
                     <div
@@ -163,8 +181,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           {isDimmed && (
-                            <span className="task-dimmed-tag" title="Task duration falls outside active date filter">
-                              Outside Date
+                            <span className="task-dimmed-tag" title="Task falls outside active filter criteria">
+                              {!isPersonMatch ? "Other Assignee" : "Outside Date"}
                             </span>
                           )}
                           {t.priority && (
