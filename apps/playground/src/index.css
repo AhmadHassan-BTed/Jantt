@@ -139,8 +139,8 @@ body {
 }
 
 .select-input {
-  background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
-  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
+  background: var(--jantt-surface-solid, #121A2C);
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.15));
   color: var(--jantt-text, #F8FAFC);
   border-radius: 9px;
   padding: 5px 10px;
@@ -150,12 +150,47 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
   max-width: 200px;
+  color-scheme: dark;
 }
 
+.playground-app.jantt-theme-light .select-input,
+.playground-app.jantt-theme-light select {
+  color-scheme: light;
+  background: #FFFFFF;
+  border-color: #CBD5E1;
+  color: #0F172A;
+}
 
+select optgroup,
+.select-input optgroup {
+  background: var(--jantt-surface-solid, #121A2C) !important;
+  color: var(--jantt-accent, #38BDF8) !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+  padding: 6px 8px 4px !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+select option,
 .select-input option {
-  background: var(--jantt-surface-solid, #121A2C);
-  color: var(--jantt-text, #F8FAFC);
+  background: var(--jantt-surface-solid, #121A2C) !important;
+  color: var(--jantt-text, #F8FAFC) !important;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.playground-app.jantt-theme-light select optgroup,
+.playground-app.jantt-theme-light .select-input optgroup {
+  background: #FFFFFF !important;
+  color: #0284C7 !important;
+}
+
+.playground-app.jantt-theme-light select option,
+.playground-app.jantt-theme-light .select-input option {
+  background: #FFFFFF !important;
+  color: #0F172A !important;
 }
 
 .select-input:hover,
@@ -247,6 +282,15 @@ body {
 .btn-plan-action.is-add:hover {
   background: var(--jantt-accent, #38BDF8);
   color: #FFFFFF;
+}
+
+.btn-plan-action.is-share {
+  color: var(--jantt-accent, #38BDF8);
+}
+
+.btn-plan-action.is-share:hover {
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
+  color: var(--jantt-accent, #38BDF8);
 }
 
 .btn-plan-action.is-delete:hover {
