@@ -343,6 +343,70 @@ function loadInitialState() {
   };
 }
 
+const PERSON_COLORS = ["#4FAE93", "#38BDF8", "#F59E0B", "#A78BFA", "#F43F5E", "#10B981", "#FB923C", "#60A5FA"];
+
+export interface EffectivePerson extends Person {
+  isInferred?: boolean;
+}
+
+export function getEffectivePeople(data: JanttData | null, registeredPeople: Person[]): EffectivePerson[] {
+  const result: EffectivePerson[] = registeredPeople.map((p) => ({ ...p }));
+  if (!data) return result;
+
+  const knownIds = new Set(result.map((p) => p.id.toLowerCase()));
+  const knownNames = new Set(result.map((p) => p.name.toLowerCase()));
+
+  const discovered = new Map<string, { role?: string }>();
+
+  // 1. From meta.person (Project Lead / Candidate / Owner)
+  if (data.meta?.person && typeof data.meta.person === "string" && data.meta.person.trim()) {
+    discovered.set(data.meta.person.trim(), { role: "Project Lead / Owner" });
+  }
+
+  // 2. From tasks assignee
+  if (Array.isArray(data.tasks)) {
+    data.tasks.forEach((t) => {
+      if (t.assignee && typeof t.assignee === "string" && t.assignee.trim()) {
+        const name = t.assignee.trim();
+        if (!discovered.has(name)) {
+          discovered.set(name, {});
+        }
+      }
+    });
+  }
+
+  // 3. From documents owner
+  if (Array.isArray(data.documents)) {
+    data.documents.forEach((d) => {
+      if (d.owner && typeof d.owner === "string" && d.owner.trim()) {
+        const name = d.owner.trim();
+        if (!discovered.has(name)) {
+          discovered.set(name, {});
+        }
+      }
+    });
+  }
+
+  let colorIdx = result.length;
+  discovered.forEach((metaInfo, name) => {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    if (!knownNames.has(name.toLowerCase()) && !knownIds.has(slug)) {
+      result.push({
+        id: slug || name,
+        name: name,
+        role: metaInfo.role,
+        color: PERSON_COLORS[colorIdx % PERSON_COLORS.length],
+        isInferred: true
+      });
+      knownNames.add(name.toLowerCase());
+      knownIds.add(slug);
+      colorIdx++;
+    }
+  });
+
+  return result;
+}
+
 export function App() {
   const init = useMemo(() => loadInitialState(), []);
 
@@ -391,6 +455,11 @@ export function App() {
   // ── People & Team Management State ─────────────────────────────────────
   const [people, setPeople] = useState<Person[]>(() => (init.initialParsed as any)?.people || []);
   const [teams, setTeams] = useState<Team[]>(() => (init.initialParsed as any)?.teams || []);
+
+  // Auto-derived effective people combining explicitly configured people + assignees discovered in tasks/meta
+  const effectivePeople = useMemo(() => {
+    return getEffectivePeople(parsedData, people);
+  }, [parsedData, people]);
   const [selectedPersonFilter, setSelectedPersonFilter] = useState<string>(init.initialPersonFilter);
   const [showPeopleModal, setShowPeopleModal] = useState(false);
   const [peopleModalTab, setPeopleModalTab] = useState<"people" | "teams">("people");
@@ -595,8 +664,8 @@ export function App() {
         case "name": va = (a.label || a.name || a.id).toLowerCase(); vb = (b.label || b.name || b.id).toLowerCase(); break;
         case "category": va = a.category; vb = b.category; break;
         case "assignee": {
-          const aInfo = resolveTaskAssignee(a, people, teams);
-          const bInfo = resolveTaskAssignee(b, people, teams);
+          const aInfo = resolveTaskAssignee(a, effectivePeople, teams);
+          const bInfo = resolveTaskAssignee(b, effectivePeople, teams);
           va = aInfo.displayName.toLowerCase();
           vb = bInfo.displayName.toLowerCase();
           break;
@@ -611,7 +680,7 @@ export function App() {
       if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
       return String(va).localeCompare(String(vb)) * dir;
     });
-  }, [parsedData, summarySortConfig, people, teams]);
+  }, [parsedData, summarySortConfig, effectivePeople, teams]);
 
   const handleSummarySort = (column: string) => {
     setSummarySortConfig((prev) => {
@@ -639,8 +708,8 @@ export function App() {
           case "end": va = a.end; vb = b.end; break;
           case "wbs": va = a.wbs || "zzz"; vb = b.wbs || "zzz"; break;
           case "assignee": {
-            const aInfo = resolveTaskAssignee(a, people, teams);
-            const bInfo = resolveTaskAssignee(b, people, teams);
+            const aInfo = resolveTaskAssignee(a, effectivePeople, teams);
+            const bInfo = resolveTaskAssignee(b, effectivePeople, teams);
             va = aInfo.displayName.toLowerCase();
             vb = bInfo.displayName.toLowerCase();
             break;
@@ -654,18 +723,17 @@ export function App() {
       }
       return 0;
     });
-  }, [kanbanSortRules, people, teams]);
+  }, [kanbanSortRules, effectivePeople, teams]);
 
   // ── People & Team Management Handlers ─────────────────────────────────────
   const handleAddPerson = () => {
     if (!newPersonName.trim() || !parsedData) return;
-    const PERSON_COLORS = ["#4FAE93", "#38BDF8", "#F59E0B", "#A78BFA", "#F43F5E", "#10B981", "#FB923C", "#60A5FA"];
     const newPerson: Person = {
       id: `person-${Date.now().toString(36)}`,
       name: newPersonName.trim(),
       role: newPersonRole.trim() || undefined,
       teamId: newPersonTeamId || undefined,
-      color: PERSON_COLORS[people.length % PERSON_COLORS.length]
+      color: PERSON_COLORS[effectivePeople.length % PERSON_COLORS.length]
     };
     const updated = [...people, newPerson];
     setPeople(updated);
@@ -674,6 +742,37 @@ export function App() {
     setNewPersonName("");
     setNewPersonRole("");
     setNewPersonTeamId("");
+  };
+
+  const handlePersistPerson = (personToPersist: Person) => {
+    if (!parsedData) return;
+    const cleanPerson: Person = {
+      id: personToPersist.id,
+      name: personToPersist.name,
+      role: personToPersist.role,
+      teamId: personToPersist.teamId,
+      color: personToPersist.color || PERSON_COLORS[people.length % PERSON_COLORS.length]
+    };
+    const updated = [...people, cleanPerson];
+    setPeople(updated);
+    const updatedData = { ...parsedData, people: updated };
+    handleChartCommit(updatedData);
+    showToast(`Saved ${personToPersist.name} to project JSON!`);
+  };
+
+  const handlePersistAllPeople = () => {
+    if (!parsedData) return;
+    const cleanPeople: Person[] = effectivePeople.map((p) => ({
+      id: p.id,
+      name: p.name,
+      role: p.role,
+      teamId: p.teamId,
+      color: p.color
+    }));
+    setPeople(cleanPeople);
+    const updatedData = { ...parsedData, people: cleanPeople };
+    handleChartCommit(updatedData);
+    showToast(`Saved all ${cleanPeople.length} members to project JSON!`);
   };
 
   const handleRemovePerson = (personId: string) => {
@@ -1038,6 +1137,8 @@ export function App() {
           localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
           setJsonText(JSON.stringify(parsed, null, 2));
           setParsedData(parsed);
+          setPeople(parsed.people || []);
+          setTeams(parsed.teams || []);
           setValidationResult(val);
           showToast(`Imported "${newProj.name}"`);
         } else {
@@ -1067,6 +1168,8 @@ export function App() {
       setValidationResult(val);
       if (val.valid) {
         setParsedData(parsed);
+        setPeople(parsed.people || []);
+        setTeams(parsed.teams || []);
         if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
         if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
         if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
@@ -1083,6 +1186,12 @@ export function App() {
       setValidationResult(val);
       if (val.valid) {
         setParsedData(parsed);
+        if (Array.isArray(parsed.people)) {
+          setPeople(parsed.people);
+        }
+        if (Array.isArray(parsed.teams)) {
+          setTeams(parsed.teams);
+        }
       } else {
         setParsedData(null);
       }
@@ -1396,7 +1505,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
             title="Manage team members and assignees"
           >
             <Users size={13} />
-            <span>People{people.length > 0 ? ` (${people.length})` : ""}</span>
+            <span>People{effectivePeople.length > 0 ? ` (${effectivePeople.length})` : ""}</span>
           </button>
 
 
@@ -1519,7 +1628,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
             title="Manage team members and assignees"
           >
             <Users size={13} />
-            <span>People{people.length > 0 ? ` (${people.length})` : ""}</span>
+            <span>People{effectivePeople.length > 0 ? ` (${effectivePeople.length})` : ""}</span>
           </button>
 
           {/* Data I/O Group (Import & Export) */}
@@ -1961,7 +2070,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                 const catColor = cat?.color || "var(--jantt-accent)";
                                 const isCompleted = t.status === "completed";
                                 const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
-                                const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                                const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                                 return (
                                   <div key={t.id} className={`kanban-card ${isDimmed ? "kanban-card-dimmed" : ""}`}>
                                     <div className="kanban-card-top">
@@ -2163,7 +2272,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                             const isCompleted = t.status === "completed";
                             const effectiveProgress = isCompleted ? 1.0 : (t.progress ?? 0);
                             const isDimmed = !isTaskMatchingDateFilter(t);
-                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                            const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                             return (
                               <tr key={t.id} className={isDimmed ? "summary-row-dimmed" : ""}>
                                 <td style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 700 }}>{t.wbs || "-"}</td>
@@ -2316,13 +2425,14 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                 ))}
                               </optgroup>
                             )}
-                            {people.length > 0 && (
-                              <optgroup label="Team Members">
-                                {people.map((p) => {
+                            {effectivePeople.length > 0 && (
+                              <optgroup label="Team Members & Assignees">
+                                {effectivePeople.map((p) => {
                                   const pTeam = resolveTeamById(teams, p.teamId);
+                                  const count = parsedData.tasks.filter((t) => t.assignee === p.name || t.assignee === p.id).length;
                                   return (
                                     <option key={p.id} value={p.id}>
-                                      {p.name}{p.role ? ` (${p.role})` : ""}{pTeam ? ` • ${pTeam.name}` : ""}
+                                      {p.name}{count > 0 ? ` (${count} tasks)` : ""}{pTeam ? ` • ${pTeam.name}` : ""}
                                     </option>
                                   );
                                 })}
@@ -2354,14 +2464,16 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                         if (selectedPersonFilter.startsWith("team:")) {
                           const targetTeamId = selectedPersonFilter.replace("team:", "");
                           tasksToDisplay = tasksToDisplay.filter((t) => {
-                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                            const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                             return assigneeInfo.team?.id === targetTeamId || t.teamId === targetTeamId;
                           });
                         } else {
+                          const targetPerson = effectivePeople.find((p) => p.id === selectedPersonFilter);
                           tasksToDisplay = tasksToDisplay.filter((t) => {
-                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                            const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                             return (
                               t.assignee === selectedPersonFilter ||
+                              (targetPerson && t.assignee === targetPerson.name) ||
                               assigneeInfo.person?.id === selectedPersonFilter ||
                               assigneeInfo.person?.name === selectedPersonFilter
                             );
@@ -2408,7 +2520,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                               const catColor = cat?.color || "var(--jantt-accent)";
                               const isCompleted = t.status === "completed";
                               const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
-                              const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                              const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                               return (
                                 <div key={t.id} className={`tasks-todo-row ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`} style={{ borderLeftColor: catColor }}>
                                   <div className="tasks-todo-left">
@@ -2511,7 +2623,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                             const catColor = cat?.color || "var(--jantt-accent)";
                             const isCompleted = t.status === "completed";
                             const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
-                            const assigneeInfo = resolveTaskAssignee(t, people, teams);
+                            const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                             return (
                               <div key={t.id} className={`today-task-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`} style={{ borderTopColor: catColor }}>
                                 <div className="today-card-header">
@@ -3018,7 +3130,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                 onClick={() => setPeopleModalTab("people")}
               >
                 <Users size={13} />
-                <span>Team Members ({people.length})</span>
+                <span>Team Members ({effectivePeople.length})</span>
               </button>
               <button
                 className={`prompt-tab-btn ${peopleModalTab === "teams" ? "is-active" : ""}`}
@@ -3116,10 +3228,47 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 
                   {/* People List */}
                   <div>
-                    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", color: "var(--jantt-text-muted)" }}>
-                      Current Members ({people.length})
-                    </label>
-                    {people.length === 0 ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", margin: 0, color: "var(--jantt-text-muted)" }}>
+                        Current Members ({effectivePeople.length})
+                      </label>
+                      {effectivePeople.length > people.length && (
+                        <button
+                          className="btn-nav btn-nav-primary"
+                          style={{ height: "24px", padding: "0 10px", fontSize: "10.5px" }}
+                          onClick={handlePersistAllPeople}
+                          title="Save all detected schedule assignees into the project JSON 'people' array"
+                        >
+                          Save All to JSON
+                        </button>
+                      )}
+                    </div>
+
+                    {effectivePeople.length > people.length && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 12px",
+                          background: "rgba(56, 189, 248, 0.08)",
+                          border: "1px solid rgba(56, 189, 248, 0.2)",
+                          borderRadius: "8px",
+                          marginBottom: "10px",
+                          fontSize: "11.5px",
+                          color: "var(--jantt-text)"
+                        }}
+                      >
+                        <span>
+                          💡 <strong>{effectivePeople.length - people.length} assignee{effectivePeople.length - people.length === 1 ? "" : "s"}</strong> detected from schedule &amp; meta ({parsedData?.meta?.person ? `${parsedData.meta.person}, etc.` : "tasks"}).
+                        </span>
+                        <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                          Visible across all views &amp; filters
+                        </span>
+                      </div>
+                    )}
+
+                    {effectivePeople.length === 0 ? (
                       <div style={{ textAlign: "center", padding: "28px 16px", background: "var(--jantt-surface)", border: "1px dashed var(--jantt-border)", borderRadius: "10px", color: "var(--jantt-text-muted)" }}>
                         <Users size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
                         <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No team members defined yet.</p>
@@ -3127,7 +3276,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       </div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
-                        {people.map((p) => {
+                        {effectivePeople.map((p) => {
                           const assignedCount = parsedData?.tasks.filter(
                             (t) => t.assignee === p.name || t.assignee === p.id
                           ).length || 0;
@@ -3179,6 +3328,22 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                     <span style={{ fontSize: "10px", fontFamily: "var(--jantt-font-mono)", color: "var(--jantt-text-muted)" }}>
                                       #{p.id}
                                     </span>
+                                    {p.isInferred && (
+                                      <span
+                                        style={{
+                                          fontSize: "9.5px",
+                                          fontWeight: 600,
+                                          background: "rgba(56, 189, 248, 0.12)",
+                                          color: "var(--jantt-accent)",
+                                          padding: "1px 6px",
+                                          borderRadius: "100px",
+                                          border: "1px solid rgba(56, 189, 248, 0.25)"
+                                        }}
+                                        title="Automatically discovered from schedule assignees & metadata"
+                                      >
+                                        Inferred
+                                      </span>
+                                    )}
                                     {memberTeam && (
                                       <span
                                         style={{
@@ -3215,22 +3380,41 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                 >
                                   {assignedCount} {assignedCount === 1 ? "task" : "tasks"}
                                 </span>
-                                <button
-                                  onClick={() => handleRemovePerson(p.id)}
-                                  style={{
-                                    background: "transparent",
-                                    border: "none",
-                                    color: "var(--jantt-text-muted)",
-                                    cursor: "pointer",
-                                    padding: "4px",
-                                    borderRadius: "4px",
-                                    display: "flex",
-                                    alignItems: "center"
-                                  }}
-                                  title={`Remove ${p.name}`}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
+                                {p.isInferred ? (
+                                  <button
+                                    onClick={() => handlePersistPerson(p)}
+                                    className="btn-nav"
+                                    style={{
+                                      padding: "3px 8px",
+                                      height: "26px",
+                                      fontSize: "11px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "4px"
+                                    }}
+                                    title={`Add ${p.name} permanently to project JSON "people" array`}
+                                  >
+                                    <Plus size={11} />
+                                    <span>Save to JSON</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleRemovePerson(p.id)}
+                                    style={{
+                                      background: "transparent",
+                                      border: "none",
+                                      color: "var(--jantt-text-muted)",
+                                      cursor: "pointer",
+                                      padding: "4px",
+                                      borderRadius: "4px",
+                                      display: "flex",
+                                      alignItems: "center"
+                                    }}
+                                    title={`Remove ${p.name}`}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -3328,7 +3512,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
                         {teams.map((tm) => {
-                          const memberCount = people.filter((p) => p.teamId === tm.id).length;
+                          const memberCount = effectivePeople.filter((p) => p.teamId === tm.id).length;
                           return (
                             <div
                               key={tm.id}
