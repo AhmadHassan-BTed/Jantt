@@ -64,7 +64,8 @@ import {
   CheckSquare,
   ListTodo,
   Filter,
-  EyeOff
+  EyeOff,
+  Share2
 } from "lucide-react";
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
@@ -200,6 +201,43 @@ function saveCustomProjects(projects: SavedProject[]) {
   } catch {}
 }
 
+export function encodeDataToBase64Url(data: JanttData): string {
+  try {
+    const jsonStr = JSON.stringify(data);
+    const utf8Bytes = new TextEncoder().encode(jsonStr);
+    let binary = "";
+    for (let i = 0; i < utf8Bytes.length; i++) {
+      binary += String.fromCharCode(utf8Bytes[i]);
+    }
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  } catch (err) {
+    console.error("Failed to encode plan data to base64url:", err);
+    return "";
+  }
+}
+
+export function decodeDataFromBase64Url(base64url: string): JanttData | null {
+  try {
+    let base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) {
+      base64 += "=";
+    }
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const jsonStr = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(jsonStr);
+    const val = validate(parsed);
+    if (val.valid) return parsed;
+    return null;
+  } catch (err) {
+    console.error("Failed to decode plan data from base64url:", err);
+    return null;
+  }
+}
+
 function loadInitialState() {
   const savedProjects = loadSavedProjects();
   let activeProjectId = "default";
@@ -324,6 +362,74 @@ function loadInitialState() {
     const savedDFM = localStorage.getItem(STORAGE_KEYS.DATE_FILTER_MODE) as DateFilterMode;
     if (savedDFM && ["all", "today", "week", "date", "range"].includes(savedDFM)) initialDateFilterMode = savedDFM;
   } catch {}
+
+  // Check URL share params (?view=, ?theme=, ?scale=, #data=, ?data=, ?plan=default)
+  if (typeof window !== "undefined") {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash;
+
+      const viewParam = urlParams.get("view");
+      if (viewParam && ["gantt", "kanban", "summary", "tasks"].includes(viewParam)) {
+        initialView = viewParam as ActiveView;
+      }
+
+      const themeParam = urlParams.get("theme");
+      if (themeParam && themeManager.getTheme(themeParam)) {
+        initialTheme = themeParam;
+      }
+
+      const scaleParam = urlParams.get("scale") as TimeScale;
+      if (scaleParam && ["day", "week", "month", "quarter", "year"].includes(scaleParam)) {
+        initialScale = scaleParam;
+      }
+
+      let dataPayload: string | null = null;
+      if (hash) {
+        const rawHash = hash.replace(/^#/, "");
+        if (rawHash.startsWith("data=")) {
+          dataPayload = rawHash.substring(5);
+        } else {
+          const hp = new URLSearchParams(rawHash);
+          if (hp.get("data")) dataPayload = hp.get("data");
+        }
+      }
+      if (!dataPayload) {
+        dataPayload = urlParams.get("data");
+      }
+
+      if (dataPayload) {
+        const decoded = decodeDataFromBase64Url(dataPayload);
+        if (decoded) {
+          initialParsed = decoded;
+          initialJson = JSON.stringify(decoded, null, 2);
+          const sharedName = urlParams.get("name") || decoded.meta?.title || "Shared Plan";
+          const sharedId = `shared-${Date.now().toString(36)}`;
+          const sharedProj: SavedProject = {
+            id: sharedId,
+            name: sharedName,
+            updatedAt: new Date().toISOString(),
+            data: decoded,
+            source: "local"
+          };
+          const existingIndex = savedProjects.findIndex((p) => p.name === sharedName && p.data?.tasks?.length === decoded.tasks?.length);
+          if (existingIndex >= 0) {
+            savedProjects[existingIndex] = sharedProj;
+          } else {
+            savedProjects.unshift(sharedProj);
+          }
+          saveCustomProjects(savedProjects);
+          activeProjectId = sharedId;
+        }
+      } else if (urlParams.get("plan") === "default") {
+        activeProjectId = "default";
+        initialParsed = DEFAULT_TEMPLATE.data;
+        initialJson = JSON.stringify(DEFAULT_TEMPLATE.data, null, 2);
+      }
+    } catch (err) {
+      console.error("Error reading URL share params", err);
+    }
+  }
 
   return {
     activeProjectId,
@@ -480,6 +586,8 @@ export function App() {
   const [cloudPreviewResult, setCloudPreviewResult] = useState<RemoteFetchResult | null>(null);
   const [cloudPreviewError, setCloudPreviewError] = useState<string | null>(null);
   const [isSyncingProject, setIsSyncingProject] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isToastError, setIsToastError] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
@@ -1392,6 +1500,135 @@ export function App() {
     }
   };
 
+  // ── Shareable Link & Cloud Source Helpers ──────────────────────────────
+  const currentProjectName = useMemo(() => {
+    if (activeProjectId === "default") return DEFAULT_TEMPLATE.name;
+    const found = customProjects.find((p) => p.id === activeProjectId);
+    return found?.name || parsedData?.meta?.title || "Project Plan";
+  }, [activeProjectId, customProjects, parsedData]);
+
+  const activeProject = useMemo(() => {
+    return customProjects.find((p) => p.id === activeProjectId) || (activeProjectId === "default" ? DEFAULT_TEMPLATE : undefined);
+  }, [activeProjectId, customProjects]);
+
+  const shareUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+
+    if (activeProject && activeProject.source === "linked" && activeProject.sourceUrl) {
+      return `${origin}${pathname}?url=${encodeURIComponent(activeProject.sourceUrl)}&view=${activeView}&theme=${selectedThemeId}`;
+    }
+
+    if (activeProjectId === "default" && jsonText === JSON.stringify(DEFAULT_TEMPLATE.data, null, 2)) {
+      return `${origin}${pathname}?plan=default&view=${activeView}&theme=${selectedThemeId}`;
+    }
+
+    // Local / custom plan or edited template
+    if (parsedData) {
+      const b64 = encodeDataToBase64Url(parsedData);
+      const nameParam = currentProjectName && currentProjectName !== DEFAULT_TEMPLATE.name
+        ? `&name=${encodeURIComponent(currentProjectName)}`
+        : "";
+      return `${origin}${pathname}?view=${activeView}&theme=${selectedThemeId}${nameParam}#data=${b64}`;
+    }
+
+    return `${origin}${pathname}`;
+  }, [activeProjectId, activeProject, activeView, selectedThemeId, parsedData, jsonText, currentProjectName]);
+
+  const handleCopyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = shareUrl;
+        ta.style.position = "fixed";
+        ta.style.left = "-999999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopiedShareLink(true);
+      showToast("Shareable link copied to clipboard!");
+      setTimeout(() => setCopiedShareLink(false), 2500);
+    } catch {
+      showToast("Failed to copy link to clipboard", true);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!shareUrl) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: currentProjectName,
+          text: `Check out this project plan: ${currentProjectName}`,
+          url: shareUrl
+        });
+        showToast("Shared successfully!");
+      }
+    } catch {
+      // User cancelled native share
+    }
+  };
+
+  // Auto-fetch remote cloud plan if ?url= is passed in URL on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const remoteUrl = params.get("url");
+    if (!remoteUrl) return;
+
+    // Check if project is already linked with this sourceUrl
+    const existing = customProjects.find((p) => p.sourceUrl === remoteUrl);
+    if (existing) {
+      if (activeProjectId !== existing.id) {
+        handleSelectProject(existing.id);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchRemotePlan(remoteUrl);
+        if (cancelled) return;
+        const newProj: SavedProject = {
+          id: `cloud-${Date.now().toString(36)}`,
+          name: res.title || "Linked Cloud Plan",
+          updatedAt: new Date().toISOString(),
+          data: res.data,
+          source: "linked",
+          sourceUrl: res.info.originalUrl,
+          lastSyncedAt: new Date().toISOString()
+        };
+        const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
+        setCustomProjects(updated);
+        saveCustomProjects(updated);
+        setActiveProjectId(newProj.id);
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+        setJsonText(JSON.stringify(res.data, null, 2));
+        setParsedData(res.data);
+        setPeople(res.data.people || []);
+        setTeams(res.data.teams || []);
+        setValidationResult(validate(res.data));
+        showToast(`Loaded shared plan from ${res.info.label}!`);
+      } catch (err: any) {
+        if (!cancelled) {
+          showToast(`Failed to load plan from URL: ${err.message || err}`, true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Quick Add New Task
   const handleAddNewTask = () => {
     if (!parsedData) return;
@@ -1771,6 +2008,19 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               </button>
             </div>
           </div>
+
+          {/* Share Plan Button */}
+          <button
+            className="btn-nav"
+            onClick={() => {
+              setShowShareModal(true);
+              setCopiedShareLink(false);
+            }}
+            title="Share this project plan via link or open source"
+          >
+            <Share2 size={13} />
+            <span>Share</span>
+          </button>
 
           {/* Theme Selector */}
           <div className="nav-select-group">
@@ -3956,6 +4206,266 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                 <Cloud size={14} />
                 <span>Save &amp; Subscribe to Plan</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Share Plan Popup Modal ────────────────────────────────────── */}
+      {showShareModal && (
+        <div className="prompt-modal-backdrop" onClick={() => setShowShareModal(false)}>
+          <div
+            className="prompt-modal-card"
+            style={{ maxWidth: "580px", width: "90%" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="prompt-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "8px",
+                    background: "rgba(56, 189, 248, 0.15)",
+                    color: "var(--jantt-accent)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Share2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                    Share Project Plan
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "12px", color: "var(--jantt-text-muted)" }}>
+                    Copy a direct shareable link or open the original plan source.
+                  </p>
+                </div>
+              </div>
+              <button className="prompt-modal-close-btn" onClick={() => setShowShareModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Plan Overview Card */}
+              <div
+                style={{
+                  background: "var(--jantt-surface, #F8FAFC)",
+                  border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
+                  borderRadius: "10px",
+                  padding: "12px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px"
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--jantt-text)" }}>
+                    {currentProjectName}
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
+                    {parsedData?.tasks?.length || 0} tasks &bull; View: {activeView.toUpperCase()} &bull; Theme: {activeTheme.label}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    padding: "3px 9px",
+                    borderRadius: "100px",
+                    background: activeProject?.source === "linked" ? "rgba(16, 185, 129, 0.12)" : "rgba(56, 189, 248, 0.12)",
+                    color: activeProject?.source === "linked" ? "#10B981" : "var(--jantt-accent)",
+                    border: `1px solid ${activeProject?.source === "linked" ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.3)"}`
+                  }}
+                >
+                  {activeProject?.source === "linked" ? "Cloud Linked" : activeProjectId === "default" ? "Template" : "Direct Plan"}
+                </span>
+              </div>
+
+              {/* Shareable Link Input Section */}
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "12.5px",
+                    fontWeight: 600,
+                    marginBottom: "6px",
+                    color: "var(--jantt-text)"
+                  }}
+                >
+                  Shareable Link:
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    readOnly
+                    className="prompt-input"
+                    value={shareUrl}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                    style={{
+                      fontFamily: "var(--jantt-font-mono, monospace)",
+                      fontSize: "12px",
+                      flex: 1
+                    }}
+                  />
+                  <button
+                    className="btn-nav btn-nav-primary"
+                    onClick={handleCopyShareLink}
+                    style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    title="Copy share link to clipboard"
+                  >
+                    {copiedShareLink ? <Check size={14} /> : <Copy size={14} />}
+                    <span>{copiedShareLink ? "Copied!" : "Copy Link"}</span>
+                  </button>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "6px", gap: "8px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                    Opens the exact schedule, active view, and theme in any browser.
+                  </span>
+                  {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+                    <button
+                      className="btn-nav"
+                      style={{ fontSize: "11px", padding: "2px 8px" }}
+                      onClick={handleNativeShare}
+                      title="Open native device share dialog"
+                    >
+                      <Share2 size={11} />
+                      <span>Share Device...</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Source Document Section ("or opening the source") */}
+              <div
+                style={{
+                  background: "var(--jantt-surface, #F8FAFC)",
+                  border: "1px solid var(--jantt-border, #E2E8F0)",
+                  borderRadius: "10px",
+                  padding: "14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {activeProject?.source === "linked" ? (
+                      <Cloud size={16} style={{ color: "var(--jantt-accent)" }} />
+                    ) : (
+                      <FileJson size={16} style={{ color: "var(--jantt-accent)" }} />
+                    )}
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                      {activeProject?.source === "linked" ? "Original Cloud Source" : "Plan Source"}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    {activeProject?.sourceUrl ? (
+                      <a
+                        href={activeProject.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-nav btn-nav-primary"
+                        style={{ fontSize: "12px", textDecoration: "none" }}
+                        title="Open the original source file URL in a new browser tab"
+                      >
+                        <ExternalLink size={13} />
+                        <span>Open Source</span>
+                      </a>
+                    ) : (
+                      <a
+                        href={shareUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-nav"
+                        style={{ fontSize: "12px", textDecoration: "none" }}
+                        title="Open this plan link in a new browser tab"
+                      >
+                        <ExternalLink size={13} />
+                        <span>Open Link</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {activeProject?.sourceUrl ? (
+                  <div
+                    style={{
+                      fontSize: "11.5px",
+                      color: "var(--jantt-text-muted)",
+                      wordBreak: "break-all",
+                      fontFamily: "var(--jantt-font-mono, monospace)",
+                      background: "var(--jantt-bg, #FFFFFF)",
+                      border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
+                      borderRadius: "6px",
+                      padding: "8px 10px"
+                    }}
+                  >
+                    {activeProject.sourceUrl}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                    <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
+                      Raw JSON schedule data is self-contained. You can inspect or download the JSON source.
+                    </span>
+                    <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                      <button
+                        className="btn-nav"
+                        style={{ fontSize: "11px", padding: "3px 8px" }}
+                        onClick={() => {
+                          setShowShareModal(false);
+                          setIsSidebarCollapsed(false);
+                        }}
+                        title="Open JSON editor sidebar"
+                      >
+                        <FileJson size={12} />
+                        <span>View JSON</span>
+                      </button>
+                      <button
+                        className="btn-nav"
+                        style={{ fontSize: "11px", padding: "3px 8px" }}
+                        onClick={handleDownloadJson}
+                        title="Download JSON file"
+                      >
+                        <Download size={12} />
+                        <span>Download</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="prompt-modal-footer">
+              <button className="btn-nav" onClick={() => setShowShareModal(false)}>
+                Close
+              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {activeProject?.sourceUrl && (
+                  <a
+                    href={activeProject.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-nav"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open Source</span>
+                  </a>
+                )}
+                <button
+                  className="btn-nav btn-nav-primary"
+                  onClick={handleCopyShareLink}
+                >
+                  {copiedShareLink ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{copiedShareLink ? "Link Copied!" : "Copy Share Link"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

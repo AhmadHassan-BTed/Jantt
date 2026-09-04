@@ -758,6 +758,24 @@ body {
   box-shadow: 0 0 0 3px var(--jantt-accent-glow, rgba(2, 132, 199, 0.14));
 }
 
+.prompt-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--jantt-bg, #FFFFFF);
+  border: 1px solid var(--jantt-border-strong, #CBD5E1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--jantt-text, #0F172A);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.prompt-input:focus {
+  border-color: var(--jantt-accent, #0284C7);
+  box-shadow: 0 0 0 3px var(--jantt-accent-glow, rgba(2, 132, 199, 0.14));
+}
+
 /* Ideology & Architecture Explainer */
 .ideology-wrap {
   display: flex;
