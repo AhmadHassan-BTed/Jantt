@@ -13,7 +13,8 @@ import {
   type Task,
   type Team,
   resolveTaskAssignee,
-  syncTaskProgressAndStatus
+  syncTaskProgressAndStatus,
+  isTaskDone
 } from "@jantt/core";
 import type {
   KanbanSortRule,
@@ -145,14 +146,14 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 {visibleTasks.map((t) => {
                   const cat = parsedData.categories?.[t.category];
                   const catColor = cat?.color || "var(--jantt-accent)";
-                  const isCompleted = t.status === "completed";
+                  const isCompleted = isTaskDone(t);
                   const isDimmed =
                     dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                   const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                   return (
                     <div
                       key={t.id}
-                      className={`kanban-card ${isDimmed ? "kanban-card-dimmed" : ""}`}
+                      className={`kanban-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "kanban-card-dimmed" : ""}`}
                       onClick={() => openTaskDetailSidebar(t)}
                     >
                       <div className="kanban-card-top">

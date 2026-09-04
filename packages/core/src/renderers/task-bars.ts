@@ -3,6 +3,7 @@ import { InteractionController } from "../controller";
 import { TooltipController } from "./tooltip";
 import { formatHumanDate } from "../date-math";
 import { resolveTaskAssignee } from "../team-resolver";
+import { isTaskDone } from "../utils";
 
 export interface TaskBarsProps {
   taskLayouts: TaskLayout[];
@@ -36,15 +37,17 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
     // 2. Milestone Diamond Pin
     const isSelected = props.controller.isSelected(item.task.id);
+    const isDone = isTaskDone(item.task);
+
     if (item.isMilestone) {
       const mStone = document.createElement("div");
-      mStone.className = `jantt-milestone ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
+      mStone.className = `jantt-milestone ${isDone ? "is-done" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
       mStone.style.left = `${item.x}px`;
       mStone.style.top = `${item.y}px`;
       mStone.style.width = `${item.width}px`;
       mStone.style.height = `${item.height}px`;
       mStone.style.transform = "translate(-50%, -50%) rotate(45deg)";
-      mStone.style.background = item.category.color;
+      mStone.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : item.category.color;
       mStone.setAttribute("data-task-id", item.task.id);
       mStone.setAttribute("tabindex", "0");
       mStone.setAttribute("role", "button");
@@ -73,12 +76,12 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
     // 3. Standard Task Bar
     const bar = document.createElement("div");
-    bar.className = `jantt-task-bar ${item.task.locked ? "is-locked" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
+    bar.className = `jantt-task-bar ${isDone ? "is-done" : ""} ${item.task.locked ? "is-locked" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
     bar.style.left = `${item.x}px`;
     bar.style.top = `${item.y}px`;
     bar.style.width = `${item.width}px`;
     bar.style.height = `${item.height}px`;
-    bar.style.background = item.category.color;
+    bar.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : item.category.color;
     bar.setAttribute("data-task-id", item.task.id);
     bar.setAttribute("tabindex", "0");
     bar.setAttribute("role", "button");
@@ -88,7 +91,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     );
 
     // Progress Fill
-    const progressRatio = item.task.progress ?? 0;
+    const progressRatio = isDone ? 1.0 : (item.task.progress ?? 0);
     const progressFill = document.createElement("div");
     progressFill.className = "jantt-task-progress";
     progressFill.style.width = `${Math.min(progressRatio * 100, 100)}%`;

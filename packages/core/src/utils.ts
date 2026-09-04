@@ -135,3 +135,14 @@ export function syncTaskProgressAndStatus(
 
   return result;
 }
+
+/**
+ * Checks if a task is completed or done, either via status ("completed" or "done")
+ * or via progress reaching 100% (1.0 or >= 1).
+ */
+export function isTaskDone(task?: { status?: string; progress?: number | null } | null): boolean {
+  if (!task) return false;
+  if (task.status === "completed" || task.status === "done") return true;
+  if (typeof task.progress === "number" && task.progress >= 1) return true;
+  return false;
+}

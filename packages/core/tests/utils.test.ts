@@ -5,7 +5,8 @@ import {
   getEffectiveGap,
   clampDayWidth,
   buildViewportSnapshot,
-  syncTaskProgressAndStatus
+  syncTaskProgressAndStatus,
+  isTaskDone
 } from "../src/utils";
 import { resolveSchedule } from "../src/resolver";
 import { Task } from "../src/types";
@@ -202,6 +203,34 @@ describe("Core Utilities & Robustness", () => {
         status: "in-progress",
         progress: 0.5
       });
+    });
+  });
+
+  describe("isTaskDone", () => {
+    it("returns false for null or undefined tasks", () => {
+      expect(isTaskDone(null)).toBe(false);
+      expect(isTaskDone(undefined)).toBe(false);
+    });
+
+    it("returns true when status is completed", () => {
+      expect(isTaskDone({ status: "completed" })).toBe(true);
+    });
+
+    it("returns true when status is done", () => {
+      expect(isTaskDone({ status: "done" })).toBe(true);
+    });
+
+    it("returns true when progress is 1.0 or greater", () => {
+      expect(isTaskDone({ progress: 1.0 })).toBe(true);
+      expect(isTaskDone({ progress: 1 })).toBe(true);
+      expect(isTaskDone({ progress: 1.2 })).toBe(true);
+    });
+
+    it("returns false for incomplete tasks", () => {
+      expect(isTaskDone({ status: "in-progress", progress: 0.5 })).toBe(false);
+      expect(isTaskDone({ status: "not-started", progress: 0 })).toBe(false);
+      expect(isTaskDone({ status: "submitted", progress: 0.75 })).toBe(false);
+      expect(isTaskDone({})).toBe(false);
     });
   });
 });

@@ -1,6 +1,6 @@
 import { TaskLayout, Task, Person, Team } from "../types";
 import { InteractionController } from "../controller";
-import { escapeHtml } from "../utils";
+import { escapeHtml, isTaskDone } from "../utils";
 import { resolveTaskAssignee } from "../team-resolver";
 
 export interface GridTableProps {
@@ -40,15 +40,17 @@ export function renderGridTable(props: GridTableProps): {
 
   // Rows
   props.taskLayouts.forEach((item) => {
+    const isDone = isTaskDone(item.task);
     const row = document.createElement("div");
-    row.className = "jantt-label-row";
+    row.className = `jantt-label-row ${isDone ? "is-done" : ""}`;
     row.style.height = `${props.rowHeight}px`;
     row.setAttribute("data-row-id", item.task.id);
 
-    const progressPct =
-      item.task.progress !== undefined && item.task.progress !== null
-        ? `${Math.round(item.task.progress * 100)}%`
-        : "-";
+    const progressPct = isDone
+      ? "100%"
+      : item.task.progress !== undefined && item.task.progress !== null
+      ? `${Math.round(item.task.progress * 100)}%`
+      : "-";
 
     const wbsBadge = item.task.wbs
       ? `<span class="jantt-wbs-pill" style="font-family: var(--jantt-font-mono); font-size: 10px; font-weight: 700; color: var(--jantt-text-muted); opacity: 0.8; margin-right: 4px;">${escapeHtml(item.task.wbs)}</span>`
@@ -62,7 +64,7 @@ export function renderGridTable(props: GridTableProps): {
 
     row.innerHTML = `
       <div class="jantt-col-name">
-        <span class="jantt-label-dot" style="background: ${item.category.color};"></span>
+        <span class="jantt-label-dot" style="background: ${isDone ? "var(--jantt-bar-done, #64748B)" : item.category.color};"></span>
         ${wbsBadge}
         <span class="jantt-label-text">${escapeHtml(item.displayLabel)}</span>
         ${assigneeBadge}
