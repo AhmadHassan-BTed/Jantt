@@ -464,6 +464,7 @@ export function renderJantt(
       selectedDate: selectedDateFilter,
       dayWidth: currentDayWidth,
       showToday: viewport.showToday,
+      showTodayTag: viewport.showTodayTag,
       onColumnResize: (w) => handleDayWidthChange(w),
       onColumnResizeStart: handleColumnResizeStart,
       onColumnResizeEnd: handleColumnResizeEnd,
@@ -494,6 +495,8 @@ export function renderJantt(
       rowHeight: viewport.rowHeight,
       gridContainer,
       controller,
+      people: currentData.people,
+      teams: currentData.teams,
       onTaskClick: openTaskSidebar,
       onAddTask: currentOptions.readOnly ? undefined : handleAddTask
     });
@@ -520,21 +523,18 @@ export function renderJantt(
       showCritical,
       onLinkDelete: (fromId, toId) => {
         const targetTask = currentData.tasks.find((t) => t.id === toId);
-        if (targetTask) {
-          const remaining = getTaskDependencies(targetTask).filter((id) => id !== fromId);
-          if (remaining.length === 0) {
-            targetTask.dependsOn = null;
-          } else if (remaining.length === 1) {
-            targetTask.dependsOn = remaining[0];
-          } else {
-            targetTask.dependsOn = remaining;
-          }
-          const resolved = resolveSchedule(currentData.tasks, currentData.meta?.defaultGapDays ?? 2);
-          currentData = { ...currentData, tasks: resolved };
-          render();
-          currentOptions.onLinkDelete?.(fromId, toId);
-          currentOptions.onCommit?.(currentData);
-        }
+        if (!targetTask) return;
+        const currentDeps = getTaskDependencies(targetTask);
+        const nextDeps = currentDeps.filter((id) => id !== fromId);
+        const updatedTask = {
+          ...targetTask,
+          dependsOn: nextDeps.length === 0 ? null : nextDeps.length === 1 ? nextDeps[0] : nextDeps
+        };
+        const nextTasks = currentData.tasks.map((t) => (t.id === toId ? updatedTask : t));
+        const resolved = resolveSchedule(nextTasks, currentData.meta?.defaultGapDays ?? 2);
+        currentData = { ...currentData, tasks: resolved };
+        render();
+        currentOptions.onCommit?.(currentData);
       }
     });
     previewWireSvg = pWire;
@@ -549,6 +549,8 @@ export function renderJantt(
         showCritical,
         showBaselines,
         readOnly: currentOptions.readOnly,
+        people: currentData.people,
+        teams: currentData.teams,
         controller,
         tooltip
       },

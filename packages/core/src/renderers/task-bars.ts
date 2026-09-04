@@ -1,7 +1,8 @@
-import { TaskLayout, DependencyLine } from "../types";
+import { TaskLayout, DependencyLine, Person, Team } from "../types";
 import { InteractionController } from "../controller";
 import { TooltipController } from "./tooltip";
 import { formatHumanDate } from "../date-math";
+import { resolveTaskAssignee } from "../team-resolver";
 
 export interface TaskBarsProps {
   taskLayouts: TaskLayout[];
@@ -10,6 +11,8 @@ export interface TaskBarsProps {
   showCritical: boolean;
   showBaselines: boolean;
   readOnly?: boolean;
+  people?: Person[];
+  teams?: Team[];
   controller: InteractionController;
   tooltip: TooltipController;
 }
@@ -111,15 +114,24 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     content.appendChild(titleSpan);
 
     if (item.task.assignee) {
-      const aPill = document.createElement("span");
-      aPill.className = "jantt-hover-type-pill";
-      aPill.style.fontSize = "8.5px";
-      aPill.style.padding = "0 4px";
-      aPill.style.background = "rgba(0, 0, 0, 0.25)";
-      aPill.style.color = "#FFFFFF";
-      aPill.style.borderRadius = "3px";
-      aPill.textContent = item.task.assignee;
-      content.appendChild(aPill);
+      const assigneeInfo = resolveTaskAssignee(item.task, props.people, props.teams);
+      const aAvatar = document.createElement("span");
+      aAvatar.className = "jantt-task-avatar-pill";
+      aAvatar.style.display = "inline-flex";
+      aAvatar.style.alignItems = "center";
+      aAvatar.style.justifyContent = "center";
+      aAvatar.style.width = "16px";
+      aAvatar.style.height = "16px";
+      aAvatar.style.minWidth = "16px";
+      aAvatar.style.borderRadius = "50%";
+      aAvatar.style.background = assigneeInfo.avatarColor || "rgba(0, 0, 0, 0.35)";
+      aAvatar.style.color = "#FFFFFF";
+      aAvatar.style.fontSize = "8px";
+      aAvatar.style.fontWeight = "700";
+      aAvatar.style.flexShrink = "0";
+      aAvatar.title = `${assigneeInfo.displayName}${assigneeInfo.team ? ` (${assigneeInfo.team.name})` : ""}`;
+      aAvatar.textContent = assigneeInfo.initials;
+      content.appendChild(aAvatar);
     }
 
     if (item.task.urgent) {

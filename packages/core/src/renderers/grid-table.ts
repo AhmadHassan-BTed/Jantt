@@ -1,6 +1,7 @@
-import { TaskLayout, Task } from "../types";
+import { TaskLayout, Task, Person, Team } from "../types";
 import { InteractionController } from "../controller";
 import { escapeHtml } from "../utils";
+import { resolveTaskAssignee } from "../team-resolver";
 
 export interface GridTableProps {
   taskLayouts: TaskLayout[];
@@ -9,6 +10,8 @@ export interface GridTableProps {
   rowHeight: number;
   gridContainer: HTMLElement;
   controller: InteractionController;
+  people?: Person[];
+  teams?: Team[];
   onTaskClick: (task: Task) => void;
   onAddTask?: () => void;
 }
@@ -51,9 +54,11 @@ export function renderGridTable(props: GridTableProps): {
       ? `<span class="jantt-wbs-pill" style="font-family: var(--jantt-font-mono); font-size: 10px; font-weight: 700; color: var(--jantt-text-muted); opacity: 0.8; margin-right: 4px;">${escapeHtml(item.task.wbs)}</span>`
       : "";
 
-    const assigneeBadge = item.task.assignee
-      ? `<span class="jantt-hover-type-pill" style="font-size: 8.5px; padding: 0 4px; background: rgba(2, 132, 199, 0.08); color: var(--jantt-accent); border: 1px solid rgba(2, 132, 199, 0.2);">${escapeHtml(item.task.assignee)}</span>`
-      : "";
+    let assigneeBadge = "";
+    if (item.task.assignee) {
+      const assigneeInfo = resolveTaskAssignee(item.task, props.people, props.teams);
+      assigneeBadge = `<span class="jantt-assignee-avatar" title="${escapeHtml(assigneeInfo.displayName)}${assigneeInfo.team ? ` (${escapeHtml(assigneeInfo.team.name)})` : ""}" style="background: ${assigneeInfo.avatarColor};">${escapeHtml(assigneeInfo.initials)}</span>`;
+    }
 
     row.innerHTML = `
       <div class="jantt-col-name">

@@ -395,6 +395,79 @@ describe("Stress & Boundary Tests", () => {
       chart.destroy();
       container.remove();
     });
+
+    it("renders compact initials avatar badge instead of long full name in the left table and task bar", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const testData: JanttData = {
+        people: [
+          { id: "p-ahmad", name: "Ahmad Hassan", color: "#38BDF8", role: "Researcher" }
+        ],
+        tasks: [
+          {
+            id: "t1",
+            wbs: "1.1",
+            label: "Rewrite Master Academic CV (add FRACTAL, ML)",
+            category: "dev",
+            start: "2026-09-01",
+            end: "2026-09-05",
+            assignee: "Ahmad Hassan"
+          }
+        ]
+      };
+
+      const chart = renderJantt(container, testData);
+
+      // Left bar table renders compact initials avatar
+      const avatar = container.querySelector<HTMLElement>(".jantt-label-column .jantt-assignee-avatar");
+      expect(avatar).not.toBeNull();
+      expect(avatar?.textContent?.trim()).toBe("AH");
+      expect(avatar?.title).toContain("Ahmad Hassan");
+
+      // Gantt task bar also renders compact initials avatar
+      const barAvatar = container.querySelector<HTMLElement>(".jantt-task-bar .jantt-task-avatar-pill");
+      expect(barAvatar).not.toBeNull();
+      expect(barAvatar?.textContent?.trim()).toBe("AH");
+      expect(barAvatar?.title).toContain("Ahmad Hassan");
+
+      chart.destroy();
+      container.remove();
+    });
+
+    it("renders the header-anchored today marker pin when showTodayTag is enabled", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const fixedToday = "2026-09-04T12:00:00Z";
+      const testData: JanttData = {
+        tasks: [
+          { id: "t1", label: "Task Spanning Today", category: "dev", start: "2026-09-01", end: "2026-09-07" },
+          { id: "t2", label: "Future Task", category: "dev", start: "2026-09-10", end: "2026-09-15" }
+        ]
+      };
+
+      const chart = renderJantt(container, testData, {
+        viewport: {
+          showToday: true,
+          showTodayTag: true,
+          currentTime: new Date(fixedToday)
+        }
+      });
+
+      const headerMarker = container.querySelector<HTMLElement>(".jantt-header-today-marker");
+      expect(headerMarker).not.toBeNull();
+      expect(headerMarker?.querySelector(".jantt-header-today-pill")?.textContent).toBe("Today");
+      expect(headerMarker?.querySelector(".jantt-header-today-arrow")).not.toBeNull();
+
+      // Click to filter works
+      headerMarker?.click();
+      let rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(1);
+
+      chart.destroy();
+      container.remove();
+    });
   });
 
   describe("Interactive Day Header Click to Filter by Date", () => {
