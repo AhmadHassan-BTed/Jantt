@@ -19,7 +19,9 @@ import {
   resolveTeamById,
   resolveTaskAssignee,
   fetchRemotePlan,
-  RemoteFetchResult
+  RemoteFetchResult,
+  createTaskSidebar,
+  getTaskDependencies
 } from "@jantt/core";
 
 import { Jantt } from "@jantt/react";
@@ -1271,6 +1273,85 @@ export function App() {
     }, 1300);
   }, []);
 
+  const activeSidebarRef = useRef<{ close: () => void } | null>(null);
+
+  // Close sidebar drawer if open when unmounting or switching view
+  useEffect(() => {
+    return () => {
+      activeSidebarRef.current?.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    activeSidebarRef.current?.close();
+  }, [activeView]);
+
+  const parsedDataRef = useRef(parsedData);
+  parsedDataRef.current = parsedData;
+
+  const activeThemeRef = useRef(activeTheme);
+  activeThemeRef.current = activeTheme;
+
+  // Open the slide-out Task Details Sidebar / Drawer (Swiss Modernist design) for a given task
+  const openTaskDetailSidebar = useCallback(
+    (task: Task) => {
+      if (activeSidebarRef.current) {
+        try {
+          activeSidebarRef.current.close();
+        } catch {
+          // Ignore
+        }
+        activeSidebarRef.current = null;
+      }
+      // Remove any lingering sidebar backdrops if present
+      document.querySelectorAll(".jantt-sidebar-backdrop").forEach((el) => {
+        el.parentNode?.removeChild(el);
+      });
+
+      if (!parsedDataRef.current) return;
+
+      const sidebarInstance = createTaskSidebar({
+        task,
+        allTasks: parsedDataRef.current.tasks,
+        categories: parsedDataRef.current.categories || {},
+        theme: activeThemeRef.current.vars,
+        themeClassName: activeThemeRef.current.className,
+        onClose: () => {
+          activeSidebarRef.current = null;
+        },
+        onSave: (updatedTask) => {
+          const currentData = parsedDataRef.current;
+          if (!currentData) return;
+          const nextTasks = currentData.tasks.map((t) =>
+            t.id === updatedTask.id ? updatedTask : t
+          );
+          const resolved = resolveSchedule(nextTasks, currentData.meta?.defaultGapDays ?? 2);
+          handleChartCommit({ ...currentData, tasks: resolved });
+        },
+        onDelete: (taskId) => {
+          const currentData = parsedDataRef.current;
+          if (!currentData) return;
+          const nextTasks = currentData.tasks.filter((t) => t.id !== taskId);
+          nextTasks.forEach((t) => {
+            const remaining = getTaskDependencies(t).filter((id) => id !== taskId);
+            if (remaining.length === 0) {
+              t.dependsOn = null;
+            } else if (remaining.length === 1) {
+              t.dependsOn = remaining[0];
+            } else {
+              t.dependsOn = remaining;
+            }
+          });
+          const resolved = resolveSchedule(nextTasks, currentData.meta?.defaultGapDays ?? 2);
+          handleChartCommit({ ...currentData, tasks: resolved });
+        }
+      });
+
+      activeSidebarRef.current = sidebarInstance;
+    },
+    [handleChartCommit]
+  );
+
 
   // Format JSON in editor
   const formatJson = () => {
@@ -2096,7 +2177,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                 const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                                 return (
-                                  <div key={t.id} className={`kanban-card ${isDimmed ? "kanban-card-dimmed" : ""}`}>
+                                  <div
+                                    key={t.id}
+                                    className={`kanban-card ${isDimmed ? "kanban-card-dimmed" : ""}`}
+                                    onClick={() => openTaskDetailSidebar(t)}
+                                  >
                                     <div className="kanban-card-top">
                                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                         <span className="kanban-cat-dot" style={{ background: catColor }} />
@@ -2172,7 +2257,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                       <select
                                         className="kanban-status-select"
                                         value={t.status || "not-started"}
+                                        onClick={(e) => e.stopPropagation()}
                                         onChange={(e) => {
+                                          e.stopPropagation();
                                           const newStatus = e.target.value;
                                           let newProgress = t.progress;
                                           if (newStatus === "completed") newProgress = 1.0;
@@ -2546,11 +2633,17 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                               const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                               return (
-                                <div key={t.id} className={`tasks-todo-row ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`} style={{ borderLeftColor: catColor }}>
+                                <div
+                                  key={t.id}
+                                  className={`tasks-todo-row ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
+                                  style={{ borderLeftColor: catColor }}
+                                  onClick={() => openTaskDetailSidebar(t)}
+                                >
                                   <div className="tasks-todo-left">
                                     <button
                                       className={`tasks-checkbox-btn ${isCompleted ? "is-checked" : ""}`}
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         const nextStatus = isCompleted ? "in-progress" : "completed";
                                         const nextProgress = isCompleted ? 0 : 1.0;
                                         const updatedTasks = parsedData.tasks.map((item) =>
@@ -2603,7 +2696,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                     <select
                                       className="kanban-status-select"
                                       value={t.status || "not-started"}
+                                      onClick={(e) => e.stopPropagation()}
                                       onChange={(e) => {
+                                        e.stopPropagation();
                                         const newStatus = e.target.value;
                                         let newProgress = t.progress;
                                         if (newStatus === "completed") newProgress = 1.0;
@@ -2623,7 +2718,8 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                     <button
                                       className="kanban-sort-remove-btn"
                                       title="Delete task"
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         const updatedTasks = parsedData.tasks.filter((item) => item.id !== t.id);
                                         const resolved = resolveSchedule(updatedTasks, parsedData.meta?.defaultGapDays ?? 2);
                                         handleChartCommit({ ...parsedData, tasks: resolved });
@@ -2649,7 +2745,12 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                             const isDimmed = dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                             const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                             return (
-                              <div key={t.id} className={`today-task-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`} style={{ borderTopColor: catColor }}>
+                              <div
+                                key={t.id}
+                                className={`today-task-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
+                                style={{ borderTopColor: catColor }}
+                                onClick={() => openTaskDetailSidebar(t)}
+                              >
                                 <div className="today-card-header">
                                   <div className="today-card-category">
                                     <span className="kanban-cat-dot" style={{ background: catColor }} />
@@ -2665,7 +2766,8 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                     {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
                                     <button
                                       className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`}
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         const nextStatus = isCompleted ? "in-progress" : "completed";
                                         const nextProgress = isCompleted ? 0 : 1.0;
                                         const updatedTasks = parsedData.tasks.map((item) =>
@@ -2738,7 +2840,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                   <select
                                     className="kanban-status-select"
                                     value={t.status || "not-started"}
+                                    onClick={(e) => e.stopPropagation()}
                                     onChange={(e) => {
+                                      e.stopPropagation();
                                       const newStatus = e.target.value;
                                       let newProgress = t.progress;
                                       if (newStatus === "completed") newProgress = 1.0;
@@ -2758,7 +2862,8 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                   <button
                                     className="kanban-sort-remove-btn"
                                     title="Delete task"
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       const updatedTasks = parsedData.tasks.filter((item) => item.id !== t.id);
                                       const resolved = resolveSchedule(updatedTasks, parsedData.meta?.defaultGapDays ?? 2);
                                       handleChartCommit({ ...parsedData, tasks: resolved });
