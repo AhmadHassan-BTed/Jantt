@@ -248,17 +248,10 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       }
     } else {
       // On standard Day scale: show day name and day number
-      if (d.isToday) {
-        dCell.innerHTML = `
-          <span class="jantt-day-name is-today">${d.dayName}</span>
-          <span class="jantt-day-num is-today">${d.label}</span>
-        `;
-      } else {
-        dCell.innerHTML = `
-          <span class="jantt-day-name">${d.dayName}</span>
-          <span class="jantt-day-num">${d.label}</span>
-        `;
-      }
+      dCell.innerHTML = `
+        <span class="jantt-day-name">${d.dayName}</span>
+        <span class="jantt-day-num">${d.label}</span>
+      `;
     }
 
     // Draggable resize handle for day tier (available on all scales where cell is at least 6px)
@@ -284,37 +277,5 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
   });
 
   timelineHeader.appendChild(daysRow);
-
-  // 4. Header-Anchored Today Marker Pin (Systematic UX Alignment)
-  // Positioned in the sticky timeline header so it permanently stays in view when scrolling,
-  // aligns with the vertical today guide line, and never gets occluded by or obstructs task bars.
-  if (header.todayX !== null && options?.showToday !== false) {
-    const todayMarker = document.createElement("div");
-    todayMarker.className = "jantt-header-today-marker";
-    todayMarker.style.left = `${header.todayX}px`;
-
-    const todayDay = header.days.find((d) => d.isToday);
-    const todayDateStr = todayDay?.dateStr || "";
-
-    todayMarker.setAttribute("data-today-date", todayDateStr);
-    todayMarker.title = todayDateStr
-      ? `Today: ${todayDateStr} (Click to filter tasks active today)`
-      : "Today (Click to filter tasks active today)";
-
-    todayMarker.innerHTML = `
-      <span class="jantt-header-today-pill">Today</span>
-      <span class="jantt-header-today-arrow"></span>
-    `;
-
-    if (options?.onDateClick && todayDateStr) {
-      todayMarker.addEventListener("click", (e) => {
-        e.stopPropagation();
-        options.onDateClick!(todayDateStr);
-      });
-    }
-
-    timelineHeader.appendChild(todayMarker);
-  }
-
   return timelineHeader;
 }
