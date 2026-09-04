@@ -164,7 +164,7 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
           >
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <HardDrive size={13} style={{ color: "var(--jantt-accent)" }} />
-              <span>Persistent Client Storage (localStorage)</span>
+              <span>Jantt v1.1.1 • localStorage</span>
             </div>
             <span style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 600, color: "var(--jantt-text)" }}>
               ~{storageSizeKb} KB

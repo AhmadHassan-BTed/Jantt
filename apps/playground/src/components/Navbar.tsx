@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
   CheckCircle2,
@@ -11,13 +11,15 @@ import {
   Clock,
   FileSpreadsheet,
   Trash2,
-  Upload,
   Plus,
   Cloud,
   RefreshCw,
   GitFork,
   CheckSquare,
-  Share2
+  Share2,
+  ChevronDown,
+  ArrowUpFromLine,
+  ArrowDownToLine
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { SavedProject, ActiveView, EffectivePerson } from "../types";
@@ -87,11 +89,31 @@ export const Navbar: React.FC<NavbarProps> = ({
   setSelectedThemeId,
   setShowPromptModal
 }) => {
+  const [ioDropdownOpen, setIoDropdownOpen] = useState(false);
+  const ioDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!ioDropdownOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (ioDropdownRef.current && !ioDropdownRef.current.contains(e.target as Node)) {
+        setIoDropdownOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIoDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [ioDropdownOpen]);
   return (
     <header className="navbar">
       <div className="brand-section">
         <JanttLogo size={28} />
-        <span className="brand-badge">v1.1.1</span>
         <button
           type="button"
           className={`btn-autosave-badge is-${saveStatus}`}
@@ -281,40 +303,71 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>People{effectivePeople.length > 0 ? ` (${effectivePeople.length})` : ""}</span>
         </button>
 
-        {/* Data I/O Group (Import & Export) */}
-        <div className="nav-io-group">
-          {/* Hidden File Input for JSON Import */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept=".json,application/json"
-            onChange={handleImportJsonFile}
-            style={{ display: "none" }}
-          />
+        {/* Hidden File Input for JSON Import */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".json,application/json"
+          onChange={handleImportJsonFile}
+          style={{ display: "none" }}
+        />
 
-          {/* Import JSON Button */}
+        {/* Unified Import / Export Dropdown */}
+        <div className="nav-io-dropdown" ref={ioDropdownRef}>
           <button
-            className="btn-nav"
-            onClick={() => fileInputRef.current?.click()}
-            title="Import a Jantt JSON file from your computer"
+            className={`btn-nav nav-io-trigger ${ioDropdownOpen ? "is-open" : ""}`}
+            onClick={() => setIoDropdownOpen((o) => !o)}
+            title="Import or export project data"
           >
-            <Upload size={13} />
-            <span>Import</span>
+            <Download size={13} />
+            <span>Import / Export</span>
+            <ChevronDown size={11} className={`nav-io-chevron ${ioDropdownOpen ? "is-open" : ""}`} />
           </button>
 
-          <div className="nav-export-split">
-            {/* Download JSON Button */}
-            <button className="btn-nav" onClick={handleDownloadJson} title="Download Jantt JSON file">
-              <Download size={13} />
-              <span>JSON</span>
-            </button>
-
-            {/* Export CSV Button */}
-            <button className="btn-nav" onClick={handleExportCsv} title="Export RFC-4180 CSV / Excel spreadsheet">
-              <FileSpreadsheet size={13} />
-              <span>CSV</span>
-            </button>
-          </div>
+          {ioDropdownOpen && (
+            <div className="nav-io-panel">
+              <button
+                className="nav-io-item"
+                onClick={() => {
+                  fileInputRef.current?.click();
+                  setIoDropdownOpen(false);
+                }}
+              >
+                <ArrowUpFromLine size={14} />
+                <div className="nav-io-item-text">
+                  <span className="nav-io-item-label">Import JSON</span>
+                  <span className="nav-io-item-desc">Load a .json file from your computer</span>
+                </div>
+              </button>
+              <div className="nav-io-divider" />
+              <button
+                className="nav-io-item"
+                onClick={() => {
+                  handleDownloadJson();
+                  setIoDropdownOpen(false);
+                }}
+              >
+                <ArrowDownToLine size={14} />
+                <div className="nav-io-item-text">
+                  <span className="nav-io-item-label">Export as JSON</span>
+                  <span className="nav-io-item-desc">Download the Jantt project file</span>
+                </div>
+              </button>
+              <button
+                className="nav-io-item"
+                onClick={() => {
+                  handleExportCsv();
+                  setIoDropdownOpen(false);
+                }}
+              >
+                <FileSpreadsheet size={14} />
+                <div className="nav-io-item-text">
+                  <span className="nav-io-item-label">Export as CSV</span>
+                  <span className="nav-io-item-desc">Spreadsheet-compatible RFC-4180</span>
+                </div>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Theme Selector */}

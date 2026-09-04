@@ -400,37 +400,106 @@ select option,
   border-color: rgba(239, 68, 68, 0.3);
 }
 
-/* Grouped Data I/O (Import & Export) */
-.nav-io-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* Unified Import / Export Dropdown */
+.nav-io-dropdown {
+  position: relative;
   flex-shrink: 0;
 }
 
-.nav-export-split {
-  display: inline-flex;
+.nav-io-trigger {
+  position: relative;
+}
+
+.nav-io-trigger.is-open {
+  border-color: var(--jantt-accent, #38BDF8);
+  background: var(--jantt-surface-hover, rgba(28, 45, 75, 0.9));
+}
+
+.nav-io-chevron {
+  transition: transform 0.2s ease;
+  opacity: 0.6;
+  margin-left: -2px;
+}
+
+.nav-io-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.nav-io-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: var(--jantt-surface-solid, #121A2C);
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  z-index: 200;
+  animation: jantt-popover-in 0.15s ease;
+}
+
+.playground-app.jantt-theme-light .nav-io-panel {
+  background: #FFFFFF;
+  border-color: #E2E8F0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.nav-io-item {
+  display: flex;
   align-items: center;
-  background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
-  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
-  border-radius: 8px;
-  height: 32px;
-  padding: 1px;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: var(--jantt-text, #E2E8F0);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  text-align: left;
+}
+
+.nav-io-item:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-accent, #38BDF8);
+}
+
+.nav-io-item svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.nav-io-item:hover svg {
+  opacity: 1;
+  color: var(--jantt-accent, #38BDF8);
+}
+
+.nav-io-item-text {
+  display: flex;
+  flex-direction: column;
   gap: 1px;
 }
 
-.nav-export-split .btn-nav {
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  padding: 0 9px;
-  height: 28px;
-  font-size: 12px;
+.nav-io-item-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
-.nav-export-split .btn-nav:hover {
-  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
-  color: var(--jantt-accent, #38BDF8);
+.nav-io-item-desc {
+  font-size: 10.5px;
+  color: var(--jantt-text-muted, #64748B);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.nav-io-divider {
+  height: 1px;
+  background: var(--jantt-border-subtle, rgba(255, 255, 255, 0.06));
+  margin: 3px 8px;
 }
 
 .btn-nav {
@@ -2391,4 +2460,8 @@ path.jantt-dep-path.jantt-task-dimmed {
   color: var(--jantt-accent) !important;
 }
 
+@keyframes jantt-popover-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
