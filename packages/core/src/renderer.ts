@@ -589,10 +589,18 @@ export function renderJantt(
   };
 
   let resizeObserver: ResizeObserver | null = null;
+  let lastObservedWidth = 0;
+  let lastObservedHeight = 0;
+  let resizeTimer: any = null;
+
   if (typeof ResizeObserver !== "undefined") {
-    let resizeTimer: any = null;
-    resizeObserver = new ResizeObserver(() => {
-      if (rowHeightMode === "fit") {
+    resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (Math.abs(width - lastObservedWidth) > 2 || Math.abs(height - lastObservedHeight) > 2) {
+        lastObservedWidth = width;
+        lastObservedHeight = height;
         if (resizeTimer) cancelAnimationFrame(resizeTimer);
         resizeTimer = requestAnimationFrame(() => {
           render();
@@ -659,6 +667,7 @@ export function renderJantt(
     destroy: () => {
       const oldToolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
       (oldToolbar as any)?.__cleanup?.();
+      if (resizeTimer) cancelAnimationFrame(resizeTimer);
       if (todayTimer) clearInterval(todayTimer);
       resizeObserver?.disconnect();
       tooltip.hide();

@@ -25,6 +25,7 @@ interface UseProjectStateOptions {
   setShowCriticalPath: (val: boolean) => void;
   setShowBaselines: (val: boolean) => void;
   showToast: (msg: string, isErr?: boolean) => void;
+  flushPendingSave?: () => void;
 }
 
 export function useProjectState({
@@ -39,10 +40,13 @@ export function useProjectState({
   setCurrentScale,
   setShowCriticalPath,
   setShowBaselines,
-  showToast
+  showToast,
+  flushPendingSave
 }: UseProjectStateOptions) {
   const [customProjects, setCustomProjects] = useState<SavedProject[]>(initialProjects);
   const [activeProjectId, setActiveProjectId] = useState<string>(initialActiveId);
+  const flushPendingSaveRef = useRef(flushPendingSave);
+  flushPendingSaveRef.current = flushPendingSave;
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
   const [newPlanTemplateType, setNewPlanTemplateType] = useState<"blank" | "master" | "clone">("blank");
@@ -59,6 +63,9 @@ export function useProjectState({
 
   const handleSelectProject = useCallback(
     (projectId: string) => {
+      // Synchronously flush unpersisted edits of current project before switching
+      flushPendingSaveRef.current?.();
+
       setActiveProjectId(projectId);
       try {
         localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, projectId);
@@ -216,6 +223,9 @@ export function useProjectState({
         : `Delete local plan "${projToDelete?.name || projectId}" from browser storage?`;
       const confirmed = window.confirm(promptMsg);
       if (!confirmed) return;
+      if (activeProjectId === projectId) {
+        flushPendingSaveRef.current?.();
+      }
       const updated = customProjects.filter((p) => p.id !== projectId);
       setCustomProjects(updated);
       saveCustomProjects(updated);

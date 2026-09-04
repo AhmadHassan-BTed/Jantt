@@ -8,7 +8,8 @@ import {
   addDays,
   resolveSchedule,
   resolveTaskAssignee,
-  validate
+  validate,
+  syncTaskProgressAndStatus
 } from "@jantt/core";
 import type {
   DateFilterMode,
@@ -60,12 +61,10 @@ export function useTaskActions({
     if (dateFilterMode !== "all" && dateFilterBehavior === "hide") {
       baseTasks = baseTasks.filter(isTaskMatchingDateFilter);
     }
-    // Apply status → progress auto-sync
+    // Apply universal status <-> progress auto-sync
     let tasks = baseTasks.map((t) => {
-      if (t.status === "completed") return { ...t, progress: 1.0 };
-      if (t.status === "submitted" && (t.progress ?? 0) < 0.75) return { ...t, progress: 0.75 };
-      if (t.status === "not-started" && (t.progress ?? 0) > 0) return { ...t, progress: 0 };
-      return t;
+      const synced = syncTaskProgressAndStatus({ status: t.status, progress: t.progress }, t);
+      return { ...t, ...synced };
     });
     if (!summarySortConfig.column || !summarySortConfig.direction) return tasks;
     const { column, direction } = summarySortConfig;

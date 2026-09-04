@@ -5,7 +5,8 @@ import {
   type Team,
   type ValidationResult,
   validate,
-  downloadCsv
+  downloadCsv,
+  syncTaskProgressAndStatus
 } from "@jantt/core";
 
 interface UseEditorStateOptions {
@@ -81,6 +82,11 @@ export function useEditorState({
         finalData = { ...currentMaster, ...updated, tasks: mergedTasks };
       }
     }
+    const syncedTasks = finalData.tasks.map((t) => {
+      const synced = syncTaskProgressAndStatus({ status: t.status, progress: t.progress }, t);
+      return { ...t, ...synced };
+    });
+    finalData = { ...finalData, tasks: syncedTasks };
 
     setParsedData(finalData);
     if (Array.isArray((finalData as any).people) && onPeopleChangeRef.current) {

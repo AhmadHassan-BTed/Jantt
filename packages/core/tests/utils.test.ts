@@ -4,7 +4,8 @@ import {
   getTaskDisplayName,
   getEffectiveGap,
   clampDayWidth,
-  buildViewportSnapshot
+  buildViewportSnapshot,
+  syncTaskProgressAndStatus
 } from "../src/utils";
 import { resolveSchedule } from "../src/resolver";
 import { Task } from "../src/types";
@@ -120,6 +121,87 @@ describe("Core Utilities & Robustness", () => {
       // Verify original input remained pristine
       expect(originalTasks[0].baseline!.start).toBe("2026-09-01");
       expect(originalTasks[0].fields!.budget).toBe(1000);
+    });
+  });
+
+  describe("syncTaskProgressAndStatus", () => {
+    it("sets progress to 1.0 when status is completed", () => {
+      expect(syncTaskProgressAndStatus({ status: "completed" })).toEqual({
+        status: "completed",
+        progress: 1.0
+      });
+    });
+
+    it("sets progress to 0 when status is not-started", () => {
+      expect(syncTaskProgressAndStatus({ status: "not-started" }, { progress: 0.8 })).toEqual({
+        status: "not-started",
+        progress: 0.0
+      });
+    });
+
+    it("ensures submitted status has at least 0.75 progress", () => {
+      expect(syncTaskProgressAndStatus({ status: "submitted" }, { progress: 0.2 })).toEqual({
+        status: "submitted",
+        progress: 0.75
+      });
+      expect(syncTaskProgressAndStatus({ status: "submitted" }, { progress: 0.9 })).toEqual({
+        status: "submitted",
+        progress: 0.9
+      });
+    });
+
+    it("adjusts in-progress status from 0 or 1.0 to 0.25 default", () => {
+      expect(syncTaskProgressAndStatus({ status: "in-progress" }, { progress: 0 })).toEqual({
+        status: "in-progress",
+        progress: 0.25
+      });
+      expect(syncTaskProgressAndStatus({ status: "in-progress" }, { progress: 1.0 })).toEqual({
+        status: "in-progress",
+        progress: 0.25
+      });
+      expect(syncTaskProgressAndStatus({ status: "in-progress" }, { progress: 0.6 })).toEqual({
+        status: "in-progress",
+        progress: 0.6
+      });
+    });
+
+    it("sets status to completed when progress is 1.0", () => {
+      expect(syncTaskProgressAndStatus({ progress: 1.0 }, { status: "in-progress" })).toEqual({
+        status: "completed",
+        progress: 1.0
+      });
+    });
+
+    it("sets status to not-started when progress is 0.0", () => {
+      expect(syncTaskProgressAndStatus({ progress: 0.0 }, { status: "in-progress" })).toEqual({
+        status: "not-started",
+        progress: 0.0
+      });
+    });
+
+    it("transitions not-started or completed to in-progress when progress is between 0 and 1", () => {
+      expect(syncTaskProgressAndStatus({ progress: 0.5 }, { status: "completed" })).toEqual({
+        status: "in-progress",
+        progress: 0.5
+      });
+      expect(syncTaskProgressAndStatus({ progress: 0.3 }, { status: "not-started" })).toEqual({
+        status: "in-progress",
+        progress: 0.3
+      });
+    });
+
+    it("preserves submitted status if progress >= 0.75", () => {
+      expect(syncTaskProgressAndStatus({ progress: 0.8 }, { status: "submitted" })).toEqual({
+        status: "submitted",
+        progress: 0.8
+      });
+    });
+
+    it("transitions submitted to in-progress if progress drops below 0.75", () => {
+      expect(syncTaskProgressAndStatus({ progress: 0.5 }, { status: "submitted" })).toEqual({
+        status: "in-progress",
+        progress: 0.5
+      });
     });
   });
 });
