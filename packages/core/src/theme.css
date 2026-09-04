@@ -893,14 +893,15 @@
   flex-shrink: 0;
   border-bottom: 1px solid var(--jantt-border);
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 70px 58px;
+  grid-template-columns: minmax(120px, 1fr) 36px 42px;
+  gap: 6px;
   align-items: center;
-  padding: 0 14px;
-  font-size: 11px;
+  padding: 0 12px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--jantt-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   background: var(--jantt-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -910,14 +911,14 @@
 .jantt-label-row {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 70px 58px;
+  grid-template-columns: minmax(120px, 1fr) 36px 42px;
+  gap: 6px;
   align-items: center;
-  padding: 0 14px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--jantt-border-subtle);
   cursor: pointer;
   transition: background 0.15s ease;
   font-size: 12.5px;
-  gap: 8px;
   white-space: nowrap;
   box-sizing: border-box;
 }
@@ -1004,14 +1005,18 @@
 }
 
 .jantt-col-progress-pill {
-  font-size: 10.5px;
+  font-size: 10px;
   font-family: var(--jantt-font-mono);
   font-weight: 700;
   text-align: center;
-  padding: 2px 6px;
+  padding: 1.5px 4px;
   border-radius: 100px;
   background: rgba(56, 189, 248, 0.12);
   color: var(--jantt-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 /* Done / Completed Table Row Styles */
