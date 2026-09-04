@@ -1728,6 +1728,14 @@
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(56, 189, 248, 0.15);
 }
 
+.jantt-theme-beenie.jantt-hover-card,
+.jantt-theme-beenie .jantt-hover-card {
+  background: rgba(255, 245, 248, 0.96);
+  color: #831843;
+  border: 1px solid rgba(244, 114, 182, 0.45);
+  box-shadow: 0 20px 40px -10px rgba(236, 72, 153, 0.25), 0 0 0 1px rgba(244, 114, 182, 0.2);
+}
+
 .jantt-hover-card-header {
   display: flex;
   align-items: center;
@@ -2148,7 +2156,8 @@
 
 .jantt-theme-midnight-rose .jantt-btn-primary,
 .jantt-theme-sunset-crimson .jantt-btn-primary,
-.jantt-theme-nordic-frost .jantt-btn-primary {
+.jantt-theme-nordic-frost .jantt-btn-primary,
+.jantt-theme-beenie .jantt-btn-primary {
   color: #FFFFFF;
 }
 
@@ -2192,3 +2201,64 @@
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
+
+/* ==========================================================================
+   Beenie Theme — Cherry Blossom Aesthetic
+   Soft porcelain & petal pinks, organic petal curves, floral watermark pattern
+   ========================================================================== */
+
+.jantt-theme-beenie .jantt-timeline-area {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160' fill='none'%3E%3Cg transform='translate(50,50)' opacity='0.08'%3E%3Cellipse cx='0' cy='-16' rx='7' ry='12' fill='%23EC4899' transform='rotate(0)'/%3E%3Cellipse cx='0' cy='-16' rx='7' ry='12' fill='%23EC4899' transform='rotate(72)'/%3E%3Cellipse cx='0' cy='-16' rx='7' ry='12' fill='%23EC4899' transform='rotate(144)'/%3E%3Cellipse cx='0' cy='-16' rx='7' ry='12' fill='%23EC4899' transform='rotate(216)'/%3E%3Cellipse cx='0' cy='-16' rx='7' ry='12' fill='%23EC4899' transform='rotate(288)'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23F43F5E'/%3E%3C/g%3E%3Cg opacity='0.08'%3E%3Cpath d='M130,25 C124,31 124,40 130,44 C136,40 136,31 130,25 Z' fill='%23F472B6' transform='rotate(25, 130, 34)'/%3E%3Cpath d='M20,115 C14,121 14,130 20,134 C26,130 26,121 20,115 Z' fill='%23F472B6' transform='rotate(-40, 20, 124)'/%3E%3Cpath d='M120,125 C115,129 115,137 120,141 C125,137 125,129 120,125 Z' fill='%23FB7185' transform='rotate(15, 120, 133)'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 160px 160px;
+}
+
+.jantt-theme-beenie .jantt-task-bar {
+  box-shadow: 0 3px 10px -2px rgba(236, 72, 153, 0.30), 0 0 0 1px rgba(255, 255, 255, 0.45) inset;
+}
+
+.jantt-theme-beenie .jantt-task-bar:hover {
+  box-shadow: 0 6px 16px -2px rgba(236, 72, 153, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.70) inset;
+  filter: saturate(1.08);
+}
+
+.jantt-theme-beenie .jantt-task-bar.is-done {
+  background: var(--jantt-bar-done, #D4A5B8) !important;
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  box-shadow: 0 2px 6px rgba(212, 165, 184, 0.30);
+}
+
+.jantt-theme-beenie .jantt-milestone {
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.55);
+}
+
+.jantt-theme-beenie .jantt-add-task-btn,
+.jantt-theme-beenie .jantt-btn-primary {
+  background: linear-gradient(135deg, #EC4899 0%, #F43F5E 100%);
+  color: #FFFFFF;
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(236, 72, 153, 0.38);
+}
+
+.jantt-theme-beenie .jantt-add-task-btn:hover,
+.jantt-theme-beenie .jantt-btn-primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.52);
+}
+
+.jantt-theme-beenie .jantt-scale-btn.is-active,
+.jantt-theme-beenie .jantt-settings-btn.is-active {
+  background: linear-gradient(135deg, #EC4899 0%, #F43F5E 100%);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.35);
+}
+
+.jantt-theme-beenie .jantt-header-today-pill {
+  background: linear-gradient(135deg, #EC4899 0%, #F43F5E 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.35);
+}
+

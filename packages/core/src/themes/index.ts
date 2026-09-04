@@ -5,4 +5,5 @@ export * from "./cyber-emerald";
 export * from "./midnight-rose";
 export * from "./sunset-crimson";
 export * from "./nordic-frost";
+export * from "./beenie";
 export * from "./manager";

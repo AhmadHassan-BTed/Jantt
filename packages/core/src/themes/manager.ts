@@ -5,6 +5,7 @@ import { cyberEmeraldTheme } from "./cyber-emerald";
 import { midnightRoseTheme } from "./midnight-rose";
 import { sunsetCrimsonTheme } from "./sunset-crimson";
 import { nordicFrostTheme } from "./nordic-frost";
+import { beenieTheme } from "./beenie";
 
 /**
  * Enterprise Theme Manager for Jantt.
@@ -22,6 +23,7 @@ export class ThemeManager {
     this.registerTheme(midnightRoseTheme);
     this.registerTheme(sunsetCrimsonTheme);
     this.registerTheme(nordicFrostTheme);
+    this.registerTheme(beenieTheme);
   }
 
   /**
