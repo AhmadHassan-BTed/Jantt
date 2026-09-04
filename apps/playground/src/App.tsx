@@ -65,7 +65,10 @@ import {
   ListTodo,
   Filter,
   EyeOff,
-  Share2
+  Share2,
+  Lightbulb,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
@@ -1869,7 +1872,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                   <option value="default">{DEFAULT_TEMPLATE.name}</option>
                 </optgroup>
                 {customProjects.filter((p) => p.source !== "linked").length > 0 && (
-                  <optgroup label={`💻 Local Plans (${customProjects.filter((p) => p.source !== "linked").length})`}>
+                  <optgroup label={`Local Plans (${customProjects.filter((p) => p.source !== "linked").length})`}>
                     {customProjects
                       .filter((p) => p.source !== "linked")
                       .map((p) => (
@@ -1880,12 +1883,12 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                   </optgroup>
                 )}
                 {customProjects.filter((p) => p.source === "linked").length > 0 && (
-                  <optgroup label={`☁️ Linked Cloud Plans (${customProjects.filter((p) => p.source === "linked").length})`}>
+                  <optgroup label={`Linked Cloud Plans (${customProjects.filter((p) => p.source === "linked").length})`}>
                     {customProjects
                       .filter((p) => p.source === "linked")
                       .map((p) => (
                         <option key={p.id} value={p.id}>
-                          ☁️ {p.name} ({p.data?.tasks?.length || 0} tasks)
+                          {p.name} ({p.data?.tasks?.length || 0} tasks)
                         </option>
                       ))}
                   </optgroup>
@@ -2363,15 +2366,19 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                               updated[idx] = { ...rule, direction: rule.direction === "asc" ? "desc" : "asc" };
                               setKanbanSortRules(updated);
                             }}
+                            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                           >
-                            {rule.direction === "asc" ? "↑" : "↓"}
+                            {rule.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
                           </button>
                           {kanbanSortRules.length > 1 && (
                             <button
                               className="kanban-sort-remove-btn"
                               title="Remove this sort rule"
                               onClick={() => setKanbanSortRules(kanbanSortRules.filter((_, i) => i !== idx))}
-                            >×</button>
+                              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                            >
+                              <X size={11} />
+                            </button>
                           )}
                         </div>
                       ))}
@@ -2379,7 +2386,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                         <button
                           className="kanban-sort-add-btn"
                           onClick={() => setKanbanSortRules([...kanbanSortRules, { field: "start", direction: "asc" }])}
-                        >+ Add Sort</button>
+                          style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <Plus size={11} />
+                          <span>Add Sort</span>
+                        </button>
                       )}
                     </div>
 
@@ -2489,7 +2500,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                     </div>
                                     {/* Progress: hide for completed, show checkmark */}
                                     {isCompleted ? (
-                                      <div className="kanban-card-complete-badge">✓ Done</div>
+                                      <div className="kanban-card-complete-badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                        <Check size={11} />
+                                        <span>Done</span>
+                                      </div>
                                     ) : t.progress !== undefined && t.progress !== null ? (
                                       <div className="kanban-card-prog-wrap">
                                         <div className="kanban-card-prog-bar" style={{ width: `${Math.round(t.progress * 100)}%` }} />
@@ -2584,8 +2598,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                       <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px" }}>
                         Work Breakdown &amp; Category Distribution
                         {summarySortConfig.column && (
-                          <span style={{ fontSize: "11px", fontWeight: 400, marginLeft: "10px", color: "var(--jantt-text-muted)" }}>
-                            Sorted by {summarySortConfig.column} {summarySortConfig.direction === "asc" ? "↑" : "↓"}
+                          <span style={{ fontSize: "11px", fontWeight: 400, marginLeft: "10px", color: "var(--jantt-text-muted)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <span>Sorted by {summarySortConfig.column}</span>
+                            {summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
                             <button
                               onClick={() => setSummarySortConfig({ column: "", direction: null })}
                               style={{ marginLeft: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--jantt-accent)", fontSize: "11px" }}
@@ -2598,24 +2613,41 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                           <tr>
                             {(["wbs", "name", "category", "assignee"] as const).map((col) => (
                               <th key={col} className={`summary-th-sortable ${summarySortConfig.column === col ? "is-sorted" : ""}`} onClick={() => handleSummarySort(col)}>
-                                {col === "wbs" ? "WBS" : col === "name" ? "Task Name" : col === "category" ? "Category" : "Assignee / Team"}
-                                {summarySortConfig.column === col && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  <span>{col === "wbs" ? "WBS" : col === "name" ? "Task Name" : col === "category" ? "Category" : "Assignee / Team"}</span>
+                                  {summarySortConfig.column === col && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                                </span>
                               </th>
                             ))}
                             <th className={`summary-th-sortable ${summarySortConfig.column === "start" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("start")}>
-                              Start{summarySortConfig.column === "start" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Start</span>
+                                {summarySortConfig.column === "start" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                              </span>
                             </th>
                             <th className={`summary-th-sortable ${summarySortConfig.column === "end" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("end")}>
-                              End{summarySortConfig.column === "end" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>End</span>
+                                {summarySortConfig.column === "end" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                              </span>
                             </th>
                             <th className={`summary-th-sortable ${summarySortConfig.column === "budget" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("budget")}>
-                              Budget ($){summarySortConfig.column === "budget" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Budget ($)</span>
+                                {summarySortConfig.column === "budget" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                              </span>
                             </th>
                             <th className={`summary-th-sortable ${summarySortConfig.column === "status" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("status")}>
-                              Status{summarySortConfig.column === "status" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Status</span>
+                                {summarySortConfig.column === "status" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                              </span>
                             </th>
                             <th className={`summary-th-sortable ${summarySortConfig.column === "progress" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("progress")}>
-                              Progress{summarySortConfig.column === "progress" && (summarySortConfig.direction === "asc" ? " ↑" : " ↓")}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Progress</span>
+                                {summarySortConfig.column === "progress" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                              </span>
                             </th>
                           </tr>
                         </thead>
@@ -2686,7 +2718,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                 </td>
                                 <td>
                                   {isCompleted ? (
-                                    <span className="progress-complete-badge">✓ 100%</span>
+                                    <span className="progress-complete-badge" style={{ display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                                      <Check size={11} />
+                                      <span>100%</span>
+                                    </span>
                                   ) : (
                                     <div className="summary-progress-cell">
                                       <div className="summary-mini-progress-bar">
@@ -2736,7 +2771,14 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                             onChange={(e) => setTasksSearchQuery(e.target.value)}
                           />
                           {tasksSearchQuery && (
-                            <button className="tasks-search-clear" onClick={() => setTasksSearchQuery("")}>✕</button>
+                            <button
+                              className="tasks-search-clear"
+                              onClick={() => setTasksSearchQuery("")}
+                              title="Clear search"
+                              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                            >
+                              <X size={12} />
+                            </button>
                           )}
                         </div>
 
@@ -2955,7 +2997,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                       <option value="not-started">To Do</option>
                                       <option value="in-progress">In Progress</option>
                                       <option value="submitted">Submitted</option>
-                                      <option value="completed">Completed ✓</option>
+                                      <option value="completed">Completed</option>
                                     </select>
                                     <button
                                       className="kanban-sort-remove-btn"
@@ -3069,7 +3111,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                   )}
                                 </div>
                                 {isCompleted ? (
-                                  <div className="today-card-complete">✓ Completed</div>
+                                  <div className="today-card-complete" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                    <Check size={11} />
+                                    <span>Completed</span>
+                                  </div>
                                 ) : (
                                   <div className="today-card-progress">
                                     <div className="today-prog-bar-wrap">
@@ -3099,7 +3144,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                                     <option value="not-started">To Do</option>
                                     <option value="in-progress">In Progress</option>
                                     <option value="submitted">Submitted</option>
-                                    <option value="completed">Completed ✓</option>
+                                    <option value="completed">Completed</option>
                                   </select>
                                   <button
                                     className="kanban-sort-remove-btn"
@@ -3630,8 +3675,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                           color: "var(--jantt-text)"
                         }}
                       >
-                        <span>
-                          💡 <strong>{effectivePeople.length - people.length} assignee{effectivePeople.length - people.length === 1 ? "" : "s"}</strong> detected from schedule &amp; meta ({parsedData?.meta?.person ? `${parsedData.meta.person}, etc.` : "tasks"}).
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                          <Lightbulb size={14} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
+                          <span>
+                            <strong>{effectivePeople.length - people.length} assignee{effectivePeople.length - people.length === 1 ? "" : "s"}</strong> detected from schedule &amp; meta ({parsedData?.meta?.person ? `${parsedData.meta.person}, etc.` : "tasks"}).
+                          </span>
                         </span>
                         <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
                           Visible across all views &amp; filters

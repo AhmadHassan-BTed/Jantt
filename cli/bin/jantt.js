@@ -71,7 +71,7 @@ if (command === "validate") {
       errors.forEach((err) => console.error(`  - \x1b[33m${err}\x1b[0m`));
       process.exit(1);
     } else {
-      console.log(`\x1b[32m✔ Validation Passed: ${filePath} is valid Jantt JSON (${json.tasks.length} tasks)\x1b[0m`);
+      console.log(`\x1b[32m[PASS] Validation Passed: ${filePath} is valid Jantt JSON (${json.tasks.length} tasks)\x1b[0m`);
       process.exit(0);
     }
   } catch (err) {
