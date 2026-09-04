@@ -17,7 +17,11 @@ import {
   layout,
   exportToCsv,
   downloadCsv,
-  downloadJson
+  downloadJson,
+  themeManager,
+  fetchRemotePlan,
+  pushRemotePlan,
+  startRemoteSyncPolling
 } from "@jantt/core";
 ```
 
@@ -25,23 +29,42 @@ import {
 Mounts an interactive Gantt chart into an HTMLElement.
 
 **Parameters:**
-- `container: HTMLElement`: Target DOM container.
-- `data: JanttData`: Initial JSON state.
+- `container: HTMLElement`: Target DOM container element.
+- `data: JanttData`: Initial JSON state conforming to Jantt Schema v1.
 - `options?: JanttOptions`: Optional configuration:
   - `viewport?: ViewportOptions`
-  - `theme?: Record<string, string>`
+    - `scale?: TimeScale` (`"day" | "week" | "month" | "quarter" | "year"`)
+    - `dayWidth?: number` (Custom pixel width per day)
+    - `rowHeight?: number` (Default 46px)
+    - `rowHeightMode?: "custom" | "fit"`
+    - `linkRouting?: "orthogonal" | "curved" | "direct"`
+    - `showCriticalPath?: boolean`
+    - `showBaselines?: boolean`
+    - `selectedDate?: string | null`
+    - `columns?: GridColumn[]`
+  - `theme?: Record<string, string>` (Custom CSS variable tokens)
+  - `themeClassName?: string` (Theme class e.g. `"theme-swiss-dark"`)
   - `readOnly?: boolean`
   - `searchQuery?: string`
-  - `onChange?: (draft: JanttData) => void`
+  - `selectedDate?: string | null`
   - `onCommit?: (final: JanttData) => void`
+  - `onChange?: (draft: JanttData) => void`
+  - `onViewportChange?: (viewport: ViewportOptions) => void`
   - `onTaskClick?: (task: Task) => void`
-  - `onLinkCreate?: (fromId: string, toId: string) => void`
-  - `onLinkDelete?: (fromId: string, toId: string) => void`
+  - `onTaskAdd?: (newTask: Task) => void`
+  - `onTaskDelete?: (taskId: string) => void`
+  - `onDateClick?: (dateStr: string) => void`
+  - `onClearDateFilter?: () => void`
+  - `onDayWidthChange?: (dayWidth: number) => void`
 
 **Returns `JanttInstance`:**
 - `instance.update(newData: JanttData, newOptions?: Partial<JanttOptions>): void`
 - `instance.destroy(): void`
 - `instance.getData(): JanttData`
+- `instance.filterByDate(dateStr: string | null): void`
+- `instance.getSelectedDate(): string | null`
+- `instance.setDayWidth(w: number): void`
+- `instance.getDayWidth(): number`
 
 ---
 
@@ -59,12 +82,27 @@ interface ValidationResult {
 ---
 
 ### `resolveSchedule(tasks: Task[], defaultGapDays?: number): Task[]`
-Pure function that computes topological schedule relaxation and returns an updated task array.
+Pure function that computes topological schedule relaxation and returns an updated task array. Handles multi-predecessor dependencies (`dependsOn: string[]`) and preserves durations.
 
 ---
 
 ### `calculateCriticalPath(tasks: Task[]): CriticalPathResult`
 Pure function that computes early/late start float and returns sets of critical task IDs and dependency link keys.
+
+---
+
+### Exporters (`@jantt/core`)
+
+```typescript
+// Export schedule data as RFC-4180 CSV string
+const csvString = exportToCsv(data);
+
+// Trigger immediate browser CSV file download
+downloadCsv(data, "project-schedule.csv");
+
+// Trigger formatted JSON file download
+downloadJson(data, "project-plan.json");
+```
 
 ---
 
@@ -83,7 +121,8 @@ function App() {
       viewport={{
         scale: "week",
         showCriticalPath: true,
-        showBaselines: true
+        showBaselines: true,
+        linkRouting: "orthogonal"
       }}
       onChange={(draft) => console.log("Draft change:", draft)}
       onCommit={(final) => saveToServer(final)}

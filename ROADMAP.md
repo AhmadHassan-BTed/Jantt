@@ -32,14 +32,34 @@ To be the world's most capable, lightweight, dependency-free Gantt chart engine 
 - [x] Draggable grid/timeline splitter.
 - [x] Multi-tier hierarchical date header (Year banner, Month row, Day cells).
 
-### Phase 3: Enterprise Extensibility & Portfolio Roadmaps (Upcoming v1.2.0) [In Progress]
+### Phase 3: Multi-View Workspace, People & Extensibility (Released in v1.2.0) [Completed]
+- [x] **Multi-View Interactive Workspace**:
+  - Gantt Timeline view with sticky data grid and 90° CAD links.
+  - Interactive Kanban Board with multi-sort (priority, dates, assignee, WBS).
+  - Tasks Checklist (`Todo List` with 1-click completion) and Detailed Cards mode.
+  - Budget & KPI Analytics dashboard with cost variance tracking.
+- [x] **People & Teams Auto-Discovery Engine**:
+  - Automatic entity inference from `meta.person`, `tasks[].assignee`, and `documents[].owner`.
+  - 1-click persistence into JSON schema `people[]`.
+  - Squad/Team assignments and avatar palette styling.
+- [x] **Universal Date Filter Subheader**:
+  - Presets for Today, This Week, Pick Date, and Date Range.
+  - Contextual Dim vs Filter focus modes across all views.
+- [x] **Smooth Cursor-Anchored Column Resizing**:
+  - Exponential rubberband curve drag-to-resize header columns.
+  - Cursor-anchored viewport transform with `requestAnimationFrame` 60/120fps throttling.
+- [x] **Client-Side High-Res Exporters**:
+  - Native RFC-4180 CSV spreadsheet export (`exportToCsv`, `downloadCsv`).
+  - Native SVG vector download.
+  - JSON plan export.
+- [x] **Remote Cloud URL Live Sync**:
+  - Two-way polling and push sync with remote JSON URLs.
+  - ETag caching, conflict detection, and network status indicators.
+
+### Phase 4: Enterprise Hierarchy & Scalability (Upcoming v1.3.0) [In Progress]
 - [ ] **Hierarchical Grouping & Subtasks**:
   - Parent summary tasks spanning across subtasks with accordion collapse/expand.
   - Category and Assignee lane grouping.
-- [ ] **Client-Side Exporters**:
-  - Native high-res PNG image export (`canvas.toBlob()`).
-  - Native SVG vector file download.
-  - CSV schedule table export.
 - [ ] **Custom Column Configuration**:
   - Declarative column definitions in JSON `viewport.columns`.
 - [ ] **Virtual Scrolling**:

@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-180%2F180%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![Tests Passing](https://img.shields.io/badge/Tests-233%2F233%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
 [![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
@@ -158,19 +158,6 @@ Jantt features a fully reactive, CSS variable-driven theming architecture with o
   </tr>
 </table>
 
----
-
-## Graphic Assets & Brand Identity
-
-The Jantt design system includes tailored vector icons and badges located in [`assets/`](./assets):
-
-| Graphic | Asset File | Description |
-| :---: | :--- | :--- |
-| <img src="./assets/jantt-logo.svg" width="140" /> | [`assets/jantt-logo.svg`](./assets/jantt-logo.svg) | Official horizontal banner logo with dual-tone timeline bars. |
-| <img src="./assets/jantt-icon-gradient.svg" width="40" /> | [`assets/jantt-icon-gradient.svg`](./assets/jantt-icon-gradient.svg) | Vibrant blue-to-emerald gradient icon badge. |
-| <img src="./assets/jantt-icon-duotone.svg" width="40" /> | [`assets/jantt-icon-duotone.svg`](./assets/jantt-icon-duotone.svg) | Deep duotone blue and emerald badge. |
-| <img src="./assets/jantt-icon-monochrome.svg" width="40" /> | [`assets/jantt-icon-monochrome.svg`](./assets/jantt-icon-monochrome.svg) | High-contrast monochrome icon for documentation. |
-| <img src="./assets/jantt-icon-outline.svg" width="40" /> | [`assets/jantt-icon-outline.svg`](./assets/jantt-icon-outline.svg) | Minimal geometric outline icon for light backgrounds. |
 
 ---
 
@@ -272,75 +259,63 @@ sequenceDiagram
 
 ---
 
-## Key Capabilities
+## Feature Matrix & Capabilities Guide
 
-<details open>
-<summary><b>1. Interactive Drag-to-Link (90° Orthogonal Step Routing)</b></summary>
-<br />
-Hovering any task bar or milestone reveals circular connector anchor ports on its edges. Dragging an anchor draws an interactive live wire. Dropping it onto another task establishes a <code>dependsOn</code> relationship, immediately triggering a topological schedule cascade. All connectors route with right-angle turns matching professional CAD and MS Project standards.
-</details>
+Jantt bridges the gap between declarative machine data and human project intuition. Below is a comprehensive overview of its core capabilities:
 
-<details open>
-<summary><b>2. Multi-Scale Timeline Zoom (Day to Year)</b></summary>
-<br />
-Switch between 5 zoom tiers on the fly:
-<ul>
-  <li><b>Day View</b> (36px/day): Granular day-by-day scheduling.</li>
-  <li><b>Week View</b> (18px/day): 7-day sprint blocks with month indicators.</li>
-  <li><b>Month View</b> (7px/day): Standard quarterly roadmaps.</li>
-  <li><b>Quarter View</b> (3px/day): Macro portfolio roadmaps.</li>
-  <li><b>Year View</b> (1.5px/day): Multi-year strategic planning.</li>
-</ul>
-</details>
+### 1. High-Performance Core Engine (`@jantt/core`)
+* **Zero Runtime Dependencies**: 100% pure TypeScript. No external libraries, no D3 overhead, no heavy bloated chart dependencies (<14 KB gzip).
+* **Deterministic Layout & 60/120fps Rendering**: Coordinated `requestAnimationFrame` render cycles eliminate layout thrashing, frame drops, and cursor stutter during high-speed timeline scrubbing.
+* **Topological Schedule Cascade Resolver**: Graph-based constraint solver with multi-predecessor pacing ($ES(T) = \max(EF(P) + \text{gap})$). Downstream tasks shift automatically when predecessors move, while `locked: true` milestones remain fixed reference points.
+* **Algorithmic Critical Path & Float Calculation**: Dual-pass forward/backward scheduling computes total slack/float. Tasks with zero float are highlighted with an illuminating bottleneck glow to identify schedule-dictating sequences.
 
-<details open>
-<summary><b>3. Algorithmic Critical Path Calculation</b></summary>
-<br />
-The core engine executes forward and backward passes to compute Early Start/Finish and Late Start/Finish float values. Tasks with zero total float—the bottleneck sequence that directly dictates project completion—are automatically calculated and illuminated when the <b>Critical Path</b> toggle is activated.
-</details>
+### 2. Interactive Gantt Timeline
+* **Interactive Drag-to-Link (90° Orthogonal CAD Routing)**: Hovering any task reveals circular connector anchor ports. Dragging an anchor port draws an interactive live wire; dropping it onto a successor establishes a `dependsOn` link with professional CAD-style right-angle routing.
+* **Multi-Scale Timeline Zoom (5 Tiers + Continuous Slider)**: Switch seamlessly between **Day View** (36px/day), **Week View** (18px/day), **Month View** (7px/day), **Quarter View** (3px/day), and **Year View** (1.5px/day), or drag the continuous slider with cursor-anchored focus.
+* **Milestone Diamonds & Baseline Comparison Ghost Bars**:
+  * Milestones (`milestone: true` or duration 0) render as 45° rotated diamond checkpoints.
+  * Baseline comparisons (`baseline: { start, end }`) render subtle ghost bars beneath active tasks for immediate planned-vs-actual variance tracking.
+* **Inline Progress Drag Handle**: Intuitive handle directly on the task bar allows dragging completion from 0% to 100% without opening modals.
+* **Draggable Splitter & Fit-to-Height Mode**: Resizable boundary between table columns and timeline canvas, with optional "Fit" mode dynamically adjusting row heights to fit within the viewport without vertical scrolling.
 
-<details>
-<summary><b>4. Milestones & Baseline Ghost Bars</b></summary>
-<br />
-<ul>
-  <li><b>Milestones</b> (<code>milestone: true</code> or duration <code>0</code>): Render as rotated 45° diamond pins with status borders.</li>
-  <li><b>Baselines</b> (<code>baseline: { start, end }</code>): Render subtle ghost comparison bars beneath active bars, allowing instant visual tracking of original planned vs revised actual dates.</li>
-</ul>
-</details>
+### 3. Multi-View Interactive Workspace
+* **Gantt Chart View**: Full timeline schedule with sticky data grid, interactive dependency wires, and multi-tier date headers.
+* **Interactive Kanban Board**: Visual workflow columns (`pending`, `in-progress`, `completed`, `blocked`) featuring priority tags, category color accents, live progress updates, and multi-sort rules (by priority, start date, assignee, WBS).
+* **Tasks Checklist & Cards View**:
+  * **Todo Checklist**: Clean interactive task list with 1-click `[x]` completion checkboxes, automatic strikethroughs, and category tags.
+  * **Task Cards**: Detailed cards with progress bars, assignee avatars, team badges, and quick status actions.
+* **Budget & KPI Analytics View**: High-level executive dashboard tracking total budget, estimated cost, actual spend, cost variance, completion velocity, and deliverable readiness.
 
-<details>
-<summary><b>5. Inline Progress Slider</b></summary>
-<br />
-Inside each task bar, a dedicated progress drag handle enables intuitive adjustment of completion percentage (0% to 100%) directly on the chart canvas without opening modals.
-</details>
+### 4. Built for AI Agents & LLM Toolchains
+* **JSON-as-Interface**: Outputting structured JSON consumes **$10\times$ fewer tokens** than fragile React JSX or HTML canvas boilerplate.
+* **Zero UI Hallucinations**: Language models focus purely on data logic, milestones, and dates. Jantt guarantees deterministic math, valid layouts, and error-free graphics.
+* **AI Benchmark Cheatsheet**: Copy-paste reference schema optimized for ChatGPT, Claude 3.5 Sonnet, Gemini 1.5 Pro, and Cursor.
+* **Bidirectional Human-in-the-Loop Roundtrip**: Humans visually drag dates, toggle checkboxes, or re-link tasks; Jantt immediately serializes clean, validated JSON back to disk or agent context.
 
-<details>
-<summary><b>6. Draggable Grid-Timeline Splitter</b></summary>
-<br />
-A vertical splitter bar separates the left data grid from the right timeline area. Drag to reveal more column data or maximize timeline visibility (180px to 600px).
-</details>
+### 5. Academic & Student Application Pipeline Planning
+* **Concurrency & Deadline Management**: Designed to coordinate complex academic pipelines (such as PhD/MS admissions, scholarship applications, thesis research, and visa milestones).
+* **Funding & Fellowship Monitoring**: Track DAAD, Fulbright, SINGA, KAIST, Commonwealth, and university-specific funding deadlines side-by-side with required credential checklists.
+* **Estimated vs Confirmed Milestones**: Visual distinction between hard application cutoffs and rolling admission windows.
+* **Document Checklists (`documents[]`)**: Embedded credential tracking for transcripts, SOPs, GRE/IELTS score reports, and referee recommendation letters.
 
-<details>
-<summary><b>7. Multi-Tier Hierarchical Date Header</b></summary>
-<br />
-The timeline header adapts to the time span:
-<ul>
-  <li><b>Top Year Banner</b>: Renders automatically whenever the schedule crosses multiple calendar years (e.g., <code>2026</code> to <code>2027</code>).</li>
-  <li><b>Month Bar</b>: Displays localized month names.</li>
-  <li><b>Days Row</b>: Structured dual-line cells displaying uppercase weekday names (<code>Mo</code>, <code>Tu</code>...) and padded date numbers (<code>01</code>, <code>02</code>...).</li>
-</ul>
-</details>
+### 6. Personal Productivity & Time Blocking
+* **Universal Date Filter Subheader**: 1-click focus presets across all views:
+  * **Today**: Instant focus on tasks active today.
+  * **This Week**: Sprint focus for Monday through Sunday.
+  * **Pick Date**: Target a specific deadline or milestone day.
+  * **Date Range**: Filter between start and end boundaries.
+* **Dim vs Filter Focus Modes**: Switch between **Dim Mode** (fades non-matching tasks to maintain timeline context) and **Filter Mode** (completely hides non-matching items for distraction-free execution).
 
-<details>
-<summary><b>8. Client-Side Exporters</b></summary>
-<br />
-Export schedule data straight from the browser without server dependencies:
-<ul>
-  <li><b>CSV Spreadsheet</b>: RFC-4180 compliant CSV export via <code>exportToCsv(data)</code>.</li>
-  <li><b>Vector SVG</b>: Standalone SVG extraction via <code>exportSvgString(container)</code>.</li>
-  <li><b>JSON State</b>: Formatted JSON download via <code>downloadJson(data)</code>.</li>
-</ul>
-</details>
+### 7. People, Teams & Automatic Assignee Discovery
+* **Auto-Discovery Engine**: Automatically scans `meta.person`, `tasks[].assignee`, and `documents[].owner` to register team members with unique avatar colors and task counts.
+* **1-Click JSON Persistence**: Discovered assignees feature a `Save to JSON` button to write clean `Person` entries into the JSON schema's root `"people"` array.
+* **Team Squad Management**: Group team members into squads (Engineering, QA, Design, Operations) for workload filtering and assignee avatars.
+
+### 8. Developer & Enterprise Tooling
+* **Client-Side High-Res Exporters**: One-click RFC-4180 CSV spreadsheet export (`exportToCsv`), vector SVG extraction, and JSON file downloads.
+* **Remote Cloud URL Sync**: Bidirectional sync between local state and remote JSON endpoints with automatic polling, conflict detection, and ETag caching.
+* **Split Monaco JSON Editor**: Embedded VS Code-grade code editor with real-time JSON schema validation, error tooltips, and sync glow indicator.
+* **Bi-directional CLI (`jantt`)**: Live two-way synchronization between local JSON files on disk and the browser UI.
 
 ---
 

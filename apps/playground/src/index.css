@@ -1293,7 +1293,9 @@ body {
 .jantt-bar-group.jantt-task-dimmed,
 g[data-task-id].jantt-task-dimmed,
 div[data-row-id].jantt-task-dimmed,
-div[data-grid-row-id].jantt-task-dimmed {
+div[data-grid-row-id].jantt-task-dimmed,
+.jantt-dep-path.jantt-task-dimmed,
+path.jantt-dep-path.jantt-task-dimmed {
   opacity: 0.18 !important;
   filter: grayscale(0.85);
   transition: opacity 0.2s ease, filter 0.2s ease;

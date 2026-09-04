@@ -289,3 +289,132 @@ The `@jantt/core` validation engine enforces:
    - No circular dependency cycles (`A -> B -> C -> A`).
    - Timing sanity (`start` must be on or after prerequisite `end` + `gapDays`).
 6. **Progress Bounds**: `progress` must be a float between `0.0` and `1.0`.
+
+---
+
+## 9. People & Teams Registry (`people`, `teams`)
+
+The Jantt engine manages human resources, squad allocations, and avatar presentation through optional top-level `people` and `teams` arrays:
+
+```json
+{
+  "people": [
+    {
+      "id": "ahmad-hassan",
+      "name": "Ahmad Hassan",
+      "role": "Project Lead / Principal Investigator",
+      "teamId": "ai-core",
+      "color": "#38BDF8"
+    },
+    {
+      "id": "sarah-chen",
+      "name": "Sarah Chen",
+      "role": "Distributed Systems Researcher",
+      "teamId": "ai-core",
+      "color": "#10B981"
+    }
+  ],
+  "teams": [
+    {
+      "id": "ai-core",
+      "name": "Distributed Edge & FL Core",
+      "color": "#38BDF8"
+    }
+  ]
+}
+```
+
+> **Automatic Discovery**: If `people` is omitted, the Jantt UI automatically infers assignees and owners from `meta.person`, `tasks[].assignee`, and `documents[].owner`. Inferred members can be formalized into the JSON schema with a single click.
+
+---
+
+## 10. Academic Pipeline & Research Planning Benchmark
+
+Jantt is designed to coordinate complex academic pipelines (such as PhD/MS admissions, scholarship competitions, thesis defenses, and visa pathways). Below is a minimal production benchmark:
+
+```json
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "Ahmad Hassan — Global PhD/MS Application Pipeline",
+    "description": "Concurrent admissions and scholarship pipeline with post-study PR pathways",
+    "person": "Ahmad Hassan",
+    "start": "2026-09-01",
+    "end": "2027-03-31",
+    "scale": "month",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "currency": "USD",
+    "budget": 5000
+  },
+  "categories": {
+    "prep": { "label": "Exams & Transcripts", "color": "#F59E0B" },
+    "germany": { "label": "Germany (DAAD & Direct)", "color": "#38BDF8" },
+    "asia": { "label": "Asia (KAIST & SINGA)", "color": "#10B981" },
+    "na": { "label": "North America (Direct PhD)", "color": "#A78BFA" }
+  },
+  "documents": [
+    { "id": "doc-ielts", "label": "IELTS Academic TRF (Band 8.0+)", "status": "have", "owner": "Ahmad Hassan" },
+    { "id": "doc-transcripts", "label": "HEC Attested Degree & Transcript", "status": "have", "owner": "Ahmad Hassan" },
+    { "id": "doc-sop-germany", "label": "Research Statement (Distributed FL)", "status": "pending", "owner": "Ahmad Hassan" }
+  ],
+  "tasks": [
+    {
+      "id": "gre-exam",
+      "wbs": "1.1",
+      "label": "GRE General Exam & Score Transmission",
+      "category": "prep",
+      "start": "2026-09-01",
+      "end": "2026-09-28",
+      "progress": 0.8,
+      "priority": "high",
+      "assignee": "Ahmad Hassan"
+    },
+    {
+      "id": "gate-prep",
+      "wbs": "1.2",
+      "label": "All Test Scores & Dossiers Finalized",
+      "category": "prep",
+      "start": "2026-09-30",
+      "end": "2026-09-30",
+      "milestone": true,
+      "dependsOn": "gre-exam"
+    },
+    {
+      "id": "daad-sub",
+      "wbs": "2.1",
+      "label": "DAAD Helmut-Schmidt Application Deadline",
+      "category": "germany",
+      "start": "2026-10-01",
+      "end": "2026-10-31",
+      "dependsOn": "gate-prep",
+      "priority": "urgent",
+      "assignee": "Ahmad Hassan",
+      "notes": "Verified official DAAD portal deadline. Hard cutoff."
+    },
+    {
+      "id": "singa-sub",
+      "wbs": "3.1",
+      "label": "Singapore SINGA Agency for Science & Tech Award",
+      "category": "asia",
+      "start": "2026-10-15",
+      "end": "2026-12-01",
+      "dependsOn": "gate-prep",
+      "priority": "urgent",
+      "assignee": "Ahmad Hassan"
+    }
+  ]
+}
+```
+
+---
+
+## 11. Personal Productivity & Time Blocking
+
+For daily work, sprint planning, and time blocking:
+1. **Daily Focus**: Switch the Date Filter subheader to **Today** to isolate active tasks.
+2. **Weekly Sprints**: Select **This Week** to review commitments spanning Monday through Sunday.
+3. **Dim vs Filter**:
+   - Use **Dim Mode** to fade out future and completed tasks while preserving the surrounding roadmap context.
+   - Use **Filter Mode** for zero-distraction focus on items due right now.
+4. **Interactive Todo List**: Jump to the **Tasks** tab for a streamlined interactive checklist with one-click completion checkboxes and status updates.
