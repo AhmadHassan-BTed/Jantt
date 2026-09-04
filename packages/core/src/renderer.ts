@@ -79,6 +79,8 @@ export function renderJantt(
         showBaselines,
         autoCascade: controller ? controller.isAutoCascade() : (currentOptions.viewport?.autoCascade ?? currentOptions.autoCascade ?? true),
         selectedDate: selectedDateFilter,
+        showDateFilterBadge: currentOptions.showDateFilterBadge ?? currentOptions.viewport?.showDateFilterBadge,
+        filterTasksByDate: currentOptions.filterTasksByDate ?? currentOptions.viewport?.filterTasksByDate,
         labelWidth
       })
     );
@@ -241,7 +243,10 @@ export function renderJantt(
         (t.notes || "").toLowerCase().includes(q)
       );
     }
-    if (selectedDateFilter) {
+    const shouldFilterTasksByDate =
+      currentOptions.filterTasksByDate !== false &&
+      currentOptions.viewport?.filterTasksByDate !== false;
+    if (selectedDateFilter && shouldFilterTasksByDate) {
       displayTasks = displayTasks.filter((t) => {
         if (!t.start || !t.end) return false;
         return isTaskOnDate(t.start, t.end, selectedDateFilter!);
@@ -406,6 +411,9 @@ export function renderJantt(
         render();
       },
       selectedDate: selectedDateFilter,
+      showDateFilterBadge:
+        currentOptions.showDateFilterBadge !== false &&
+        currentOptions.viewport?.showDateFilterBadge !== false,
       onClearDateFilter: () => {
         selectedDateFilter = null;
         currentOptions.onClearDateFilter?.();
@@ -469,7 +477,12 @@ export function renderJantt(
       onColumnResizeStart: handleColumnResizeStart,
       onColumnResizeEnd: handleColumnResizeEnd,
       onDateClick: (dateStr: string) => {
-        selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
+        const shouldFilter =
+          currentOptions.filterTasksByDate !== false &&
+          currentOptions.viewport?.filterTasksByDate !== false;
+        if (shouldFilter) {
+          selectedDateFilter = selectedDateFilter === dateStr ? null : dateStr;
+        }
         currentOptions.onDateClick?.(dateStr);
         broadcastViewportChange();
         render();
@@ -657,6 +670,12 @@ export function renderJantt(
           controller.setAutoCascade(newOpts.viewport.autoCascade);
         } else if (newOpts.autoCascade !== undefined) {
           controller.setAutoCascade(newOpts.autoCascade);
+        }
+        if (newOpts.showDateFilterBadge !== undefined) {
+          currentOptions.showDateFilterBadge = newOpts.showDateFilterBadge;
+        }
+        if (newOpts.filterTasksByDate !== undefined) {
+          currentOptions.filterTasksByDate = newOpts.filterTasksByDate;
         }
         if (newOpts.selectedDate !== undefined) {
           selectedDateFilter = newOpts.selectedDate;

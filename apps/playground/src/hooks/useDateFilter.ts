@@ -61,9 +61,8 @@ export function useDateFilter({
   const dateFilterActiveDate = useMemo(() => {
     if (dateFilterMode === "today") return getTodayISODate();
     if (dateFilterMode === "date") return dateFilterValue || null;
-    if (dateFilterMode === "range") return dateFilterRangeStart || null;
     return null;
-  }, [dateFilterMode, dateFilterValue, dateFilterRangeStart]);
+  }, [dateFilterMode, dateFilterValue]);
 
   const isPersonFiltering =
     selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");

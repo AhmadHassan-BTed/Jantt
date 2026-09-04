@@ -52,7 +52,7 @@ export function getScaleFromDayWidth(dayWidth: number): TimeScale {
   return "year";
 }
 
-const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult">> = {
+const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> = {
   dayWidth: 32,
   rowHeight: DEFAULT_ROW_HEIGHT,
   rowHeightMode: "fit",
@@ -98,10 +98,12 @@ export function layout(
     dayWidth = SCALE_DAY_WIDTHS[scale] || 32;
   }
 
-  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult">> & {
+  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> & {
     columns?: ViewportOptions["columns"];
     currentTime?: Date;
     selectedDate?: string | null;
+    showDateFilterBadge?: boolean;
+    filterTasksByDate?: boolean;
     criticalResult?: CriticalPathResult;
   } = {
     ...DEFAULT_VIEWPORT,
@@ -122,6 +124,8 @@ export function layout(
     endDate: viewportOptions.endDate || "",
     currentTime: viewportOptions.currentTime,
     selectedDate: viewportOptions.selectedDate,
+    showDateFilterBadge: viewportOptions.showDateFilterBadge,
+    filterTasksByDate: viewportOptions.filterTasksByDate,
     criticalResult: viewportOptions.criticalResult
   };
 

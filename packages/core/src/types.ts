@@ -160,6 +160,8 @@ export interface ViewportOptions {
   autoCascade?: boolean;
   currentTime?: Date;
   selectedDate?: string | null;
+  showDateFilterBadge?: boolean;
+  filterTasksByDate?: boolean;
   columns?: GridColumn[];
   criticalResult?: CriticalPathResult;
 }
@@ -254,10 +256,12 @@ export interface JanttLayoutResult {
   tasks: TaskLayout[];
   dependencies: DependencyLine[];
   header: GridHeader;
-  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult">> & {
+  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> & {
     columns?: GridColumn[];
     currentTime?: Date;
     selectedDate?: string | null;
+    showDateFilterBadge?: boolean;
+    filterTasksByDate?: boolean;
     criticalResult?: CriticalPathResult;
   };
   canvasWidth: number;
@@ -273,6 +277,8 @@ export interface JanttOptions {
   readOnly?: boolean;
   searchQuery?: string;
   selectedDate?: string | null;
+  showDateFilterBadge?: boolean;
+  filterTasksByDate?: boolean;
   autoCascade?: boolean;
   sidebarContainer?: HTMLElement | string;
   onChange?: (draft: JanttData) => void;

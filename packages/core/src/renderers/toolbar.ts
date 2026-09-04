@@ -20,6 +20,7 @@ export interface ToolbarProps {
   searchQuery: string;
   autoCascade: boolean;
   selectedDate?: string | null;
+  showDateFilterBadge?: boolean;
   dayWidth: number;
   onDayWidthChange: (dayWidth: number) => void;
   onScaleChange: (scale: TimeScale) => void;
@@ -190,7 +191,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   centerZone.appendChild(critBtn);
 
   // 2d. Active Date Filter Badge
-  if (props.selectedDate) {
+  if (props.selectedDate && props.showDateFilterBadge !== false) {
     const dateFilterBadge = document.createElement("div");
     dateFilterBadge.className = "jantt-date-filter-badge";
     dateFilterBadge.title = `Filtered to ${props.selectedDate} — click to clear filter`;
@@ -412,7 +413,8 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   // 2d. Date Filter Badge
   const centerZone = toolbar.querySelector<HTMLElement>(".jantt-toolbar-center");
   let dateFilterBadge = toolbar.querySelector<HTMLElement>(".jantt-date-filter-badge");
-  if (nextProps.selectedDate) {
+  const shouldShowBadge = Boolean(nextProps.selectedDate && nextProps.showDateFilterBadge !== false);
+  if (shouldShowBadge) {
     if (!dateFilterBadge && centerZone) {
       dateFilterBadge = document.createElement("div");
       dateFilterBadge.className = "jantt-date-filter-badge";
@@ -426,7 +428,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
             <line x1="3" y1="10" x2="21" y2="10"></line>
           </svg>
         </span>
-        <span class="jantt-date-filter-text">${escapeHtml(nextProps.selectedDate)}</span>
+        <span class="jantt-date-filter-text">${escapeHtml(nextProps.selectedDate!)}</span>
         <button type="button" class="jantt-date-filter-clear" aria-label="Clear date filter" title="Clear filter">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -439,7 +441,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
     } else if (dateFilterBadge) {
       dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} — click to clear filter`;
       const txt = dateFilterBadge.querySelector<HTMLSpanElement>(".jantt-date-filter-text");
-      if (txt) txt.textContent = nextProps.selectedDate;
+      if (txt) txt.textContent = nextProps.selectedDate!;
     }
   } else if (dateFilterBadge) {
     dateFilterBadge.remove();
