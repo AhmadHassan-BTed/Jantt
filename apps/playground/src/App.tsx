@@ -1775,7 +1775,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
   return (
     <div
       className={`playground-app ${activeTheme.className}`}
-      style={{ ...(activeTheme.vars as React.CSSProperties) }}
+      style={{
+        colorScheme: activeTheme.mode || "dark",
+        ...(activeTheme.vars as React.CSSProperties)
+      }}
     >
       {/* Navbar Header */}
       <header className="navbar">
@@ -1930,20 +1933,22 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                     >
                       <GitFork size={12} />
                     </button>
-                    {linkedActive.sourceUrl && (
-                      <a
-                        href={linkedActive.sourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn-plan-action"
-                        title="Open original cloud link in new tab"
-                      >
-                        <ExternalLink size={12} />
-                      </a>
-                    )}
                   </>
                 );
               })()}
+
+              {/* Share Active Plan Button (Unified popup modal for link sharing & source document) */}
+              <button
+                className="btn-plan-action is-share"
+                onClick={() => {
+                  setShowShareModal(true);
+                  setCopiedShareLink(false);
+                }}
+                title="Share this project plan via link or open source"
+              >
+                <Share2 size={12} />
+                <span>Share</span>
+              </button>
 
               {/* Delete / Unlink Active Plan Button */}
               {activeProjectId !== "default" && (
@@ -2008,19 +2013,6 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
               </button>
             </div>
           </div>
-
-          {/* Share Plan Button */}
-          <button
-            className="btn-nav"
-            onClick={() => {
-              setShowShareModal(true);
-              setCopiedShareLink(false);
-            }}
-            title="Share this project plan via link or open source"
-          >
-            <Share2 size={13} />
-            <span>Share</span>
-          </button>
 
           {/* Theme Selector */}
           <div className="nav-select-group">

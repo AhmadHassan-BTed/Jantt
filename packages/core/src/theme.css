@@ -9,9 +9,9 @@
   --jantt-surface: #F8FAFC;
   --jantt-surface-hover: #F1F5F9;
   --jantt-surface-solid: #FFFFFF;
-  --jantt-border: #E2E8F0;
-  --jantt-border-subtle: #F1F5F9;
-  --jantt-border-strong: #CBD5E1;
+  --jantt-border: #CBD5E1;
+  --jantt-border-subtle: #E2E8F0;
+  --jantt-border-strong: #94A3B8;
   --jantt-text: #0F172A;
   --jantt-text-muted: #475569;
   --jantt-text-dim: #94A3B8;
@@ -22,8 +22,8 @@
   --jantt-critical: #D97706;
   --jantt-critical-glow: rgba(217, 119, 6, 0.18);
   --jantt-weekend-bg: transparent;
-  --jantt-grid-line: #F1F5F9;
-  --jantt-grid-row-line: #F1F5F9;
+  --jantt-grid-line: #E2E8F0;
+  --jantt-grid-row-line: #E2E8F0;
   --jantt-dep-line: #94A3B8;
   --jantt-dep-line-active: #0284C7;
   --jantt-bar-radius: 6px;
@@ -38,9 +38,9 @@
   --jantt-surface: rgba(18, 26, 44, 0.88);
   --jantt-surface-hover: rgba(28, 40, 66, 0.88);
   --jantt-surface-solid: #121A2C;
-  --jantt-border: rgba(255, 255, 255, 0.08);
-  --jantt-border-subtle: rgba(255, 255, 255, 0.04);
-  --jantt-border-strong: rgba(255, 255, 255, 0.16);
+  --jantt-border: rgba(255, 255, 255, 0.14);
+  --jantt-border-subtle: rgba(255, 255, 255, 0.08);
+  --jantt-border-strong: rgba(255, 255, 255, 0.22);
   --jantt-text: #F8FAFC;
   --jantt-text-muted: #94A3B8;
   --jantt-text-dim: #64748B;
@@ -51,8 +51,8 @@
   --jantt-critical: #F59E0B;
   --jantt-critical-glow: rgba(245, 158, 11, 0.35);
   --jantt-weekend-bg: transparent;
-  --jantt-grid-line: rgba(255, 255, 255, 0.045);
-  --jantt-grid-row-line: rgba(255, 255, 255, 0.065);
+  --jantt-grid-line: rgba(255, 255, 255, 0.12);
+  --jantt-grid-row-line: rgba(255, 255, 255, 0.09);
   --jantt-dep-line: #64748B;
   --jantt-dep-line-active: #38BDF8;
   --jantt-bar-radius: 6px;
