@@ -6,6 +6,8 @@ export interface TimelineHeaderOptions {
   dayWidth?: number;
   onDateClick?: (dateStr: string) => void;
   onColumnResize?: (newDayWidth: number, clientX?: number) => void;
+  onColumnResizeStart?: () => void;
+  onColumnResizeEnd?: () => void;
 }
 
 /**
@@ -16,8 +18,10 @@ function startColumnDragSession(
   initialPointerEvt: PointerEvent,
   startDayWidth: number,
   mode: "handle" | "cell",
-  onResize?: (newDayWidth: number, clientX: number) => void,
-  onDragStateChange?: (didMove: boolean) => void
+  onResize?: (newDayWidth: number, clientX?: number) => void,
+  onDragStateChange?: (didMove: boolean) => void,
+  onDragStart?: () => void,
+  onDragEnd?: () => void
 ) {
   // Only trigger on primary left click
   if (initialPointerEvt.button !== 0) return;
@@ -42,6 +46,7 @@ function startColumnDragSession(
       const threshold = mode === "handle" ? 2 : 4;
       if (Math.abs(deltaX) >= threshold || (mode === "handle" && Math.abs(deltaY) >= threshold)) {
         hasMoved = true;
+        onDragStart?.();
         onDragStateChange?.(true);
         document.body.style.cursor = "col-resize";
         document.body.style.userSelect = "none";
@@ -78,6 +83,10 @@ function startColumnDragSession(
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
     window.removeEventListener("pointercancel", onPointerUp);
+
+    if (hasMoved) {
+      onDragEnd?.();
+    }
 
     document.body.style.cursor = prevCursor;
     document.body.style.userSelect = prevUserSelect;
@@ -133,7 +142,15 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     if (options?.onColumnResize) {
       mCell.addEventListener("pointerdown", (e) => {
         if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
-        startColumnDragSession(e, currentDayW, "cell", options.onColumnResize);
+        startColumnDragSession(
+          e,
+          currentDayW,
+          "cell",
+          options.onColumnResize,
+          undefined,
+          options.onColumnResizeStart,
+          options.onColumnResizeEnd
+        );
       });
 
       // Draggable resize handle for month tier
@@ -141,7 +158,15 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       mResizeHandle.className = "jantt-col-resize-handle";
       mResizeHandle.title = "Drag to resize column width / zoom timeline";
       mResizeHandle.addEventListener("pointerdown", (e) => {
-        startColumnDragSession(e, currentDayW, "handle", options.onColumnResize);
+        startColumnDragSession(
+          e,
+          currentDayW,
+          "handle",
+          options.onColumnResize,
+          undefined,
+          options.onColumnResizeStart,
+          options.onColumnResizeEnd
+        );
       });
       mCell.appendChild(mResizeHandle);
     }
@@ -186,7 +211,9 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
           options.onColumnResize,
           (didMove) => {
             cellDragMoved = didMove;
-          }
+          },
+          options.onColumnResizeStart,
+          options.onColumnResizeEnd
         );
       });
     }
@@ -232,7 +259,15 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       dResizeHandle.className = "jantt-col-resize-handle";
       dResizeHandle.title = "Drag to resize column width / zoom timeline";
       dResizeHandle.addEventListener("pointerdown", (e) => {
-        startColumnDragSession(e, currentDayW, "handle", options.onColumnResize);
+        startColumnDragSession(
+          e,
+          currentDayW,
+          "handle",
+          options.onColumnResize,
+          undefined,
+          options.onColumnResizeStart,
+          options.onColumnResizeEnd
+        );
       });
       dCell.appendChild(dResizeHandle);
     }

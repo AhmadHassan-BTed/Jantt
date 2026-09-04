@@ -639,5 +639,77 @@ describe("Stress & Boundary Tests", () => {
       chart.destroy();
       document.body.removeChild(container);
     });
+
+    it("pivots from the leftmost visible edge when expanding or contracting the timeline", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const chart = renderJantt(container, basicJson as JanttData, {
+        viewport: {
+          scale: "day",
+          dayWidth: 40
+        }
+      });
+
+      let bodyWrap = container.querySelector<HTMLElement>(".jantt-body-wrap");
+      expect(bodyWrap).not.toBeNull();
+      expect(chart.getDayWidth()).toBe(40);
+
+      // Simulate scrolling horizontally into the timeline (e.g. 5 days from start: 5 * 40 = 200px)
+      bodyWrap!.scrollLeft = 200;
+
+      // Expand day width from 40 to 60 (50% expansion)
+      chart.setDayWidth(60);
+
+      bodyWrap = container.querySelector<HTMLElement>(".jantt-body-wrap");
+      expect(chart.getDayWidth()).toBe(60);
+      // At dayWidth 60, 5 days from start should be 5 * 60 = 300px
+      expect(bodyWrap!.scrollLeft).toBe(300);
+
+      // Contract day width from 60 to 30 (contract by 50%)
+      chart.setDayWidth(30);
+
+      bodyWrap = container.querySelector<HTMLElement>(".jantt-body-wrap");
+      expect(chart.getDayWidth()).toBe(30);
+      // At dayWidth 30, 5 days from start should be 5 * 30 = 150px
+      expect(bodyWrap!.scrollLeft).toBe(150);
+
+      // Test column drag resize session preserves leftmost pivot
+      const dayCell = container.querySelector<HTMLElement>(".jantt-day-cell");
+      expect(dayCell).not.toBeNull();
+
+      const PEvent = (typeof PointerEvent !== "undefined" ? PointerEvent : MouseEvent);
+
+      // Start drag session on day cell
+      dayCell!.dispatchEvent(new PEvent("pointerdown", {
+        clientX: 100,
+        clientY: 20,
+        button: 0,
+        bubbles: true
+      }));
+
+      // Drag to resize
+      window.dispatchEvent(new PEvent("pointermove", {
+        clientX: 130,
+        clientY: 20,
+        bubbles: true
+      }));
+
+      // End drag
+      window.dispatchEvent(new PEvent("pointerup", {
+        clientX: 130,
+        clientY: 20,
+        bubbles: true
+      }));
+
+      bodyWrap = container.querySelector<HTMLElement>(".jantt-body-wrap");
+      const currentWidth = chart.getDayWidth();
+      // Leftmost visible day offset (bodyWrap.scrollLeft / currentWidth) must still be 5 days!
+      const visibleDays = bodyWrap!.scrollLeft / currentWidth;
+      expect(Math.round(visibleDays)).toBe(5);
+
+      chart.destroy();
+      document.body.removeChild(container);
+    });
   });
 });
