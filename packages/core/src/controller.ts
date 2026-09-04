@@ -53,6 +53,7 @@ export class InteractionController {
     this.options = options;
     this.dayWidth = dayWidth;
     this.defaultGapDays = data.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS;
+    this.autoCascade = options.viewport?.autoCascade ?? options.autoCascade ?? (data.meta?.autoCascade ?? true);
     this.onRenderRequest = onRenderRequest;
     this.openModalHandler = openModalHandler;
     this.onLiveLinkUpdate = onLiveLinkUpdate;
@@ -62,9 +63,17 @@ export class InteractionController {
     this.onPointerUp = this.onPointerUp.bind(this);
   }
 
-  public updateData(newData: JanttData, dayWidth?: number) {
+  public updateData(newData: JanttData, dayWidth?: number, newOptions?: JanttOptions) {
     this.data = newData;
     if (dayWidth) this.dayWidth = dayWidth;
+    if (newOptions) {
+      this.options = newOptions;
+      if (newOptions.viewport?.autoCascade !== undefined) {
+        this.autoCascade = newOptions.viewport.autoCascade;
+      } else if (newOptions.autoCascade !== undefined) {
+        this.autoCascade = newOptions.autoCascade;
+      }
+    }
     this.defaultGapDays = newData.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS;
   }
 
@@ -96,7 +105,6 @@ export class InteractionController {
       this.data.tasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
       this.options.onCommit?.(this.data);
     }
-    this.onRenderRequest();
     return this.autoCascade;
   }
 

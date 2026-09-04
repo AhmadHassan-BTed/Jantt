@@ -49,6 +49,7 @@ export interface ViewportSnapshotState {
   rowHeightMode: RowHeightMode;
   showCriticalPath: boolean;
   showBaselines: boolean;
+  autoCascade?: boolean;
   selectedDate: string | null;
   labelWidth?: number;
   headerHeight?: number;
@@ -66,6 +67,7 @@ export function buildViewportSnapshot(state: ViewportSnapshotState): ViewportOpt
     rowHeightMode: state.rowHeightMode,
     showCriticalPath: state.showCriticalPath,
     showBaselines: state.showBaselines,
+    autoCascade: state.autoCascade,
     selectedDate: state.selectedDate,
     ...(state.labelWidth !== undefined ? { labelWidth: state.labelWidth } : {}),
     ...(state.headerHeight !== undefined ? { headerHeight: state.headerHeight } : {})

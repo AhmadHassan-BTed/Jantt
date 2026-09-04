@@ -2,7 +2,7 @@ import { JanttData, JanttOptions, Task, TimeScale, LinkRoutingStyle, RowHeightMo
 import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "./layout";
 import { InteractionController } from "./controller";
 import { createTaskSidebar } from "./sidebar";
-import { resolveSchedule, getTaskDependencies } from "./resolver";
+import { resolveSchedule, getTaskDependencies, calculateCriticalPath } from "./resolver";
 import { addDays, diffDays, getTodayISODate, isTaskOnDate, parseISODate } from "./date-math";
 import { clampDayWidth, buildViewportSnapshot } from "./utils";
 import {
@@ -18,6 +18,8 @@ import {
 } from "./constants";
 import {
   renderToolbar,
+  updateToolbar,
+  ToolbarProps,
   renderGridTable,
   renderTimelineHeader,
   renderTimelineGrid,
@@ -75,6 +77,7 @@ export function renderJantt(
         rowHeightMode,
         showCriticalPath: showCritical,
         showBaselines,
+        autoCascade: controller ? controller.isAutoCascade() : (currentOptions.viewport?.autoCascade ?? currentOptions.autoCascade ?? true),
         selectedDate: selectedDateFilter,
         labelWidth
       })
@@ -220,12 +223,15 @@ export function renderJantt(
 
   const render = () => {
     // 0. Capture scroll positions before re-render so viewport never resets to beginning
-    const prevBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
-    const savedScrollLeft = prevBodyWrap ? prevBodyWrap.scrollLeft : 0;
-    const savedScrollTop = prevBodyWrap ? prevBodyWrap.scrollTop : 0;
-    const hadPreviousRender = prevBodyWrap !== null && renderedStartDate !== "" && renderedDayWidth > 0;
+    const prevScrollWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
+    const savedScrollLeft = prevScrollWrap ? prevScrollWrap.scrollLeft : 0;
+    const savedScrollTop = prevScrollWrap ? prevScrollWrap.scrollTop : 0;
+    const hadPreviousRender = prevScrollWrap !== null && renderedStartDate !== "" && renderedDayWidth > 0;
 
-    // 1. Task Search / Filtering
+    // 1. Compute master critical path across complete schedule graph before any display filtering
+    const masterCriticalResult = calculateCriticalPath(currentData.tasks);
+
+    // 2. Task Search / Filtering for display
     let displayTasks = currentData.tasks;
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
@@ -242,19 +248,20 @@ export function renderJantt(
       });
     }
 
-    // 2. Dynamic Row Height Calculation
+    // 3. Dynamic Row Height Calculation
     let effectiveRowHeight = customRowHeight;
     if (rowHeightMode === "fit") {
       const containerH = container.clientHeight || root.clientHeight || 550;
-      let minStart = displayTasks[0]?.start || getTodayISODate(currentOptions.viewport?.currentTime);
-      let maxEnd = displayTasks[displayTasks.length - 1]?.end || minStart;
-      displayTasks.forEach((t) => {
+      let minStart = currentData.tasks[0]?.start || getTodayISODate(currentOptions.viewport?.currentTime);
+      let maxEnd = currentData.tasks[currentData.tasks.length - 1]?.end || minStart;
+      currentData.tasks.forEach((t) => {
         if (t.start && t.start < minStart) minStart = t.start;
         if (t.end && t.end > maxEnd) maxEnd = t.end;
       });
       const spansMulti = parseISODate(minStart).getUTCFullYear() !== parseISODate(maxEnd).getUTCFullYear();
       const headerH = spansMulti ? MULTI_YEAR_HEADER_HEIGHT : (currentOptions.viewport?.headerHeight || DEFAULT_HEADER_HEIGHT);
-      const toolbarH = TOOLBAR_HEIGHT;
+      const existingToolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
+      const toolbarH = existingToolbar ? existingToolbar.offsetHeight : TOOLBAR_HEIGHT;
       const addRowH = currentOptions.readOnly ? 0 : ADD_ROW_HEIGHT;
       const borderBuffer = 6;
       const availH = Math.max(containerH - headerH - toolbarH - addRowH - borderBuffer, 100);
@@ -262,7 +269,7 @@ export function renderJantt(
       effectiveRowHeight = Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT, Math.floor(availH / count)));
     }
 
-    // 3. Coordinate Layout Calculation
+    // 4. Coordinate Layout Calculation
     const layoutResult = layout(
       { ...currentData, tasks: displayTasks },
       {
@@ -275,7 +282,8 @@ export function renderJantt(
         showCriticalPath: showCritical,
         showBaselines,
         labelWidth,
-        selectedDate: selectedDateFilter
+        selectedDate: selectedDateFilter,
+        criticalResult: masterCriticalResult
       }
     );
 
@@ -285,8 +293,7 @@ export function renderJantt(
       header,
       viewport,
       canvasWidth,
-      canvasHeight,
-      criticalTaskIds
+      canvasHeight
     } = layoutResult;
 
     const newStartDate = layoutResult.viewport.startDate;
@@ -307,7 +314,7 @@ export function renderJantt(
       }
     }
 
-    // 3. Controller State Machine Setup
+    // 5. Controller State Machine Setup
     if (!controller) {
       controller = new InteractionController(
         currentData,
@@ -337,17 +344,12 @@ export function renderJantt(
         }
       );
     } else {
-      controller.updateData(currentData, viewport.dayWidth);
+      controller.updateData(currentData, viewport.dayWidth, currentOptions);
     }
 
-    // Clean up previous toolbar listeners before replacing DOM
-    const oldToolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
-    (oldToolbar as any)?.__cleanup?.();
-
-    root.innerHTML = "";
-
-    // 4. Render Toolbar Subsystem
-    const toolbar = renderToolbar({
+    // 6. Render or Update Toolbar Subsystem in-place
+    let toolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
+    const toolbarProps: ToolbarProps = {
       meta: currentData.meta,
       taskCount: displayTasks.length,
       currentScale,
@@ -356,33 +358,33 @@ export function renderJantt(
       rowHeight: effectiveRowHeight,
       showCritical,
       showBaselines,
-      criticalCount: criticalTaskIds.size,
+      criticalCount: masterCriticalResult.criticalTaskIds.size,
       searchQuery: filterQuery,
       autoCascade: controller.isAutoCascade(),
       dayWidth: currentDayWidth,
       isSettingsOpen,
-      onSettingsOpenChange: (open) => {
+      onSettingsOpenChange: (open: boolean) => {
         isSettingsOpen = open;
       },
       onDayWidthChange: handleDayWidthChange,
-      onScaleChange: (s) => {
+      onScaleChange: (s: TimeScale) => {
         currentScale = s;
         currentDayWidth = SCALE_DAY_WIDTHS[s] || 36;
         currentOptions.onDayWidthChange?.(currentDayWidth);
         broadcastViewportChange();
         render();
       },
-      onRoutingChange: (r) => {
+      onRoutingChange: (r: LinkRoutingStyle) => {
         currentRouting = r;
         broadcastViewportChange();
         render();
       },
-      onRowHeightModeChange: (mode) => {
+      onRowHeightModeChange: (mode: RowHeightMode) => {
         rowHeightMode = mode;
         broadcastViewportChange();
         render();
       },
-      onRowHeightChange: (h) => {
+      onRowHeightChange: (h: number) => {
         customRowHeight = h;
         rowHeightMode = "custom";
         broadcastViewportChange();
@@ -400,6 +402,7 @@ export function renderJantt(
       },
       onAutoCascadeToggle: () => {
         controller.toggleAutoCascade();
+        broadcastViewportChange();
         render();
       },
       selectedDate: selectedDateFilter,
@@ -409,14 +412,27 @@ export function renderJantt(
         broadcastViewportChange();
         render();
       },
-      onSearchChange: (q) => {
+      onSearchChange: (q: string) => {
         filterQuery = q;
         render();
-      }
-    });
-    root.appendChild(toolbar);
+      },
+      onAddTask: currentOptions.readOnly ? undefined : handleAddTask
+    };
 
-    // 5. Scroll Body Container
+    if (toolbar && toolbar.isConnected) {
+      updateToolbar(toolbar, toolbarProps);
+    } else {
+      toolbar = renderToolbar(toolbarProps);
+      root.prepend(toolbar);
+    }
+
+    // Clean up previous scroll body container before mounting updated body
+    const oldBodyWrap = root.querySelector<HTMLElement>(".jantt-body-wrap");
+    if (oldBodyWrap) {
+      oldBodyWrap.remove();
+    }
+
+    // 7. Scroll Body Container
     const bodyWrap = document.createElement("div");
     bodyWrap.className = "jantt-body-wrap";
     if (rowHeightMode === "fit") {
@@ -626,6 +642,11 @@ export function renderJantt(
         if (newOpts.viewport?.rowHeightMode !== undefined) rowHeightMode = newOpts.viewport.rowHeightMode;
         if (newOpts.viewport?.showCriticalPath !== undefined) showCritical = newOpts.viewport.showCriticalPath;
         if (newOpts.viewport?.showBaselines !== undefined) showBaselines = newOpts.viewport.showBaselines;
+        if (newOpts.viewport?.autoCascade !== undefined) {
+          controller.setAutoCascade(newOpts.viewport.autoCascade);
+        } else if (newOpts.autoCascade !== undefined) {
+          controller.setAutoCascade(newOpts.autoCascade);
+        }
         if (newOpts.selectedDate !== undefined) {
           selectedDateFilter = newOpts.selectedDate;
         } else if (newOpts.viewport?.selectedDate !== undefined) {

@@ -554,6 +554,9 @@
   top: calc(100% + 8px);
   right: 0;
   width: 310px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  box-sizing: border-box;
   background: var(--jantt-surface);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);

@@ -10,7 +10,8 @@ import {
   HeaderDay,
   JanttLayoutResult,
   TimeScale,
-  LinkRoutingStyle
+  LinkRoutingStyle,
+  CriticalPathResult
 } from "./types";
 import {
   addDays,
@@ -51,7 +52,7 @@ export function getScaleFromDayWidth(dayWidth: number): TimeScale {
   return "year";
 }
 
-const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> = {
+const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult">> = {
   dayWidth: 32,
   rowHeight: DEFAULT_ROW_HEIGHT,
   rowHeightMode: "fit",
@@ -64,7 +65,8 @@ const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime"
   showToday: true,
   showWeekends: true,
   showCriticalPath: false,
-  showBaselines: true
+  showBaselines: true,
+  autoCascade: true
 };
 
 /**
@@ -95,10 +97,11 @@ export function layout(
     dayWidth = SCALE_DAY_WIDTHS[scale] || 32;
   }
 
-  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> & {
+  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult">> & {
     columns?: ViewportOptions["columns"];
     currentTime?: Date;
     selectedDate?: string | null;
+    criticalResult?: CriticalPathResult;
   } = {
     ...DEFAULT_VIEWPORT,
     dayWidth,
@@ -108,6 +111,7 @@ export function layout(
     showBaselines: viewportOptions.showBaselines ?? (data.meta?.showBaselines ?? true),
     showToday: viewportOptions.showToday ?? true,
     showWeekends: viewportOptions.showWeekends ?? true,
+    autoCascade: viewportOptions.autoCascade ?? (data.meta?.autoCascade ?? true),
     rowHeight: viewportOptions.rowHeight || DEFAULT_VIEWPORT.rowHeight,
     rowHeightMode: viewportOptions.rowHeightMode || DEFAULT_VIEWPORT.rowHeightMode,
     labelWidth: viewportOptions.labelWidth || DEFAULT_VIEWPORT.labelWidth,
@@ -115,7 +119,8 @@ export function layout(
     startDate: viewportOptions.startDate || "",
     endDate: viewportOptions.endDate || "",
     currentTime: viewportOptions.currentTime,
-    selectedDate: viewportOptions.selectedDate
+    selectedDate: viewportOptions.selectedDate,
+    criticalResult: viewportOptions.criticalResult
   };
 
   // Determine overall timeline bounds dynamically based on active tasks
@@ -173,8 +178,9 @@ export function layout(
   const canvasWidth = Math.max(totalDays * viewport.dayWidth, 600);
   const canvasHeight = Math.max(tasks.length * viewport.rowHeight, viewport.rowHeight);
 
-  // Critical path calculation
-  const { criticalTaskIds, criticalDepKeys } = calculateCriticalPath(tasks);
+  // Critical path calculation (use pre-computed master critical path if provided, or compute on tasks)
+  const { criticalTaskIds, criticalDepKeys } =
+    viewportOptions.criticalResult || calculateCriticalPath(tasks);
 
   // Compute TaskLayouts: Proportional bar height (~62% of row height) with vertical padding for dependency clearance
   const verticalPadding = Math.max(8, Math.round(viewport.rowHeight * 0.36));
@@ -478,7 +484,7 @@ export function computeDependencyPath(
   fromY: number,
   toX: number,
   toY: number,
-  _rowHeight = 46,
+  rowHeight = 46,
   style: LinkRoutingStyle = "orthogonal"
 ): string {
   // 1. Same row connection
@@ -510,17 +516,19 @@ export function computeDependencyPath(
   }
 
   // 3. Tight gap / adjacent milestone / reverse overlap (dx < 12)
-  // Route cleanly through the gutter between rows:
-  // Step out from predecessor -> drop to mid-row gutter -> step back before successor -> drop to target row -> enter target anchor from left
+  // Route cleanly through the gutter between rows to avoid cutting through intermediate tasks:
   const leadOut = 8;
   const leadIn = 8;
   const stepOutX = fromX + leadOut;
   const stepInX = toX - leadIn;
-  const midY = Math.round((fromY + toY) / 2);
+  // Route through the boundary gutter directly below source row (or above if going upwards)
+  const gutterY = fromY < toY
+    ? fromY + Math.round(rowHeight * 0.5)
+    : fromY - Math.round(rowHeight * 0.5);
 
   if (style === "curved") {
-    return `M ${fromX} ${fromY} C ${stepOutX + 6} ${fromY}, ${stepOutX + 6} ${midY}, ${stepOutX} ${midY} L ${stepInX} ${midY} C ${stepInX - 6} ${midY}, ${stepInX - 6} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
+    return `M ${fromX} ${fromY} C ${stepOutX + 6} ${fromY}, ${stepOutX + 6} ${gutterY}, ${stepOutX} ${gutterY} L ${stepInX} ${gutterY} C ${stepInX - 6} ${gutterY}, ${stepInX - 6} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
   }
 
-  return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${midY} L ${stepInX} ${midY} L ${stepInX} ${toY} L ${toX} ${toY}`;
+  return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${gutterY} L ${stepInX} ${gutterY} L ${stepInX} ${toY} L ${toX} ${toY}`;
 }

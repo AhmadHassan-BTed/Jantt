@@ -15,6 +15,7 @@ export interface JanttMeta {
   linkRouting?: LinkRoutingStyle;
   showCriticalPath?: boolean;
   showBaselines?: boolean;
+  autoCascade?: boolean;
   generatedAt?: string;
   [key: string]: unknown;
 }
@@ -155,9 +156,16 @@ export interface ViewportOptions {
   showWeekends?: boolean;
   showCriticalPath?: boolean;
   showBaselines?: boolean;
+  autoCascade?: boolean;
   currentTime?: Date;
   selectedDate?: string | null;
   columns?: GridColumn[];
+  criticalResult?: CriticalPathResult;
+}
+
+export interface CriticalPathResult {
+  criticalTaskIds: Set<string>;
+  criticalDepKeys: Set<string>;
 }
 
 export interface TaskLayout {
@@ -245,10 +253,11 @@ export interface JanttLayoutResult {
   tasks: TaskLayout[];
   dependencies: DependencyLine[];
   header: GridHeader;
-  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate">> & {
+  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult">> & {
     columns?: GridColumn[];
     currentTime?: Date;
     selectedDate?: string | null;
+    criticalResult?: CriticalPathResult;
   };
   canvasWidth: number;
   canvasHeight: number;
@@ -263,6 +272,7 @@ export interface JanttOptions {
   readOnly?: boolean;
   searchQuery?: string;
   selectedDate?: string | null;
+  autoCascade?: boolean;
   sidebarContainer?: HTMLElement | string;
   onChange?: (draft: JanttData) => void;
   onCommit?: (final: JanttData) => void;

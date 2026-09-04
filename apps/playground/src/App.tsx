@@ -186,7 +186,8 @@ const STORAGE_KEYS = {
   KANBAN_SORT: "jantt_kanban_sort",
   PERSON_FILTER: "jantt_person_filter",
   DATE_FILTER_MODE: "jantt_date_filter_mode",
-  AUTOSAVE_INTERVAL: "jantt_autosave_interval"
+  AUTOSAVE_INTERVAL: "jantt_autosave_interval",
+  AUTO_CASCADE: "jantt_saved_auto_cascade"
 };
 
 export type AutoSaveInterval = "5s" | "10s" | "30s" | "60s" | "immediate" | "off";
@@ -333,6 +334,12 @@ function loadInitialState() {
     if (savedBase !== null) initialBaselines = savedBase === "true";
   } catch {}
 
+  let initialAutoCascade = true;
+  try {
+    const savedCascade = localStorage.getItem(STORAGE_KEYS.AUTO_CASCADE);
+    if (savedCascade !== null) initialAutoCascade = savedCascade === "true";
+  } catch {}
+
   let initialView: ActiveView = "gantt";
   try {
     const savedView = localStorage.getItem(STORAGE_KEYS.VIEW) as any;
@@ -459,6 +466,7 @@ function loadInitialState() {
     initialRowHeight,
     initialCritical,
     initialBaselines,
+    initialAutoCascade,
     initialView,
     initialCollapsed,
     initialWidth,
@@ -557,6 +565,7 @@ export function App() {
   const [rowHeight, setRowHeight] = useState<number>(init.initialRowHeight);
   const [showCriticalPath, setShowCriticalPath] = useState(init.initialCritical);
   const [showBaselines, setShowBaselines] = useState(init.initialBaselines);
+  const [autoCascade, setAutoCascade] = useState<boolean>(init.initialAutoCascade);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(init.initialCollapsed);
   const [activeView, setActiveView] = useState<ActiveView>(init.initialView);
 
@@ -799,6 +808,7 @@ export function App() {
       localStorage.setItem(STORAGE_KEYS.ROW_HEIGHT, String(rowHeight));
       localStorage.setItem(STORAGE_KEYS.CRITICAL, String(showCriticalPath));
       localStorage.setItem(STORAGE_KEYS.BASELINES, String(showBaselines));
+      localStorage.setItem(STORAGE_KEYS.AUTO_CASCADE, String(autoCascade));
       localStorage.setItem(STORAGE_KEYS.VIEW, activeView);
       localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, String(isSidebarCollapsed));
       localStorage.setItem(STORAGE_KEYS.SIDEBAR_WIDTH, String(sidebarWidth));
@@ -812,6 +822,7 @@ export function App() {
     rowHeight,
     showCriticalPath,
     showBaselines,
+    autoCascade,
     activeView,
     isSidebarCollapsed,
     sidebarWidth
@@ -877,18 +888,6 @@ export function App() {
     return parsedData.tasks.filter(isTaskMatchingDateFilter).length;
   }, [parsedData, isTaskMatchingDateFilter]);
 
-  // Derived Gantt dataset according to dateFilterBehavior ("dim" vs "hide")
-  const ganttDisplayData = useMemo(() => {
-    if (!parsedData) return parsedData;
-    if (dateFilterMode === "all" || dateFilterBehavior === "dim") {
-      return parsedData;
-    }
-    // "hide" / Filter Mode: Only provide tasks matching active date filter
-    return {
-      ...parsedData,
-      tasks: parsedData.tasks.filter(isTaskMatchingDateFilter)
-    };
-  }, [parsedData, dateFilterMode, dateFilterBehavior, isTaskMatchingDateFilter]);
 
   // Derived tasks for KPI metrics according to dateFilterBehavior
   const summaryKpiTasks = useMemo(() => {
@@ -1524,18 +1523,29 @@ export function App() {
 
   // Handle live commit from interactive Gantt drag/resize/modal/link/multi-shift
   const handleChartCommit = useCallback((updated: JanttData) => {
-    setParsedData(updated);
-    // Sync people and teams from updated data if present
-    if (Array.isArray((updated as any).people)) {
-      setPeople((updated as any).people);
+    // If incoming data has fewer tasks than current master, safeguard against truncated filter sets
+    let finalData = updated;
+    const currentMaster = parsedDataRef.current;
+    if (currentMaster && updated.tasks.length < currentMaster.tasks.length) {
+      // If difference is more than 1 (or tasks were missing due to an external filter), merge to prevent data loss
+      if (currentMaster.tasks.length - updated.tasks.length > 1) {
+        const updatedMap = new Map(updated.tasks.map((t) => [t.id, t]));
+        const mergedTasks = currentMaster.tasks.map((t) => updatedMap.get(t.id) || t);
+        finalData = { ...currentMaster, ...updated, tasks: mergedTasks };
+      }
     }
-    if (Array.isArray((updated as any).teams)) {
-      setTeams((updated as any).teams);
-    }
-    const formatted = JSON.stringify(updated, null, 2);
-    setJsonText(formatted);
-    setValidationResult(validate(updated));
 
+    setParsedData(finalData);
+    // Sync people and teams from updated data if present
+    if (Array.isArray((finalData as any).people)) {
+      setPeople((finalData as any).people);
+    }
+    if (Array.isArray((finalData as any).teams)) {
+      setTeams((finalData as any).teams);
+    }
+    const formatted = JSON.stringify(finalData, null, 2);
+    setJsonText(formatted);
+    setValidationResult(validate(finalData));
 
     // Trigger visual sync flash / glow in JSON editor
     setIsLiveSyncing(true);
@@ -2440,49 +2450,59 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                 </div>
 
                 {/* ── GANTT VIEW ── */}
-                {activeView === "gantt" && ganttDisplayData && (
+                {activeView === "gantt" && parsedData && (
                   <Jantt
-                    data={ganttDisplayData}
-                      onCommit={handleChartCommit}
-                      onTaskAdd={handleAddNewTask}
-                      selectedDate={dateFilterMode === "all" ? null : (dateFilterBehavior === "hide" ? dateFilterActiveDate : null)}
-                      onDateClick={(clickedDate) => {
-                        if (clickedDate === getTodayISODate()) {
-                          setDateFilterMode((prev) => (prev === "today" ? "all" : "today"));
+                    data={parsedData}
+                    onCommit={handleChartCommit}
+                    selectedDate={dateFilterMode === "all" ? null : (dateFilterBehavior === "hide" ? dateFilterActiveDate : null)}
+                    onDateClick={(clickedDate) => {
+                      if (clickedDate === getTodayISODate()) {
+                        setDateFilterMode((prev) => (prev === "today" ? "all" : "today"));
+                      } else {
+                        setDateFilterMode((prev) => (prev === "date" && dateFilterValue === clickedDate ? "all" : "date"));
+                        setDateFilterValue(clickedDate);
+                      }
+                    }}
+                    onClearDateFilter={() => {
+                      setDateFilterMode("all");
+                    }}
+                    onDayWidthChange={(dw) => {
+                      setCurrentDayWidth(dw);
+                    }}
+                    onViewportChange={(vp) => {
+                      if (vp.scale) setCurrentScale(vp.scale);
+                      if (vp.dayWidth !== undefined) setCurrentDayWidth(vp.dayWidth);
+                      if (vp.linkRouting) setLinkRouting(vp.linkRouting);
+                      if (vp.rowHeight !== undefined) setRowHeight(vp.rowHeight);
+                      if (vp.rowHeightMode !== undefined) setRowHeightMode(vp.rowHeightMode);
+                      if (vp.showCriticalPath !== undefined) setShowCriticalPath(vp.showCriticalPath);
+                      if (vp.showBaselines !== undefined) setShowBaselines(vp.showBaselines);
+                      if (vp.autoCascade !== undefined) setAutoCascade(vp.autoCascade);
+                      if (vp.selectedDate !== undefined) {
+                        if (vp.selectedDate === null) {
+                          setDateFilterMode("all");
+                        } else if (vp.selectedDate === getTodayISODate()) {
+                          setDateFilterMode("today");
                         } else {
-                          setDateFilterMode((prev) => (prev === "date" && dateFilterValue === clickedDate ? "all" : "date"));
-                          setDateFilterValue(clickedDate);
+                          setDateFilterMode("date");
+                          setDateFilterValue(vp.selectedDate);
                         }
-                      }}
-                      onClearDateFilter={() => {
-                        setDateFilterMode("all");
-                      }}
-                      onDayWidthChange={(dw) => {
-                        setCurrentDayWidth(dw);
-                      }}
-                      onViewportChange={(vp) => {
-                        if (vp.scale) setCurrentScale(vp.scale);
-                        if (vp.dayWidth !== undefined) setCurrentDayWidth(vp.dayWidth);
-                        if (vp.linkRouting) setLinkRouting(vp.linkRouting);
-                        if (vp.rowHeight !== undefined) setRowHeight(vp.rowHeight);
-                        if (vp.rowHeightMode !== undefined) setRowHeightMode(vp.rowHeightMode);
-                        if (vp.showCriticalPath !== undefined) setShowCriticalPath(vp.showCriticalPath);
-                        if (vp.showBaselines !== undefined) setShowBaselines(vp.showBaselines);
-                        if (vp.selectedDate !== undefined) {
-                          if (vp.selectedDate === null) {
-                            setDateFilterMode("all");
-                          } else if (vp.selectedDate === getTodayISODate()) {
-                            setDateFilterMode("today");
-                          } else {
-                            setDateFilterMode("date");
-                            setDateFilterValue(vp.selectedDate);
-                          }
-                        }
-                      }}
-                      viewport={{ scale: currentScale, dayWidth: currentDayWidth, linkRouting, rowHeight, rowHeightMode, showCriticalPath, showBaselines, selectedDate: dateFilterActiveDate }}
-                      theme={activeTheme.vars}
-                      themeClassName={activeTheme.className}
-                    />
+                      }
+                    }}
+                    viewport={{
+                      scale: currentScale,
+                      dayWidth: currentDayWidth,
+                      linkRouting,
+                      rowHeight,
+                      rowHeightMode,
+                      showCriticalPath,
+                      showBaselines,
+                      autoCascade,
+                      selectedDate: dateFilterActiveDate
+                    }}
+                    theme={activeTheme.vars}
+                    themeClassName={activeTheme.className}
+                  />
                 )}
 
                 {/* ── KANBAN VIEW ── */}

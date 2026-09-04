@@ -122,7 +122,16 @@ export const Jantt: React.FC<JanttProps> = ({
     }
   }, [
     data,
-    viewport,
+    viewport?.scale,
+    viewport?.dayWidth,
+    viewport?.linkRouting,
+    viewport?.rowHeight,
+    viewport?.rowHeightMode,
+    viewport?.showCriticalPath,
+    viewport?.showBaselines,
+    viewport?.autoCascade,
+    viewport?.selectedDate,
+    viewport?.labelWidth,
     theme,
     themeClassName,
     className,
