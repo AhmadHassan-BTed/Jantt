@@ -359,6 +359,53 @@ describe("Stress & Boundary Tests", () => {
       expect(resMidnight.header.todayX!).toBeLessThan(resNoon.header.todayX!);
       expect(resNoon.header.todayX!).toBeLessThan(resEvening.header.todayX!);
     });
+
+    it("anchors the Today marker in the sticky header and renders a clean vertical guide line in the grid without task bar occlusion", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const fixedToday = "2026-09-04T12:00:00Z";
+      const testData: JanttData = {
+        tasks: [
+          { id: "t1", label: "Task Spanning Today", category: "dev", start: "2026-09-01", end: "2026-09-07" },
+          { id: "t2", label: "Future Task", category: "dev", start: "2026-09-10", end: "2026-09-15" }
+        ]
+      };
+
+      const chart = renderJantt(container, testData, {
+        viewport: {
+          showToday: true,
+          currentTime: new Date(fixedToday)
+        }
+      });
+
+      // 1. Sticky timeline header contains the Today marker pin
+      const headerMarker = container.querySelector<HTMLElement>(".jantt-header-today-marker");
+      expect(headerMarker).not.toBeNull();
+      expect(headerMarker?.querySelector(".jantt-header-today-pill")?.textContent).toBe("Today");
+      expect(headerMarker?.querySelector(".jantt-header-today-arrow")).not.toBeNull();
+
+      // 2. The header marker is positioned at todayX
+      const todayLine = container.querySelector<HTMLElement>(".jantt-today-line");
+      expect(todayLine).not.toBeNull();
+      expect(headerMarker?.style.left).toBe(todayLine?.style.left);
+
+      // 3. Grid todayLine does NOT contain an inline badge that occludes task bars
+      expect(todayLine?.querySelector(".jantt-today-badge")).toBeNull();
+
+      // 4. Clicking the header Today marker filters active tasks
+      headerMarker?.click();
+      let rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(1);
+
+      // 5. Clicking again clears the filter
+      headerMarker?.click();
+      rows = container.querySelectorAll(".jantt-grid-row:not(.jantt-grid-add-row)");
+      expect(rows.length).toBe(2);
+
+      chart.destroy();
+      container.remove();
+    });
   });
 
   describe("Interactive Day Header Click to Filter by Date", () => {

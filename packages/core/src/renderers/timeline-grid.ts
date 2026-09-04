@@ -48,13 +48,12 @@ export function renderTimelineGrid(props: TimelineGridProps): {
     gridLayer.appendChild(addRowLine);
   }
 
-  // 3. Today marker line
+  // 3. Today vertical guide line (badge is systematically anchored to the sticky timeline header)
   let todayLine: HTMLElement | undefined;
   if (props.header.todayX !== null && props.showToday) {
     todayLine = document.createElement("div");
     todayLine.className = "jantt-today-line";
     todayLine.style.left = `${props.header.todayX}px`;
-    todayLine.innerHTML = `<span class="jantt-today-badge">Today</span>`;
   }
 
   return { gridLayer, todayLine };

@@ -1191,6 +1191,14 @@
 .jantt-day-cell.is-today {
   color: var(--jantt-today);
   font-weight: bold;
+  background: var(--jantt-today-subtle, rgba(225, 29, 72, 0.08));
+}
+
+.jantt-day-cell.is-today .jantt-day-name.is-today,
+.jantt-day-cell.is-today .jantt-day-num.is-today {
+  color: var(--jantt-today);
+  font-weight: 800;
+  opacity: 1;
 }
 
 .jantt-grid-container {
@@ -1241,7 +1249,7 @@
   z-index: 2;
 }
 
-/* Today Line */
+/* Today Line (Vertical Guide) */
 .jantt-today-line {
   position: absolute;
   top: 0;
@@ -1250,20 +1258,62 @@
   background: var(--jantt-today);
   z-index: 5;
   pointer-events: none;
+  box-shadow: 0 0 5px rgba(225, 29, 72, 0.35);
+}
+
+/* Header-Anchored Today Marker (Systematic UX Alignment) */
+.jantt-header-today-marker {
+  position: absolute;
+  bottom: -1px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 15;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), filter 0.15s ease;
+}
+
+.jantt-header-today-marker:hover {
+  filter: brightness(1.15);
+  transform: translateX(-50%) scale(1.06);
+}
+
+.jantt-header-today-pill {
+  font-size: 8px;
+  font-weight: 800;
+  font-family: var(--jantt-font-mono, ui-monospace, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #FFFFFF;
+  background: var(--jantt-today);
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 8px rgba(225, 29, 72, 0.45);
+  white-space: nowrap;
+  line-height: 1.15;
+}
+
+.jantt-header-today-arrow {
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid var(--jantt-today);
+  margin-top: -0.5px;
 }
 
 .jantt-today-badge {
-  position: absolute;
-  top: 2px;
-  left: 4px;
-  font-size: 9px;
-  font-weight: 700;
+  /* Legacy alias retained for backward compatibility */
+  font-size: 8px;
+  font-weight: 800;
   text-transform: uppercase;
-  color: #FFF;
+  color: #FFFFFF;
   background: var(--jantt-today);
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 100px;
-  letter-spacing: 0.03em;
 }
 
 /* SVG Dependency Overlay */
