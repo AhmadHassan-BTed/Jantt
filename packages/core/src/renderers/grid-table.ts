@@ -33,8 +33,8 @@ export function renderGridTable(props: GridTableProps): {
   labelHeader.style.height = `${props.headerHeight}px`;
   labelHeader.innerHTML = `
     <div>Task & Category</div>
-    <div style="text-align: center;">Duration</div>
-    <div style="text-align: center;">Progress</div>
+    <div style="text-align: center;" title="Duration (Days)">Days</div>
+    <div style="text-align: center;" title="Progress Percentage">Prog</div>
   `;
   labelCol.appendChild(labelHeader);
 
