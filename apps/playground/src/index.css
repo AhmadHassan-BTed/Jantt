@@ -923,6 +923,7 @@ body {
   flex-direction: column;
   gap: 8px;
   transition: border-color 0.15s ease, transform 0.15s ease;
+  cursor: pointer;
 }
 
 .kanban-card:hover {
@@ -1686,6 +1687,7 @@ path.jantt-dep-path.jantt-task-dimmed {
   gap: 10px;
   transition: all 0.15s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
 }
 
 .today-task-card:hover {
@@ -1943,6 +1945,7 @@ path.jantt-dep-path.jantt-task-dimmed {
   border-radius: 8px;
   gap: 12px;
   transition: all 0.15s ease;
+  cursor: pointer;
 }
 
 .tasks-todo-row:hover {
