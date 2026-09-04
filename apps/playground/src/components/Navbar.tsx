@@ -103,16 +103,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") setIoDropdownOpen(false);
     };
-    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("click", handleClick);
     document.addEventListener("keydown", handleEsc);
     return () => {
-      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("click", handleClick);
       document.removeEventListener("keydown", handleEsc);
     };
   }, [ioDropdownOpen]);
+
   return (
     <header className="navbar">
-      <div className="brand-section">
+      {/* 1. Left Zone: Brand & AutoSave Status */}
+      <div className="brand-section nav-group-left">
         <JanttLogo size={28} />
         <button
           type="button"
@@ -131,10 +133,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
         {isSidebarCollapsed && (
           <button
+            type="button"
             className="btn-nav btn-restore-sidebar"
             onClick={() => setIsSidebarCollapsed(false)}
             title="Expand JSON Editor Sidebar"
-            style={{ marginLeft: "8px" }}
+            style={{ marginLeft: "4px" }}
           >
             <FileJson size={13} />
             <span>Show JSON Editor</span>
@@ -142,10 +145,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
       </div>
 
-      <div className="nav-controls">
-        {/* View Switcher: Gantt Timeline, Kanban Board, Detailed Tasks, Budget & Analytics */}
-        <div className="jantt-scale-group" style={{ margin: "0 6px" }}>
+      {/* 2. Center Zone: Primary View Switcher */}
+      <div className="nav-group-center">
+        <div className="jantt-scale-group">
           <button
+            type="button"
             className={`jantt-scale-btn ${activeView === "gantt" ? "is-active" : ""}`}
             onClick={() => setActiveView("gantt")}
             title="Gantt Timeline Schedule"
@@ -154,6 +158,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Gantt</span>
           </button>
           <button
+            type="button"
             className={`jantt-scale-btn ${activeView === "kanban" ? "is-active" : ""}`}
             onClick={() => setActiveView("kanban")}
             title="Kanban Task Board"
@@ -162,6 +167,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Kanban</span>
           </button>
           <button
+            type="button"
             className={`jantt-scale-btn ${activeView === "tasks" ? "is-active" : ""}`}
             onClick={() => setActiveView("tasks")}
             title="Detailed Tasks & Interactive Todo Checklist"
@@ -170,6 +176,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Tasks</span>
           </button>
           <button
+            type="button"
             className={`jantt-scale-btn ${activeView === "summary" ? "is-active" : ""}`}
             onClick={() => setActiveView("summary")}
             title="Project Budget & Performance Analytics"
@@ -178,7 +185,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Budget &amp; KPI</span>
           </button>
         </div>
+      </div>
 
+      {/* 3. Right Zone: Plan Control Center, People, Import/Export, Theme & AI Prompt */}
+      <div className="nav-controls nav-group-right">
         {/* Plan Control Center — Grouped Cohesive Unit */}
         <div className="nav-plan-group">
           <div className="nav-plan-select-wrap">
@@ -221,6 +231,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="nav-plan-actions">
             {/* + Add Plan Button */}
             <button
+              type="button"
               className="btn-plan-action is-add"
               onClick={handleOpenAddPlanModal}
               title="Create a new blank plan, clone existing, or use a template"
@@ -231,6 +242,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Link Cloud Plan Button */}
             <button
+              type="button"
               className="btn-plan-action"
               onClick={handleOpenLinkCloudModal}
               title="Link and sync a remote plan from Google Drive, GitHub, Dropbox or direct URL"
@@ -244,6 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               return (
                 <>
                   <button
+                    type="button"
                     className="btn-plan-action is-sync"
                     onClick={handleSyncActiveProject}
                     disabled={isSyncingProject}
@@ -252,6 +265,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <RefreshCw size={12} className={isSyncingProject ? "spin-sync-icon" : ""} />
                   </button>
                   <button
+                    type="button"
                     className="btn-plan-action"
                     onClick={handleForkToLocalPlan}
                     title="Create an editable local copy of this cloud plan"
@@ -264,6 +278,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Share Active Plan Button */}
             <button
+              type="button"
               className="btn-plan-action is-share"
               onClick={() => {
                 setShowShareModal(true);
@@ -278,6 +293,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Delete / Unlink Active Plan Button */}
             {activeProjectId !== "default" && (
               <button
+                type="button"
                 className="btn-plan-action is-delete"
                 style={{ color: "#EF4444" }}
                 onClick={() => handleDeleteProject(activeProjectId)}
@@ -295,6 +311,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* People (Team) Manager Button */}
         <button
+          type="button"
           className="btn-nav"
           onClick={() => setShowPeopleModal(true)}
           title="Manage team members and assignees"
@@ -308,15 +325,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="file"
           ref={fileInputRef}
           accept=".json,application/json"
-          onChange={handleImportJsonFile}
+          onChange={(e) => {
+            handleImportJsonFile(e);
+            if (e.target) e.target.value = "";
+          }}
           style={{ display: "none" }}
         />
 
         {/* Unified Import / Export Dropdown */}
         <div className="nav-io-dropdown" ref={ioDropdownRef}>
           <button
+            type="button"
             className={`btn-nav nav-io-trigger ${ioDropdownOpen ? "is-open" : ""}`}
-            onClick={() => setIoDropdownOpen((o) => !o)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIoDropdownOpen((o) => !o);
+            }}
             title="Import or export project data"
           >
             <Download size={13} />
@@ -325,8 +349,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {ioDropdownOpen && (
-            <div className="nav-io-panel">
+            <div className="nav-io-panel" onClick={(e) => e.stopPropagation()}>
               <button
+                type="button"
                 className="nav-io-item"
                 onClick={() => {
                   fileInputRef.current?.click();
@@ -341,6 +366,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
               <div className="nav-io-divider" />
               <button
+                type="button"
                 className="nav-io-item"
                 onClick={() => {
                   handleDownloadJson();
@@ -354,6 +380,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </button>
               <button
+                type="button"
                 className="nav-io-item"
                 onClick={() => {
                   handleExportCsv();
@@ -389,6 +416,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Prompt AI Button */}
         <button
+          type="button"
           className="btn-prompt"
           onClick={() => setShowPromptModal(true)}
           title="Generate AI Prompt for LLM output"
