@@ -463,6 +463,7 @@ export function renderJantt(
     const timelineHeader = renderTimelineHeader(header, {
       selectedDate: selectedDateFilter,
       dayWidth: currentDayWidth,
+      showToday: viewport.showToday,
       onColumnResize: (w) => handleDayWidthChange(w),
       onColumnResizeStart: handleColumnResizeStart,
       onColumnResizeEnd: handleColumnResizeEnd,
