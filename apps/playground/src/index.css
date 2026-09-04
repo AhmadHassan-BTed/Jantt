@@ -1845,8 +1845,16 @@ path.jantt-dep-path.jantt-task-dimmed {
 }
 
 .today-task-card.is-completed {
-  border-top-color: #10B981 !important;
-  opacity: 0.85;
+  border-top-color: var(--jantt-bar-done, #64748B) !important;
+  opacity: 0.72;
+}
+
+.kanban-card.is-completed {
+  opacity: 0.72;
+}
+
+.summary-row-completed {
+  opacity: 0.72;
 }
 
 .today-card-header {
@@ -2103,8 +2111,8 @@ path.jantt-dep-path.jantt-task-dimmed {
 }
 
 .tasks-todo-row.is-completed {
-  border-left-color: #10B981 !important;
-  opacity: 0.75;
+  border-left-color: var(--jantt-bar-done, #64748B) !important;
+  opacity: 0.72;
 }
 
 .tasks-todo-left {

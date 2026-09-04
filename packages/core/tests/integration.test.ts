@@ -468,6 +468,92 @@ describe("Stress & Boundary Tests", () => {
       chart.destroy();
       container.remove();
     });
+
+    it("renders completed or 100% tasks and milestones in grey with is-done classes in both table and timeline", () => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const testData: JanttData = {
+        categories: {
+          dev: { label: "Development", color: "#38BDF8" }
+        },
+        tasks: [
+          {
+            id: "done-by-status",
+            label: "Completed via Status",
+            category: "dev",
+            start: "2026-09-01",
+            end: "2026-09-05",
+            status: "completed"
+          },
+          {
+            id: "done-by-progress",
+            label: "Completed via 100% Progress",
+            category: "dev",
+            start: "2026-09-02",
+            end: "2026-09-06",
+            progress: 1.0
+          },
+          {
+            id: "done-milestone",
+            label: "Release V1",
+            category: "dev",
+            start: "2026-09-05",
+            end: "2026-09-05",
+            milestone: true,
+            status: "done"
+          },
+          {
+            id: "active-task",
+            label: "In Progress Task",
+            category: "dev",
+            start: "2026-09-03",
+            end: "2026-09-08",
+            status: "in-progress",
+            progress: 0.4
+          }
+        ]
+      };
+
+      const chart = renderJantt(container, testData);
+
+      // 1. Check timeline task bars and milestone
+      const doneStatusTaskBar = container.querySelector<HTMLElement>('.jantt-task-bar[data-task-id="done-by-status"]');
+      expect(doneStatusTaskBar).not.toBeNull();
+      expect(doneStatusTaskBar?.classList.contains("is-done")).toBe(true);
+      expect(doneStatusTaskBar?.style.background).toContain("var(--jantt-bar-done");
+
+      const doneProgTaskBar = container.querySelector<HTMLElement>('.jantt-task-bar[data-task-id="done-by-progress"]');
+      expect(doneProgTaskBar).not.toBeNull();
+      expect(doneProgTaskBar?.classList.contains("is-done")).toBe(true);
+      expect(doneProgTaskBar?.style.background).toContain("var(--jantt-bar-done");
+
+      const doneMilestone = container.querySelector<HTMLElement>('.jantt-milestone[data-task-id="done-milestone"]');
+      expect(doneMilestone).not.toBeNull();
+      expect(doneMilestone?.classList.contains("is-done")).toBe(true);
+      expect(doneMilestone?.style.background).toContain("var(--jantt-bar-done");
+
+      const activeBar = container.querySelector<HTMLElement>('.jantt-task-bar[data-task-id="active-task"]');
+      expect(activeBar).not.toBeNull();
+      expect(activeBar?.classList.contains("is-done")).toBe(false);
+      expect(activeBar?.style.background).toBe("rgb(56, 189, 248)");
+
+      // 2. Check left table rows
+      const doneRow1 = container.querySelector<HTMLElement>('.jantt-label-row[data-row-id="done-by-status"]');
+      expect(doneRow1?.classList.contains("is-done")).toBe(true);
+      expect(doneRow1?.querySelector(".jantt-col-progress-pill")?.textContent?.trim()).toBe("100%");
+
+      const doneRow2 = container.querySelector<HTMLElement>('.jantt-label-row[data-row-id="done-by-progress"]');
+      expect(doneRow2?.classList.contains("is-done")).toBe(true);
+      expect(doneRow2?.querySelector(".jantt-col-progress-pill")?.textContent?.trim()).toBe("100%");
+
+      const activeRow = container.querySelector<HTMLElement>('.jantt-label-row[data-row-id="active-task"]');
+      expect(activeRow?.classList.contains("is-done")).toBe(false);
+      expect(activeRow?.querySelector(".jantt-col-progress-pill")?.textContent?.trim()).toBe("40%");
+
+      chart.destroy();
+      container.remove();
+    });
   });
 
   describe("Interactive Day Header Click to Filter by Date", () => {

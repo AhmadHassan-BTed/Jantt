@@ -12,7 +12,8 @@ import {
   type JanttData,
   type Task,
   type Team,
-  resolveTaskAssignee
+  resolveTaskAssignee,
+  isTaskDone
 } from "@jantt/core";
 import type { SummarySortConfig, EffectivePerson } from "../types";
 
@@ -61,7 +62,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             <span className="kpi-label">Project Progress</span>
             <span className="kpi-value">
               {Math.round(
-                (summaryKpiTasks.reduce((sum, t) => sum + (t.status === "completed" ? 1 : (t.progress || 0)), 0) /
+                (summaryKpiTasks.reduce((sum, t) => sum + (isTaskDone(t) ? 1 : (t.progress || 0)), 0) /
                   Math.max(summaryKpiTasks.length, 1)) *
                   100
               )}%
@@ -148,16 +149,16 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           <tbody>
             {sortedSummaryTasks.map((t) => {
               const cat = parsedData.categories?.[t.category];
-              const isCompleted = t.status === "completed";
+              const isCompleted = isTaskDone(t);
               const effectiveProgress = isCompleted ? 1.0 : (t.progress ?? 0);
               const isDimmed = !isTaskMatchingDateFilter(t);
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
               return (
-                <tr key={t.id} className={isDimmed ? "summary-row-dimmed" : ""}>
+                <tr key={t.id} className={`${isCompleted ? "summary-row-completed" : ""} ${isDimmed ? "summary-row-dimmed" : ""}`.trim()}>
                   <td style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 700 }}>{t.wbs || "-"}</td>
-                  <td style={{ fontWeight: 600 }}>{t.label || t.name || t.id}</td>
+                  <td style={{ fontWeight: 600, color: isCompleted ? "var(--jantt-text-muted)" : "inherit" }}>{t.label || t.name || t.id}</td>
                   <td>
-                    <span className="jantt-label-dot" style={{ background: cat?.color || "var(--jantt-accent)", display: "inline-block", marginRight: "6px" }} />
+                    <span className="jantt-label-dot" style={{ background: isCompleted ? "var(--jantt-bar-done, #64748B)" : (cat?.color || "var(--jantt-accent)"), display: "inline-block", marginRight: "6px" }} />
                     {cat?.label || t.category}
                   </td>
                   <td>

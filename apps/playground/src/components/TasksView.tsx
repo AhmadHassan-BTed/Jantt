@@ -18,7 +18,8 @@ import {
   resolveTaskAssignee,
   resolveTeamById,
   resolveSchedule,
-  syncTaskProgressAndStatus
+  syncTaskProgressAndStatus,
+  isTaskDone
 } from "@jantt/core";
 import type { DateFilterMode, EffectivePerson } from "../types";
 
@@ -73,7 +74,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               {matchingDateFilterTasks.length} task{matchingDateFilterTasks.length === 1 ? "" : "s"}
               {dateFilterMode !== "all" ? " matching active date filter" : " in project"}
               {" • "}
-              {matchingDateFilterTasks.filter((t) => t.status === "completed").length} completed
+              {matchingDateFilterTasks.filter((t) => isTaskDone(t)).length} completed
               {" • "}
               {matchingDateFilterTasks.filter((t) => t.status === "in-progress").length} in progress
             </span>
@@ -234,7 +235,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               {tasksToDisplay.map((t) => {
                 const cat = parsedData.categories?.[t.category];
                 const catColor = cat?.color || "var(--jantt-accent)";
-                const isCompleted = t.status === "completed";
+                const isCompleted = isTaskDone(t);
                 const isDimmed =
                   dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
@@ -347,7 +348,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
             {tasksToDisplay.map((t) => {
               const cat = parsedData.categories?.[t.category];
               const catColor = cat?.color || "var(--jantt-accent)";
-              const isCompleted = t.status === "completed";
+              const isCompleted = isTaskDone(t);
               const isDimmed =
                 dateFilterMode !== "all" && dateFilterBehavior === "dim" && !isTaskMatchingDateFilter(t);
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);

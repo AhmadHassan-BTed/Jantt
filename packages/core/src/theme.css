@@ -21,6 +21,8 @@
   --jantt-today: #E11D48;
   --jantt-critical: #D97706;
   --jantt-critical-glow: rgba(217, 119, 6, 0.18);
+  --jantt-bar-done: #64748B;
+  --jantt-bar-done-subtle: rgba(100, 116, 139, 0.16);
   --jantt-weekend-bg: transparent;
   --jantt-grid-line: #E2E8F0;
   --jantt-grid-row-line: #E2E8F0;
@@ -50,6 +52,8 @@
   --jantt-today: #FB7185;
   --jantt-critical: #F59E0B;
   --jantt-critical-glow: rgba(245, 158, 11, 0.35);
+  --jantt-bar-done: #475569;
+  --jantt-bar-done-subtle: rgba(71, 85, 105, 0.25);
   --jantt-weekend-bg: transparent;
   --jantt-grid-line: rgba(255, 255, 255, 0.12);
   --jantt-grid-row-line: rgba(255, 255, 255, 0.09);
@@ -1010,6 +1014,30 @@
   color: var(--jantt-accent);
 }
 
+/* Done / Completed Table Row Styles */
+.jantt-label-row.is-done {
+  opacity: 0.68;
+}
+
+.jantt-label-row.is-done:hover {
+  opacity: 0.95;
+}
+
+.jantt-label-row.is-done .jantt-label-dot {
+  background: var(--jantt-bar-done, #64748B) !important;
+  opacity: 0.65;
+}
+
+.jantt-label-row.is-done .jantt-label-text {
+  color: var(--jantt-text-muted);
+}
+
+.jantt-label-row.is-done .jantt-col-progress-pill {
+  background: var(--jantt-bar-done-subtle, rgba(100, 116, 139, 0.16));
+  color: var(--jantt-text-dim);
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
 /* Draggable Table Splitter */
 .jantt-splitter {
   position: absolute;
@@ -1424,6 +1452,22 @@
   z-index: 12;
 }
 
+.jantt-task-bar.is-done {
+  background: var(--jantt-bar-done, #64748B) !important;
+  opacity: 0.72;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+.jantt-task-bar.is-done:hover {
+  opacity: 0.92;
+}
+
+.jantt-task-bar.is-done .jantt-task-progress {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--jantt-bar-radius);
+}
+
 /* Milestone Diamond Pin */
 .jantt-milestone {
   position: absolute;
@@ -1452,6 +1496,16 @@
   outline-offset: 3px;
   box-shadow: 0 0 12px var(--jantt-accent-glow);
   z-index: 12;
+}
+
+.jantt-milestone.is-done {
+  background: var(--jantt-bar-done, #64748B) !important;
+  opacity: 0.72;
+  border-color: #94A3B8;
+}
+
+.jantt-milestone.is-done:hover {
+  opacity: 0.92;
 }
 
 /* Lasso / Rectangle Marquee Selection Box */
