@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Settings,
   Save,
   X,
   CheckCircle2,
@@ -36,147 +37,177 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
   return (
     <div className="prompt-modal-backdrop" onClick={() => setShowAutoSaveModal(false)}>
       <div
-        className="prompt-modal-window"
-        style={{ maxWidth: "480px" }}
+        className="settings-modal-card"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header with Icon Box & Version Pill */}
         <div className="prompt-modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-            <Save size={18} style={{ color: "var(--jantt-accent)" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div className="settings-header-icon">
+              <Settings size={18} />
+            </div>
             <div>
-              <h2 style={{ fontSize: "15px", fontWeight: 700, margin: 0 }}>Auto-Save Settings</h2>
-              <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: "var(--jantt-text)" }}>
+                  Settings &amp; Auto-Save
+                </h3>
+                <span className="brand-badge" style={{ fontSize: "11px", padding: "2px 8px" }}>
+                  v1.1.1
+                </span>
+              </div>
+              <p style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", margin: "2px 0 0 0" }}>
                 Configure automatic persistence and review client storage
-              </span>
+              </p>
             </div>
           </div>
-          <button className="prompt-modal-close-btn" onClick={() => setShowAutoSaveModal(false)}>
-            <X size={15} />
+          <button
+            type="button"
+            className="prompt-modal-close-btn"
+            onClick={() => setShowAutoSaveModal(false)}
+            title="Close Settings (Esc)"
+          >
+            <X size={16} />
           </button>
         </div>
 
-        <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          {/* Status Banner */}
-          <div
-            style={{
-              background: saveStatus === "saved" ? "rgba(16, 185, 129, 0.09)" : "rgba(245, 158, 11, 0.09)",
-              border: `1px solid ${saveStatus === "saved" ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.25)"}`,
-              borderRadius: "10px",
-              padding: "12px 14px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between"
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* Modal Body */}
+        <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "18px 22px" }}>
+          {/* Status Hero Card */}
+          <div className={`settings-hero-card is-${saveStatus}`}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               {saveStatus === "saved" ? (
-                <CheckCircle2 size={18} style={{ color: "#10B981", flexShrink: 0 }} />
+                <CheckCircle2 size={22} style={{ color: "#10B981", flexShrink: 0 }} />
               ) : saveStatus === "saving" ? (
-                <RefreshCw size={18} className="spin-sync-icon" style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
+                <RefreshCw size={22} className="spin-sync-icon" style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
               ) : (
-                <Clock size={18} style={{ color: "#F59E0B", flexShrink: 0 }} />
+                <Clock size={22} style={{ color: "#F59E0B", flexShrink: 0 }} />
               )}
               <div>
-                <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--jantt-text)", lineHeight: 1.2 }}>
                   {saveStatus === "saved"
                     ? "All changes saved"
                     : saveStatus === "saving"
                     ? "Saving changes..."
                     : "Pending unsaved changes"}
                 </div>
-                <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
                   Last saved: {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                 </div>
               </div>
             </div>
 
             <button
+              type="button"
               className="btn-nav btn-nav-primary"
               onClick={handleManualSaveNow}
-              style={{ fontSize: "11.5px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+              style={{
+                fontSize: "12px",
+                padding: "0 12px",
+                height: "30px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                borderRadius: "8px",
+                fontWeight: 600
+              }}
               title="Force an immediate save to permanent browser storage"
             >
-              <Save size={12} />
+              <Save size={13} />
               <span>Save Now</span>
             </button>
           </div>
 
           {/* Cadence Selector */}
           <div>
-            <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--jantt-text-muted)", marginBottom: "8px" }}>
+            <div className="settings-section-title">
               Auto-Save Cadence
-            </label>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {AUTOSAVE_OPTIONS.map((opt) => (
-                <label
-                  key={opt.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "10px",
-                    padding: "8px 12px",
-                    background: autoSaveInterval === opt.id ? "var(--jantt-surface-hover, rgba(56, 189, 248, 0.08))" : "var(--jantt-surface)",
-                    border: `1px solid ${autoSaveInterval === opt.id ? "var(--jantt-accent, #38BDF8)" : "var(--jantt-border)"}`,
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    transition: "all 0.15s ease"
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="autosave-interval"
-                    value={opt.id}
-                    checked={autoSaveInterval === opt.id}
-                    onChange={() => setAutoSaveInterval(opt.id)}
-                    style={{ marginTop: "3px" }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>{opt.label}</span>
-                      {opt.recommended && (
-                        <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--jantt-accent)", background: "var(--jantt-accent-glow)", padding: "1px 6px", borderRadius: "100px" }}>
-                          Recommended
-                        </span>
-                      )}
+            </div>
+            <div className="settings-cadence-list">
+              {AUTOSAVE_OPTIONS.map((opt) => {
+                const isSelected = autoSaveInterval === opt.id;
+                return (
+                  <div
+                    key={opt.id}
+                    className={`settings-cadence-item ${isSelected ? "is-selected" : ""}`}
+                    onClick={() => setAutoSaveInterval(opt.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setAutoSaveInterval(opt.id);
+                      }
+                    }}
+                  >
+                    {/* Custom Styled Radio Indicator */}
+                    <div className="settings-radio-indicator">
+                      <div className="settings-radio-inner-dot" />
                     </div>
-                    <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                      {opt.desc}
+
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                          {opt.label}
+                        </span>
+                        {opt.recommended && (
+                          <span className="settings-badge-rec">
+                            Recommended
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px", lineHeight: 1.3 }}>
+                        {opt.desc}
+                      </div>
                     </div>
                   </div>
-                </label>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* Diagnostic Footer */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "10px 12px",
-              background: "var(--jantt-surface)",
-              borderRadius: "8px",
-              border: "1px solid var(--jantt-border-subtle)",
-              fontSize: "11.5px",
-              color: "var(--jantt-text-muted)"
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <HardDrive size={13} style={{ color: "var(--jantt-accent)" }} />
-              <span>Jantt v1.1.1 • localStorage</span>
+          {/* Diagnostic Storage Card */}
+          <div className="settings-storage-card">
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <HardDrive size={15} style={{ color: "var(--jantt-accent)" }} />
+              <div>
+                <span style={{ fontWeight: 600, color: "var(--jantt-text)" }}>
+                  Browser LocalStorage
+                </span>
+                <span style={{ display: "block", fontSize: "10.5px", color: "var(--jantt-text-muted)" }}>
+                  Offline-first persistent storage
+                </span>
+              </div>
             </div>
-            <span style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 600, color: "var(--jantt-text)" }}>
-              ~{storageSizeKb} KB
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                style={{
+                  fontFamily: "var(--jantt-font-mono, monospace)",
+                  fontWeight: 700,
+                  color: "var(--jantt-accent, #38BDF8)",
+                  fontSize: "12px",
+                  background: "var(--jantt-accent-glow, rgba(56, 189, 248, 0.1))",
+                  border: "1px solid var(--jantt-border, rgba(56, 189, 248, 0.2))",
+                  padding: "3px 8px",
+                  borderRadius: "6px"
+                }}
+              >
+                ~{storageSizeKb} KB
+              </span>
+            </div>
           </div>
         </div>
 
+        {/* Modal Footer */}
         <div className="prompt-modal-footer">
-          <button className="btn-nav" onClick={() => setShowAutoSaveModal(false)}>
-            Close
-          </button>
-          <button className="btn-nav btn-nav-primary" onClick={() => setShowAutoSaveModal(false)}>
+          <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+            Press <kbd style={{ padding: "1px 4px", borderRadius: "4px", background: "var(--jantt-surface-solid)", border: "1px solid var(--jantt-border)" }}>Esc</kbd> to close
+          </span>
+          <button
+            type="button"
+            className="btn-nav btn-nav-primary"
+            onClick={() => setShowAutoSaveModal(false)}
+            style={{ padding: "0 18px", height: "32px" }}
+          >
             Done
           </button>
         </div>
