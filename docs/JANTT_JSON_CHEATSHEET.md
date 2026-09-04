@@ -8,6 +8,125 @@ This document is the official benchmark cheatsheet and reference guide for autho
 
 ---
 
+## AI Agent Workbench & Schema Cheatsheet
+
+### AI-Native Ideology: Stop Asking AI to Write Fragile Timeline Code
+
+Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and canvas listeners produces brittle, hallucination-prone results. With Jantt, the AI outputs **pure declarative JSON**, and Jantt delivers deterministic, interactive execution.
+
+| 10× | 0 | 100% | 2-Way |
+| :---: | :---: | :---: | :---: |
+| **Fewer LLM Tokens vs JSX** | **Runtime Dependencies** | **Deterministic DAG Solver** | **Bidirectional State Sync** |
+
+*Schema Contract: `https://jantt.dev/schema/v1.json` (v1.2.0)*
+
+#### The 4-Step Bidirectional Loop
+
+1. **Step 1: Feed Cheatsheet to LLM** — Give the AI the compact schema contract (WBS, dates, DAG dependencies, milestones, budget).
+2. **Step 2: AI Outputs Pure JSON** — Uses 10× fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
+3. **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban & Analytics.
+4. **Step 4: Bidirectional Loop** — Humans drag and adjust visually. Jantt syncs clean JSON back to localStorage/disk for the AI agent.
+
+---
+
+### LLM System Prompt
+
+Hand this prompt to ChatGPT, Claude, Gemini, Cursor, or your autonomous AI agent pipelines:
+
+```text
+You are a precision project management schedule generator.
+Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
+
+# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET
+
+## 1. Top-Level Root Structure
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {
+    "title": "<Project Title>",
+    "description": "<Project narrative and objectives>",
+    "person": "<Lead Program Manager / Owner>",
+    "organization": "<Enterprise / Organization Name>",
+    "start": "YYYY-MM-DD",
+    "end": "YYYY-MM-DD",
+    "defaultGapDays": 2,
+    "scale": "day" | "week" | "month" | "quarter" | "year",
+    "linkRouting": "orthogonal" | "curved" | "direct",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "currency": "USD",
+    "budget": 385000,
+    "version": "1.2.0"
+  },
+  "categories": {
+    "<category_id>": {
+      "label": "<Category Display Name>",
+      "color": "#HEX_COLOR",
+      "soft": "#BG_TINT_HEX",
+      "icon": "<lucide_icon_name>"
+    }
+  },
+  "documents": [
+    {
+      "id": "doc-unique-id",
+      "label": "<Document or Deliverable Title>",
+      "status": "have" | "pending" | "missing",
+      "owner": "<Owner Name>",
+      "url": "<Documentation Link>",
+      "note": "<Review notes / status>"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-unique-id",
+      "wbs": "1.1",
+      "label": "Task Name / Title",
+      "category": "<matching_category_id>",
+      "start": "YYYY-MM-DD",
+      "end": "YYYY-MM-DD",
+      "assignee": "Team Member Name",
+      "phase": "Phase 1: Foundation",
+      "priority": "low" | "medium" | "high" | "urgent",
+      "estimatedCost": 28000,
+      "actualCost": 15000,
+      "dependsOn": "prereq-id" | ["prereq-1", "prereq-2"] | null,
+      "gapDays": 2,
+      "locked": false,
+      "progress": 0.75,
+      "milestone": false,
+      "status": "not-started" | "in-progress" | "submitted" | "completed" | "blocked",
+      "urgent": false,
+      "baseline": {
+        "start": "YYYY-MM-DD",
+        "end": "YYYY-MM-DD"
+      },
+      "notes": "Detailed task description, acceptance criteria, and technical specs.",
+      "fields": {
+        "jira": "JANTT-101",
+        "storyPoints": 13,
+        "repo": "github.com/org/repo",
+        "deliverable": "schemas/v1.json"
+      }
+    }
+  ]
+}
+
+## 2. Critical Constraints & Validation Rules:
+1. DATES: All dates must be ISO "YYYY-MM-DD" format. "end" must be >= "start".
+2. CATEGORIES: Every task "category" must match an existing key in the "categories" dictionary.
+3. DEPENDENCIES (DAG):
+   - "dependsOn" can be a single task ID string, an array of strings ["t1", "t2"], or null.
+   - All referenced dependency IDs must exist in the "tasks" list (no dangling references).
+   - Strict Directed Acyclic Graph: NO circular dependency loops (e.g. A -> B -> C -> A).
+   - Timing Sanity: A task's "start" must be on or after prerequisite "end" + gapDays.
+4. MILESTONES: For zero-duration milestone gates, set "milestone": true and "start" equal to "end".
+5. PROGRESS: Must be a decimal float from 0.0 (0%) to 1.0 (100%).
+6. BASELINES: Optional planned timeframe object { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } for baseline variance tracking.
+7. LOCKED: Set "locked": true on fixed gates or hard-deadline milestones to prevent accidental drag shifts.
+```
+
+---
+
 ## 1. Top-Level Structure
 
 ```json
