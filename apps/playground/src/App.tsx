@@ -68,7 +68,9 @@ import {
   Share2,
   Lightbulb,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Save,
+  HardDrive
 } from "lucide-react";
 
 import { JanttLogo, JanttIcon } from "./components/JanttLogo";
@@ -183,8 +185,20 @@ const STORAGE_KEYS = {
   SIDEBAR_WIDTH: "jantt_saved_sidebar_width",
   KANBAN_SORT: "jantt_kanban_sort",
   PERSON_FILTER: "jantt_person_filter",
-  DATE_FILTER_MODE: "jantt_date_filter_mode"
+  DATE_FILTER_MODE: "jantt_date_filter_mode",
+  AUTOSAVE_INTERVAL: "jantt_autosave_interval"
 };
+
+export type AutoSaveInterval = "5s" | "10s" | "30s" | "60s" | "immediate" | "off";
+
+export const AUTOSAVE_OPTIONS: { id: AutoSaveInterval; label: string; desc: string; recommended?: boolean }[] = [
+  { id: "5s", label: "5 Seconds", desc: "Recommended. Ideal balance of real-time safety and typing fluidity.", recommended: true },
+  { id: "10s", label: "10 Seconds", desc: "Comfortable batch interval for steady workflows." },
+  { id: "30s", label: "30 Seconds", desc: "Relaxed batching for large schedules." },
+  { id: "60s", label: "1 Minute", desc: "Periodic checkpoint saves." },
+  { id: "immediate", label: "Immediate (0s)", desc: "Synchronously persists on every keystroke and drag." },
+  { id: "off", label: "Disabled (Manual Only)", desc: "Never auto-saves. Persists only when you click Save Now." }
+];
 
 
 function loadSavedProjects(): SavedProject[] {
@@ -610,23 +624,170 @@ export function App() {
   const isDraggingRef = useRef(false);
 
 
-  // Auto-persist active state and custom projects to localStorage memory
+  // ── Auto-Save Engine & Configurable Cadence ─────────────────────────────
+  const [autoSaveInterval, setAutoSaveInterval] = useState<AutoSaveInterval>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.AUTOSAVE_INTERVAL);
+      if (saved && ["5s", "10s", "30s", "60s", "immediate", "off"].includes(saved)) {
+        return saved as AutoSaveInterval;
+      }
+    } catch {}
+    return "5s"; // Recommended default
+  });
+
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "pending">("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<Date>(() => new Date());
+  const [showAutoSaveModal, setShowAutoSaveModal] = useState(false);
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const isFirstMountRef = useRef(true);
+
+  // Sync latest state references for timer and unload flushes
+  const jsonTextRef = useRef(jsonText);
+  jsonTextRef.current = jsonText;
+  const activeProjectIdRef = useRef(activeProjectId);
+  activeProjectIdRef.current = activeProjectId;
+  const parsedDataRef = useRef(parsedData);
+  parsedDataRef.current = parsedData;
+
+  // Persist auto-save configuration choice
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, jsonText);
+      localStorage.setItem(STORAGE_KEYS.AUTOSAVE_INTERVAL, autoSaveInterval);
     } catch {}
+  }, [autoSaveInterval]);
 
-    // If a custom project is active, auto-update it in customProjects
-    if (activeProjectId !== "default" && parsedData) {
-      setCustomProjects((prev) => {
-        const updated = prev.map((p) =>
-          p.id === activeProjectId ? { ...p, data: parsedData, updatedAt: new Date().toISOString() } : p
-        );
-        saveCustomProjects(updated);
-        return updated;
-      });
+  // Core save execution to browser storage
+  const executeSave = useCallback(() => {
+    setSaveStatus("saving");
+    try {
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, jsonTextRef.current);
+      if (activeProjectIdRef.current !== "default" && parsedDataRef.current) {
+        setCustomProjects((prev) => {
+          const updated = prev.map((p) =>
+            p.id === activeProjectIdRef.current
+              ? { ...p, data: parsedDataRef.current!, updatedAt: new Date().toISOString() }
+              : p
+          );
+          saveCustomProjects(updated);
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.error("Auto-save error:", err);
     }
-  }, [jsonText, activeProjectId, parsedData]);
+    setLastSavedAt(new Date());
+    setSaveStatus("saved");
+  }, []);
+
+  const handleManualSaveNow = () => {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    executeSave();
+    showToast("Plan state successfully saved to browser storage!");
+  };
+
+  // Immediate flush before tab close / navigation ensures zero lost work
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, jsonTextRef.current);
+        if (activeProjectIdRef.current !== "default" && parsedDataRef.current) {
+          const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_PROJECTS);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const updated = list.map((p: any) =>
+                p.id === activeProjectIdRef.current
+                  ? { ...p, data: parsedDataRef.current, updatedAt: new Date().toISOString() }
+                  : p
+              );
+              localStorage.setItem(STORAGE_KEYS.CUSTOM_PROJECTS, JSON.stringify(updated));
+            }
+          }
+        }
+      } catch {}
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  // Dispatch auto-save according to configured interval
+  useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    if (autoSaveInterval === "immediate") {
+      executeSave();
+      return;
+    }
+
+    if (autoSaveInterval === "off") {
+      setSaveStatus("pending");
+      return;
+    }
+
+    setSaveStatus("pending");
+    const delayMs =
+      autoSaveInterval === "5s"
+        ? 5000
+        : autoSaveInterval === "10s"
+        ? 10000
+        : autoSaveInterval === "30s"
+        ? 30000
+        : 60000;
+
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      executeSave();
+    }, delayMs);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [jsonText, activeProjectId, parsedData, autoSaveInterval, executeSave]);
+
+  // 1-second dynamic relative time ticker
+  const [saveTicker, setSaveTicker] = useState(0);
+  useEffect(() => {
+    const ticker = setInterval(() => setSaveTicker((t) => t + 1), 1000);
+    return () => clearInterval(ticker);
+  }, []);
+
+  const autoSaveLabel = useMemo(() => {
+    if (saveStatus === "saving") return "Saving...";
+    if (saveStatus === "pending") return "Unsaved";
+    const diffSec = Math.floor((Date.now() - lastSavedAt.getTime()) / 1000);
+    if (diffSec < 5) return "Saved just now";
+    if (diffSec < 60) return `Saved ${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `Saved ${diffMin}m ago`;
+    return `Saved at ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  }, [saveStatus, lastSavedAt, saveTicker]);
+
+  const storageSizeKb = useMemo(() => {
+    try {
+      let total = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("jantt_")) {
+          total += (localStorage.getItem(k)?.length || 0) * 2;
+        }
+      }
+      return (total / 1024).toFixed(1);
+    } catch {
+      return "0.0";
+    }
+  }, [lastSavedAt, showAutoSaveModal]);
 
   useEffect(() => {
     try {
@@ -1397,9 +1558,6 @@ export function App() {
     activeSidebarRef.current?.close();
   }, [activeView]);
 
-  const parsedDataRef = useRef(parsedData);
-  parsedDataRef.current = parsedData;
-
   const activeThemeRef = useRef(activeTheme);
   activeThemeRef.current = activeTheme;
 
@@ -1788,24 +1946,21 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
         <div className="brand-section">
           <JanttLogo size={28} />
           <span className="brand-badge">v1.1.1</span>
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-              fontSize: "11px",
-              color: "#10B981",
-              background: "rgba(16, 185, 129, 0.12)",
-              padding: "2px 8px",
-              borderRadius: "12px",
-              fontWeight: 600,
-              marginLeft: "4px"
-            }}
-            title="All changes are continuously auto-saved to permanent browser storage (localStorage)"
+          <button
+            type="button"
+            className={`btn-autosave-badge is-${saveStatus}`}
+            onClick={() => setShowAutoSaveModal(true)}
+            title={`Last auto-saved: ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • Cadence: ${autoSaveInterval} • Click to configure`}
           >
-            <CheckCircle2 size={11} />
-            <span>Auto-Saved</span>
-          </span>
+            {saveStatus === "saving" ? (
+              <RefreshCw size={11} className="spin-sync-icon" />
+            ) : saveStatus === "pending" ? (
+              <Clock size={11} />
+            ) : (
+              <CheckCircle2 size={11} />
+            )}
+            <span>{autoSaveLabel}</span>
+          </button>
           {isSidebarCollapsed && (
             <button
               className="btn-nav btn-restore-sidebar"
@@ -4506,6 +4661,158 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                   <span>{copiedShareLink ? "Link Copied!" : "Copy Share Link"}</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Auto-Save Configuration Modal ────────────────────────────────────── */}
+      {showAutoSaveModal && (
+        <div className="prompt-modal-backdrop" onClick={() => setShowAutoSaveModal(false)}>
+          <div
+            className="prompt-modal-window"
+            style={{ maxWidth: "480px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="prompt-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                <Save size={18} style={{ color: "var(--jantt-accent)" }} />
+                <div>
+                  <h2 style={{ fontSize: "15px", fontWeight: 700, margin: 0 }}>Auto-Save Settings</h2>
+                  <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                    Configure automatic persistence and review client storage
+                  </span>
+                </div>
+              </div>
+              <button className="prompt-modal-close-btn" onClick={() => setShowAutoSaveModal(false)}>
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              {/* Status Banner */}
+              <div
+                style={{
+                  background: saveStatus === "saved" ? "rgba(16, 185, 129, 0.09)" : "rgba(245, 158, 11, 0.09)",
+                  border: `1px solid ${saveStatus === "saved" ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.25)"}`,
+                  borderRadius: "10px",
+                  padding: "12px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  {saveStatus === "saved" ? (
+                    <CheckCircle2 size={18} style={{ color: "#10B981", flexShrink: 0 }} />
+                  ) : saveStatus === "saving" ? (
+                    <RefreshCw size={18} className="spin-sync-icon" style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
+                  ) : (
+                    <Clock size={18} style={{ color: "#F59E0B", flexShrink: 0 }} />
+                  )}
+                  <div>
+                    <div style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                      {saveStatus === "saved"
+                        ? "All changes saved"
+                        : saveStatus === "saving"
+                        ? "Saving changes..."
+                        : "Pending unsaved changes"}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                      Last saved: {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  className="btn-nav btn-nav-primary"
+                  onClick={handleManualSaveNow}
+                  style={{ fontSize: "11.5px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                  title="Force an immediate save to permanent browser storage"
+                >
+                  <Save size={12} />
+                  <span>Save Now</span>
+                </button>
+              </div>
+
+              {/* Cadence Selector */}
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--jantt-text-muted)", marginBottom: "8px" }}>
+                  Auto-Save Cadence
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {AUTOSAVE_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        padding: "8px 12px",
+                        background: autoSaveInterval === opt.id ? "var(--jantt-surface-hover, rgba(56, 189, 248, 0.08))" : "var(--jantt-surface)",
+                        border: `1px solid ${autoSaveInterval === opt.id ? "var(--jantt-accent, #38BDF8)" : "var(--jantt-border)"}`,
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="autosave-interval"
+                        value={opt.id}
+                        checked={autoSaveInterval === opt.id}
+                        onChange={() => setAutoSaveInterval(opt.id)}
+                        style={{ marginTop: "3px" }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>{opt.label}</span>
+                          {opt.recommended && (
+                            <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--jantt-accent)", background: "var(--jantt-accent-glow)", padding: "1px 6px", borderRadius: "100px" }}>
+                              Recommended
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
+                          {opt.desc}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Diagnostic Footer */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 12px",
+                  background: "var(--jantt-surface)",
+                  borderRadius: "8px",
+                  border: "1px solid var(--jantt-border-subtle)",
+                  fontSize: "11.5px",
+                  color: "var(--jantt-text-muted)"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <HardDrive size={13} style={{ color: "var(--jantt-accent)" }} />
+                  <span>Persistent Client Storage (localStorage)</span>
+                </div>
+                <span style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 600, color: "var(--jantt-text)" }}>
+                  ~{storageSizeKb} KB
+                </span>
+              </div>
+            </div>
+
+            <div className="prompt-modal-footer">
+              <button className="btn-nav" onClick={() => setShowAutoSaveModal(false)}>
+                Close
+              </button>
+              <button className="btn-nav btn-nav-primary" onClick={() => setShowAutoSaveModal(false)}>
+                Done
+              </button>
             </div>
           </div>
         </div>
