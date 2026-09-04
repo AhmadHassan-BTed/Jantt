@@ -11,10 +11,16 @@
   padding: 0;
 }
 
+html {
+  font-size: 14px;
+}
+
 body {
   background: var(--jantt-bg, #FFFFFF);
   color: var(--jantt-text, #0F172A);
   font-family: var(--jantt-font-sans, 'Inter', system-ui, -apple-system, sans-serif);
+  font-size: 14px;
+  line-height: 1.5;
   min-height: 100vh;
   height: 100vh;
   overflow: hidden;
@@ -55,7 +61,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 10px 18px;
   background: var(--jantt-surface, #F8FAFC);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -68,9 +74,9 @@ body {
 .brand-section {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
-  padding-right: 12px;
+  padding-right: 14px;
 }
 
 .brand-logo {
@@ -78,15 +84,15 @@ body {
   align-items: center;
   gap: 10px;
   font-family: 'Space Grotesk', -apple-system, sans-serif;
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--jantt-text, #FFFFFF);
   letter-spacing: -0.02em;
 }
 
 .brand-icon-box {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 9px;
   background: linear-gradient(135deg, var(--jantt-accent, #38BDF8) 0%, #3B82F6 100%);
   display: flex;
@@ -94,29 +100,30 @@ body {
   justify-content: center;
   color: #000;
   font-weight: 800;
-  font-size: 15px;
+  font-size: 16px;
   box-shadow: 0 0 16px var(--jantt-accent-glow, rgba(56, 189, 248, 0.4));
 }
 
 .brand-badge {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.12));
   color: var(--jantt-accent, #38BDF8);
   border: 1px solid var(--jantt-border-strong, rgba(56, 189, 248, 0.3));
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 100px;
 }
 
 .btn-autosave-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  height: 32px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  padding: 2px 9px;
+  padding: 4px 10px;
   border-radius: 100px;
   cursor: pointer;
   outline: none;
@@ -184,7 +191,7 @@ body {
 .nav-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
   flex: 1 1 auto;
@@ -203,7 +210,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
   line-height: 1;
   white-space: nowrap;
 }
@@ -216,8 +226,8 @@ body {
 .nav-select-group {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 13px;
   color: var(--jantt-text-muted, #94A3B8);
   font-weight: 500;
   flex-shrink: 0;
@@ -228,9 +238,10 @@ body {
   background: var(--jantt-surface-solid, #121A2C);
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.15));
   color: var(--jantt-text, #F8FAFC);
-  border-radius: 9px;
-  padding: 5px 10px;
-  font-size: 12px;
+  border-radius: 8px;
+  padding: 0 10px;
+  height: 32px;
+  font-size: 13px;
   font-weight: 500;
   outline: none;
   cursor: pointer;
@@ -291,8 +302,9 @@ select option,
   align-items: center;
   background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
-  border-radius: 10px;
-  padding: 2px 4px 2px 8px;
+  border-radius: 8px;
+  height: 32px;
+  padding: 0 6px 0 10px;
   gap: 6px;
   flex-shrink: 0;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -310,7 +322,7 @@ select option,
 }
 
 .nav-plan-label {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--jantt-text-muted, #94A3B8);
   text-transform: uppercase;
@@ -321,8 +333,9 @@ select option,
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
-  padding: 4px 6px !important;
-  font-size: 12px;
+  padding: 0 6px !important;
+  height: 100%;
+  font-size: 13px;
   font-weight: 600;
   color: var(--jantt-text, #F8FAFC);
   max-width: 175px;
@@ -332,22 +345,23 @@ select option,
 .nav-plan-actions {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   border-left: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
-  padding-left: 4px;
+  padding-left: 5px;
 }
 
 .btn-plan-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--jantt-text-muted, #94A3B8);
-  padding: 3px 6px;
+  padding: 0 8px;
+  height: 26px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -363,6 +377,7 @@ select option,
   background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
   color: var(--jantt-accent, #38BDF8);
   border-color: var(--jantt-accent-glow, rgba(56, 189, 248, 0.3));
+  padding: 0 9px;
 }
 
 .btn-plan-action.is-add:hover {
@@ -395,9 +410,11 @@ select option,
 
 .nav-export-split {
   display: inline-flex;
+  align-items: center;
   background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
-  border-radius: 9px;
+  border-radius: 8px;
+  height: 32px;
   padding: 1px;
   gap: 1px;
 }
@@ -405,9 +422,10 @@ select option,
 .nav-export-split .btn-nav {
   border: none;
   background: transparent;
-  border-radius: 7px;
-  padding: 4px 8px;
-  font-size: 11px;
+  border-radius: 6px;
+  padding: 0 9px;
+  height: 28px;
+  font-size: 12px;
 }
 
 .nav-export-split .btn-nav:hover {
@@ -418,13 +436,14 @@ select option,
 .btn-nav {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.9));
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
   color: var(--jantt-text, #E2E8F0);
-  padding: 5px 10px;
-  border-radius: 9px;
-  font-size: 12px;
+  padding: 0 12px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -493,13 +512,14 @@ select option,
 .btn-prompt {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--jantt-accent, #0284C7);
   border: 1px solid var(--jantt-accent, #0284C7);
   color: var(--jantt-btn-text, #FFFFFF);
-  padding: 5px 10px;
-  border-radius: 9px;
-  font-size: 12px;
+  padding: 0 14px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1289,7 +1309,7 @@ select option,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 16px;
+  padding: 10px 18px;
   background: var(--jantt-surface, #F8FAFC);
   border-bottom: 1px solid var(--jantt-border, #E2E8F0);
   flex-shrink: 0;
@@ -1325,8 +1345,9 @@ select option,
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
-  font-size: 11.5px;
+  padding: 0 13px;
+  height: 32px;
+  font-size: 12.5px;
   font-weight: 600;
   border: none;
   background: transparent;
@@ -1351,9 +1372,10 @@ select option,
   background: var(--jantt-surface-solid, #FFFFFF);
   border: 1px solid var(--jantt-border, #E2E8F0);
   color: var(--jantt-text, #0F172A);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11.5px;
+  border-radius: 7px;
+  padding: 0 10px;
+  height: 32px;
+  font-size: 12.5px;
   font-family: var(--jantt-font-mono, monospace);
   outline: none;
   cursor: pointer;
@@ -1365,11 +1387,14 @@ select option,
 }
 
 .date-filter-active-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--jantt-accent, #0284C7);
   background: var(--jantt-accent-glow, rgba(2, 132, 199, 0.1));
-  padding: 3px 8px;
+  padding: 0 10px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
   border-radius: 6px;
   border: 1px solid var(--jantt-border-strong, rgba(2, 132, 199, 0.2));
   font-family: var(--jantt-font-mono, monospace);
@@ -1378,11 +1403,11 @@ select option,
 .date-range-inputs {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .date-filter-range-sep {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--jantt-text-muted, #94A3B8);
   font-weight: 700;
 }
@@ -1395,11 +1420,14 @@ select option,
 }
 
 .date-filter-count-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--jantt-accent, #38BDF8);
   background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
-  padding: 2px 8px;
+  padding: 0 10px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
   border-radius: 100px;
   border: 1px solid var(--jantt-accent-glow, rgba(56, 189, 248, 0.3));
 }
@@ -1407,13 +1435,14 @@ select option,
 .date-filter-reset-btn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.25);
   color: #EF4444;
   border-radius: 6px;
-  padding: 2px 7px;
-  font-size: 11px;
+  padding: 0 10px;
+  height: 30px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1427,15 +1456,16 @@ select option,
 .date-filter-behavior-group {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background: var(--jantt-surface-solid, rgba(21, 34, 56, 0.8));
   border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
   border-radius: 7px;
   padding: 2px 4px;
+  height: 32px;
 }
 
 .date-filter-behavior-label {
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--jantt-text-muted, #94A3B8);
   font-weight: 700;
   margin-right: 2px;
@@ -1445,9 +1475,10 @@ select option,
   background: transparent;
   border: none;
   color: var(--jantt-text-muted, #94A3B8);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  padding: 2px 7px;
+  padding: 0 9px;
+  height: 26px;
   border-radius: 5px;
   cursor: pointer;
   display: inline-flex;
@@ -1473,7 +1504,8 @@ select option,
   background: var(--jantt-surface-solid, #FFFFFF);
   border: 1px solid var(--jantt-border, #E2E8F0);
   border-radius: 7px;
-  padding: 3px 8px;
+  padding: 0 10px;
+  height: 32px;
   transition: all 0.15s ease;
 }
 
@@ -1492,11 +1524,12 @@ select option,
   background: transparent;
   border: none;
   color: var(--jantt-text, #0F172A);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   outline: none;
   cursor: pointer;
   padding-right: 4px;
+  height: 100%;
 }
 
 .filter-bar-person-select option,
@@ -1510,8 +1543,8 @@ select option,
   border: 1px solid rgba(239, 68, 68, 0.25);
   color: #EF4444;
   border-radius: 4px;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   cursor: pointer;
   display: inline-flex;

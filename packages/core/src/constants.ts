@@ -25,9 +25,9 @@ export const DEFAULT_CATEGORY: Category = {
 };
 
 export const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
-  day: 36,
-  week: 18,
-  month: 7,
-  quarter: 3,
-  year: 1.5
+  day: 52,
+  week: 24,
+  month: 10,
+  quarter: 4.5,
+  year: 2.2
 };

@@ -176,16 +176,16 @@ export function loadInitialState() {
     }
   } catch {}
 
-  let initialRowHeightMode: RowHeightMode = "fit";
+  let initialRowHeightMode: RowHeightMode = "custom";
   try {
     const savedMode = localStorage.getItem(STORAGE_KEYS.ROW_HEIGHT_MODE) as RowHeightMode;
     if (savedMode && ["fit", "custom"].includes(savedMode)) initialRowHeightMode = savedMode;
   } catch {}
 
-  let initialRowHeight = 46;
+  let initialRowHeight = 48;
   try {
     const savedHeight = localStorage.getItem(STORAGE_KEYS.ROW_HEIGHT);
-    if (savedHeight) initialRowHeight = parseInt(savedHeight, 10) || 46;
+    if (savedHeight) initialRowHeight = parseInt(savedHeight, 10) || 48;
   } catch {}
 
   let initialCritical = true;
