@@ -458,8 +458,15 @@ select option,
 }
 
 .jantt-theme-midnight-rose .btn-nav-primary,
-.jantt-theme-sunset-crimson .btn-nav-primary {
+.jantt-theme-sunset-crimson .btn-nav-primary,
+.jantt-theme-nordic-frost .btn-nav-primary,
+.jantt-theme-beenie .btn-nav-primary {
   color: #FFFFFF;
+}
+
+.jantt-theme-beenie .btn-nav-primary {
+  background: linear-gradient(135deg, #EC4899 0%, #F43F5E 100%);
+  border-color: #EC4899;
 }
 
 .btn-nav-primary:hover {
@@ -515,8 +522,14 @@ select option,
 
 .jantt-theme-midnight-rose .btn-prompt,
 .jantt-theme-sunset-crimson .btn-prompt,
-.jantt-theme-nordic-frost .btn-prompt {
+.jantt-theme-nordic-frost .btn-prompt,
+.jantt-theme-beenie .btn-prompt {
   color: #FFFFFF;
+}
+
+.jantt-theme-beenie .btn-prompt {
+  background: linear-gradient(135deg, #EC4899 0%, #F43F5E 100%);
+  border-color: #EC4899;
 }
 
 .btn-prompt:hover {
