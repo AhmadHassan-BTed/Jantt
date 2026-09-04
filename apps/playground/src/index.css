@@ -127,6 +127,20 @@ body {
   display: none;
 }
 
+.jantt-scale-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.jantt-scale-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 .nav-select-group {
   display: flex;
   align-items: center;

@@ -358,6 +358,10 @@
 }
 
 .jantt-scale-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   background: transparent;
   border: none;
   color: var(--jantt-text-muted);
@@ -368,6 +372,13 @@
   cursor: pointer;
   transition: all 0.16s ease;
   text-transform: capitalize;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.jantt-scale-btn svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 .jantt-scale-btn:hover {
