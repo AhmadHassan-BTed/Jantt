@@ -926,9 +926,8 @@
 .jantt-col-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
   min-width: 0;
   padding-left: 2px;
 }
@@ -948,8 +947,49 @@
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--jantt-text);
   letter-spacing: -0.01em;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Compact Assignee Avatar Initials */
+.jantt-assignee-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  min-height: 17px;
+  border-radius: 50%;
+  color: #FFFFFF;
+  font-size: 8px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  text-transform: uppercase;
+  user-select: none;
+  cursor: default;
+}
+
+.jantt-task-avatar-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  border-radius: 50%;
+  color: #FFFFFF;
+  font-size: 7.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  user-select: none;
+  cursor: default;
 }
 
 .jantt-col-meta {
@@ -1261,9 +1301,48 @@
   box-shadow: 0 0 5px rgba(225, 29, 72, 0.35);
 }
 
-.jantt-today-badge,
+/* Header-Anchored Today Marker Pin */
 .jantt-header-today-marker {
-  display: none !important;
+  position: absolute;
+  bottom: -1px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 15;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), filter 0.15s ease;
+}
+
+.jantt-header-today-marker:hover {
+  filter: brightness(1.15);
+  transform: translateX(-50%) scale(1.06);
+}
+
+.jantt-header-today-pill {
+  font-size: 8px;
+  font-weight: 800;
+  font-family: var(--jantt-font-mono, ui-monospace, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #FFFFFF;
+  background: var(--jantt-today);
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 8px rgba(225, 29, 72, 0.45);
+  white-space: nowrap;
+  line-height: 1.15;
+}
+
+.jantt-header-today-arrow {
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid var(--jantt-today);
+  margin-top: -0.5px;
 }
 
 /* SVG Dependency Overlay */

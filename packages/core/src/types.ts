@@ -153,6 +153,7 @@ export interface ViewportOptions {
   scale?: TimeScale; // "day" | "week" | "month" | "quarter" | "year"
   linkRouting?: LinkRoutingStyle; // "orthogonal" | "curved" | "direct"
   showToday?: boolean;
+  showTodayTag?: boolean;
   showWeekends?: boolean;
   showCriticalPath?: boolean;
   showBaselines?: boolean;
