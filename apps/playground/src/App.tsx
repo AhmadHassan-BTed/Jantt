@@ -1532,16 +1532,6 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
             </button>
           </div>
 
-          {/* People (Team) Manager Button */}
-          <button
-            className="btn-nav"
-            onClick={() => setShowPeopleModal(true)}
-            title="Manage team members and assignees"
-          >
-            <Users size={13} />
-            <span>People{effectivePeople.length > 0 ? ` (${effectivePeople.length})` : ""}</span>
-          </button>
-
 
           {/* Plan Control Center — Grouped Cohesive Unit */}
           <div className="nav-plan-group">
