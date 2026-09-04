@@ -46,6 +46,9 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   const toolbar = document.createElement("div");
   toolbar.className = "jantt-toolbar";
 
+  const propsRef = { current: props };
+  (toolbar as any).__propsRef = propsRef;
+
   // ─────────────────────────────────────────────────────────────────────────────
   // ZONE 1: LEFT (Schedule Title & Task Count)
   // ─────────────────────────────────────────────────────────────────────────────
@@ -100,18 +103,18 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   zoomSlider.addEventListener("input", (e) => {
     const val = parseFloat((e.target as HTMLInputElement).value);
     if (!isNaN(val) && val > 0) {
-      props.onDayWidthChange(val);
+      propsRef.current.onDayWidthChange(val);
     }
   });
 
   zoomOutBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    props.onDayWidthChange(Math.max(DAY_WIDTH_MIN, Math.round((props.dayWidth / 1.25) * 10) / 10));
+    propsRef.current.onDayWidthChange(Math.max(DAY_WIDTH_MIN, Math.round((propsRef.current.dayWidth / 1.25) * 10) / 10));
   });
 
   zoomInBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    props.onDayWidthChange(Math.min(DAY_WIDTH_MAX, Math.round((props.dayWidth * 1.25) * 10) / 10));
+    propsRef.current.onDayWidthChange(Math.min(DAY_WIDTH_MAX, Math.round((propsRef.current.dayWidth * 1.25) * 10) / 10));
   });
 
   (["day", "week", "month", "quarter", "year"] as TimeScale[]).forEach((s) => {
@@ -120,7 +123,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     btn.className = `jantt-scale-btn ${s === props.currentScale ? "is-active" : ""}`;
     btn.textContent = s;
     btn.title = `Switch to ${s} scale view`;
-    btn.addEventListener("click", () => props.onScaleChange(s));
+    btn.addEventListener("click", () => propsRef.current.onScaleChange(s));
     scaleGroup.appendChild(btn);
   });
 
@@ -152,7 +155,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   rhSlider.addEventListener("input", (e) => {
     const val = parseInt((e.target as HTMLInputElement).value, 10);
     if (!isNaN(val)) {
-      props.onRowHeightChange(val);
+      propsRef.current.onRowHeightChange(val);
     }
   });
 
@@ -162,10 +165,10 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
       e.stopPropagation();
       const mode = btn.dataset.mode;
       if (mode === "fit") {
-        props.onRowHeightModeChange("fit");
+        propsRef.current.onRowHeightModeChange("fit");
       } else {
         const val = parseInt(btn.dataset.val || "46", 10);
-        props.onRowHeightChange(val);
+        propsRef.current.onRowHeightChange(val);
       }
     });
   });
@@ -183,10 +186,10 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     </svg>
     <span>Critical Path (${props.criticalCount})</span>
   `;
-  critBtn.addEventListener("click", () => props.onCriticalToggle());
+  critBtn.addEventListener("click", () => propsRef.current.onCriticalToggle());
   centerZone.appendChild(critBtn);
 
-  // 2c. Active Date Filter Badge
+  // 2d. Active Date Filter Badge
   if (props.selectedDate) {
     const dateFilterBadge = document.createElement("div");
     dateFilterBadge.className = "jantt-date-filter-badge";
@@ -208,7 +211,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         </svg>
       </button>
     `;
-    dateFilterBadge.addEventListener("click", () => props.onClearDateFilter?.());
+    dateFilterBadge.addEventListener("click", () => propsRef.current.onClearDateFilter?.());
     centerZone.appendChild(dateFilterBadge);
   }
 
@@ -234,7 +237,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   `;
   const sInput = searchBox.querySelector<HTMLInputElement>(".jantt-search-input")!;
   sInput.addEventListener("input", (e) => {
-    props.onSearchChange((e.target as HTMLInputElement).value);
+    propsRef.current.onSearchChange((e.target as HTMLInputElement).value);
   });
   rightZone.appendChild(searchBox);
 
@@ -251,7 +254,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
       </svg>
       <span>Add Task</span>
     `;
-    addBtn.addEventListener("click", () => props.onAddTask?.());
+    addBtn.addEventListener("click", () => propsRef.current.onAddTask?.());
     rightZone.appendChild(addBtn);
   }
 
@@ -262,7 +265,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";
   settingsBtn.className = "jantt-settings-btn";
-  settingsBtn.title = "Chart & Layout Settings (Row height, link routing, auto-cascade, baselines)";
+  settingsBtn.title = "Chart Settings (Link routing, auto-cascade engine, baselines)";
   settingsBtn.setAttribute("aria-label", "Chart Settings");
   settingsBtn.innerHTML = `
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -274,7 +277,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   settingsWrap.appendChild(settingsBtn);
 
   // Settings Popover Panel
-  const popover = renderSettingsPopover(props, () => togglePopover(false));
+  const popover = renderSettingsPopover(propsRef, () => togglePopover(false));
   settingsWrap.appendChild(popover);
 
   const onDocClick = (e: MouseEvent) => {
@@ -304,13 +307,23 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     popover.classList.toggle("is-open", isOpen);
     settingsBtn.classList.toggle("is-active", isOpen);
     if (isOpen) {
+      const rect = settingsWrap.getBoundingClientRect();
+      const popoverH = 260;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < popoverH && rect.top > popoverH) {
+        popover.style.top = "auto";
+        popover.style.bottom = "calc(100% + 8px)";
+      } else {
+        popover.style.top = "calc(100% + 8px)";
+        popover.style.bottom = "auto";
+      }
       document.addEventListener("pointerdown", onDocClick);
       document.addEventListener("keydown", onDocKeydown);
     } else {
       document.removeEventListener("pointerdown", onDocClick);
       document.removeEventListener("keydown", onDocKeydown);
     }
-    props.onSettingsOpenChange?.(isOpen);
+    propsRef.current.onSettingsOpenChange?.(isOpen);
   };
 
   if (props.isSettingsOpen) {
@@ -338,22 +351,150 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 }
 
 /**
+ * Updates an existing toolbar DOM element in-place to avoid destroying input elements
+ * or active slider drag sessions.
+ */
+export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): void {
+  const propsRef = (toolbar as any).__propsRef as { current: ToolbarProps } | undefined;
+  if (propsRef) {
+    propsRef.current = nextProps;
+  }
+
+  // 1. Left Zone
+  const titleSpan = toolbar.querySelector<HTMLSpanElement>(".jantt-title");
+  if (titleSpan) titleSpan.textContent = nextProps.meta?.title || "Project Schedule";
+  const badgeSpan = toolbar.querySelector<HTMLSpanElement>(".jantt-badge");
+  if (badgeSpan) badgeSpan.textContent = `${nextProps.taskCount} tasks`;
+
+  // 2. Center Zone
+  // 2a. Zoom Slider & Presets
+  const zoomSlider = toolbar.querySelector<HTMLInputElement>(".jantt-zoom-slider");
+  if (zoomSlider && document.activeElement !== zoomSlider) {
+    zoomSlider.value = String(nextProps.dayWidth);
+  }
+  const zoomLabel = toolbar.querySelector<HTMLSpanElement>(".jantt-zoom-label");
+  if (zoomLabel) zoomLabel.textContent = `${Math.round(nextProps.dayWidth)}px`;
+
+  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-zoom-strip .jantt-scale-btn").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.textContent === nextProps.currentScale);
+  });
+
+  // 2b. Row Height Slider & Presets
+  const rhSlider = toolbar.querySelector<HTMLInputElement>(".jantt-rowheight-slider");
+  if (rhSlider) {
+    if (document.activeElement !== rhSlider) {
+      rhSlider.value = String(nextProps.rowHeight);
+    }
+    rhSlider.disabled = nextProps.rowHeightMode === "fit";
+    rhSlider.style.opacity = nextProps.rowHeightMode === "fit" ? "0.45" : "1";
+    rhSlider.style.pointerEvents = nextProps.rowHeightMode === "fit" ? "none" : "auto";
+  }
+  const rhLabel = toolbar.querySelector<HTMLSpanElement>(".jantt-rowheight-label");
+  if (rhLabel) {
+    rhLabel.textContent = nextProps.rowHeightMode === "fit" ? "Fit" : `${nextProps.rowHeight}px`;
+  }
+
+  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-rowheight-strip .jantt-scale-btn").forEach((btn) => {
+    const isFit = btn.dataset.mode === "fit";
+    const val = parseInt(btn.dataset.val || "0", 10);
+    const isActive = isFit ? nextProps.rowHeightMode === "fit" : (nextProps.rowHeightMode === "custom" && nextProps.rowHeight === val);
+    btn.classList.toggle("is-active", isActive);
+  });
+
+  // 2c. Critical Path Button
+  const critBtn = toolbar.querySelector<HTMLButtonElement>(".jantt-critical-btn");
+  if (critBtn) {
+    critBtn.classList.toggle("is-active", nextProps.showCritical);
+    const span = critBtn.querySelector("span");
+    if (span) span.textContent = `Critical Path (${nextProps.criticalCount})`;
+  }
+
+  // 2d. Date Filter Badge
+  const centerZone = toolbar.querySelector<HTMLElement>(".jantt-toolbar-center");
+  let dateFilterBadge = toolbar.querySelector<HTMLElement>(".jantt-date-filter-badge");
+  if (nextProps.selectedDate) {
+    if (!dateFilterBadge && centerZone) {
+      dateFilterBadge = document.createElement("div");
+      dateFilterBadge.className = "jantt-date-filter-badge";
+      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} — click to clear filter`;
+      dateFilterBadge.innerHTML = `
+        <span class="jantt-date-filter-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+        </span>
+        <span class="jantt-date-filter-text">${escapeHtml(nextProps.selectedDate)}</span>
+        <button type="button" class="jantt-date-filter-clear" aria-label="Clear date filter" title="Clear filter">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      `;
+      dateFilterBadge.addEventListener("click", () => propsRef?.current.onClearDateFilter?.());
+      centerZone.appendChild(dateFilterBadge);
+    } else if (dateFilterBadge) {
+      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} — click to clear filter`;
+      const txt = dateFilterBadge.querySelector<HTMLSpanElement>(".jantt-date-filter-text");
+      if (txt) txt.textContent = nextProps.selectedDate;
+    }
+  } else if (dateFilterBadge) {
+    dateFilterBadge.remove();
+  }
+
+  // 3. Right Zone: Search Input
+  const sInput = toolbar.querySelector<HTMLInputElement>(".jantt-search-input");
+  if (sInput && document.activeElement !== sInput) {
+    sInput.value = nextProps.searchQuery;
+  }
+
+  // 4. Settings Popover internal states
+  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-routing-group .jantt-scale-btn").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.routing === nextProps.currentRouting);
+  });
+
+  const cascadeBtn = toolbar.querySelector<HTMLButtonElement>('[data-switch="auto-cascade"]');
+  if (cascadeBtn) {
+    cascadeBtn.classList.toggle("is-active", nextProps.autoCascade);
+    cascadeBtn.setAttribute("aria-checked", String(nextProps.autoCascade));
+  }
+
+  const baselinesBtn = toolbar.querySelector<HTMLButtonElement>('[data-switch="baselines"]');
+  if (baselinesBtn) {
+    baselinesBtn.classList.toggle("is-active", Boolean(nextProps.showBaselines));
+    baselinesBtn.setAttribute("aria-checked", String(Boolean(nextProps.showBaselines)));
+  }
+
+  const popover = toolbar.querySelector<HTMLElement>(".jantt-settings-popover");
+  const settingsBtn = toolbar.querySelector<HTMLButtonElement>(".jantt-settings-btn");
+  if (popover && settingsBtn && nextProps.isSettingsOpen !== undefined) {
+    popover.classList.toggle("is-open", nextProps.isSettingsOpen);
+    settingsBtn.classList.toggle("is-active", nextProps.isSettingsOpen);
+  }
+}
+
+/**
  * Builds the floating Chart Settings Popover.
  * Provides intuitive controls for:
  * 1. Dependency Link Routing Style (90° Orthogonal, Curved, Direct)
  * 2. Engine Auto-Cascade Rule
  * 3. Baseline Comparisons
  */
-function renderSettingsPopover(props: ToolbarProps, onClose: () => void): HTMLElement {
+function renderSettingsPopover(propsRef: { current: ToolbarProps }, onClose: () => void): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "jantt-settings-popover";
+
+  const props = propsRef.current;
 
   panel.innerHTML = `
     <div class="jantt-settings-header">
       <div class="jantt-settings-title">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
         <span>Chart Settings</span>
       </div>
@@ -425,7 +566,7 @@ function renderSettingsPopover(props: ToolbarProps, onClose: () => void): HTMLEl
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const routing = btn.dataset.routing as LinkRoutingStyle;
-      props.onRoutingChange(routing);
+      propsRef.current.onRoutingChange(routing);
     });
   });
 
@@ -433,14 +574,14 @@ function renderSettingsPopover(props: ToolbarProps, onClose: () => void): HTMLEl
   const cascadeRow = panel.querySelector<HTMLElement>('[data-action="toggle-cascade"]');
   cascadeRow?.addEventListener("click", (e) => {
     e.stopPropagation();
-    props.onAutoCascadeToggle();
+    propsRef.current.onAutoCascadeToggle();
   });
 
   // Baselines switch & row toggle
   const baselinesRow = panel.querySelector<HTMLElement>('[data-action="toggle-baselines"]');
   baselinesRow?.addEventListener("click", (e) => {
     e.stopPropagation();
-    props.onBaselinesToggle?.();
+    propsRef.current.onBaselinesToggle?.();
   });
 
   return panel;

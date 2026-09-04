@@ -1,4 +1,4 @@
-import { Task } from "./types";
+import { Task, CriticalPathResult } from "./types";
 import { addDays, diffDays } from "./date-math";
 import { getEffectiveGap } from "./utils";
 import { DEFAULT_GAP_DAYS } from "./constants";
@@ -97,10 +97,7 @@ export function resolveSchedule(tasks: Task[], defaultGapDays = DEFAULT_GAP_DAYS
   return tasks.map((orig) => byId[orig.id] || { ...orig });
 }
 
-export interface CriticalPathResult {
-  criticalTaskIds: Set<string>;
-  criticalDepKeys: Set<string>;
-}
+
 
 /**
  * Calculates the Critical Path of a task network using Early/Late start analysis.
@@ -191,18 +188,24 @@ export function calculateCriticalPath(tasks: Task[]): CriticalPathResult {
     const slack = diffDays(t.end, lf);
     slackMap.set(t.id, Math.max(0, slack));
 
-    // Tasks with minimal slack (<= 0 days) on an active dependency chain or terminal finish
-    if (slack <= 0 || t.end === maxProjectFinish) {
+    // Tasks with minimal slack (<= 0 days) on an active dependency chain or project terminal finish
+    if (slack <= 0) {
       criticalTaskIds.add(t.id);
     }
   });
 
-  // Trace critical links
+  // Trace critical links: A -> B is critical only if both A and B are critical,
+  // and the finish of A plus required gap directly drives the start of B
   tasks.forEach((t) => {
     const depIds = getTaskDependencies(t);
     depIds.forEach((depId) => {
-      if (criticalTaskIds.has(t.id) && criticalTaskIds.has(depId)) {
-        criticalDepKeys.add(`${depId}->${t.id}`);
+      const prereq = byId.get(depId);
+      if (prereq && criticalTaskIds.has(t.id) && criticalTaskIds.has(depId)) {
+        const gap = getEffectiveGap(t, 0);
+        const expectedStart = addDays(prereq.end, gap);
+        if (diffDays(expectedStart, t.start) === 0) {
+          criticalDepKeys.add(`${depId}->${t.id}`);
+        }
       }
     });
   });
