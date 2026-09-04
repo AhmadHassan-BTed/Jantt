@@ -278,12 +278,22 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   settingsWrap.appendChild(popover);
 
   const onDocClick = (e: MouseEvent) => {
+    if (!settingsWrap.isConnected) {
+      document.removeEventListener("pointerdown", onDocClick);
+      document.removeEventListener("keydown", onDocKeydown);
+      return;
+    }
     if (!settingsWrap.contains(e.target as Node)) {
       togglePopover(false);
     }
   };
 
   const onDocKeydown = (e: KeyboardEvent) => {
+    if (!settingsWrap.isConnected) {
+      document.removeEventListener("pointerdown", onDocClick);
+      document.removeEventListener("keydown", onDocKeydown);
+      return;
+    }
     if (e.key === "Escape" && popover.classList.contains("is-open")) {
       togglePopover(false);
     }
@@ -317,6 +327,12 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 
   rightZone.appendChild(settingsWrap);
   toolbar.appendChild(rightZone);
+
+  // Attach teardown handler for when toolbar DOM is unmounted or replaced
+  (toolbar as any).__cleanup = () => {
+    document.removeEventListener("pointerdown", onDocClick);
+    document.removeEventListener("keydown", onDocKeydown);
+  };
 
   return toolbar;
 }

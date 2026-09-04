@@ -79,3 +79,44 @@ Case B: Reverse / Lane Bypass Flow (toX < fromX + 28px)
 
  Path: M fromX fromY L (fromX+14) fromY L (fromX+14) midY L (toX-14) midY L (toX-14) toY L toX toY
 ```
+
+---
+
+## 4. Cursor-Anchored Zoom Transformation
+
+When expanding or contracting the timeline (via Ctrl+Wheel, zoom slider, or column header drag), Jantt guarantees that the exact calendar date or column beneath the mouse pointer remains stationary:
+
+1. **Mouse Content Coordinate**:
+   $$X_{\text{mouse}} = \text{clientX} - \text{bodyRect.left}$$
+   $$X_{\text{content}} = X_{\text{mouse}} + \text{bodyWrap.scrollLeft}$$
+
+2. **Scale Ratio Calculation**:
+   $$\text{ratio} = \frac{\text{newDayWidth}}{\text{prevDayWidth}}$$
+
+3. **New Scroll Anchor**:
+   $$\text{newScrollLeft} = \max\left(0, X_{\text{content}} \times \text{ratio} - X_{\text{mouse}}\right)$$
+
+This mathematical transform completely eliminates visual jumping and orientation loss during zooming.
+
+---
+
+## 5. Assignee & Owner Auto-Discovery Engine
+
+To support zero-friction import of raw schedule plans (e.g. from AI models, spreadsheets, or student pipelines), Jantt implements an automated entity inference engine:
+
+1. **Scanning**:
+   - Extract primary candidate/lead from `data.meta.person` $\to$ default role `"Project Lead / Owner"`.
+   - Extract all unique non-empty string values from `data.tasks[].assignee`.
+   - Extract all unique non-empty string values from `data.documents[].owner`.
+
+2. **Deduplication & Slug Generation**:
+   - Normalize names case-insensitively.
+   - Generate URL-safe kebab slugs: $\text{slug} = \text{toLowerCase}(name) \to \text{regex replace } [^a-z0-9]+ \to -$.
+   - Cross-check against explicit entries in `data.people[]`.
+
+3. **Avatar & Metadata Assignment**:
+   - Discovered members not in `data.people[]` are tagged `isInferred: true`.
+   - Stable deterministic color assignment from the curated 8-color palette:
+     $$\text{color} = \text{PALETTE}[\text{index} \pmod 8]$$
+   - Discovered members immediately populate member filters, Kanban squad cards, and the People Manager modal with 1-click JSON persistence.
+

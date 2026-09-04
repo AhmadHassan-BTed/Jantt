@@ -318,6 +318,10 @@ export function renderJantt(
       controller.updateData(currentData, viewport.dayWidth);
     }
 
+    // Clean up previous toolbar listeners before replacing DOM
+    const oldToolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
+    (oldToolbar as any)?.__cleanup?.();
+
     root.innerHTML = "";
 
     // 4. Render Toolbar Subsystem
@@ -617,6 +621,8 @@ export function renderJantt(
       render();
     },
     destroy: () => {
+      const oldToolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
+      (oldToolbar as any)?.__cleanup?.();
       if (todayTimer) clearInterval(todayTimer);
       resizeObserver?.disconnect();
       tooltip.hide();

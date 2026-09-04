@@ -812,14 +812,16 @@ export function App() {
 
   // Apply Gantt date filter dimming via DOM after render
   useEffect(() => {
-    if (activeView !== "gantt" || dateFilterMode === "all" || dateFilterBehavior === "hide") {
-      // Remove all dimming when switching to "all" or in "hide" (Filter) mode
-      document.querySelectorAll<HTMLElement>("[data-task-id], [data-row-id], [data-grid-row-id]").forEach((el) => {
-        el.classList.remove("jantt-task-dimmed");
-      });
-      return;
-    }
-    const handle = requestAnimationFrame(() => {
+    const applyGanttDimming = () => {
+      if (activeView !== "gantt" || dateFilterMode === "all" || dateFilterBehavior === "hide") {
+        // Remove all dimming when switching to "all" or in "hide" (Filter) mode
+        document.querySelectorAll<HTMLElement | SVGElement>("[data-task-id], [data-row-id], [data-grid-row-id], .jantt-dep-path").forEach((el) => {
+          el.classList.remove("jantt-task-dimmed");
+        });
+        return;
+      }
+
+      // Dim task bars, milestones, grid rows, and table rows
       document.querySelectorAll<HTMLElement>("[data-task-id], [data-row-id], [data-grid-row-id]").forEach((el) => {
         const taskId = el.dataset.taskId || el.dataset.rowId || el.dataset.gridRowId;
         const task = parsedData?.tasks.find((t) => t.id === taskId);
@@ -829,9 +831,41 @@ export function App() {
           el.classList.remove("jantt-task-dimmed");
         }
       });
-    });
-    return () => cancelAnimationFrame(handle);
-  }, [activeView, currentScale, currentDayWidth, dateFilterMode, dateFilterValue, dateFilterBehavior, dateFilterRangeStart, dateFilterRangeEnd, parsedData, isTaskMatchingDateFilter]);
+
+      // Dim SVG dependency connectors if either linked task is outside active date filter
+      document.querySelectorAll<SVGElement>(".jantt-dep-path").forEach((path) => {
+        const fromId = path.getAttribute("data-from");
+        const toId = path.getAttribute("data-to");
+        const fromTask = parsedData?.tasks.find((t) => t.id === fromId);
+        const toTask = parsedData?.tasks.find((t) => t.id === toId);
+        const isFromMatch = fromTask ? isTaskMatchingDateFilter(fromTask) : true;
+        const isToMatch = toTask ? isTaskMatchingDateFilter(toTask) : true;
+        if (!isFromMatch || !isToMatch) {
+          path.classList.add("jantt-task-dimmed");
+        } else {
+          path.classList.remove("jantt-task-dimmed");
+        }
+      });
+    };
+
+    const handle = requestAnimationFrame(applyGanttDimming);
+    const timer = window.setTimeout(applyGanttDimming, 60);
+    return () => {
+      cancelAnimationFrame(handle);
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeView,
+    currentScale,
+    currentDayWidth,
+    dateFilterMode,
+    dateFilterValue,
+    dateFilterBehavior,
+    dateFilterRangeStart,
+    dateFilterRangeEnd,
+    parsedData,
+    isTaskMatchingDateFilter
+  ]);
 
 
 
@@ -1940,7 +1974,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
                     data={ganttDisplayData}
                       onCommit={handleChartCommit}
                       onTaskAdd={handleAddNewTask}
-                      selectedDate={null}
+                      selectedDate={dateFilterMode === "all" ? null : (dateFilterBehavior === "hide" ? dateFilterActiveDate : null)}
                       onDateClick={(clickedDate) => {
                         if (clickedDate === getTodayISODate()) {
                           setDateFilterMode((prev) => (prev === "today" ? "all" : "today"));

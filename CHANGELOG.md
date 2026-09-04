@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-09-04
+
+### Added
+- **People, Teams & Auto-Discovery Engine**:
+  - Automatic entity inference from `meta.person` (Project Lead), `tasks[].assignee`, and `documents[].owner`.
+  - Discovered assignees populate member filters, Kanban squad cards, and the People modal with generated avatars.
+  - 1-click persistence to write clean `Person` entries into the JSON schema's root `"people"` array.
+- **Multi-View Interactive Workspace**:
+  - **Tasks View**: Added interactive Todo checklist with one-click completion checkboxes `[x]`, status transitions, and card layouts.
+  - **Kanban Board**: Drag-and-drop workflow lanes with multi-column sorting (by priority, dates, assignee, WBS).
+  - **Budget & KPI Dashboard**: Real-time project metrics tracking total spend, cost variance, and completion percentage.
+- **Universal Date Filter Subheader**:
+  - Presets for Today, This Week, Pick Date, and Date Range.
+  - Contextual **Dim vs Filter** focus modes across Gantt, Kanban, and Tasks views.
+- **Smooth Cursor-Anchored Drag-to-Resize Columns**:
+  - Interactive header column dragging with smooth exponential scaling and `requestAnimationFrame` 60/120fps throttling.
+  - Cursor-anchored viewport transform preventing position jumping.
+- **Client-Side High-Resolution Exporters**:
+  - RFC-4180 compliant CSV export (`exportToCsv`, `downloadCsv`), standalone SVG extraction, and formatted JSON downloads.
+- **Remote Cloud URL Live Sync**:
+  - Live bidirectional two-way sync with remote HTTP/HTTPS JSON endpoints, ETag caching, and conflict diagnostics.
+- **Complete Multi-Audience SEO & Discoverability**:
+  - Full Schema.org JSON-LD structured data (`SoftwareApplication` / `WebApplication`).
+  - Tailored keyword architecture for AI agents, graduate students (PhD/MS application pipelines), and personal productivity roadmaps.
+
+### Fixed
+- Fixed Settings popover premature closing caused by orphaned document pointerdown listeners during DOM re-renders.
+- Fixed Gantt chart Dim mode synchronization for date-filtered task bars and SVG dependency lines.
+- Fixed JSON Monaco editor synchronization when pasting plans with custom people and team entities.
+
+---
+
 ## [1.1.0] - 2026-08-28
 
 ### Added
