@@ -14,7 +14,7 @@
     "@jantt/core": "*"
   },
   "devDependencies": {
-    "typescript": "^5.4.5",
+    "typescript": "^7.0.2",
     "vite": "^5.2.11"
   }
 }
