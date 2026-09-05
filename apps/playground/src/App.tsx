@@ -300,6 +300,8 @@ export function App() {
         setShowAutoSaveModal={autoSave.setShowAutoSaveModal}
         syncStatus={dynamicSync.syncStatus}
         syncMessage={dynamicSync.syncMessage}
+        isQuotaShieldActive={dynamicSync.isQuotaShieldActive}
+        cloudProvider={dynamicSync.cloudProvider}
         snapshotsCount={vault.snapshots.length}
         setShowVersionHistoryModal={vault.setShowVersionHistoryModal}
         isSidebarCollapsed={sidebar.isSidebarCollapsed}

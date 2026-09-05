@@ -16,7 +16,9 @@ import {
   Share2,
   Activity,
   StickyNote,
-  History
+  History,
+  ShieldCheck,
+  HardDrive
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { SavedProject, ActiveView, EffectivePerson } from "../types";
@@ -32,6 +34,8 @@ interface NavbarProps {
   setShowAutoSaveModal: (show: boolean) => void;
   syncStatus?: SyncStatus;
   syncMessage?: string;
+  isQuotaShieldActive?: boolean;
+  cloudProvider?: string;
   snapshotsCount?: number;
   setShowVersionHistoryModal?: (show: boolean) => void;
   isSidebarCollapsed: boolean;
@@ -67,6 +71,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setShowAutoSaveModal,
   syncStatus,
   syncMessage,
+  isQuotaShieldActive,
+  cloudProvider,
   snapshotsCount = 0,
   setShowVersionHistoryModal,
   isSidebarCollapsed,
@@ -93,6 +99,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   setSelectedThemeId,
   setShowPromptModal
 }) => {
+  const activeProject = customProjects.find((p) => p.id === activeProjectId);
+  const isGoogleDrive = Boolean(
+    cloudProvider === "google-drive" ||
+    (activeProject?.source === "linked" && activeProject.sourceUrl?.includes("drive.google.com"))
+  );
 
   return (
     <header className="navbar">
@@ -123,6 +134,28 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <span className="sync-pulse-dot" />
             <span>{syncMessage || "In sync"}</span>
+          </div>
+        )}
+
+        {/* Google Drive Source Indicator */}
+        {isGoogleDrive && (
+          <div
+            className="btn-cloud-source-badge is-google-drive"
+            title="Linked to Google Drive JSON file share"
+          >
+            <HardDrive size={11} />
+            <span>Google Drive</span>
+          </div>
+        )}
+
+        {/* Serverless Quota Shield Indicator */}
+        {isQuotaShieldActive && (
+          <div
+            className="btn-quota-shield-badge"
+            title="Google Drive Quota Shield is ACTIVE: Request coalescing and edge cache fallback engaged to protect against rate limits (429/403)."
+          >
+            <ShieldCheck size={11} />
+            <span>Quota Shield</span>
           </div>
         )}
 

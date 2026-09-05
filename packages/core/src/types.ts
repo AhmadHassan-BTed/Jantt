@@ -54,6 +54,7 @@ export interface ReconcileResult {
     tasksDeleted: number;
     notesUpdated: number;
     fieldsMerged: number;
+    tombstonesPreserved?: number;
   };
   remoteChanged: boolean;
   localChanged: boolean;
@@ -99,6 +100,10 @@ export interface NoteItem {
   category?: string;
   tags?: string[];
   task_ids?: string[]; // Attached task IDs
+  fieldTimestamps?: Record<string, string>;
+  updatedBy?: string;
+  _deleted?: boolean;
+  deletedAt?: string;
   [key: string]: unknown;
 }
 
@@ -152,6 +157,11 @@ export interface Task {
   notes?: string;
   description?: string;
   fields?: Record<string, unknown>;
+  fieldTimestamps?: Record<string, string>;
+  updatedAt?: string;
+  updatedBy?: string;
+  _deleted?: boolean;
+  deletedAt?: string;
   [key: string]: unknown;
 }
 

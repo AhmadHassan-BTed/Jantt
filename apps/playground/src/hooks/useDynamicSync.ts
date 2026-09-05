@@ -28,6 +28,20 @@ interface UseDynamicSyncOptions {
   captureSnapshot: (projectId: string, data: JanttData, reason: string) => void;
 }
 
+function getCollaboratorId(): string {
+  if (typeof window === "undefined") return "peer-serverless";
+  try {
+    let id = localStorage.getItem("jantt_peer_id");
+    if (!id) {
+      id = `peer-${Math.random().toString(36).slice(2, 8)}`;
+      localStorage.setItem("jantt_peer_id", id);
+    }
+    return id;
+  } catch {
+    return "peer-serverless";
+  }
+}
+
 export function useDynamicSync({
   activeProjectId,
   customProjects,
@@ -44,6 +58,10 @@ export function useDynamicSync({
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("in-sync");
   const [lastSyncTime, setLastSyncTime] = useState<Date>(() => new Date());
   const [syncMessage, setSyncMessage] = useState<string>("In sync");
+  const [isQuotaShieldActive, setIsQuotaShieldActive] = useState<boolean>(false);
+  const [cloudProvider, setCloudProvider] = useState<string | undefined>(undefined);
+
+  const clientIdRef = useRef<string>(getCollaboratorId());
 
   // Keep refs for asynchronous interval callbacks
   const activeProjectIdRef = useRef(activeProjectId);
@@ -125,11 +143,20 @@ export function useDynamicSync({
       try {
         const res = await fetchRemotePlan(currentProj.sourceUrl, { previousHash: prevHash });
 
+        if (res.quotaShieldActive) {
+          setIsQuotaShieldActive(true);
+        } else {
+          setIsQuotaShieldActive(false);
+        }
+        if (res.info?.provider) {
+          setCloudProvider(res.info.provider);
+        }
+
         // If remote file is unchanged according to content hash, nothing to merge
         if (res.notModified) {
           setSyncStatus("in-sync");
           setLastSyncTime(new Date());
-          setSyncMessage("In sync");
+          setSyncMessage(res.quotaShieldActive ? "In sync (Shield active)" : "In sync");
           return;
         }
 
@@ -170,17 +197,19 @@ export function useDynamicSync({
 
           setSyncStatus("in-sync");
           setLastSyncTime(new Date());
-          setSyncMessage("Updated from collaborator");
+          setSyncMessage(res.quotaShieldActive ? "Updated (Shield active)" : "Updated from collaborator");
           showToast(`Synced latest updates from ${res.info.label}!`);
           return;
         }
 
-        // Case 2: Both local and remote have changes -> 3-Way Task Reconciliation!
+        // Case 2: Both local and remote have changes -> N-Party CRDT Task Reconciliation!
         setSyncStatus("syncing");
         setSyncMessage("Reconciling collaborator updates...");
         captureSnapshot(currentProj.id, currentLocalData, "Pre-Merge Local Snapshot");
 
-        const reconcileResult = reconcilePlans(baseData, currentLocalData, remoteData);
+        const reconcileResult = reconcilePlans(baseData, currentLocalData, remoteData, {
+          clientId: clientIdRef.current
+        });
         const mergedData = reconcileResult.mergedData;
         baseDataMapRef.current.set(currentProj.id, remoteData);
 
@@ -223,6 +252,10 @@ export function useDynamicSync({
           showToast(`Cleanly merged updates from collaborator!`);
         }
       } catch (err: any) {
+        if (err?.message?.includes("quota") || err?.message?.includes("429")) {
+          setIsQuotaShieldActive(true);
+          setSyncMessage("Quota Shield active (pacing requests)");
+        }
         if (!isBackground) {
           showToast(`Sync failed: ${err.message}`, true);
         }
@@ -240,9 +273,10 @@ export function useDynamicSync({
     ]
   );
 
-  // Dynamic Polling Loop:
-  // - 6s interval when tab is active and visible
-  // - 30s interval when tab is hidden
+  // Dynamic Adaptive Jittered Polling Loop:
+  // - 6s base ± 25% random jitter when tab is active (4.5s to 7.5s) to avoid thundering herd
+  // - 14s base when Quota Shield is active (pacing Google Drive)
+  // - 30s base when tab is hidden in background
   // - Instant check when tab regains focus
   useEffect(() => {
     let timer: number | null = null;
@@ -250,7 +284,9 @@ export function useDynamicSync({
     const scheduleNext = () => {
       if (timer) clearTimeout(timer);
       const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-      const delayMs = isHidden ? 30000 : 7000;
+      const baseMs = isHidden ? 30000 : (isQuotaShieldActive ? 14000 : 6000);
+      const jitter = (Math.random() - 0.5) * (baseMs * 0.5);
+      const delayMs = Math.max(3000, Math.round(baseMs + jitter));
 
       timer = window.setTimeout(async () => {
         await checkAndSyncProject(true);
@@ -275,13 +311,16 @@ export function useDynamicSync({
       window.removeEventListener("focus", handleVisibilityOrFocus);
       window.removeEventListener("visibilitychange", handleVisibilityOrFocus);
     };
-  }, [checkAndSyncProject]);
+  }, [checkAndSyncProject, isQuotaShieldActive]);
 
   return {
     syncStatus,
     lastSyncTime,
     syncMessage,
     checkAndSyncProject,
-    broadcastLocalChange
+    broadcastLocalChange,
+    isQuotaShieldActive,
+    cloudProvider,
+    peerId: clientIdRef.current
   };
 }
