@@ -224,6 +224,7 @@ export function App() {
     setParsedData: editor.setParsedData,
     setJsonText: editor.setJsonText,
     setValidationResult: editor.setValidationResult,
+    handleChartCommit: editor.handleChartCommit,
     dateFilterMode: dateFilter.dateFilterMode,
     dateFilterBehavior: dateFilter.dateFilterBehavior,
     isTaskMatchingDateFilter: dateFilter.isTaskMatchingDateFilter,
