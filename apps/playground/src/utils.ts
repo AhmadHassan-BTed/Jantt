@@ -210,7 +210,7 @@ export function loadInitialState() {
   try {
     const savedView = localStorage.getItem(STORAGE_KEYS.VIEW) as any;
     if (savedView === "today") initialView = "tasks";
-    else if (savedView && ["gantt", "kanban", "summary", "tasks"].includes(savedView)) initialView = savedView;
+    else if (savedView && ["gantt", "kanban", "summary", "tasks", "notes"].includes(savedView)) initialView = savedView;
   } catch {}
 
   let initialCollapsed = false;
@@ -260,7 +260,7 @@ export function loadInitialState() {
       const hash = window.location.hash;
 
       const viewParam = urlParams.get("view");
-      if (viewParam && ["gantt", "kanban", "summary", "tasks"].includes(viewParam)) {
+      if (viewParam && ["gantt", "kanban", "summary", "tasks", "notes"].includes(viewParam)) {
         initialView = viewParam as ActiveView;
       }
 
