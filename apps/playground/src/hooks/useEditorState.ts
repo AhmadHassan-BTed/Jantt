@@ -7,7 +7,8 @@ import {
   type ValidationResult,
   validate,
   downloadCsv,
-  syncTaskProgressAndStatus
+  syncTaskProgressAndStatus,
+  calculatePlanHash
 } from "@jantt/core";
 
 interface UseEditorStateOptions {
@@ -172,13 +173,30 @@ export function useEditorState({
       return currentTask;
     });
 
-    finalData = {
+    const nextRevision = (finalData.meta?.revision || 0) + 1;
+    const interimData: JanttData = {
       ...finalData,
       meta: {
         ...finalData.meta,
+        revision: nextRevision,
         updatedAt: nowIso
       },
       tasks: stampedTasks
+    };
+    const contentHash = calculatePlanHash(interimData);
+    finalData = {
+      ...interimData,
+      meta: {
+        ...interimData.meta,
+        contentHash,
+        sync: {
+          ...(interimData.meta?.sync || {}),
+          revision: nextRevision,
+          contentHash,
+          updatedAt: nowIso,
+          clientId: peerId
+        }
+      }
     };
 
     setParsedData(finalData);

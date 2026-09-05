@@ -30,6 +30,7 @@ interface UseTaskActionsOptions {
   effectivePeople: EffectivePerson[];
   teams: Team[];
   initialKanbanSort: KanbanSortRule[];
+  handleChartCommit?: (data: JanttData) => void;
 }
 
 export function useTaskActions({
@@ -42,7 +43,8 @@ export function useTaskActions({
   isTaskMatchingDateFilter,
   effectivePeople,
   teams,
-  initialKanbanSort
+  initialKanbanSort,
+  handleChartCommit
 }: UseTaskActionsOptions) {
   const [tasksViewMode, setTasksViewMode] = useState<"cards" | "todo">("cards");
   const [tasksSearchQuery, setTasksSearchQuery] = useState<string>("");
@@ -198,10 +200,14 @@ export function useTaskActions({
       },
       tasks: resolved
     };
-    setParsedData(updated);
-    setJsonText(JSON.stringify(updated, null, 2));
-    setValidationResult(validate(updated));
-  }, [parsedData, setParsedData, setJsonText, setValidationResult]);
+    if (handleChartCommit) {
+      handleChartCommit(updated);
+    } else {
+      setParsedData(updated);
+      setJsonText(JSON.stringify(updated, null, 2));
+      setValidationResult(validate(updated));
+    }
+  }, [parsedData, setParsedData, setJsonText, setValidationResult, handleChartCommit]);
 
   return {
     tasksViewMode,
