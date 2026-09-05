@@ -10,7 +10,9 @@ import {
   themeManager,
   getTodayISODate,
   addDays,
-  resolveTaskAssignee
+  resolveTaskAssignee,
+  compressPlanToUrlPayload,
+  decompressPlanFromUrlPayload
 } from "@jantt/core";
 import type {
   SavedProject,
@@ -88,13 +90,7 @@ export function saveCustomProjects(projects: SavedProject[]) {
 
 export function encodeDataToBase64Url(data: JanttData): string {
   try {
-    const jsonStr = JSON.stringify(data);
-    const utf8Bytes = new TextEncoder().encode(jsonStr);
-    let binary = "";
-    for (let i = 0; i < utf8Bytes.length; i++) {
-      binary += String.fromCharCode(utf8Bytes[i]);
-    }
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return compressPlanToUrlPayload(data);
   } catch (err) {
     console.error("Failed to encode plan data to base64url:", err);
     return "";
@@ -103,20 +99,7 @@ export function encodeDataToBase64Url(data: JanttData): string {
 
 export function decodeDataFromBase64Url(base64url: string): JanttData | null {
   try {
-    let base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-    while (base64.length % 4) {
-      base64 += "=";
-    }
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const jsonStr = new TextDecoder().decode(bytes);
-    const parsed = JSON.parse(jsonStr);
-    const val = validate(parsed);
-    if (val.valid) return parsed;
-    return null;
+    return decompressPlanFromUrlPayload(base64url);
   } catch (err) {
     console.error("Failed to decode plan data from base64url:", err);
     return null;
@@ -143,7 +126,7 @@ export function loadInitialState() {
 
   try {
     const savedJson = localStorage.getItem(STORAGE_KEYS.ACTIVE_JSON);
-    if (savedJson) {
+    if (savedJson && activeProjectId === "default") {
       const parsed = JSON.parse(savedJson);
       const val = validate(parsed);
       if (val.valid) {

@@ -11,6 +11,7 @@ import {
 } from "@jantt/core";
 import type { SavedProject } from "../types";
 import { saveCustomProjects } from "../utils";
+import { STORAGE_KEYS } from "../constants";
 
 export type SyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict";
 
@@ -96,8 +97,12 @@ export function useDynamicSync({
         setParsedData(msg.data);
         setPeople(msg.data.people || []);
         setTeams(msg.data.teams || []);
-        setJsonText(JSON.stringify(msg.data, null, 2));
+        const formatted = JSON.stringify(msg.data, null, 2);
+        setJsonText(formatted);
         setValidationResult(validate(msg.data));
+        try {
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, formatted);
+        } catch {}
         setSyncStatus("in-sync");
         setLastSyncTime(new Date());
         setSyncMessage("Synced from another tab");
@@ -192,8 +197,12 @@ export function useDynamicSync({
           setParsedData(remoteData);
           setPeople(remoteData.people || []);
           setTeams(remoteData.teams || []);
-          setJsonText(JSON.stringify(remoteData, null, 2));
+          const formatted = JSON.stringify(remoteData, null, 2);
+          setJsonText(formatted);
           setValidationResult(validate(remoteData));
+          try {
+            localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, formatted);
+          } catch {}
 
           setSyncStatus("in-sync");
           setLastSyncTime(new Date());
@@ -231,8 +240,12 @@ export function useDynamicSync({
         setParsedData(mergedData);
         setPeople(mergedData.people || []);
         setTeams(mergedData.teams || []);
-        setJsonText(JSON.stringify(mergedData, null, 2));
+        const formatted = JSON.stringify(mergedData, null, 2);
+        setJsonText(formatted);
         setValidationResult(validate(mergedData));
+        try {
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, formatted);
+        } catch {}
 
         if (reconcileResult.hasConflicts) {
           setSyncStatus("conflict");
