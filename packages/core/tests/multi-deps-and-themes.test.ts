@@ -172,8 +172,8 @@ describe("Theme Architecture & ThemeManager Subsystem", () => {
   it("retrieves themes by ID with complete token maps", () => {
     const dark = themeManager.getTheme("swiss-dark");
     expect(dark).toBeDefined();
-    expect(dark?.vars["--jantt-bg"]).toBe("#090E1A");
-    expect(dark?.vars["--jantt-accent"]).toBe("#38BDF8");
+    expect(dark?.vars["--jantt-bg"]).toBe("#000000");
+    expect(dark?.vars["--jantt-accent"]).toBe("#FFFFFF");
 
     const light = themeManager.getTheme("swiss-light");
     expect(light).toBeDefined();

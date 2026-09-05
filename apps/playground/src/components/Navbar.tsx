@@ -425,7 +425,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
 
-        {/* Theme Selector */}
+        {/* Theme Selector — Sectioned by Dark Mode & Light Mode */}
         <div className="nav-select-group">
           <label htmlFor="theme-select">Theme:</label>
           <select
@@ -433,12 +433,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="select-input"
             value={selectedThemeId}
             onChange={(e) => setSelectedThemeId(e.target.value)}
+            title="Visual Theme (Sectioned by Dark & Light Modes)"
           >
-            {AVAILABLE_THEMES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
+            <optgroup label="Dark Modes">
+              {AVAILABLE_THEMES.filter((t) => t.mode === "dark").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Light Modes">
+              {AVAILABLE_THEMES.filter((t) => t.mode === "light").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
 

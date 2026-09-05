@@ -36,32 +36,32 @@
 }
 
 .jantt-theme-dark {
-  --jantt-bg: #090E1A;
-  --jantt-surface: rgba(18, 26, 44, 0.88);
-  --jantt-surface-hover: rgba(28, 40, 66, 0.88);
-  --jantt-surface-solid: #121A2C;
+  --jantt-bg: #000000;
+  --jantt-surface: rgba(16, 16, 18, 0.95);
+  --jantt-surface-hover: rgba(28, 28, 32, 0.95);
+  --jantt-surface-solid: #101012;
   --jantt-border: rgba(255, 255, 255, 0.14);
-  --jantt-border-subtle: rgba(255, 255, 255, 0.08);
-  --jantt-border-strong: rgba(255, 255, 255, 0.22);
-  --jantt-text: #F8FAFC;
-  --jantt-text-muted: #94A3B8;
-  --jantt-text-dim: #64748B;
-  --jantt-accent: #38BDF8;
-  --jantt-accent-glow: rgba(56, 189, 248, 0.25);
-  --jantt-accent-contrast: #090E1A;
-  --jantt-today: #FB7185;
-  --jantt-critical: #F59E0B;
-  --jantt-critical-glow: rgba(245, 158, 11, 0.35);
-  --jantt-bar-done: #475569;
-  --jantt-bar-done-subtle: rgba(71, 85, 105, 0.25);
+  --jantt-border-subtle: rgba(255, 255, 255, 0.07);
+  --jantt-border-strong: rgba(255, 255, 255, 0.28);
+  --jantt-text: #FFFFFF;
+  --jantt-text-muted: #A1A1AA;
+  --jantt-text-dim: #71717A;
+  --jantt-accent: #FFFFFF;
+  --jantt-accent-glow: rgba(255, 255, 255, 0.30);
+  --jantt-accent-contrast: #000000;
+  --jantt-today: #EF4444;
+  --jantt-critical: #F43F5E;
+  --jantt-critical-glow: rgba(244, 63, 94, 0.40);
+  --jantt-bar-done: #3F3F46;
+  --jantt-bar-done-subtle: rgba(63, 63, 70, 0.35);
   --jantt-weekend-bg: transparent;
-  --jantt-grid-line: rgba(255, 255, 255, 0.12);
-  --jantt-grid-row-line: rgba(255, 255, 255, 0.09);
-  --jantt-dep-line: #64748B;
-  --jantt-dep-line-active: #38BDF8;
+  --jantt-grid-line: rgba(255, 255, 255, 0.08);
+  --jantt-grid-row-line: rgba(255, 255, 255, 0.05);
+  --jantt-dep-line: #52525B;
+  --jantt-dep-line-active: #FFFFFF;
   --jantt-bar-radius: 6px;
   --jantt-glass-blur: 16px;
-  --jantt-shadow: none;
+  --jantt-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.95);
 }
 
 /* Base Root Container */
@@ -1787,10 +1787,10 @@
 
 .jantt-theme-dark.jantt-hover-card,
 .jantt-theme-dark .jantt-hover-card {
-  background: rgba(15, 23, 42, 0.92);
-  color: #F8FAFC;
-  border: 1px solid #334155;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 14, 0.96);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .jantt-theme-cyber-emerald.jantt-hover-card,
