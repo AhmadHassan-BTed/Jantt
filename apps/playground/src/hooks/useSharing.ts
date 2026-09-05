@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { JanttData } from "@jantt/core";
 import type { SavedProject, ActiveView } from "../types";
 import { DEFAULT_TEMPLATE } from "../constants";
@@ -55,10 +55,18 @@ export function useSharing({
   }, [activeProjectId, activeProject, activeView, selectedThemeId, parsedData, jsonText, currentProjectName]);
 
   // Keep browser address bar continuously updated with active plan's shareable link
+  const prevViewRef = useRef(activeView);
+  const prevProjectRef = useRef(activeProjectId);
+
   useEffect(() => {
     if (typeof window === "undefined" || !shareUrl) return;
 
-    const timer = setTimeout(() => {
+    const isViewOrProjectChange =
+      prevViewRef.current !== activeView || prevProjectRef.current !== activeProjectId;
+    prevViewRef.current = activeView;
+    prevProjectRef.current = activeProjectId;
+
+    const syncUrl = () => {
       try {
         const currentHref = window.location.href;
         if (currentHref !== shareUrl) {
@@ -67,10 +75,16 @@ export function useSharing({
       } catch {
         // Cross-origin iframe fallback
       }
-    }, 250);
+    };
 
+    if (isViewOrProjectChange) {
+      syncUrl();
+      return;
+    }
+
+    const timer = setTimeout(syncUrl, 250);
     return () => clearTimeout(timer);
-  }, [shareUrl]);
+  }, [shareUrl, activeView, activeProjectId]);
 
   const handleCopyShareLink = useCallback(async () => {
     if (!shareUrl) return;
