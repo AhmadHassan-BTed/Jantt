@@ -417,4 +417,8 @@ export interface JanttOptions {
       close: () => void;
     }
   ) => void;
+  onOpenAutoSave?: () => void;
+  onImportJson?: () => void;
+  onExportJson?: () => void;
+  onExportCsv?: () => void;
 }

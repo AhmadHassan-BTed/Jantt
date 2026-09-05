@@ -5,7 +5,10 @@ import {
   CheckCircle2,
   RefreshCw,
   Clock,
-  HardDrive
+  HardDrive,
+  ArrowUpFromLine,
+  ArrowDownToLine,
+  FileSpreadsheet
 } from "lucide-react";
 import type { AutoSaveInterval } from "../types";
 import { AUTOSAVE_OPTIONS } from "../constants";
@@ -19,6 +22,9 @@ interface AutoSaveModalProps {
   autoSaveInterval: AutoSaveInterval;
   setAutoSaveInterval: (interval: AutoSaveInterval) => void;
   storageSizeKb: string;
+  onImportJson?: () => void;
+  onExportJson?: () => void;
+  onExportCsv?: () => void;
 }
 
 export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
@@ -29,7 +35,10 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
   handleManualSaveNow,
   autoSaveInterval,
   setAutoSaveInterval,
-  storageSizeKb
+  storageSizeKb,
+  onImportJson,
+  onExportJson,
+  onExportCsv
 }) => {
   if (!showAutoSaveModal) return null;
 
@@ -194,6 +203,54 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
               </span>
             </div>
           </div>
+
+          {/* Data Import & Export Section */}
+          {(onImportJson || onExportJson || onExportCsv) && (
+            <div style={{ marginTop: "16px" }}>
+              <div className="settings-section-title">Project Data &amp; Export</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                {onImportJson && (
+                  <button
+                    type="button"
+                    className="btn-nav"
+                    onClick={() => {
+                      setShowAutoSaveModal(false);
+                      onImportJson();
+                    }}
+                    style={{ justifyContent: "center", height: "34px", padding: "0 8px" }}
+                    title="Upload and load a Jantt JSON file"
+                  >
+                    <ArrowUpFromLine size={13} />
+                    <span style={{ fontSize: "11.5px" }}>Import JSON</span>
+                  </button>
+                )}
+                {onExportJson && (
+                  <button
+                    type="button"
+                    className="btn-nav"
+                    onClick={onExportJson}
+                    style={{ justifyContent: "center", height: "34px", padding: "0 8px" }}
+                    title="Download project as JSON"
+                  >
+                    <ArrowDownToLine size={13} />
+                    <span style={{ fontSize: "11.5px" }}>Export JSON</span>
+                  </button>
+                )}
+                {onExportCsv && (
+                  <button
+                    type="button"
+                    className="btn-nav"
+                    onClick={onExportCsv}
+                    style={{ justifyContent: "center", height: "34px", padding: "0 8px" }}
+                    title="Download tasks as CSV"
+                  >
+                    <FileSpreadsheet size={13} />
+                    <span style={{ fontSize: "11.5px" }}>Export CSV</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}

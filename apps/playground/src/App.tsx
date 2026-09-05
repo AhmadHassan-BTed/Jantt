@@ -273,8 +273,6 @@ export function App() {
         effectivePeople={people.effectivePeople}
         fileInputRef={project.fileInputRef}
         handleImportJsonFile={project.handleImportJsonFile}
-        handleDownloadJson={editor.handleDownloadJson}
-        handleExportCsv={editor.handleExportCsv}
         selectedThemeId={viewport.selectedThemeId}
         setSelectedThemeId={viewport.setSelectedThemeId}
         setShowPromptModal={setShowPromptModal}
@@ -389,6 +387,10 @@ export function App() {
                     }}
                     theme={viewport.activeTheme.vars}
                     themeClassName={viewport.activeTheme.className}
+                    onOpenAutoSave={() => autoSave.setShowAutoSaveModal(true)}
+                    onImportJson={() => project.fileInputRef.current?.click()}
+                    onExportJson={editor.handleDownloadJson}
+                    onExportCsv={editor.handleExportCsv}
                   />
                 )}
 
@@ -546,6 +548,9 @@ export function App() {
         autoSaveInterval={autoSave.autoSaveInterval}
         setAutoSaveInterval={autoSave.setAutoSaveInterval}
         storageSizeKb={autoSave.storageSizeKb}
+        onImportJson={() => project.fileInputRef.current?.click()}
+        onExportJson={editor.handleDownloadJson}
+        onExportCsv={editor.handleExportCsv}
       />
 
       <Toast
