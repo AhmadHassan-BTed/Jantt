@@ -6,7 +6,6 @@ import {
   FileJson,
   Layers,
   Kanban,
-  PieChart,
   Users,
   Clock,
   FileSpreadsheet,
@@ -21,7 +20,8 @@ import {
   ArrowUpFromLine,
   ArrowDownToLine,
   Save,
-  Activity
+  Activity,
+  StickyNote
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { SavedProject, ActiveView, EffectivePerson } from "../types";
@@ -38,6 +38,7 @@ interface NavbarProps {
   setIsSidebarCollapsed: (collapsed: boolean) => void;
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
+  notesCount?: number;
   activeProjectId: string;
   customProjects: SavedProject[];
   handleSelectProject: (id: string) => void;
@@ -70,6 +71,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   setIsSidebarCollapsed,
   activeView,
   setActiveView,
+  notesCount,
   activeProjectId,
   customProjects,
   handleSelectProject,
@@ -185,6 +187,30 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Activity size={13} />
             <span>Health &amp; PM</span>
+          </button>
+          <button
+            type="button"
+            className={`jantt-scale-btn ${activeView === "notes" ? "is-active" : ""}`}
+            onClick={() => setActiveView("notes")}
+            title="Shared Project Notes, Specs & Documentation"
+          >
+            <StickyNote size={13} />
+            <span>Notes</span>
+            {typeof notesCount === "number" && notesCount > 0 && (
+              <span
+                style={{
+                  fontSize: "9.5px",
+                  fontWeight: 700,
+                  padding: "1px 5px",
+                  borderRadius: "10px",
+                  background: activeView === "notes" ? "rgba(255,255,255,0.28)" : "var(--jantt-border)",
+                  color: activeView === "notes" ? "#FFFFFF" : "var(--jantt-text-muted)",
+                  marginLeft: "2px"
+                }}
+              >
+                {notesCount}
+              </span>
+            )}
           </button>
         </div>
       </div>

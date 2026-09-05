@@ -87,6 +87,41 @@
       "note": "Mandatory blocker for GA production rollout"
     }
   ],
+  "notes": [
+    {
+      "id": "note-arch-decisions",
+      "title": "Architecture Decisions & ADR-042",
+      "content": "### Core Directives\n1. Pure Activity-on-Node (AON) CPM topological engine for zero-dependency calculations.\n2. ANSI/EIA-748 standard EVM metrics for cost and schedule integrity.\n3. All project artifacts remain 100% portable JSON, fully version-controllable in git.\n\n### Open Items\n- Finalize SOC2 Type II audit checklist with external security counsel.\n- Confirm staging cluster zero-downtime blue/green rollout strategy.",
+      "createdAt": "2026-08-25T10:00:00.000Z",
+      "updatedAt": "2026-08-30T14:20:00.000Z",
+      "color": "#3B82F6",
+      "pinned": true,
+      "category": "Architecture",
+      "tags": ["ADR", "Architecture", "Milestone"]
+    },
+    {
+      "id": "note-kickoff-sync",
+      "title": "Sprint Kickoff & Contingency Buffers",
+      "content": "Reviewed initial critical path schedule. The driving critical path runs through Core Engine Pipeline -> Schema Engine -> High-Throughput Ingestion.\n\n- Contingency buffer of 8 business days reserved prior to final GA Release.\n- All team leads to verify daily standup blockers.",
+      "createdAt": "2026-08-28T09:30:00.000Z",
+      "updatedAt": "2026-08-31T11:45:00.000Z",
+      "color": "#10B981",
+      "pinned": true,
+      "category": "Meetings",
+      "tags": ["Sprint", "Contingency", "Standup"]
+    },
+    {
+      "id": "note-hiring-onboarding",
+      "title": "Engineering Onboarding & Access Matrix",
+      "content": "Ensure all contractors and incoming engineers complete security credentialing:\n- Cloud staging environment keys issued through 1Password vault.\n- PR reviews require two passing senior peer sign-offs before merging to main.\n- CI test suite must complete in < 60s.",
+      "createdAt": "2026-08-29T16:00:00.000Z",
+      "updatedAt": "2026-09-01T08:15:00.000Z",
+      "color": "#8B5CF6",
+      "pinned": false,
+      "category": "Operations",
+      "tags": ["HR", "Onboarding", "Security"]
+    }
+  ],
   "tasks": [
     {
       "id": "task-spec-schema",
