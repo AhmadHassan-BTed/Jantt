@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   type TimeScale,
   type LinkRoutingStyle,
@@ -32,7 +32,19 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
   const [showCriticalPath, setShowCriticalPath] = useState(options.initialCritical);
   const [showBaselines, setShowBaselines] = useState(options.initialBaselines);
   const [autoCascade, setAutoCascade] = useState<boolean>(options.initialAutoCascade);
-  const [activeView, setActiveView] = useState<ActiveView>(options.initialView);
+  const [activeView, setActiveViewState] = useState<ActiveView>(options.initialView);
+
+  const setActiveView = useCallback((newView: ActiveView) => {
+    setActiveViewState(newView);
+    try {
+      localStorage.setItem(STORAGE_KEYS.VIEW, newView);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("view", newView);
+        window.history.replaceState(null, "", url.toString());
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     try {
