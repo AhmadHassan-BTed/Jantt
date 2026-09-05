@@ -3943,4 +3943,38 @@ path.jantt-dep-path.jantt-task-dimmed {
   }
 }
 
+.btn-cloud-source-badge.is-room-collaborator {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  cursor: pointer;
+}
+
+.btn-cloud-source-badge.is-room-collaborator:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.btn-cloud-source-badge.is-room-viewer {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  cursor: pointer;
+}
+
+.btn-cloud-source-badge.is-room-viewer:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.spin-slow {
+  animation: spinSlow 8s linear infinite;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+
 

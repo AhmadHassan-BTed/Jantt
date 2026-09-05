@@ -33,6 +33,14 @@ export function useSharing({
     const origin = window.location.origin;
     const pathname = window.location.pathname;
 
+    if (activeProject && activeProject.source === "room" && activeProject.roomId) {
+      const secret = activeProject.secretKey;
+      if (secret) {
+        return `${origin}${pathname}?room=${encodeURIComponent(activeProject.roomId)}&view=${activeView}&theme=${selectedThemeId}#key=${encodeURIComponent(secret)}`;
+      }
+      return `${origin}${pathname}?room=${encodeURIComponent(activeProject.roomId)}&view=${activeView}&theme=${selectedThemeId}`;
+    }
+
     if (activeProject && activeProject.source === "linked" && activeProject.sourceUrl) {
       return `${origin}${pathname}?url=${encodeURIComponent(activeProject.sourceUrl)}&view=${activeView}&theme=${selectedThemeId}`;
     }

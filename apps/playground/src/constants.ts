@@ -38,7 +38,8 @@ export const STORAGE_KEYS = {
   DATE_FILTER_MODE: "jantt_date_filter_mode",
   COMPLETED_FILTER_MODE: "jantt_completed_filter_mode",
   AUTOSAVE_INTERVAL: "jantt_autosave_interval",
-  AUTO_CASCADE: "jantt_saved_auto_cascade"
+  AUTO_CASCADE: "jantt_saved_auto_cascade",
+  ROOM_SECRET_KEYS: "jantt_room_secret_keys"
 };
 
 export const AUTOSAVE_OPTIONS: { id: AutoSaveInterval; label: string; desc: string; recommended?: boolean }[] = [
