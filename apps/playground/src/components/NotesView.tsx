@@ -11,10 +11,17 @@ import {
   RefreshCw,
   Eye,
   Edit3,
-  Calendar
+  Calendar,
+  Paperclip,
+  AtSign,
+  CheckSquare,
+  User,
+  X,
+  PlusCircle
 } from "lucide-react";
-import type { JanttData, NoteItem } from "@jantt/core";
+import type { JanttData, NoteItem, Task, Team } from "@jantt/core";
 import { formatRelativeTime } from "../utils";
+import type { EffectivePerson } from "../types";
 
 const NOTE_PALETTE = [
   { id: "#3B82F6", label: "Blue", bg: "#3B82F6" },
@@ -29,15 +36,26 @@ const NOTE_PALETTE = [
 interface NotesViewProps {
   parsedData: JanttData;
   handleChartCommit: (data: JanttData) => void;
+  effectivePeople?: EffectivePerson[];
+  teams?: Team[];
 }
 
 const STORAGE_KEY_ACTIVE_NOTE = "jantt_active_note_id";
 
 export const NotesView: React.FC<NotesViewProps> = ({
   parsedData,
-  handleChartCommit
+  handleChartCommit,
+  effectivePeople = [],
+  teams = []
 }) => {
   const notes: NoteItem[] = useMemo(() => parsedData.notes || [], [parsedData.notes]);
+  const allTasks: Task[] = useMemo(() => parsedData.tasks || [], [parsedData.tasks]);
+  const teamsMap = useMemo(() => {
+    if (Array.isArray(teams)) {
+      return Object.fromEntries(teams.map((tm) => [tm.id, tm]));
+    }
+    return teams || {};
+  }, [teams]);
 
   const [activeNoteId, setActiveNoteIdState] = useState<string | null>(() => {
     try {
@@ -78,14 +96,21 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
 
+  // Quick picker popovers
+  const [showAttachPicker, setShowAttachPicker] = useState(false);
+  const [showMentionPersonPicker, setShowMentionPersonPicker] = useState(false);
+  const [showMentionTaskPicker, setShowMentionTaskPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
+
   const activeNote = useMemo(
     () => notes.find((n) => n.id === activeNoteId) || null,
     [notes, activeNoteId]
   );
 
-  // References for debounced auto-save
+  // References for debounced auto-save & cursor insertion
   const debounceTimerRef = useRef<number | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isNewlyCreatedRef = useRef(false);
 
   const latestEditRef = useRef({
@@ -113,6 +138,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
       setEditColor(activeNote.color || "#3B82F6");
       setEditPinned(!!activeNote.pinned);
       setSaveStatus("saved");
+      setShowAttachPicker(false);
+      setShowMentionPersonPicker(false);
+      setShowMentionTaskPicker(false);
+      setPickerSearch("");
 
       if (isNewlyCreatedRef.current) {
         isNewlyCreatedRef.current = false;
@@ -122,7 +151,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
         }, 50);
       }
     }
-  }, [activeNoteId]); // Only when switching notes
+  }, [activeNoteId]);
 
   // Function to commit changes immediately to JanttData JSON
   const commitNoteChanges = useCallback(
@@ -151,6 +180,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
           content: updates.content ?? "",
           color: updates.color ?? "#3B82F6",
           pinned: updates.pinned ?? false,
+          task_ids: updates.task_ids ?? [],
           createdAt: now,
           updatedAt: now,
           ...updates
@@ -169,7 +199,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
   // Debounced save when user types in editor
   const triggerDebouncedSave = useCallback(
-    (updates: { title?: string; content?: string; color?: string; pinned?: boolean }) => {
+    (updates: { title?: string; content?: string; color?: string; pinned?: boolean; task_ids?: string[] }) => {
       if (!activeNoteId) return;
       setSaveStatus("saving");
 
@@ -228,6 +258,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
       content: "",
       color: "#3B82F6",
       pinned: false,
+      task_ids: [],
       createdAt: now,
       updatedAt: now
     };
@@ -260,6 +291,160 @@ export const NotesView: React.FC<NotesViewProps> = ({
     }
   };
 
+  // Attach task to note
+  const handleAttachTask = (taskId: string) => {
+    if (!activeNoteId || !activeNote) return;
+    const currentAttached = activeNote.task_ids || [];
+    if (currentAttached.includes(taskId)) return;
+    const nextAttached = [...currentAttached, taskId];
+    commitNoteChanges(activeNoteId, { task_ids: nextAttached });
+    setShowAttachPicker(false);
+    setPickerSearch("");
+  };
+
+  // Detach task from note
+  const handleDetachTask = (taskId: string) => {
+    if (!activeNoteId || !activeNote) return;
+    const currentAttached = activeNote.task_ids || [];
+    const nextAttached = currentAttached.filter((id) => id !== taskId);
+    commitNoteChanges(activeNoteId, { task_ids: nextAttached });
+  };
+
+  // Quick insertion of @mention or /task into textarea
+  const insertTextAtCursor = (textToInsert: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      const nextContent = editContent ? `${editContent} ${textToInsert}` : textToInsert;
+      setEditContent(nextContent);
+      triggerDebouncedSave({ content: nextContent, title: editTitle, color: editColor, pinned: editPinned });
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = editContent.substring(0, start);
+    const after = editContent.substring(end);
+    const updated = `${before}${textToInsert}${after}`;
+    setEditContent(updated);
+    triggerDebouncedSave({ content: updated, title: editTitle, color: editColor, pinned: editPinned });
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursor = start + textToInsert.length;
+      textarea.setSelectionRange(newCursor, newCursor);
+    }, 15);
+  };
+
+  // Parse Mentioned Entities from Note Markdown Body
+  const { mentionedTasks, mentionedPeople } = useMemo(() => {
+    if (!editContent) {
+      return { mentionedTasks: [], mentionedPeople: [] };
+    }
+
+    const peopleMatches = Array.from(editContent.matchAll(/@([a-zA-Z0-9_.-]+)/g)).map((m) => m[1].toLowerCase());
+    const taskMatches = Array.from(editContent.matchAll(/(?:\/|#)([a-zA-Z0-9_-]+)/g)).map((m) => m[1].toLowerCase());
+
+    const attachedSet = new Set(activeNote?.task_ids || []);
+
+    // Resolve Mentioned Tasks
+    const mTasks: Task[] = [];
+    const seenTaskIds = new Set<string>();
+    allTasks.forEach((t) => {
+      const idMatch = taskMatches.includes(t.id.toLowerCase());
+      if (idMatch && !attachedSet.has(t.id) && !seenTaskIds.has(t.id)) {
+        seenTaskIds.add(t.id);
+        mTasks.push(t);
+      }
+    });
+
+    // Resolve Mentioned People
+    const mPeople: EffectivePerson[] = [];
+    const seenPersonIds = new Set<string>();
+    effectivePeople.forEach((p) => {
+      const idMatch = peopleMatches.includes(p.id.toLowerCase());
+      const nameMatch = peopleMatches.some((pm) => p.name.toLowerCase().replace(/\s+/g, "").includes(pm));
+      if ((idMatch || nameMatch) && !seenPersonIds.has(p.id)) {
+        seenPersonIds.add(p.id);
+        mPeople.push(p);
+      }
+    });
+
+    return { mentionedTasks: mTasks, mentionedPeople: mPeople };
+  }, [editContent, allTasks, activeNote?.task_ids, effectivePeople]);
+
+  // Resolve Attached Tasks list
+  const attachedTasks = useMemo(() => {
+    const ids = activeNote?.task_ids || [];
+    return allTasks.filter((t) => ids.includes(t.id));
+  }, [activeNote?.task_ids, allTasks]);
+
+  // Tasks available to be attached
+  const unattachedTasks = useMemo(() => {
+    const attachedSet = new Set(activeNote?.task_ids || []);
+    return allTasks.filter((t) => {
+      if (attachedSet.has(t.id)) return false;
+      if (!pickerSearch.trim()) return true;
+      const q = pickerSearch.toLowerCase();
+      const title = t.label || t.name || "";
+      return t.id.toLowerCase().includes(q) || title.toLowerCase().includes(q);
+    });
+  }, [allTasks, activeNote?.task_ids, pickerSearch]);
+
+  // Filtered People for @ Mention Dropdown
+  const filterablePeople = useMemo(() => {
+    if (!pickerSearch.trim()) return effectivePeople;
+    const q = pickerSearch.toLowerCase();
+    return effectivePeople.filter((p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+  }, [effectivePeople, pickerSearch]);
+
+  // Filtered Tasks for / Mention Dropdown
+  const filterableMentionTasks = useMemo(() => {
+    if (!pickerSearch.trim()) return allTasks;
+    const q = pickerSearch.toLowerCase();
+    return allTasks.filter((t) => {
+      const title = t.label || t.name || "";
+      return t.id.toLowerCase().includes(q) || title.toLowerCase().includes(q);
+    });
+  }, [allTasks, pickerSearch]);
+
+  // Helper for rendering lines in preview with highlight pills
+  const renderLineWithMentions = (line: string) => {
+    const tokens = line.split(/(@[a-zA-Z0-9_.-]+|(?:\/|#)[a-zA-Z0-9_-]+)/g);
+    return tokens.map((part, i) => {
+      if (part.startsWith("@")) {
+        const matchName = part.slice(1).toLowerCase();
+        const person = effectivePeople.find(
+          (p) => p.id.toLowerCase() === matchName || p.name.toLowerCase().replace(/\s+/g, "").includes(matchName)
+        );
+        return (
+          <span
+            key={i}
+            className="note-mention-pill is-person"
+            title={person ? `${person.name} (${person.role || "Team Member"})` : part}
+          >
+            <AtSign size={11} />
+            <span>{person ? person.name : part.slice(1)}</span>
+          </span>
+        );
+      }
+      if (part.startsWith("/") || part.startsWith("#")) {
+        const matchId = part.slice(1).toLowerCase();
+        const task = allTasks.find((t) => t.id.toLowerCase() === matchId);
+        const taskTitle = task ? task.label || task.name || "Task" : part;
+        return (
+          <span
+            key={i}
+            className="note-mention-pill is-task"
+            title={task ? `${taskTitle} [${task.id}] - ${task.status || "pending"}` : part}
+          >
+            <CheckSquare size={11} />
+            <span>{task ? `${task.id}: ${taskTitle}` : part}</span>
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   // Filtered & Sorted Notes for Gallery Grid
   const filteredNotes = useMemo(() => {
     return notes
@@ -282,7 +467,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
       });
   }, [notes, searchQuery, selectedColor]);
 
-  // Reading / word stats for editor
+  // Reading stats
   const wordCount = useMemo(() => {
     if (!editContent.trim()) return 0;
     return editContent.trim().split(/\s+/).length;
@@ -294,7 +479,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
     <div className="notes-view-container">
       {activeNoteId && activeNote ? (
         /* ========================================================================= */
-        /* DETAIL NOTE EDITOR VIEW (Type, Format & Auto-Save into JSON)              */
+        /* DETAIL NOTE EDITOR VIEW (Type, Format, Mention & Attach Tasks)            */
         /* ========================================================================= */
         <div className="note-editor-wrapper">
           {/* Top Editor Toolbar */}
@@ -422,50 +607,393 @@ export const NotesView: React.FC<NotesViewProps> = ({
               )}
             </div>
 
+            {/* Quick Mention & Attach Tool Strip */}
+            {!isPreviewMode && (
+              <div className="note-quick-tools-bar">
+                <span style={{ fontWeight: 600, color: "var(--jantt-text-muted)", marginRight: "4px" }}>
+                  Quick Insert:
+                </span>
+
+                {/* Mention Person Button & Dropdown */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="note-quick-tool-btn"
+                    onClick={() => {
+                      setShowMentionPersonPicker(!showMentionPersonPicker);
+                      setShowMentionTaskPicker(false);
+                      setShowAttachPicker(false);
+                      setPickerSearch("");
+                    }}
+                    title="Tag a team member (@)"
+                  >
+                    <AtSign size={13} />
+                    <span>@ Person</span>
+                  </button>
+                  {showMentionPersonPicker && (
+                    <div className="note-picker-popover">
+                      <input
+                        type="text"
+                        className="note-picker-search-input"
+                        placeholder="Search person..."
+                        value={pickerSearch}
+                        onChange={(e) => setPickerSearch(e.target.value)}
+                        autoFocus
+                      />
+                      {filterablePeople.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="note-picker-item"
+                          onClick={() => {
+                            insertTextAtCursor(`@${p.name.replace(/\s+/g, "")} `);
+                            setShowMentionPersonPicker(false);
+                            setPickerSearch("");
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span
+                              className="note-person-avatar-circle"
+                              style={{ background: p.color || "var(--jantt-accent)" }}
+                            >
+                              {p.name.charAt(0)}
+                            </span>
+                            <span style={{ fontWeight: 600 }}>{p.name}</span>
+                          </div>
+                          <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                            {p.role || p.id}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Mention Task Button & Dropdown */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="note-quick-tool-btn"
+                    onClick={() => {
+                      setShowMentionTaskPicker(!showMentionTaskPicker);
+                      setShowMentionPersonPicker(false);
+                      setShowAttachPicker(false);
+                      setPickerSearch("");
+                    }}
+                    title="Mention a task (/task-id)"
+                  >
+                    <CheckSquare size={13} />
+                    <span>/ Task</span>
+                  </button>
+                  {showMentionTaskPicker && (
+                    <div className="note-picker-popover">
+                      <input
+                        type="text"
+                        className="note-picker-search-input"
+                        placeholder="Search task to mention..."
+                        value={pickerSearch}
+                        onChange={(e) => setPickerSearch(e.target.value)}
+                        autoFocus
+                      />
+                      {filterableMentionTasks.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className="note-picker-item"
+                          onClick={() => {
+                            insertTextAtCursor(`/${t.id} `);
+                            setShowMentionTaskPicker(false);
+                            setPickerSearch("");
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>{t.id}: {t.label || t.name || "Task"}</span>
+                          <span style={{ fontSize: "10.5px", color: "var(--jantt-text-muted)" }}>
+                            {t.status || "pending"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Attach Task Button & Dropdown */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="note-quick-tool-btn"
+                    onClick={() => {
+                      setShowAttachPicker(!showAttachPicker);
+                      setShowMentionPersonPicker(false);
+                      setShowMentionTaskPicker(false);
+                      setPickerSearch("");
+                    }}
+                    title="Attach task directly to note"
+                  >
+                    <Paperclip size={13} />
+                    <span>Attach Task</span>
+                  </button>
+                  {showAttachPicker && (
+                    <div className="note-picker-popover">
+                      <input
+                        type="text"
+                        className="note-picker-search-input"
+                        placeholder="Search task to attach..."
+                        value={pickerSearch}
+                        onChange={(e) => setPickerSearch(e.target.value)}
+                        autoFocus
+                      />
+                      {unattachedTasks.length === 0 ? (
+                        <div style={{ padding: "8px", fontSize: "12px", color: "var(--jantt-text-muted)", textAlign: "center" }}>
+                          No unattached tasks found
+                        </div>
+                      ) : (
+                        unattachedTasks.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            className="note-picker-item"
+                            onClick={() => handleAttachTask(t.id)}
+                          >
+                            <span style={{ fontWeight: 600 }}>{t.id}: {t.label || t.name || "Task"}</span>
+                            <span style={{ fontSize: "10.5px", color: "var(--jantt-accent)" }}>+ Attach</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Content Area (Edit vs Preview) */}
             {isPreviewMode ? (
               <div className="note-preview-content">
                 {editContent.trim() ? (
                   editContent.split("\n").map((line, idx) => {
                     if (line.startsWith("### ")) {
-                      return <h3 key={idx}>{line.slice(4)}</h3>;
+                      return <h3 key={idx}>{renderLineWithMentions(line.slice(4))}</h3>;
                     }
                     if (line.startsWith("## ")) {
-                      return <h2 key={idx}>{line.slice(3)}</h2>;
+                      return <h2 key={idx}>{renderLineWithMentions(line.slice(3))}</h2>;
                     }
                     if (line.startsWith("# ")) {
-                      return <h1 key={idx}>{line.slice(2)}</h1>;
+                      return <h1 key={idx}>{renderLineWithMentions(line.slice(2))}</h1>;
                     }
                     if (line.startsWith("- ") || line.startsWith("* ")) {
                       return (
                         <li key={idx} style={{ marginLeft: "18px", marginBottom: "4px" }}>
-                          {line.slice(2)}
+                          {renderLineWithMentions(line.slice(2))}
                         </li>
                       );
                     }
                     if (line.trim() === "") {
                       return <div key={idx} style={{ height: "12px" }} />;
                     }
-                    return <p key={idx} style={{ margin: "0 0 8px 0" }}>{line}</p>;
+                    return <p key={idx} style={{ margin: "0 0 8px 0" }}>{renderLineWithMentions(line)}</p>;
                   })
                 ) : (
                   <p style={{ color: "var(--jantt-text-muted)", fontStyle: "italic" }}>
-                    No content yet. Click Edit to start writing.
+                    No content yet. Click Edit to start writing. Type @ to mention people or / to mention tasks.
                   </p>
                 )}
               </div>
             ) : (
               <textarea
+                ref={textareaRef}
                 className="note-editor-textarea"
                 value={editContent}
                 onChange={(e) => {
                   setEditContent(e.target.value);
                   triggerDebouncedSave({ content: e.target.value, title: editTitle, color: editColor, pinned: editPinned });
                 }}
-                placeholder="Start typing your note, meeting minutes, architecture specs, or task checklist here (Markdown supported)..."
+                placeholder="Start typing your note (Markdown supported). Use @name to mention team members, and /task-id to mention tasks..."
                 rows={16}
               />
             )}
+
+            {/* ================================================================= */}
+            {/* SECTIONED LISTS: ATTACHED TASKS, MENTIONED TASKS & PEOPLE         */}
+            {/* ================================================================= */}
+            <div className="note-sections-container">
+              {/* 1. ATTACHED TASKS SECTION */}
+              <div className="note-section-card">
+                <div className="note-section-header">
+                  <div className="note-section-title-wrap">
+                    <Paperclip size={14} style={{ color: "var(--jantt-accent)" }} />
+                    <span>Attached Tasks</span>
+                    <span className="note-section-badge">{attachedTasks.length}</span>
+                  </div>
+
+                  <div style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      className="note-quick-tool-btn"
+                      onClick={() => {
+                        setShowAttachPicker(!showAttachPicker);
+                        setShowMentionPersonPicker(false);
+                        setShowMentionTaskPicker(false);
+                        setPickerSearch("");
+                      }}
+                    >
+                      <Plus size={13} />
+                      <span>Attach Task</span>
+                    </button>
+                  </div>
+                </div>
+
+                {attachedTasks.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "var(--jantt-text-muted)", fontStyle: "italic", padding: "4px 0" }}>
+                    No tasks explicitly attached to this note yet. Click "+ Attach Task" above or mention with /task-id in your note.
+                  </div>
+                ) : (
+                  <div className="note-entity-list">
+                    {attachedTasks.map((t) => {
+                      const cat = parsedData.categories?.[t.category || ""];
+                      const isCompleted = t.status === "completed" || (t.progress ?? 0) >= 1.0;
+                      const statusClass = isCompleted
+                        ? "is-completed"
+                        : t.status === "in-progress"
+                        ? "is-in-progress"
+                        : t.status === "blocked"
+                        ? "is-blocked"
+                        : "is-pending";
+
+                      return (
+                        <div key={t.id} className="note-task-row">
+                          <div className="note-task-info-left">
+                            <span
+                              style={{
+                                width: "8px",
+                                height: "8px",
+                                borderRadius: "50%",
+                                background: cat?.color || "var(--jantt-accent)",
+                                flexShrink: 0
+                              }}
+                            />
+                            <span className="note-task-id-tag">{t.id}</span>
+                            <span className="note-task-label-text">{t.label || t.name || "Task"}</span>
+                          </div>
+
+                          <div className="note-task-info-right">
+                            <span className={`note-task-status-tag ${statusClass}`}>
+                              {t.status || (isCompleted ? "completed" : "pending")}
+                            </span>
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--jantt-text-muted)" }}>
+                              {Math.round((t.progress ?? 0) * 100)}%
+                            </span>
+                            <button
+                              type="button"
+                              className="note-detach-btn"
+                              onClick={() => handleDetachTask(t.id)}
+                              title="Detach task from note"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. MENTIONED TASKS SECTION */}
+              {mentionedTasks.length > 0 && (
+                <div className="note-section-card">
+                  <div className="note-section-header">
+                    <div className="note-section-title-wrap">
+                      <CheckSquare size={14} style={{ color: "#10B981" }} />
+                      <span>Mentioned Tasks in Note Text</span>
+                      <span className="note-section-badge">{mentionedTasks.length}</span>
+                    </div>
+                  </div>
+
+                  <div className="note-entity-list">
+                    {mentionedTasks.map((t) => {
+                      const isCompleted = t.status === "completed" || (t.progress ?? 0) >= 1.0;
+                      return (
+                        <div key={t.id} className="note-task-row">
+                          <div className="note-task-info-left">
+                            <span className="note-task-id-tag">{t.id}</span>
+                            <span className="note-task-label-text">{t.label || t.name || "Task"}</span>
+                          </div>
+
+                          <div className="note-task-info-right">
+                            <span className="note-task-status-tag is-in-progress">
+                              {t.status || (isCompleted ? "completed" : "pending")}
+                            </span>
+                            <button
+                              type="button"
+                              className="note-quick-tool-btn"
+                              onClick={() => handleAttachTask(t.id)}
+                              title="Pin as attached task"
+                              style={{ padding: "2px 8px", fontSize: "11px" }}
+                            >
+                              <PlusCircle size={12} />
+                              <span>Pin to Attached</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. MENTIONED PEOPLE SECTION */}
+              {mentionedPeople.length > 0 && (
+                <div className="note-section-card">
+                  <div className="note-section-header">
+                    <div className="note-section-title-wrap">
+                      <User size={14} style={{ color: "var(--jantt-accent)" }} />
+                      <span>Mentioned Team Members</span>
+                      <span className="note-section-badge">{mentionedPeople.length}</span>
+                    </div>
+                  </div>
+
+                  <div className="note-entity-list">
+                    {mentionedPeople.map((p) => {
+                      const team = p.teamId ? teamsMap[p.teamId] : undefined;
+                      return (
+                        <div key={p.id} className="note-person-row">
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span
+                              className="note-person-avatar-circle"
+                              style={{ background: p.color || "var(--jantt-accent)" }}
+                            >
+                              {p.name.charAt(0)}
+                            </span>
+                            <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                              {p.name}
+                            </span>
+                            {p.role && (
+                              <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                                ({p.role})
+                              </span>
+                            )}
+                          </div>
+
+                          {team && (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                padding: "2px 8px",
+                                borderRadius: "100px",
+                                background: `${team.color || "var(--jantt-accent)"}20`,
+                                color: team.color || "var(--jantt-accent)"
+                              }}
+                            >
+                              {team.name}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       ) : (
@@ -571,6 +1099,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 ? note.content.replace(/[#*`_]/g, "").trim().slice(0, 160)
                 : "Empty note. Tap to write...";
 
+              const attachedCount = note.task_ids?.length || 0;
+              const hasMentions = note.content && /(@[a-zA-Z0-9_.-]+|(?:\/|#)[a-zA-Z0-9_-]+)/.test(note.content);
+
               return (
                 <div
                   key={note.id}
@@ -595,6 +1126,24 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
                   {/* Card Body Preview */}
                   <p className="note-card-snippet">{previewSnippet}</p>
+
+                  {/* Card Badges Row */}
+                  {(attachedCount > 0 || hasMentions) && (
+                    <div className="note-card-badges-row">
+                      {attachedCount > 0 && (
+                        <span className="note-card-badge">
+                          <Paperclip size={10} />
+                          <span>{attachedCount} attached</span>
+                        </span>
+                      )}
+                      {hasMentions && (
+                        <span className="note-card-badge" style={{ color: "var(--jantt-accent)" }}>
+                          <AtSign size={10} />
+                          <span>mentions</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Card Footer */}
                   <div className="note-card-footer">

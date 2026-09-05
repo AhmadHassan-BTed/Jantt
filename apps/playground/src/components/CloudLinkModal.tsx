@@ -201,7 +201,7 @@ export const CloudLinkModal: React.FC<CloudLinkModalProps> = ({
                     padding: "2px 8px",
                     borderRadius: "100px",
                     background: "var(--jantt-accent)",
-                    color: "#FFFFFF"
+                    color: "var(--jantt-accent-contrast, #FFFFFF)"
                   }}
                 >
                   {cloudPreviewResult.info.label}

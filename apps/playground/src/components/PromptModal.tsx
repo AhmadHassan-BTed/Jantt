@@ -74,6 +74,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "pinned": true,
       "category": "Architecture",
       "tags": ["RFC", "Architecture"],
+      "task_ids": ["task-1"],
       "createdAt": "YYYY-MM-DDTHH:mm:ssZ",
       "updatedAt": "YYYY-MM-DDTHH:mm:ssZ"
     }

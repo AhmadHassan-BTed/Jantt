@@ -100,4 +100,28 @@ describe("Notes Schema & Integration", () => {
     expect(res.valid).toBe(false);
     expect(res.errors.some((e) => e.message.includes("Duplicate note id"))).toBe(true);
   });
+
+  it("validates notes with attached task_ids", () => {
+    const attachedData = {
+      tasks: [{ id: "t1", category: "core", start: "2026-09-01", end: "2026-09-05" }],
+      notes: [
+        { id: "note-task", title: "Task Note", content: "Notes on T1", task_ids: ["t1"] }
+      ]
+    };
+    const res = validate(attachedData);
+    expect(res.valid).toBe(true);
+    expect(res.errors).toHaveLength(0);
+  });
+
+  it("rejects notes with invalid non-array task_ids", () => {
+    const invalidAttachedData = {
+      tasks: [{ id: "t1", category: "core", start: "2026-09-01", end: "2026-09-05" }],
+      notes: [
+        { id: "note-task-bad", title: "Bad Note", content: "A", task_ids: "not-an-array" }
+      ]
+    };
+    const res = validate(invalidAttachedData);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((e) => e.path === "notes[0].task_ids")).toBe(true);
+  });
 });

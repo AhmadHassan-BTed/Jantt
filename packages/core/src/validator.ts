@@ -264,6 +264,17 @@ export function validate(json: unknown): ValidationResult {
         } else {
           noteIds.add(note.id);
         }
+
+        if (note.task_ids !== undefined) {
+          if (!Array.isArray(note.task_ids) || !note.task_ids.every((tid) => typeof tid === "string")) {
+            errors.push({
+              path: `notes[${nIdx}].task_ids`,
+              code: "SCHEMA_MISMATCH",
+              message: `Note '${note.id || nIdx}' field 'task_ids' must be an array of string task IDs.`,
+              suggestion: "Provide an array of task IDs like [\"T1\", \"T2\"]."
+            });
+          }
+        }
       });
     }
   }

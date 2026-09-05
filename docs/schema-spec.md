@@ -179,3 +179,60 @@ A dictionary mapping unique category keys to their color presentation:
 | `urgent` | `boolean` | Optional | Displays high-priority pulse indicator |
 | `notes` | `string` | Optional | Markdown or text notes displayed in modal & tooltip |
 | `fields` | `object` | Optional | Custom domain-specific key-value pairs |
+
+---
+
+## 4. Notes Specification (`notes[]`)
+
+Shared project documentation, meeting minutes, architecture RFCs, and decision logs stored directly in the project JSON.
+
+```json
+{
+  "notes": [
+    {
+      "id": "note-arch-rfc",
+      "title": "Topological Schedule Solver RFC",
+      "content": "Specifying graph resolution with @Alice and reviewing /T1 delivery milestones.",
+      "color": "#3B82F6",
+      "pinned": true,
+      "category": "Architecture",
+      "tags": ["RFC", "Core"],
+      "task_ids": ["T1", "T2"],
+      "createdAt": "2026-09-01T10:00:00Z",
+      "updatedAt": "2026-09-05T12:00:00Z"
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | **Yes** | Unique identifier for the note (e.g. `"note-1"`) |
+| `title` | `string` | **Yes** | Note title displayed in gallery and editor |
+| `content` | `string` | **Yes** | Markdown note body (supports `@person` tagging and `/task-id` mentions) |
+| `color` | `string` | Optional | Hex accent tint (e.g. `"#3B82F6"`, `"#10B981"`) |
+| `pinned` | `boolean` | Optional | When `true`, pinned to top of the notes gallery |
+| `task_ids` | `string[]` | Optional | Array of explicitly attached task IDs |
+| `tags` | `string[]` | Optional | Categorization tags |
+| `createdAt` | `string` | Optional | ISO 8601 creation timestamp |
+| `updatedAt` | `string` | Optional | ISO 8601 last-modified timestamp |
+
+---
+
+## 5. People & Teams Specification (`people[]`, `teams[]`)
+
+```json
+{
+  "teams": [
+    { "id": "eng", "name": "Engineering", "color": "#3B82F6", "description": "Core software team" }
+  ],
+  "people": [
+    { "id": "p-ahmad", "name": "Ahmad Hassan", "teamId": "eng", "role": "Lead Architect", "color": "#10B981" }
+  ]
+}
+```
+
+| Entity | Fields | Description |
+|---|---|---|
+| **`teams[]`** | `id` (*required*), `name` (*required*), `color`, `description` | Workload squad group with color badges |
+| **`people[]`** | `id` (*required*), `name` (*required*), `teamId`, `role`, `color`, `avatar` | Registered team member with avatar initials and task allocations |

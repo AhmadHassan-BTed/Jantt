@@ -448,7 +448,7 @@
   align-items: center;
   gap: 5px;
   background: var(--jantt-accent);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   font-size: 11.5px;
   font-weight: 700;
   padding: 5px 12px;
@@ -459,8 +459,10 @@
   box-shadow: 0 2px 6px var(--jantt-accent-glow);
 }
 
-.jantt-theme-dark .jantt-add-task-btn {
-  color: #000000;
+.jantt-theme-dark .jantt-add-task-btn,
+.jantt-theme-nordic-frost .jantt-add-task-btn,
+.jantt-theme-cyber-emerald .jantt-add-task-btn {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .jantt-theme-light .jantt-add-task-btn {
@@ -544,13 +546,15 @@
 
 .jantt-settings-btn.is-active {
   background: var(--jantt-accent);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   border-color: var(--jantt-accent);
   box-shadow: 0 0 10px var(--jantt-accent-glow);
 }
 
-.jantt-theme-dark .jantt-settings-btn.is-active {
-  color: #000000;
+.jantt-theme-dark .jantt-settings-btn.is-active,
+.jantt-theme-nordic-frost .jantt-settings-btn.is-active,
+.jantt-theme-cyber-emerald .jantt-settings-btn.is-active {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 /* Floating Chart Settings Popover */
@@ -727,9 +731,15 @@
 }
 
 .jantt-preset-btn.is-active {
-  background: var(--jantt-accent-glow);
-  color: var(--jantt-accent);
+  background: var(--jantt-accent);
+  color: var(--jantt-accent-contrast, #FFFFFF);
   border-color: var(--jantt-accent);
+}
+
+.jantt-theme-dark .jantt-preset-btn.is-active,
+.jantt-theme-nordic-frost .jantt-preset-btn.is-active,
+.jantt-theme-cyber-emerald .jantt-preset-btn.is-active {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .jantt-settings-divider {
@@ -860,7 +870,7 @@
   align-items: center;
   gap: 6px;
   background: var(--jantt-accent);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   font-size: 11px;
   font-weight: 600;
   font-family: var(--jantt-font-sans);
@@ -870,6 +880,12 @@
   box-shadow: 0 2px 8px var(--jantt-accent-glow, rgba(56, 189, 248, 0.35));
   transition: opacity 0.15s ease, transform 0.15s ease;
   user-select: none;
+}
+
+.jantt-theme-dark .jantt-date-filter-badge,
+.jantt-theme-nordic-frost .jantt-date-filter-badge,
+.jantt-theme-cyber-emerald .jantt-date-filter-badge {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .jantt-date-filter-badge:hover {
@@ -1204,7 +1220,7 @@
 
 .jantt-day-cell.is-date-selected {
   background: var(--jantt-accent) !important;
-  color: #FFFFFF !important;
+  color: var(--jantt-accent-contrast, #FFFFFF) !important;
   font-weight: 800;
   box-shadow: 0 0 12px var(--jantt-accent-glow, rgba(56, 189, 248, 0.5));
   z-index: 7;
@@ -1213,7 +1229,22 @@
 .jantt-day-cell.is-date-selected .jantt-day-name,
 .jantt-day-cell.is-date-selected .jantt-day-num,
 .jantt-day-cell.is-date-selected .jantt-boundary-marker {
-  color: #FFFFFF !important;
+  color: var(--jantt-accent-contrast, #FFFFFF) !important;
+}
+
+.jantt-theme-dark .jantt-day-cell.is-date-selected,
+.jantt-theme-dark .jantt-day-cell.is-date-selected .jantt-day-name,
+.jantt-theme-dark .jantt-day-cell.is-date-selected .jantt-day-num,
+.jantt-theme-dark .jantt-day-cell.is-date-selected .jantt-boundary-marker,
+.jantt-theme-nordic-frost .jantt-day-cell.is-date-selected,
+.jantt-theme-nordic-frost .jantt-day-cell.is-date-selected .jantt-day-name,
+.jantt-theme-nordic-frost .jantt-day-cell.is-date-selected .jantt-day-num,
+.jantt-theme-nordic-frost .jantt-day-cell.is-date-selected .jantt-boundary-marker,
+.jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected,
+.jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected .jantt-day-name,
+.jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected .jantt-day-num,
+.jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected .jantt-boundary-marker {
+  color: var(--jantt-accent-contrast, #000000) !important;
 }
 
 /* Draggable Timeline Column Resize Handle */
@@ -2276,7 +2307,7 @@
 
 .jantt-btn-primary {
   background: var(--jantt-accent);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   font-weight: 700;
 }
 
@@ -2292,9 +2323,12 @@
   color: #000000;
 }
 
+.jantt-theme-nordic-frost .jantt-btn-primary {
+  color: #031326;
+}
+
 .jantt-theme-midnight-rose .jantt-btn-primary,
 .jantt-theme-sunset-crimson .jantt-btn-primary,
-.jantt-theme-nordic-frost .jantt-btn-primary,
 .jantt-theme-beenie .jantt-btn-primary {
   color: #FFFFFF;
 }
