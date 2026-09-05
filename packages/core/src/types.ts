@@ -21,6 +21,7 @@ export interface JanttMeta {
   contentHash?: string;
   updatedAt?: string;
   sync?: PlanSyncMeta;
+  tombstones?: Record<string, { deletedAt: string; entityType?: string }>;
   [key: string]: unknown;
 }
 

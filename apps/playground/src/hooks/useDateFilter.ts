@@ -81,6 +81,7 @@ export function useDateFilter({
 
   const isTaskMatchingDateFilter = useCallback(
     (task: Task): boolean => {
+      if (task._deleted) return false;
       if (dateFilterMode === "all") return true;
       if (dateFilterMode === "today") {
         return isTaskOnDate(task.start, task.end, getTodayISODate());
@@ -126,15 +127,17 @@ export function useDateFilter({
 
   const matchingTasksCount = useMemo(() => {
     if (!parsedData) return 0;
-    return parsedData.tasks.filter((t) => {
-      if (completedFilterMode === "filter" && isTaskDone(t)) return false;
-      return isTaskMatchingActiveFilter(t);
-    }).length;
+    return (parsedData.tasks || [])
+      .filter((t) => !t._deleted)
+      .filter((t) => {
+        if (completedFilterMode === "filter" && isTaskDone(t)) return false;
+        return isTaskMatchingActiveFilter(t);
+      }).length;
   }, [parsedData, completedFilterMode, isTaskMatchingActiveFilter]);
 
   const summaryKpiTasks = useMemo(() => {
     if (!parsedData) return [];
-    let tasks = parsedData.tasks;
+    let tasks = (parsedData.tasks || []).filter((t) => !t._deleted);
     if (completedFilterMode === "filter") {
       tasks = tasks.filter((t) => !isTaskDone(t));
     }
@@ -146,7 +149,7 @@ export function useDateFilter({
 
   const ganttFilteredTasks = useMemo(() => {
     if (!parsedData) return [];
-    let tasks = parsedData.tasks;
+    let tasks = (parsedData.tasks || []).filter((t) => !t._deleted);
     if (completedFilterMode === "filter") {
       tasks = tasks.filter((t) => !isTaskDone(t));
     }
@@ -161,7 +164,7 @@ export function useDateFilter({
 
   const dateFilterActiveSummary = useMemo(() => {
     if (dateFilterMode === "all" && !isPersonFiltering && completedFilterMode === "show") return null;
-    const total = parsedData?.tasks.length || 0;
+    const total = (parsedData?.tasks || []).filter((t) => !t._deleted).length;
     const countText = `${matchingTasksCount} of ${total} tasks active`;
     let label = "";
 

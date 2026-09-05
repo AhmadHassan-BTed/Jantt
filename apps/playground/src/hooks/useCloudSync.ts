@@ -13,6 +13,20 @@ import type { SavedProject } from "../types";
 import { STORAGE_KEYS } from "../constants";
 import { saveCustomProjects } from "../utils";
 
+function getCollaboratorId(): string {
+  if (typeof window === "undefined") return "peer-serverless";
+  try {
+    let id = localStorage.getItem("jantt_peer_id");
+    if (!id) {
+      id = `peer-${Math.random().toString(36).slice(2, 8)}`;
+      localStorage.setItem("jantt_peer_id", id);
+    }
+    return id;
+  } catch {
+    return "peer-serverless";
+  }
+}
+
 interface UseCloudSyncOptions {
   customProjects: SavedProject[];
   setCustomProjects: React.Dispatch<React.SetStateAction<SavedProject[]>>;
@@ -147,7 +161,9 @@ export function useCloudSync({
       captureSnapshot?.(activeProj.id, currentLocalData, "Pre-Manual Sync Snapshot");
 
       // Smart 3-way reconciliation
-      const reconcileResult = reconcilePlans(activeProj.data, currentLocalData, remoteData);
+      const reconcileResult = reconcilePlans(activeProj.data, currentLocalData, remoteData, {
+        clientId: getCollaboratorId()
+      });
       const finalData = reconcileResult.mergedData;
       const now = new Date().toISOString();
 

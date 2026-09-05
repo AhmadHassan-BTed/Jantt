@@ -77,7 +77,7 @@ export function layout(
   data: JanttData,
   viewportOptions: ViewportOptions = {}
 ): JanttLayoutResult {
-  const tasks = data.tasks || [];
+  const tasks = (data.tasks || []).filter((t) => !t._deleted);
   const categories = data.categories || {};
 
   // Auto-adjust scale tier based on continuous dayWidth

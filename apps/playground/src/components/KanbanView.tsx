@@ -140,7 +140,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
           ] as const
         ).map((col) => {
           let colTasks = kanbanMultiSort(
-            parsedData.tasks.filter((t) => {
+            (parsedData.tasks || []).filter((t) => !t._deleted).filter((t) => {
               if (col.id === "not-started") return !t.status || t.status === "not-started";
               return t.status === col.id;
             })

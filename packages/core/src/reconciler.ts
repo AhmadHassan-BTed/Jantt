@@ -199,8 +199,16 @@ export function reconcilePlans(
   let fieldsMerged = 0;
   let tombstonesPreserved = 0;
 
+  const hasSoftDeletions =
+    (local.tasks || []).some((t) => t._deleted) ||
+    (remote.tasks || []).some((t) => t._deleted) ||
+    Boolean(local.meta?.tombstones && Object.keys(local.meta.tombstones).length > 0) ||
+    Boolean(remote.meta?.tombstones && Object.keys(remote.meta.tombstones).length > 0) ||
+    (base?.tasks || []).some((t) => t._deleted) ||
+    Boolean(base?.meta?.tombstones && Object.keys(base.meta.tombstones).length > 0);
+
   // 1. Trivial check: local and remote are already logically identical
-  if (localHash === remoteHash) {
+  if (!hasSoftDeletions && localHash === remoteHash) {
     return {
       mergedData: remote,
       hasConflicts: false,
@@ -212,7 +220,7 @@ export function reconcilePlans(
   }
 
   // 2. Trivial check: local made zero modifications since base
-  if (baseHash && localHash === baseHash) {
+  if (!hasSoftDeletions && baseHash && localHash === baseHash) {
     return {
       mergedData: remote,
       hasConflicts: false,
@@ -224,7 +232,7 @@ export function reconcilePlans(
   }
 
   // 3. Trivial check: remote made zero modifications since base
-  if (baseHash && remoteHash === baseHash) {
+  if (!hasSoftDeletions && baseHash && remoteHash === baseHash) {
     return {
       mergedData: local,
       hasConflicts: false,
@@ -240,15 +248,44 @@ export function reconcilePlans(
   const localTaskMap = new Map<string, Task>((local.tasks || []).map((t) => [t.id, t]));
   const remoteTaskMap = new Map<string, Task>((remote.tasks || []).map((t) => [t.id, t]));
 
+  const nowIso = new Date().toISOString();
+  const currentClientId = options?.clientId || "client";
+
+  // Ingest tombstones from metadata and soft-deleted items across all replicas
+  const tombstoneMap = new Map<string, { deletedAt: string; entityType: "task" | "note" }>();
+
+  const ingestTombstone = (id: string, delAt?: string, entityType: "task" | "note" = "task") => {
+    if (!id) return;
+    const finalTs = delAt || `${nowIso}#${currentClientId}`;
+    const existing = tombstoneMap.get(id);
+    if (!existing || compareCompositeTimestamps(finalTs, existing.deletedAt) > 0) {
+      tombstoneMap.set(id, { deletedAt: finalTs, entityType });
+    }
+  };
+
+  // Ingest from meta.tombstones
+  Object.entries(safeBase.meta?.tombstones || {}).forEach(([id, t]) => ingestTombstone(id, t?.deletedAt, (t?.entityType as any) || "task"));
+  Object.entries(local.meta?.tombstones || {}).forEach(([id, t]) => ingestTombstone(id, t?.deletedAt, (t?.entityType as any) || "task"));
+  Object.entries(remote.meta?.tombstones || {}).forEach(([id, t]) => ingestTombstone(id, t?.deletedAt, (t?.entityType as any) || "task"));
+
+  // Ingest from soft-deleted task objects
+  (safeBase.tasks || []).forEach((t) => { if (t._deleted) ingestTombstone(t.id, t.deletedAt || t.updatedAt, "task"); });
+  (local.tasks || []).forEach((t) => { if (t._deleted) ingestTombstone(t.id, t.deletedAt || t.updatedAt, "task"); });
+  (remote.tasks || []).forEach((t) => { if (t._deleted) ingestTombstone(t.id, t.deletedAt || t.updatedAt, "task"); });
+
+  // Ingest from soft-deleted note objects
+  (safeBase.notes || []).forEach((n) => { if (n._deleted) ingestTombstone(n.id, n.deletedAt || n.updatedAt, "note"); });
+  (local.notes || []).forEach((n) => { if (n._deleted) ingestTombstone(n.id, n.deletedAt || n.updatedAt, "note"); });
+  (remote.notes || []).forEach((n) => { if (n._deleted) ingestTombstone(n.id, n.deletedAt || n.updatedAt, "note"); });
+
   const allTaskIds = new Set<string>([
     ...baseTaskMap.keys(),
     ...localTaskMap.keys(),
-    ...remoteTaskMap.keys()
+    ...remoteTaskMap.keys(),
+    ...Array.from(tombstoneMap.keys())
   ]);
 
   const mergedTasks: Task[] = [];
-  const nowIso = new Date().toISOString();
-  const currentClientId = options?.clientId || "client";
 
   for (const id of allTaskIds) {
     const inBase = baseTaskMap.has(id);
@@ -270,11 +307,7 @@ export function reconcilePlans(
         const winningDelAt =
           compareCompositeTimestamps(localDelAt, remoteDelAt) >= 0 ? localDelAt : remoteDelAt;
 
-        mergedTasks.push({
-          ...localTask,
-          _deleted: true,
-          deletedAt: winningDelAt
-        });
+        ingestTombstone(id, winningDelAt, "task");
         tombstonesPreserved++;
         continue;
       }
@@ -286,6 +319,7 @@ export function reconcilePlans(
 
         if (compareCompositeTimestamps(remoteLatest, localDelAt) > 0) {
           // Remote updated the task AFTER the deletion timestamp -> Resurrect!
+          tombstoneMap.delete(id);
           mergedTasks.push({
             ...remoteTask,
             _deleted: false,
@@ -303,11 +337,7 @@ export function reconcilePlans(
           });
         } else {
           // Deletion happened after or at the same time -> Delete wins
-          mergedTasks.push({
-            ...localTask,
-            _deleted: true,
-            deletedAt: localDelAt
-          });
+          ingestTombstone(id, localDelAt, "task");
           tasksDeleted++;
           tombstonesPreserved++;
         }
@@ -321,6 +351,7 @@ export function reconcilePlans(
 
         if (compareCompositeTimestamps(localLatest, remoteDelAt) > 0) {
           // Local updated the task AFTER the collaborator's deletion -> Resurrect!
+          tombstoneMap.delete(id);
           mergedTasks.push({
             ...localTask,
             _deleted: false,
@@ -338,21 +369,33 @@ export function reconcilePlans(
           });
         } else {
           // Collaborator deletion wins
-          mergedTasks.push({
-            ...remoteTask,
-            _deleted: true,
-            deletedAt: remoteDelAt
-          });
+          ingestTombstone(id, remoteDelAt, "task");
           tasksDeleted++;
           tombstonesPreserved++;
         }
         continue;
       }
 
-      // Case 1D: Both active -> Field-level CRDT LWW Merge!
+      // Case 1D: Both active -> Check if prior tombstone existed in metadata
+      const existingTombstone = tombstoneMap.get(id);
+      if (existingTombstone && existingTombstone.entityType === "task") {
+        const localLatest = getLatestTaskTimestamp(localTask);
+        const remoteLatest = getLatestTaskTimestamp(remoteTask);
+        const maxEditTime = compareCompositeTimestamps(localLatest, remoteLatest) >= 0 ? localLatest : remoteLatest;
+
+        if (compareCompositeTimestamps(maxEditTime, existingTombstone.deletedAt) <= 0) {
+          // Both active versions are older than or equal to deletion -> Delete wins
+          tombstonesPreserved++;
+          continue;
+        } else {
+          // At least one replica updated after tombstone -> Resurrect
+          tombstoneMap.delete(id);
+        }
+      }
+
+      // Both active -> Field-level CRDT LWW Merge!
       if (areTasksIdentical(localTask, remoteTask)) {
-        // Deterministic pick
-        mergedTasks.push(localTask);
+        mergedTasks.push({ ...localTask, _deleted: false, deletedAt: undefined });
         continue;
       }
 
@@ -361,6 +404,8 @@ export function reconcilePlans(
         ...remoteTask,
         ...localTask,
         id,
+        _deleted: false,
+        deletedAt: undefined,
         fieldTimestamps: {
           ...(baseTask?.fieldTimestamps || {}),
           ...(remoteTask.fieldTimestamps || {}),
@@ -502,7 +547,8 @@ export function reconcilePlans(
         const localChanged = !areTasksIdentical(baseTask, localTask);
         if (localChanged) {
           // You made uncommitted changes to a deleted task -> resurrect!
-          mergedTasks.push(localTask);
+          tombstoneMap.delete(id);
+          mergedTasks.push({ ...localTask, _deleted: false, deletedAt: undefined });
           conflicts.push({
             type: "task_deletion",
             entityId: id,
@@ -514,18 +560,19 @@ export function reconcilePlans(
           });
         } else {
           // Local made no changes -> accept deletion and create tombstone
-          mergedTasks.push({
-            ...baseTask,
-            _deleted: true,
-            deletedAt: `${nowIso}#remote`
-          });
+          ingestTombstone(id, `${nowIso}#remote`, "task");
           tasksDeleted++;
           tombstonesPreserved++;
         }
       } else {
         // Brand new task added locally
-        mergedTasks.push(localTask);
-        tasksAdded++;
+        if (localTask._deleted) {
+          ingestTombstone(id, localTask.deletedAt || `${nowIso}#${currentClientId}`, "task");
+          tombstonesPreserved++;
+        } else {
+          mergedTasks.push({ ...localTask, _deleted: false, deletedAt: undefined });
+          tasksAdded++;
+        }
       }
       continue;
     }
@@ -539,7 +586,8 @@ export function reconcilePlans(
         const remoteChanged = !areTasksIdentical(baseTask, remoteTask);
         if (remoteChanged) {
           // Remote made edits to a locally deleted task -> keep remote!
-          mergedTasks.push(remoteTask);
+          tombstoneMap.delete(id);
+          mergedTasks.push({ ...remoteTask, _deleted: false, deletedAt: undefined });
           tasksUpdated++;
           conflicts.push({
             type: "task_deletion",
@@ -552,18 +600,31 @@ export function reconcilePlans(
           });
         } else {
           // Remote made no changes -> accept local deletion and create tombstone
-          mergedTasks.push({
-            ...baseTask,
-            _deleted: true,
-            deletedAt: `${nowIso}#${currentClientId}`
-          });
+          ingestTombstone(id, `${nowIso}#${currentClientId}`, "task");
           tasksDeleted++;
           tombstonesPreserved++;
         }
       } else {
         // Brand new task added by remote
-        mergedTasks.push(remoteTask);
-        tasksAdded++;
+        if (remoteTask._deleted) {
+          ingestTombstone(id, remoteTask.deletedAt || nowIso, "task");
+          tombstonesPreserved++;
+        } else {
+          mergedTasks.push({ ...remoteTask, _deleted: false, deletedAt: undefined });
+          tasksAdded++;
+        }
+      }
+      continue;
+    }
+
+    // =========================================================================
+    // Scenario 4: Missing in both Local and Remote (Present in Base or Tombstone Map)
+    // =========================================================================
+    if (!localTask && !remoteTask) {
+      if (inBase && baseTask) {
+        // Existed in base, both sides deleted it!
+        ingestTombstone(id, nowIso, "task");
+        tombstonesPreserved++;
       }
       continue;
     }
@@ -594,26 +655,98 @@ export function reconcilePlans(
       const rDel = Boolean(rNote._deleted);
 
       if (lDel && rDel) {
-        mergedNotes.push({ ...lNote, _deleted: true });
+        ingestTombstone(nId, nowIso, "note");
+        continue;
+      }
+
+      if (lDel && !rDel) {
+        const lTs = lNote.deletedAt || lNote.updatedAt || nowIso;
+        const rTs = rNote.updatedAt ? `${rNote.updatedAt}#${rNote.updatedBy || ""}` : "";
+        if (compareCompositeTimestamps(rTs, lTs) > 0) {
+          tombstoneMap.delete(nId);
+          mergedNotes.push({ ...rNote, _deleted: false });
+          notesUpdated++;
+        } else {
+          ingestTombstone(nId, lTs, "note");
+        }
+        continue;
+      }
+
+      if (!lDel && rDel) {
+        const rTs = rNote.deletedAt || rNote.updatedAt || nowIso;
+        const lTs = lNote.updatedAt ? `${lNote.updatedAt}#${lNote.updatedBy || ""}` : "";
+        if (compareCompositeTimestamps(lTs, rTs) > 0) {
+          tombstoneMap.delete(nId);
+          mergedNotes.push({ ...lNote, _deleted: false });
+          notesUpdated++;
+        } else {
+          ingestTombstone(nId, rTs, "note");
+        }
         continue;
       }
 
       if (lNote.content === rNote.content && lNote.title === rNote.title) {
-        mergedNotes.push(rNote);
+        mergedNotes.push({ ...rNote, _deleted: false });
       } else {
         const lTs = lNote.updatedAt ? `${lNote.updatedAt}#${lNote.updatedBy || ""}` : "";
         const rTs = rNote.updatedAt ? `${rNote.updatedAt}#${rNote.updatedBy || ""}` : "";
         const chosen = compareCompositeTimestamps(rTs, lTs) >= 0 ? rNote : lNote;
-        mergedNotes.push(chosen);
+        mergedNotes.push({ ...chosen, _deleted: false });
         notesUpdated++;
       }
     } else if (lNote && !rNote) {
-      if (!bNote || bNote.content !== lNote.content) {
-        mergedNotes.push(lNote);
+      if (!bNote || bNote.content !== lNote.content || bNote.title !== lNote.title) {
+        if (!lNote._deleted) {
+          mergedNotes.push({ ...lNote, _deleted: false });
+        } else {
+          ingestTombstone(nId, lNote.deletedAt || nowIso, "note");
+        }
+      } else {
+        // Remote deleted note
+        ingestTombstone(nId, `${nowIso}#remote`, "note");
       }
     } else if (!lNote && rNote) {
-      mergedNotes.push(rNote);
-      notesUpdated++;
+      if (!bNote || bNote.content !== rNote.content || bNote.title !== rNote.title) {
+        if (!rNote._deleted) {
+          mergedNotes.push({ ...rNote, _deleted: false });
+          notesUpdated++;
+        } else {
+          ingestTombstone(nId, rNote.deletedAt || nowIso, "note");
+        }
+      } else {
+        // Local deleted note
+        ingestTombstone(nId, `${nowIso}#${currentClientId}`, "note");
+      }
+    }
+  }
+
+  // ===========================================================================
+  // 5. Clean Dangling Dependency Pruning
+  // ===========================================================================
+  const deletedTaskIds = new Set<string>();
+  for (const [tId, rec] of tombstoneMap.entries()) {
+    if (rec.entityType === "task") {
+      deletedTaskIds.add(tId);
+    }
+  }
+
+  for (const t of mergedTasks) {
+    if (!t.dependsOn) continue;
+    if (Array.isArray(t.dependsOn)) {
+      const remaining = t.dependsOn.filter(
+        (depId) => typeof depId === "string" && !deletedTaskIds.has(depId.trim())
+      );
+      t.dependsOn = remaining.length === 0 ? null : (remaining.length === 1 ? remaining[0] : remaining);
+    } else if (typeof t.dependsOn === "string") {
+      if (t.dependsOn.includes(",")) {
+        const remaining = t.dependsOn
+          .split(",")
+          .map((s) => s.trim())
+          .filter((depId) => depId.length > 0 && !deletedTaskIds.has(depId));
+        t.dependsOn = remaining.length === 0 ? null : (remaining.length === 1 ? remaining[0] : remaining);
+      } else if (deletedTaskIds.has(t.dependsOn.trim())) {
+        t.dependsOn = null;
+      }
     }
   }
 
@@ -643,18 +776,12 @@ export function reconcilePlans(
   if (options?.purgeTombstones) {
     const maxAge = options.tombstoneMaxAgeDays ?? 30;
     const cutoff = Date.now() - maxAge * 24 * 60 * 60 * 1000;
-    finalTasks = finalTasks.filter((t) => {
-      if (!t._deleted) return true;
-      if (!t.deletedAt) return false;
-      const ts = new Date(t.deletedAt.split("#")[0]).getTime();
-      return !isNaN(ts) && ts > cutoff;
-    });
-    finalNotes = finalNotes.filter((n) => {
-      if (!n._deleted) return true;
-      if (!n.deletedAt) return false;
-      const ts = new Date(n.deletedAt.split("#")[0]).getTime();
-      return !isNaN(ts) && ts > cutoff;
-    });
+    for (const [id, rec] of Array.from(tombstoneMap.entries())) {
+      const ts = new Date(rec.deletedAt.split("#")[0]).getTime();
+      if (!isNaN(ts) && ts < cutoff) {
+        tombstoneMap.delete(id);
+      }
+    }
   }
 
   // ===========================================================================
@@ -673,6 +800,7 @@ export function reconcilePlans(
       title: remote.meta?.title || local.meta?.title || "Project Plan",
       revision: nextRevision,
       updatedAt: nowIso,
+      tombstones: Object.fromEntries(tombstoneMap.entries()),
       sync: {
         revision: nextRevision,
         contentHash: "",
@@ -743,8 +871,19 @@ export function purgeTombstones(data: JanttData, maxAgeDays = 30): JanttData {
     const ts = new Date(n.deletedAt.split("#")[0]).getTime();
     return !isNaN(ts) && ts > cutoffMs;
   });
+  const nextTombstones: Record<string, { deletedAt: string; entityType?: string }> = {};
+  if (data.meta?.tombstones) {
+    for (const [id, record] of Object.entries(data.meta.tombstones)) {
+      if (!record?.deletedAt) continue;
+      const ts = new Date(record.deletedAt.split("#")[0]).getTime();
+      if (!isNaN(ts) && ts > cutoffMs) {
+        nextTombstones[id] = record;
+      }
+    }
+  }
   return {
     ...data,
+    meta: data.meta ? { ...data.meta, tombstones: nextTombstones } : undefined,
     tasks: purgedTasks,
     notes: purgedNotes
   };

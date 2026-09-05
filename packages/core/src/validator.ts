@@ -56,6 +56,7 @@ export function validate(json: unknown): ValidationResult {
     }
 
     const task = rawTask as Task;
+    if (task._deleted) return; // Skip soft-deleted tombstones defensively
     const taskId = task.id;
 
     if (!taskId || typeof taskId !== "string" || taskId.trim() === "") {
@@ -167,7 +168,7 @@ export function validate(json: unknown): ValidationResult {
 
   // Second pass: Dependency resolution, dangling check, and cycle detection
   data.tasks.forEach((task, index) => {
-    if (!task || !task.id) return;
+    if (!task || !task.id || task._deleted) return;
 
     const depIds = getTaskDependencies(task);
     depIds.forEach((depId) => {

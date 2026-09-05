@@ -53,7 +53,9 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   const metrics = new Map<string, TaskScheduleMetrics>();
   const criticalPaths: string[][] = [];
 
-  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+  const liveTasks = (tasks || []).filter((t) => !t._deleted);
+
+  if (liveTasks.length === 0) {
     return {
       criticalTaskIds,
       criticalDepKeys,
@@ -72,7 +74,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   const inDegree = new Map<string, number>();
   const durationMap = new Map<string, number>();
 
-  tasks.forEach((t) => {
+  liveTasks.forEach((t) => {
     byId.set(t.id, t);
     predMap.set(t.id, []);
     succMap.set(t.id, []);
@@ -224,7 +226,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   const freeFloatMap = new Map<string, number>();
   let minTotalFloat = Infinity;
 
-  tasks.forEach((t) => {
+  liveTasks.forEach((t) => {
     const es = earlyStartMap.get(t.id)!;
     const ls = lateStartMap.get(t.id)!;
     const ef = earlyFinishMap.get(t.id)!;
@@ -260,7 +262,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   // 5. Critical & Near-Critical Classification
   const nearCriticalThreshold = options?.nearCriticalThresholdDays ?? 3;
 
-  tasks.forEach((t) => {
+  liveTasks.forEach((t) => {
     const tf = totalFloatMap.get(t.id)!;
     const isCritical = tf <= 0 || tf === minTotalFloat;
     const isNearCritical = !isCritical && tf - Math.min(0, minTotalFloat) <= nearCriticalThreshold;
@@ -294,7 +296,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   });
 
   // 6. Identify Driving Critical Dependency Links (A -> B)
-  tasks.forEach((t) => {
+  liveTasks.forEach((t) => {
     if (!criticalTaskIds.has(t.id)) return;
     const preds = predMap.get(t.id) || [];
     const tES = earlyStartMap.get(t.id)!;

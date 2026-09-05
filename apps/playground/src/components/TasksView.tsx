@@ -19,7 +19,8 @@ import {
   resolveTeamById,
   resolveSchedule,
   syncTaskProgressAndStatus,
-  isTaskDone
+  isTaskDone,
+  getTaskDependencies
 } from "@jantt/core";
 import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../types";
 import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
@@ -63,7 +64,36 @@ export const TasksView: React.FC<TasksViewProps> = ({
   openTaskDetailSidebar,
   handleChartCommit
 }) => {
-  const matchingDateFilterTasks = parsedData.tasks.filter(isTaskMatchingDateFilter);
+  const activeTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
+  const matchingDateFilterTasks = activeTasks.filter(isTaskMatchingDateFilter);
+
+  const handleDeleteTask = React.useCallback(
+    (taskIdToDelete: string) => {
+      const active = (parsedData.tasks || []).filter((item) => item.id !== taskIdToDelete && !item._deleted);
+      const pruned = active.map((item) => {
+        const remaining = getTaskDependencies(item).filter((id) => id !== taskIdToDelete);
+        return {
+          ...item,
+          dependsOn: remaining.length === 0 ? null : (remaining.length === 1 ? remaining[0] : remaining)
+        };
+      });
+      const nowIso = new Date().toISOString();
+      const tombstones = {
+        ...(parsedData.meta?.tombstones || {}),
+        [taskIdToDelete]: { deletedAt: nowIso, entityType: "task" }
+      };
+      const resolved = resolveSchedule(pruned, parsedData.meta?.defaultGapDays ?? 2);
+      handleChartCommit({
+        ...parsedData,
+        meta: {
+          ...parsedData.meta,
+          tombstones
+        },
+        tasks: resolved
+      });
+    },
+    [parsedData, handleChartCommit]
+  );
 
   return (
     <div className="tasks-view-container">
@@ -149,7 +179,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 <optgroup label="Team Members & Assignees">
                   {effectivePeople.map((p) => {
                     const pTeam = resolveTeamById(teams, p.teamId);
-                    const count = parsedData.tasks.filter((t) => t.assignee === p.name || t.assignee === p.id).length;
+                    const count = activeTasks.filter((t) => t.assignee === p.name || t.assignee === p.id).length;
                     return (
                       <option key={p.id} value={p.id}>
                         {p.name}{count > 0 ? ` (${count} tasks)` : ""}{pTeam ? ` • ${pTeam.name}` : ""}
@@ -178,8 +208,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
       {(() => {
         let tasksToDisplay =
           dateFilterMode !== "all" && dateFilterBehavior === "hide"
-            ? parsedData.tasks.filter(isTaskMatchingDateFilter)
-            : parsedData.tasks;
+            ? activeTasks.filter(isTaskMatchingDateFilter)
+            : activeTasks;
 
         const isPersonFiltering =
           selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
@@ -332,9 +362,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         title="Delete task"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const updatedTasks = parsedData.tasks.filter((item) => item.id !== t.id);
-                          const resolved = resolveSchedule(updatedTasks, parsedData.meta?.defaultGapDays ?? 2);
-                          handleChartCommit({ ...parsedData, tasks: resolved });
+                          handleDeleteTask(t.id);
                         }}
                       >
                         <Trash2 size={13} style={{ color: "var(--jantt-text-muted)" }} />
@@ -481,9 +509,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       title="Delete task"
                       onClick={(e) => {
                         e.stopPropagation();
-                        const updatedTasks = parsedData.tasks.filter((item) => item.id !== t.id);
-                        const resolved = resolveSchedule(updatedTasks, parsedData.meta?.defaultGapDays ?? 2);
-                        handleChartCommit({ ...parsedData, tasks: resolved });
+                        handleDeleteTask(t.id);
                       }}
                     >
                       <Trash2 size={13} style={{ color: "var(--jantt-text-muted)" }} />

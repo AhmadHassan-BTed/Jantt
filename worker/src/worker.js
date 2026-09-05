@@ -46,7 +46,7 @@ const CACHE_TTL_MS = 4000; // 4 seconds fresh cache TTL
  */
 function normalizeCloudUrl(rawUrl) {
   const trimmed = rawUrl.trim();
-  const driveFileRegex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
+  const driveFileRegex = /drive\.google\.com\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/i;
   const driveOpenRegex = /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i;
   const match = trimmed.match(driveFileRegex) || trimmed.match(driveOpenRegex);
   if (match && match[1]) {
@@ -199,6 +199,13 @@ export default {
     if (!targetUrl) {
       return new Response(
         JSON.stringify({ error: "Missing ?url= parameter or /api/room/ path" }),
+        { status: 400, headers: { ...corsHeaders(origin), "Content-Type": "application/json" } }
+      );
+    }
+
+    if (targetUrl.includes("drive.google.com/drive/folders/")) {
+      return new Response(
+        JSON.stringify({ error: "The provided URL is a Google Drive folder link. Please share the specific project .json file." }),
         { status: 400, headers: { ...corsHeaders(origin), "Content-Type": "application/json" } }
       );
     }

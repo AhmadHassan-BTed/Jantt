@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import {
   type JanttData,
+  type Task,
   type Person,
   type Team,
   type ValidationResult,
@@ -96,11 +97,89 @@ export function useEditorState({
       };
     }
 
-    const syncedTasks = finalData.tasks.map((t) => {
+    const peerId = (() => {
+      try {
+        let id = localStorage.getItem("jantt_peer_id");
+        if (!id) {
+          id = `peer-${Math.random().toString(36).slice(2, 8)}`;
+          localStorage.setItem("jantt_peer_id", id);
+        }
+        return id;
+      } catch {
+        return "peer-serverless";
+      }
+    })();
+
+    const nowIso = new Date().toISOString();
+    const compositeTs = `${nowIso}#${peerId}`;
+    const prevTaskMap = new Map<string, Task>((currentMaster?.tasks || []).map((t) => [t.id, t]));
+
+    const PM_TRACKED_FIELDS = [
+      "label",
+      "name",
+      "start",
+      "end",
+      "progress",
+      "status",
+      "category",
+      "assignee",
+      "person",
+      "assignees",
+      "dependsOn",
+      "gapDays",
+      "notes",
+      "color",
+      "priority",
+      "urgent",
+      "locked"
+    ] as const;
+
+    const stampedTasks = (finalData.tasks || []).map((t) => {
+      const prev = prevTaskMap.get(t.id);
       const synced = syncTaskProgressAndStatus({ status: t.status, progress: t.progress }, t);
-      return { ...t, ...synced };
+      const currentTask = { ...t, ...synced };
+
+      const fieldTimestamps: Record<string, string> = { ...(currentTask.fieldTimestamps || {}) };
+      let hasChanges = false;
+
+      if (!prev) {
+        hasChanges = true;
+        for (const field of PM_TRACKED_FIELDS) {
+          if ((currentTask as any)[field] !== undefined) {
+            fieldTimestamps[field] = compositeTs;
+          }
+        }
+      } else {
+        for (const field of PM_TRACKED_FIELDS) {
+          const currVal = (currentTask as any)[field];
+          const prevVal = (prev as any)[field];
+          if (JSON.stringify(currVal) !== JSON.stringify(prevVal)) {
+            fieldTimestamps[field] = compositeTs;
+            hasChanges = true;
+          }
+        }
+      }
+
+      if (hasChanges) {
+        return {
+          ...currentTask,
+          fieldTimestamps,
+          updatedAt: nowIso,
+          updatedBy: peerId
+        };
+      }
+
+      return currentTask;
     });
-    finalData = { ...finalData, tasks: syncedTasks };
+
+    finalData = {
+      ...finalData,
+      meta: {
+        ...finalData.meta,
+        updatedAt: nowIso
+      },
+      tasks: stampedTasks
+    };
 
     setParsedData(finalData);
     if (Array.isArray((finalData as any).people) && onPeopleChangeRef.current) {

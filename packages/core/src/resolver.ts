@@ -23,10 +23,14 @@ export function resolveSchedule(tasks: Task[], defaultGapDays = DEFAULT_GAP_DAYS
   if (!Array.isArray(tasks) || tasks.length === 0) {
     return [];
   }
+  const liveTasks = tasks.filter((t) => !t._deleted);
+  if (liveTasks.length === 0) {
+    return [];
+  }
 
   // Pure deep clone of tasks ensuring nested objects (baseline, fields, dependsOn) are not mutated
   const byId = Object.fromEntries(
-    tasks.map((t) => [
+    liveTasks.map((t) => [
       t.id,
       {
         ...t,
