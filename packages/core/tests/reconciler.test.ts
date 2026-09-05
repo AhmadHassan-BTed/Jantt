@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculatePlanHash, reconcilePlans, purgeTombstones } from "../src/reconciler";
+import { calculatePlanHash, reconcilePlans, purgeTombstones, maintainPlanData } from "../src/reconciler";
 import { JanttData } from "../src/types";
 
 describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
@@ -614,5 +614,42 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
     // t3 had dependsOn: ["t1", "t2"] -> should now be "t2"
     const t3 = res.mergedData.tasks.find((t) => t.id === "t3");
     expect(t3?.dependsOn).toBe("t2");
+  });
+
+  it("performs autonomous JSON maintenance: prunes expired tombstones, caps bloat, strips empty timestamps", () => {
+    const bloatedPlan: JanttData = {
+      meta: {
+        title: "Bloated Plan",
+        tombstones: {
+          "ancient-1": { deletedAt: "2020-01-01T00:00:00.000Z#peer1", entityType: "task" },
+          "fresh-1": { deletedAt: "2026-09-05T12:00:00.000Z#peer2", entityType: "task" }
+        }
+      },
+      tasks: [
+        {
+          id: "active-1",
+          label: "Active Task",
+          category: "dev",
+          start: "2026-09-01",
+          end: "2026-09-05",
+          dependsOn: "ancient-1", // Dangling dependency on pruned tombstone
+          fieldTimestamps: {} // Empty timestamp dictionary (bloat)
+        }
+      ]
+    };
+
+    const maintained = maintainPlanData(bloatedPlan, { maxAgeDays: 30, maxTombstones: 50 });
+
+    // Ancient tombstone pruned
+    expect(maintained.meta?.tombstones?.["ancient-1"]).toBeUndefined();
+    // Fresh tombstone retained
+    expect(maintained.meta?.tombstones?.["fresh-1"]).toBeDefined();
+    // Dangling dependency pruned
+    expect(maintained.tasks[0].dependsOn).toBeNull();
+    // Empty fieldTimestamps stripped
+    expect(maintained.tasks[0].fieldTimestamps).toBeUndefined();
+    // Canonical hash computed
+    expect(maintained.meta?.contentHash).toBeDefined();
+    expect(maintained.meta?.contentHash?.length).toBe(16);
   });
 });

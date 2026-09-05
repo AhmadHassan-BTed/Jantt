@@ -23,7 +23,9 @@ export function exportToCsv(data: JanttData): string {
     "Notes"
   ];
 
-  const rows = (data.tasks || []).map((t) => {
+  const rows = (data.tasks || [])
+    .filter((t) => !t._deleted)
+    .map((t) => {
     const duration = Math.max(diffDays(t.start, t.end), 0);
     const progressPct = t.progress !== undefined && t.progress !== null ? `${Math.round(t.progress * 100)}%` : "";
     const isMilestone = Boolean(t.milestone || duration === 0);
