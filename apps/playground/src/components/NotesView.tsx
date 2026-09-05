@@ -31,13 +31,42 @@ interface NotesViewProps {
   handleChartCommit: (data: JanttData) => void;
 }
 
+const STORAGE_KEY_ACTIVE_NOTE = "jantt_active_note_id";
+
 export const NotesView: React.FC<NotesViewProps> = ({
   parsedData,
   handleChartCommit
 }) => {
   const notes: NoteItem[] = useMemo(() => parsedData.notes || [], [parsedData.notes]);
 
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [activeNoteId, setActiveNoteIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY_ACTIVE_NOTE) || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setActiveNoteId = useCallback((id: string | null) => {
+    setActiveNoteIdState(id);
+    try {
+      if (id) {
+        localStorage.setItem(STORAGE_KEY_ACTIVE_NOTE, id);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_ACTIVE_NOTE);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Validate that if activeNoteId is set, it actually exists in notes
+  useEffect(() => {
+    if (activeNoteId && notes.length > 0 && !notes.some((n) => n.id === activeNoteId)) {
+      setActiveNoteId(null);
+    }
+  }, [notes, activeNoteId, setActiveNoteId]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedColor, setSelectedColor] = useState<string>("all");
 
@@ -58,6 +87,23 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const debounceTimerRef = useRef<number | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const isNewlyCreatedRef = useRef(false);
+
+  const latestEditRef = useRef({
+    activeNoteId,
+    saveStatus,
+    editTitle,
+    editContent,
+    editColor,
+    editPinned
+  });
+  latestEditRef.current = {
+    activeNoteId,
+    saveStatus,
+    editTitle,
+    editContent,
+    editColor,
+    editPinned
+  };
 
   // Sync active note data into local editor state when opened
   useEffect(() => {
@@ -138,14 +184,23 @@ export const NotesView: React.FC<NotesViewProps> = ({
     [activeNoteId, commitNoteChanges]
   );
 
-  // Clean up timer on unmount
+  // Clean up timer & flush pending edits on unmount
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         window.clearTimeout(debounceTimerRef.current);
       }
+      const state = latestEditRef.current;
+      if (state.activeNoteId && state.saveStatus === "saving") {
+        commitNoteChanges(state.activeNoteId, {
+          title: state.editTitle,
+          content: state.editContent,
+          color: state.editColor,
+          pinned: state.editPinned
+        });
+      }
     };
-  }, []);
+  }, [commitNoteChanges]);
 
   // Flush any pending changes when exiting editor
   const handleBackToGallery = () => {

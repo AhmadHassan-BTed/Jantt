@@ -66,6 +66,37 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "icon": "<lucide_icon_name>"
     }
   },
+  "people": [
+    {
+      "id": "person-id",
+      "name": "Alex Mercer",
+      "role": "Lead Architect",
+      "email": "alex@org.com",
+      "teamId": "core-team",
+      "color": "#3B82F6"
+    }
+  ],
+  "teams": [
+    {
+      "id": "core-team",
+      "name": "Core Platform Squad",
+      "color": "#3B82F6",
+      "description": "Backend services and architecture"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-unique-id",
+      "title": "Architecture RFC & Specs",
+      "content": "Detailed markdown requirements, meeting minutes, and acceptance criteria.",
+      "color": "#3B82F6",
+      "pinned": true,
+      "category": "Architecture",
+      "tags": ["RFC", "Architecture"],
+      "createdAt": "YYYY-MM-DDTHH:mm:ssZ",
+      "updatedAt": "YYYY-MM-DDTHH:mm:ssZ"
+    }
+  ],
   "documents": [
     {
       "id": "doc-unique-id",
@@ -134,6 +165,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
   "$schema": "https://jantt.dev/schema/v1.json",
   "meta": { ... },
   "categories": { ... },
+  "people": [ ... ],
+  "teams": [ ... ],
+  "notes": [ ... ],
   "documents": [ ... ],
   "tasks": [ ... ]
 }
@@ -144,6 +178,9 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 | `$schema` | `string` | No | Schema URI identifier |
 | `meta` | `object` | No | Project-wide configuration, timeline bounds, and rendering options |
 | `categories` | `object` | Yes | Map of category IDs to display labels, brand colors, and icons |
+| `people` | `array` | No | Team members with avatar colors, contact emails, and squad mappings |
+| `teams` | `array` | No | Department or squad registries with distinct theme badge colors |
+| `notes` | `array` | No | Project documentation, architecture RFCs, meeting minutes, and checklists |
 | `documents` | `array` | No | List of project artifacts, RFCs, compliance checklists, or deliverables |
 | `tasks` | `array` | **Yes** | Array of tasks, milestones, baselines, and dependency definitions |
 

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-09-05
+
+### Added
+- **Operations Research Critical Path Engine (`@jantt/core/cpm`)**:
+  - Full 2-pass Activity-on-Node (AON) DAG topological solver calculating Early/Late Start ($ES, LS$), Early/Late Finish ($EF, LF$), Total Float ($TF$), Free Float ($FF$), and near-critical paths.
+  - Resolved leaf task bug; driving dependency chains are identified with exact operations research formulas.
+- **Earned Value Management (EVM - ANSI/EIA-748)**:
+  - Enterprise metrics suite calculating $BAC, PV, EV, AC, SV, CV, SPI, CPI, EAC, ETC, VAC, TCPI$.
+  - Dual-mode presentation: intuitive project pulse for everyday managers/hobbyists alongside advanced PM drawer for senior directors and PMP audits.
+- **DCMA 14-Point Schedule Health Audit**:
+  - Algorithmic audit rating schedules with Letter Grades (A–F) and Health Scores (/100).
+  - Diagnostic issues drawer detecting Missing Logic, Negative Float, High Float ($>44$d), and Out-of-Sequence tasks with actionable advice.
+- **PERT 3-Point Risk & Confidence Engine**:
+  - Beta-distribution expected duration ($\mu = \frac{O + 4M + P}{6}$) and Central Limit Theorem normal distribution confidence intervals ($Z$-score).
+- **Shared Project Notes Workspace in JSON**:
+  - Root `"notes"` collection in Jantt JSON with support for titles, markdown content, color tints, tags, and pinning.
+  - Dedicated Notes view featuring responsive gallery cards, instant search, and full markdown editor.
+  - Persistent active note state: open notes remain opened across tab transitions and browser reloads with safe flush on unmount.
+- **Centralized Data & Persistence Navigation**:
+  - Removed cluttered standalone Auto-Save and Import/Export buttons from the top navbar.
+  - Consolidated Import JSON, Export JSON, Export CSV, and Auto-Save cadence into the Gantt chart toolbar's Settings popover and the Auto-Save & Storage modal.
+- **Direct Task Color Overrides**:
+  - Tasks can now declare an optional direct `color: "#HEX"` property that overrides category defaults.
+- **Swiss Noir Theme & High-Contrast Styling**:
+  - Streamlined "Swiss Noir" true pitch-black theme with high-contrast text styling.
+  - Ensured all mode toggles and action buttons dynamically adapt text colors (`--jantt-accent-contrast`) to remain fully visible.
+
+### Changed
+- **Zero Emoji Policy**:
+  - Replaced all emojis across tooltips, diagnostic cards, and selectors with crisp Lucide SVG icons and high-contrast typography.
+- **Schema Validation & Integrity Guard**:
+  - Added dedicated schema validation for the `notes` collection in `@jantt/core`.
+  - Fortified `handleChartCommit` with master-state deep merging and safe JSON serialization to guarantee GUI interactions never corrupt or break JSON datasets.
+
+---
+
 ## [1.2.0] - 2026-09-04
 
 ### Added

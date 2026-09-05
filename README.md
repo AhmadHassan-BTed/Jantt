@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-233%2F233%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![Tests Passing](https://img.shields.io/badge/Tests-266%2F266%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
 [![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
@@ -100,6 +100,37 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "icon": "<lucide_icon_name>"
     }
   },
+  "people": [
+    {
+      "id": "person-id",
+      "name": "Alex Mercer",
+      "role": "Lead Architect",
+      "email": "alex@org.com",
+      "teamId": "core-team",
+      "color": "#3B82F6"
+    }
+  ],
+  "teams": [
+    {
+      "id": "core-team",
+      "name": "Core Platform Squad",
+      "color": "#3B82F6",
+      "description": "Backend services and architecture"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-unique-id",
+      "title": "Architecture RFC & Specs",
+      "content": "Detailed markdown requirements, meeting minutes, and acceptance criteria.",
+      "color": "#3B82F6",
+      "pinned": true,
+      "category": "Architecture",
+      "tags": ["RFC", "Architecture"],
+      "createdAt": "YYYY-MM-DDTHH:mm:ssZ",
+      "updatedAt": "YYYY-MM-DDTHH:mm:ssZ"
+    }
+  ],
   "documents": [
     {
       "id": "doc-unique-id",

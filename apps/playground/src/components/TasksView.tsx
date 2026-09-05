@@ -133,7 +133,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               onChange={(e) => setSelectedPersonFilter(e.target.value)}
             >
               <option value="all">All People &amp; Teams</option>
-              <option value="sort:assignee">⇅ Sort by Assignee (A-Z)</option>
+              <option value="sort:assignee">Sort by Assignee (A-Z)</option>
               {teams.length > 0 && (
                 <optgroup label="Teams / Squads">
                   {teams.map((tm) => (

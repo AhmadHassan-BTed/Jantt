@@ -391,17 +391,17 @@
 
 .jantt-scale-btn.is-active {
   background: var(--jantt-accent);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   font-weight: 700;
   box-shadow: 0 2px 6px var(--jantt-accent-glow, rgba(0, 0, 0, 0.2));
 }
 
 .jantt-theme-dark .jantt-scale-btn.is-active {
-  color: #000000;
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .jantt-theme-light .jantt-scale-btn.is-active {
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
 }
 
 /* Critical Path Toggle */

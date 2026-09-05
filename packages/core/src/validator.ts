@@ -226,6 +226,48 @@ export function validate(json: unknown): ValidationResult {
     }
   }
 
+  // Validate notes collection if present
+  if (data.notes !== undefined) {
+    if (!Array.isArray(data.notes)) {
+      errors.push({
+        path: "notes",
+        code: "SCHEMA_MISMATCH",
+        message: "The 'notes' property must be an array of note items.",
+        suggestion: "Ensure 'notes' is formatted as [ { id, title, content } ]."
+      });
+    } else {
+      const noteIds = new Set<string>();
+      data.notes.forEach((note, nIdx) => {
+        if (!note || typeof note !== "object") {
+          errors.push({
+            path: `notes[${nIdx}]`,
+            code: "SCHEMA_MISMATCH",
+            message: `Note at index ${nIdx} is not a valid object.`,
+            suggestion: "Ensure each note object contains { id, title, content }."
+          });
+          return;
+        }
+        if (!note.id || typeof note.id !== "string" || note.id.trim() === "") {
+          errors.push({
+            path: `notes[${nIdx}].id`,
+            code: "SCHEMA_MISMATCH",
+            message: `Note at index ${nIdx} is missing a required string 'id'.`,
+            suggestion: "Add a unique string id (e.g. \"note-1\")."
+          });
+        } else if (noteIds.has(note.id)) {
+          errors.push({
+            path: `notes[${nIdx}].id`,
+            code: "SCHEMA_MISMATCH",
+            message: `Duplicate note id '${note.id}' at index ${nIdx}.`,
+            suggestion: "Ensure each note has a unique id."
+          });
+        } else {
+          noteIds.add(note.id);
+        }
+      });
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors

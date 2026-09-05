@@ -4,7 +4,9 @@ import {
   TrendingUp,
   Clock,
   Zap,
-  Sliders
+  Sliders,
+  AlertTriangle,
+  CheckCircle2
 } from "lucide-react";
 import type { EVMResult, CriticalPathResult } from "@jantt/core";
 
@@ -123,9 +125,15 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm }) => {
             <span className="kpi-value">{evm.healthScore}/100</span>
             <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
               {evm.taskCountBlocked > 0 ? (
-                <span style={{ color: "#F59E0B", fontWeight: 600 }}>⚠️ {evm.taskCountBlocked} task(s) blocked by prerequisites</span>
+                <span style={{ color: "#F59E0B", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <AlertTriangle size={12} />
+                  <span>{evm.taskCountBlocked} task(s) blocked by prerequisites</span>
+                </span>
               ) : (
-                <span style={{ color: "#10B981" }}>✓ Zero task blockers</span>
+                <span style={{ color: "#10B981", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <CheckCircle2 size={12} />
+                  <span>Zero task blockers</span>
+                </span>
               )}
             </span>
           </div>
