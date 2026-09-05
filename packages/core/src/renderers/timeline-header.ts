@@ -241,6 +241,10 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       const dResizeHandle = document.createElement("div");
       dResizeHandle.className = "jantt-col-resize-handle";
       dResizeHandle.title = "Drag to resize column width / zoom timeline";
+      if (d.width < 18) {
+        dResizeHandle.style.width = "6px";
+        dResizeHandle.style.right = "-3px";
+      }
       dResizeHandle.addEventListener("pointerdown", (e) => {
         startColumnDragSession(
           e,

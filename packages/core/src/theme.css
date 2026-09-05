@@ -1185,6 +1185,8 @@
   border-right: 1px solid var(--jantt-grid-line);
   box-sizing: border-box;
   letter-spacing: -0.01em;
+  position: relative;
+  overflow: visible;
 }
 
 .jantt-header-days {
@@ -1251,8 +1253,8 @@
 .jantt-col-resize-handle {
   position: absolute;
   top: 0;
-  right: -4px;
-  width: 9px;
+  right: -5px;
+  width: 10px;
   height: 100%;
   cursor: col-resize !important;
   z-index: 15;
