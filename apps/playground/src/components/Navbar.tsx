@@ -5,15 +5,9 @@ import {
   FileJson,
   Layers,
   Kanban,
-  Users,
   Clock,
-  Trash2,
-  Plus,
-  Cloud,
   RefreshCw,
-  GitFork,
   CheckSquare,
-  Share2,
   Activity,
   StickyNote,
   History,
@@ -21,9 +15,8 @@ import {
   HardDrive
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
-import type { SavedProject, ActiveView, EffectivePerson } from "../types";
-import { DEFAULT_TEMPLATE, AVAILABLE_THEMES } from "../constants";
-import { formatRelativeTime } from "../utils";
+import type { ActiveView } from "../types";
+import { AVAILABLE_THEMES } from "../constants";
 import type { SyncStatus } from "../hooks/useDynamicSync";
 
 interface NavbarProps {
@@ -36,6 +29,7 @@ interface NavbarProps {
   syncMessage?: string;
   isQuotaShieldActive?: boolean;
   cloudProvider?: string;
+  isGoogleDrive?: boolean;
   snapshotsCount?: number;
   setShowVersionHistoryModal?: (show: boolean) => void;
   isSidebarCollapsed: boolean;
@@ -43,19 +37,6 @@ interface NavbarProps {
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
   notesCount?: number;
-  activeProjectId: string;
-  customProjects: SavedProject[];
-  handleSelectProject: (id: string) => void;
-  handleOpenAddPlanModal: () => void;
-  handleOpenLinkCloudModal: () => void;
-  isSyncingProject: boolean;
-  handleSyncActiveProject: () => void;
-  handleForkToLocalPlan: () => void;
-  setShowShareModal: (show: boolean) => void;
-  setCopiedShareLink: (copied: boolean) => void;
-  handleDeleteProject: (id: string) => void;
-  setShowPeopleModal: (show: boolean) => void;
-  effectivePeople: EffectivePerson[];
   fileInputRef: React.RefObject<HTMLInputElement>;
   handleImportJsonFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedThemeId: string;
@@ -73,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   syncMessage,
   isQuotaShieldActive,
   cloudProvider,
+  isGoogleDrive = false,
   snapshotsCount = 0,
   setShowVersionHistoryModal,
   isSidebarCollapsed,
@@ -80,30 +62,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeView,
   setActiveView,
   notesCount,
-  activeProjectId,
-  customProjects,
-  handleSelectProject,
-  handleOpenAddPlanModal,
-  handleOpenLinkCloudModal,
-  isSyncingProject,
-  handleSyncActiveProject,
-  handleForkToLocalPlan,
-  setShowShareModal,
-  setCopiedShareLink,
-  handleDeleteProject,
-  setShowPeopleModal,
-  effectivePeople,
   fileInputRef,
   handleImportJsonFile,
   selectedThemeId,
   setSelectedThemeId,
   setShowPromptModal
 }) => {
-  const activeProject = customProjects.find((p) => p.id === activeProjectId);
-  const isGoogleDrive = Boolean(
-    cloudProvider === "google-drive" ||
-    (activeProject?.source === "linked" && activeProject.sourceUrl?.includes("drive.google.com"))
-  );
+  const isGdrive = isGoogleDrive || cloudProvider === "google-drive";
 
   return (
     <header className="navbar">
@@ -138,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         {/* Google Drive Source Indicator */}
-        {isGoogleDrive && (
+        {isGdrive && (
           <div
             className="btn-cloud-source-badge is-google-drive"
             title="Linked to Google Drive JSON file share"
@@ -255,139 +220,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* 3. Right Zone: Plan Control Center, People, Import/Export, Theme & AI Prompt */}
+      {/* 3. Right Zone: Theme Selector & AI Prompt */}
       <div className="nav-controls nav-group-right">
-        {/* Plan Control Center — Grouped Cohesive Unit */}
-        <div className="nav-plan-group">
-          <div className="nav-plan-select-wrap">
-            <label htmlFor="project-select" className="nav-plan-label">Plan:</label>
-            <select
-              id="project-select"
-              className="select-input nav-plan-select"
-              value={activeProjectId}
-              onChange={(e) => handleSelectProject(e.target.value)}
-              title="Select Active Project Plan"
-            >
-              <optgroup label="Templates">
-                <option value="default">{DEFAULT_TEMPLATE.name}</option>
-              </optgroup>
-              {customProjects.filter((p) => p.source !== "linked").length > 0 && (
-                <optgroup label={`Local Plans (${customProjects.filter((p) => p.source !== "linked").length})`}>
-                  {customProjects
-                    .filter((p) => p.source !== "linked")
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.data?.tasks?.length || 0} tasks)
-                      </option>
-                    ))}
-                </optgroup>
-              )}
-              {customProjects.filter((p) => p.source === "linked").length > 0 && (
-                <optgroup label={`Linked Cloud Plans (${customProjects.filter((p) => p.source === "linked").length})`}>
-                  {customProjects
-                    .filter((p) => p.source === "linked")
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.data?.tasks?.length || 0} tasks)
-                      </option>
-                    ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-
-          <div className="nav-plan-actions">
-            {/* + Add Plan Button */}
-            <button
-              type="button"
-              className="btn-plan-action is-add"
-              onClick={handleOpenAddPlanModal}
-              title="Create a new blank plan, clone existing, or use a template"
-            >
-              <Plus size={13} />
-              <span>Plan</span>
-            </button>
-
-            {/* Link Cloud Plan Button */}
-            <button
-              type="button"
-              className="btn-plan-action"
-              onClick={handleOpenLinkCloudModal}
-              title="Link and sync a remote plan from Google Drive, GitHub, Dropbox or direct URL"
-            >
-              <Cloud size={13} style={{ color: "var(--jantt-accent)" }} />
-            </button>
-
-            {/* Linked Cloud Plan Controls (when active plan is linked) */}
-            {customProjects.some((p) => p.id === activeProjectId && p.source === "linked") && (() => {
-              const linkedActive = customProjects.find((p) => p.id === activeProjectId)!;
-              return (
-                <>
-                  <button
-                    type="button"
-                    className="btn-plan-action is-sync"
-                    onClick={handleSyncActiveProject}
-                    disabled={isSyncingProject}
-                    title={`Re-fetch and update this plan from the cloud URL (Last synced: ${formatRelativeTime(linkedActive.lastSyncedAt)})`}
-                  >
-                    <RefreshCw size={12} className={isSyncingProject ? "spin-sync-icon" : ""} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-plan-action"
-                    onClick={handleForkToLocalPlan}
-                    title="Create an editable local copy of this cloud plan"
-                  >
-                    <GitFork size={12} />
-                  </button>
-                </>
-              );
-            })()}
-
-            {/* Share Active Plan Button */}
-            <button
-              type="button"
-              className="btn-plan-action is-share"
-              onClick={() => {
-                setShowShareModal(true);
-                setCopiedShareLink(false);
-              }}
-              title="Share this project plan via link or open source"
-            >
-              <Share2 size={12} />
-              <span>Share</span>
-            </button>
-
-            {/* Delete / Unlink Active Plan Button */}
-            {activeProjectId !== "default" && (
-              <button
-                type="button"
-                className="btn-plan-action is-delete"
-                style={{ color: "#EF4444" }}
-                onClick={() => handleDeleteProject(activeProjectId)}
-                title={
-                  customProjects.find((p) => p.id === activeProjectId)?.source === "linked"
-                    ? "Unlink this cloud plan from browser storage"
-                    : "Delete this custom plan from browser memory"
-                }
-              >
-                <Trash2 size={12} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* People (Team) Manager Button */}
-        <button
-          type="button"
-          className="btn-nav"
-          onClick={() => setShowPeopleModal(true)}
-          title="Manage team members and assignees"
-        >
-          <Users size={13} />
-          <span>People{effectivePeople.length > 0 ? ` (${effectivePeople.length})` : ""}</span>
-        </button>
-
         {/* Hidden File Input for JSON Import */}
         <input
           type="file"
