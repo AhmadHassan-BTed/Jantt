@@ -42,6 +42,261 @@ interface NotesViewProps {
 
 const STORAGE_KEY_ACTIVE_NOTE = "jantt_active_note_id";
 
+function getCaretCoordinates(): { top: number; left: number } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  const rects = range.getClientRects();
+  const rect = rects.length > 0 ? rects[0] : range.getBoundingClientRect();
+  if (!rect || (rect.top === 0 && rect.left === 0 && rect.bottom === 0)) {
+    return null;
+  }
+  return {
+    top: Math.min(rect.bottom + 6, window.innerHeight - 260),
+    left: Math.max(16, Math.min(rect.left, window.innerWidth - 300))
+  };
+}
+
+function serializeEditorToMarkdown(editorEl: HTMLElement): string {
+  let result = "";
+
+  function walk(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += node.nodeValue || "";
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+
+      if (el.classList.contains("note-mention-pill")) {
+        const type = el.getAttribute("data-mention-type");
+        const id = el.getAttribute("data-mention-id") || "";
+        const label = el.getAttribute("data-mention-label") || id;
+
+        if (type === "person") {
+          result += `@${label.replace(/\s+/g, "")}`;
+        } else if (type === "task") {
+          result += `/${id}`;
+        }
+        return;
+      }
+
+      const tag = el.tagName.toLowerCase();
+      if (tag === "br") {
+        result += "\n";
+        return;
+      }
+
+      const isBlock = ["div", "p", "h1", "h2", "h3", "li"].includes(tag);
+      if (isBlock && result.length > 0 && !result.endsWith("\n")) {
+        result += "\n";
+      }
+
+      for (let i = 0; i < el.childNodes.length; i++) {
+        walk(el.childNodes[i]);
+      }
+
+      if (isBlock && !result.endsWith("\n")) {
+        result += "\n";
+      }
+    }
+  }
+
+  for (let i = 0; i < editorEl.childNodes.length; i++) {
+    walk(editorEl.childNodes[i]);
+  }
+
+  return result.replace(/\u00A0/g, " ");
+}
+
+function populateEditorWithContent(
+  editorEl: HTMLElement,
+  content: string,
+  people: EffectivePerson[],
+  tasks: Task[]
+) {
+  editorEl.innerHTML = "";
+  if (!content) return;
+
+  const lines = content.split("\n");
+  lines.forEach((line) => {
+    const div = document.createElement("div");
+    if (line === "") {
+      div.appendChild(document.createElement("br"));
+      editorEl.appendChild(div);
+      return;
+    }
+
+    const tokens = line.split(/(@[a-zA-Z0-9_.-]+|(?:\/|#)[a-zA-Z0-9_-]+)/g);
+    tokens.forEach((tok) => {
+      if (tok.startsWith("@")) {
+        const query = tok.slice(1).toLowerCase();
+        const person = people.find(
+          (p) =>
+            p.name.toLowerCase().replace(/\s+/g, "") === query ||
+            p.id.toLowerCase() === query ||
+            p.name.toLowerCase() === query
+        );
+        if (person) {
+          const pill = document.createElement("span");
+          pill.className = "note-mention-pill is-person";
+          pill.setAttribute("contenteditable", "false");
+          pill.setAttribute("data-mention-type", "person");
+          pill.setAttribute("data-mention-id", person.id);
+          pill.setAttribute("data-mention-label", person.name);
+          pill.innerHTML = `
+            <span class="note-pill-avatar" style="background: ${person.color || "var(--jantt-accent, #0284C7)"}">
+              ${(person.name || "U").charAt(0).toUpperCase()}
+            </span>
+            <span class="note-pill-text">@${person.name}</span>
+          `;
+          div.appendChild(pill);
+          return;
+        }
+      } else if (tok.startsWith("/") || tok.startsWith("#")) {
+        const taskId = tok.slice(1).toLowerCase();
+        const task = tasks.find((t) => t.id.toLowerCase() === taskId);
+        if (task) {
+          const pill = document.createElement("span");
+          pill.className = "note-mention-pill is-task";
+          pill.setAttribute("contenteditable", "false");
+          pill.setAttribute("data-mention-type", "task");
+          pill.setAttribute("data-mention-id", task.id);
+          const taskLabel = task.label || task.name || task.id;
+          pill.setAttribute("data-mention-label", taskLabel);
+          pill.innerHTML = `
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 11 12 14 22 4"></polyline>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+            </svg>
+            <span class="note-pill-text">${task.id}: ${taskLabel}</span>
+          `;
+          div.appendChild(pill);
+          return;
+        }
+      }
+
+      div.appendChild(document.createTextNode(tok));
+    });
+
+    editorEl.appendChild(div);
+  });
+}
+
+function insertPillAtRange(
+  editorEl: HTMLElement,
+  rangeInfo: { textNode: Text; startIndex: number; endIndex: number },
+  pillData: { type: "person" | "task"; id: string; label: string; color?: string }
+) {
+  const { textNode, startIndex, endIndex } = rangeInfo;
+  const parent = textNode.parentNode;
+  if (!parent) return;
+
+  const pill = document.createElement("span");
+  pill.className = `note-mention-pill ${pillData.type === "person" ? "is-person" : "is-task"}`;
+  pill.setAttribute("contenteditable", "false");
+  pill.setAttribute("data-mention-type", pillData.type);
+  pill.setAttribute("data-mention-id", pillData.id);
+  pill.setAttribute("data-mention-label", pillData.label);
+
+  if (pillData.type === "person") {
+    pill.innerHTML = `
+      <span class="note-pill-avatar" style="background: ${pillData.color || "var(--jantt-accent, #0284C7)"}">
+        ${(pillData.label || "U").charAt(0).toUpperCase()}
+      </span>
+      <span class="note-pill-text">@${pillData.label}</span>
+    `;
+  } else {
+    pill.innerHTML = `
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 11 12 14 22 4"></polyline>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+      </svg>
+      <span class="note-pill-text">${pillData.id}: ${pillData.label}</span>
+    `;
+  }
+
+  const trailingSpace = document.createTextNode("\u00A0");
+
+  try {
+    const afterNode = textNode.splitText(endIndex);
+    const targetNode = textNode.splitText(startIndex);
+
+    parent.replaceChild(pill, targetNode);
+    parent.insertBefore(trailingSpace, afterNode);
+
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      const r = document.createRange();
+      r.setStart(trailingSpace, 1);
+      r.setEnd(trailingSpace, 1);
+      sel.addRange(r);
+    }
+  } catch (err) {
+    console.error("Failed to insert pill at range", err);
+  }
+
+  editorEl.focus();
+}
+
+function insertPillAtCurrentCaret(
+  editorEl: HTMLElement,
+  pillData: { type: "person" | "task"; id: string; label: string; color?: string }
+) {
+  const sel = window.getSelection();
+  let range: Range | null = null;
+  if (sel && sel.rangeCount > 0) {
+    range = sel.getRangeAt(0);
+  }
+
+  const pill = document.createElement("span");
+  pill.className = `note-mention-pill ${pillData.type === "person" ? "is-person" : "is-task"}`;
+  pill.setAttribute("contenteditable", "false");
+  pill.setAttribute("data-mention-type", pillData.type);
+  pill.setAttribute("data-mention-id", pillData.id);
+  pill.setAttribute("data-mention-label", pillData.label);
+
+  if (pillData.type === "person") {
+    pill.innerHTML = `
+      <span class="note-pill-avatar" style="background: ${pillData.color || "var(--jantt-accent, #0284C7)"}">
+        ${(pillData.label || "U").charAt(0).toUpperCase()}
+      </span>
+      <span class="note-pill-text">@${pillData.label}</span>
+    `;
+  } else {
+    pill.innerHTML = `
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 11 12 14 22 4"></polyline>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+      </svg>
+      <span class="note-pill-text">${pillData.id}: ${pillData.label}</span>
+    `;
+  }
+
+  const trailingSpace = document.createTextNode("\u00A0");
+
+  if (range && editorEl.contains(range.commonAncestorContainer)) {
+    range.deleteContents();
+    range.insertNode(trailingSpace);
+    range.insertNode(pill);
+
+    sel?.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.setStart(trailingSpace, 1);
+    newRange.setEnd(trailingSpace, 1);
+    sel?.addRange(newRange);
+  } else {
+    editorEl.appendChild(pill);
+    editorEl.appendChild(trailingSpace);
+    sel?.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.setStart(trailingSpace, 1);
+    newRange.setEnd(trailingSpace, 1);
+    sel?.addRange(newRange);
+  }
+
+  editorEl.focus();
+}
+
 export const NotesView: React.FC<NotesViewProps> = ({
   parsedData,
   handleChartCommit,
@@ -107,11 +362,27 @@ export const NotesView: React.FC<NotesViewProps> = ({
     [notes, activeNoteId]
   );
 
-  // References for debounced auto-save & cursor insertion
+  // References for debounced auto-save & rich editor
   const debounceTimerRef = useRef<number | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const contentEditableRef = useRef<HTMLDivElement>(null);
+  const popupRangeRef = useRef<{ textNode: Text; startIndex: number; endIndex: number } | null>(null);
   const isNewlyCreatedRef = useRef(false);
+
+  // Floating autocomplete popover state
+  const [mentionPopup, setMentionPopup] = useState<{
+    isOpen: boolean;
+    type: "person" | "task";
+    query: string;
+    coords: { top: number; left: number };
+    selectedIndex: number;
+  }>({
+    isOpen: false,
+    type: "person",
+    query: "",
+    coords: { top: 0, left: 0 },
+    selectedIndex: 0
+  });
 
   const latestEditRef = useRef({
     activeNoteId,
@@ -142,6 +413,17 @@ export const NotesView: React.FC<NotesViewProps> = ({
       setShowMentionPersonPicker(false);
       setShowMentionTaskPicker(false);
       setPickerSearch("");
+      setMentionPopup({ isOpen: false, type: "person", query: "", coords: { top: 0, left: 0 }, selectedIndex: 0 });
+      popupRangeRef.current = null;
+
+      if (contentEditableRef.current) {
+        populateEditorWithContent(
+          contentEditableRef.current,
+          activeNote.content || "",
+          effectivePeople,
+          allTasks
+        );
+      }
 
       if (isNewlyCreatedRef.current) {
         isNewlyCreatedRef.current = false;
@@ -152,6 +434,18 @@ export const NotesView: React.FC<NotesViewProps> = ({
       }
     }
   }, [activeNoteId]);
+
+  // When switching from Preview back to Edit mode, rehydrate editor
+  useEffect(() => {
+    if (!isPreviewMode && contentEditableRef.current && activeNote) {
+      populateEditorWithContent(
+        contentEditableRef.current,
+        editContent,
+        effectivePeople,
+        allTasks
+      );
+    }
+  }, [isPreviewMode]);
 
   // Function to commit changes immediately to JanttData JSON
   const commitNoteChanges = useCallback(
@@ -310,29 +604,271 @@ export const NotesView: React.FC<NotesViewProps> = ({
     commitNoteChanges(activeNoteId, { task_ids: nextAttached });
   };
 
-  // Quick insertion of @mention or /task into textarea
-  const insertTextAtCursor = (textToInsert: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      const nextContent = editContent ? `${editContent} ${textToInsert}` : textToInsert;
-      setEditContent(nextContent);
-      triggerDebouncedSave({ content: nextContent, title: editTitle, color: editColor, pinned: editPinned });
+  // Sync current contenteditable text back to state & trigger debounced save
+  const syncContentToState = useCallback(() => {
+    if (!contentEditableRef.current) return;
+    const serialized = serializeEditorToMarkdown(contentEditableRef.current);
+    setEditContent(serialized);
+    triggerDebouncedSave({ content: serialized, title: editTitle, color: editColor, pinned: editPinned });
+  }, [triggerDebouncedSave, editTitle, editColor, editPinned]);
+
+  // Insert a person pill into the rich editor
+  const insertPersonPill = useCallback(
+    (person: EffectivePerson) => {
+      const editorEl = contentEditableRef.current;
+      if (!editorEl) return;
+
+      const targetRange = popupRangeRef.current;
+      if (targetRange && targetRange.textNode.parentNode && editorEl.contains(targetRange.textNode)) {
+        insertPillAtRange(editorEl, targetRange, {
+          type: "person",
+          id: person.id,
+          label: person.name,
+          color: person.color
+        });
+      } else {
+        insertPillAtCurrentCaret(editorEl, {
+          type: "person",
+          id: person.id,
+          label: person.name,
+          color: person.color
+        });
+      }
+
+      popupRangeRef.current = null;
+      setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+      syncContentToState();
+    },
+    [syncContentToState]
+  );
+
+  // Insert a task pill into the rich editor
+  const insertTaskPill = useCallback(
+    (task: Task) => {
+      const editorEl = contentEditableRef.current;
+      if (!editorEl) return;
+
+      const targetRange = popupRangeRef.current;
+      const label = task.label || task.name || task.id;
+      if (targetRange && targetRange.textNode.parentNode && editorEl.contains(targetRange.textNode)) {
+        insertPillAtRange(editorEl, targetRange, {
+          type: "task",
+          id: task.id,
+          label
+        });
+      } else {
+        insertPillAtCurrentCaret(editorEl, {
+          type: "task",
+          id: task.id,
+          label
+        });
+      }
+
+      popupRangeRef.current = null;
+      setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+      syncContentToState();
+    },
+    [syncContentToState]
+  );
+
+  // Filtered lists for the floating mention popover
+  const autocompletePeople = useMemo(() => {
+    if (!mentionPopup.isOpen || mentionPopup.type !== "person") return [];
+    const q = mentionPopup.query.trim().toLowerCase();
+    if (!q) return effectivePeople;
+    return effectivePeople.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.id.toLowerCase().includes(q) ||
+        p.name.toLowerCase().replace(/\s+/g, "").includes(q)
+    );
+  }, [mentionPopup.isOpen, mentionPopup.type, mentionPopup.query, effectivePeople]);
+
+  const autocompleteTasks = useMemo(() => {
+    if (!mentionPopup.isOpen || mentionPopup.type !== "task") return [];
+    const q = mentionPopup.query.trim().toLowerCase();
+    if (!q) return allTasks;
+    return allTasks.filter((t) => {
+      const title = t.label || t.name || "";
+      return t.id.toLowerCase().includes(q) || title.toLowerCase().includes(q);
+    });
+  }, [mentionPopup.isOpen, mentionPopup.type, mentionPopup.query, allTasks]);
+
+  // Handle typing input inside the Notion-style contenteditable editor
+  const handleEditorInput = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) {
+      syncContentToState();
       return;
     }
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const before = editContent.substring(0, start);
-    const after = editContent.substring(end);
-    const updated = `${before}${textToInsert}${after}`;
-    setEditContent(updated);
-    triggerDebouncedSave({ content: updated, title: editTitle, color: editColor, pinned: editPinned });
 
-    setTimeout(() => {
-      textarea.focus();
-      const newCursor = start + textToInsert.length;
-      textarea.setSelectionRange(newCursor, newCursor);
-    }, 15);
-  };
+    const anchorNode = sel.anchorNode;
+    if (!anchorNode || anchorNode.nodeType !== Node.TEXT_NODE) {
+      if (mentionPopup.isOpen) {
+        setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+        popupRangeRef.current = null;
+      }
+      syncContentToState();
+      return;
+    }
+
+    const text = anchorNode.nodeValue || "";
+    const caretPos = sel.anchorOffset;
+    const textBeforeCaret = text.slice(0, caretPos);
+
+    const atMatch = textBeforeCaret.match(/(?:^|\s)@([a-zA-Z0-9_.-]*)$/);
+    const slashMatch = textBeforeCaret.match(/(?:^|\s)\/([a-zA-Z0-9_-]*)$/);
+
+    if (atMatch) {
+      const query = atMatch[1];
+      const atIndex = textBeforeCaret.lastIndexOf("@");
+      const coords = getCaretCoordinates() || { top: 120, left: 120 };
+      popupRangeRef.current = {
+        textNode: anchorNode as Text,
+        startIndex: atIndex,
+        endIndex: caretPos
+      };
+      setMentionPopup({
+        isOpen: true,
+        type: "person",
+        query,
+        coords,
+        selectedIndex: 0
+      });
+    } else if (slashMatch) {
+      const query = slashMatch[1];
+      const slashIndex = textBeforeCaret.lastIndexOf("/");
+      const coords = getCaretCoordinates() || { top: 120, left: 120 };
+      popupRangeRef.current = {
+        textNode: anchorNode as Text,
+        startIndex: slashIndex,
+        endIndex: caretPos
+      };
+      setMentionPopup({
+        isOpen: true,
+        type: "task",
+        query,
+        coords,
+        selectedIndex: 0
+      });
+    } else {
+      if (mentionPopup.isOpen) {
+        setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+        popupRangeRef.current = null;
+      }
+    }
+
+    syncContentToState();
+  }, [syncContentToState, mentionPopup.isOpen]);
+
+  // Handle key navigation and the user-specified spacebar rule
+  const handleEditorKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (mentionPopup.isOpen) {
+        const peopleList = autocompletePeople;
+        const taskList = autocompleteTasks;
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          const count = mentionPopup.type === "person" ? peopleList.length : taskList.length;
+          if (count > 0) {
+            setMentionPopup((prev) => ({ ...prev, selectedIndex: (prev.selectedIndex + 1) % count }));
+          }
+          return;
+        }
+
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          const count = mentionPopup.type === "person" ? peopleList.length : taskList.length;
+          if (count > 0) {
+            setMentionPopup((prev) => ({ ...prev, selectedIndex: (prev.selectedIndex - 1 + count) % count }));
+          }
+          return;
+        }
+
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          if (mentionPopup.type === "person") {
+            if (peopleList.length > 0) {
+              const selected = peopleList[mentionPopup.selectedIndex] || peopleList[0];
+              insertPersonPill(selected);
+            }
+          } else {
+            if (taskList.length > 0) {
+              const selected = taskList[mentionPopup.selectedIndex] || taskList[0];
+              insertTaskPill(selected);
+            }
+          }
+          return;
+        }
+
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+          popupRangeRef.current = null;
+          return;
+        }
+
+        // USER RULE:
+        // "if i'll complete the name and then press spacebar, that person be selected and his name be in a pill in hte notes, and if none matches then none will be there, and it'll be a plain text."
+        if (e.key === " ") {
+          const q = mentionPopup.query.trim().toLowerCase();
+          if (mentionPopup.type === "person") {
+            const match = effectivePeople.find(
+              (p) =>
+                p.name.toLowerCase() === q ||
+                p.id.toLowerCase() === q ||
+                p.name.toLowerCase().replace(/\s+/g, "") === q
+            );
+            if (match) {
+              e.preventDefault();
+              insertPersonPill(match);
+              return;
+            } else {
+              // No match: close popup, allow spacebar as normal character, remains plain text!
+              setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+              popupRangeRef.current = null;
+              return;
+            }
+          } else {
+            const match = allTasks.find(
+              (t) =>
+                t.id.toLowerCase() === q ||
+                (t.label || t.name || "").toLowerCase() === q ||
+                (t.label || t.name || "").toLowerCase().replace(/\s+/g, "") === q
+            );
+            if (match) {
+              e.preventDefault();
+              insertTaskPill(match);
+              return;
+            } else {
+              setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+              popupRangeRef.current = null;
+              return;
+            }
+          }
+        }
+      }
+    },
+    [mentionPopup, autocompletePeople, autocompleteTasks, effectivePeople, allTasks, insertPersonPill, insertTaskPill]
+  );
+
+  // Global listener to dismiss mention popover if user clicks elsewhere
+  useEffect(() => {
+    const handleGlobalPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (!target.closest(".note-floating-autocomplete") && !target.closest(".note-editor-contenteditable")) {
+        if (mentionPopup.isOpen) {
+          setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+          popupRangeRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener("pointerdown", handleGlobalPointerDown);
+    return () => window.removeEventListener("pointerdown", handleGlobalPointerDown);
+  }, [mentionPopup.isOpen]);
 
   // Parse Mentioned Entities from Note Markdown Body
   const { mentionedTasks, mentionedPeople } = useMemo(() => {
@@ -646,7 +1182,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           type="button"
                           className="note-picker-item"
                           onClick={() => {
-                            insertTextAtCursor(`@${p.name.replace(/\s+/g, "")} `);
+                            insertPersonPill(p);
                             setShowMentionPersonPicker(false);
                             setPickerSearch("");
                           }}
@@ -701,7 +1237,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           type="button"
                           className="note-picker-item"
                           onClick={() => {
-                            insertTextAtCursor(`/${t.id} `);
+                            insertTaskPill(t);
                             setShowMentionTaskPicker(false);
                             setPickerSearch("");
                           }}
@@ -798,17 +1334,89 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 )}
               </div>
             ) : (
-              <textarea
-                ref={textareaRef}
-                className="note-editor-textarea"
-                value={editContent}
-                onChange={(e) => {
-                  setEditContent(e.target.value);
-                  triggerDebouncedSave({ content: e.target.value, title: editTitle, color: editColor, pinned: editPinned });
-                }}
-                placeholder="Start typing your note (Markdown supported). Use @name to mention team members, and /task-id to mention tasks..."
-                rows={16}
+              <div
+                ref={contentEditableRef}
+                className="note-editor-contenteditable"
+                contentEditable
+                suppressContentEditableWarning
+                onInput={handleEditorInput}
+                onKeyDown={handleEditorKeyDown}
+                data-placeholder="Start typing your note (Markdown supported). Type @ to mention team members, or / to mention tasks..."
               />
+            )}
+
+            {/* Floating Autocomplete Dropdown Menu (Notion-style) */}
+            {mentionPopup.isOpen && (
+              <div
+                className="note-floating-autocomplete"
+                style={{
+                  top: `${mentionPopup.coords.top}px`,
+                  left: `${mentionPopup.coords.left}px`
+                }}
+                onMouseDown={(e) => {
+                  // Keep caret focus in editor when clicking dropdown options
+                  e.preventDefault();
+                }}
+              >
+                <div className="note-autocomplete-header">
+                  {mentionPopup.type === "person" ? "Mention Team Member (@)" : "Mention Task (/)"}
+                </div>
+
+                {mentionPopup.type === "person" ? (
+                  autocompletePeople.length === 0 ? (
+                    <div style={{ padding: "8px 10px", fontSize: "11.5px", color: "var(--jantt-text-muted)", fontStyle: "italic" }}>
+                      No matching team member
+                    </div>
+                  ) : (
+                    autocompletePeople.map((person, idx) => (
+                      <button
+                        key={person.id}
+                        type="button"
+                        className={`note-autocomplete-item ${idx === mentionPopup.selectedIndex ? "is-selected" : ""}`}
+                        onClick={() => insertPersonPill(person)}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span
+                            className="note-pill-avatar"
+                            style={{ background: person.color || "var(--jantt-accent)" }}
+                          >
+                            {(person.name || "U").charAt(0).toUpperCase()}
+                          </span>
+                          <span style={{ fontWeight: 600 }}>{person.name}</span>
+                        </div>
+                        <span className="note-autocomplete-sub">
+                          {person.role || person.id}
+                        </span>
+                      </button>
+                    ))
+                  )
+                ) : (
+                  autocompleteTasks.length === 0 ? (
+                    <div style={{ padding: "8px 10px", fontSize: "11.5px", color: "var(--jantt-text-muted)", fontStyle: "italic" }}>
+                      No matching tasks
+                    </div>
+                  ) : (
+                    autocompleteTasks.map((task, idx) => (
+                      <button
+                        key={task.id}
+                        type="button"
+                        className={`note-autocomplete-item ${idx === mentionPopup.selectedIndex ? "is-selected" : ""}`}
+                        onClick={() => insertTaskPill(task)}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                          <CheckSquare size={12} style={{ flexShrink: 0 }} />
+                          <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {task.id}: {task.label || task.name || "Task"}
+                          </span>
+                        </div>
+                        <span className="note-autocomplete-sub">
+                          {task.status || "pending"}
+                        </span>
+                      </button>
+                    ))
+                  )
+                )}
+              </div>
             )}
 
             {/* ================================================================= */}
