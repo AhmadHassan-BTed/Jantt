@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useCallback } from "react";
 import { Jantt } from "@jantt/react";
-import { getTodayISODate, type Person, type Team, type JanttData } from "@jantt/core";
+import { getTodayISODate, validate, type Person, type Team, type JanttData } from "@jantt/core";
 
 // Re-export all types, constants, and utilities for external consumers
 export type {
@@ -50,6 +50,8 @@ import { useCloudSync } from "./hooks/useCloudSync";
 import { useTaskActions } from "./hooks/useTaskActions";
 import { useTaskDetailSidebar } from "./hooks/useTaskDetailSidebar";
 import { useSharing } from "./hooks/useSharing";
+import { useSnapshotVault } from "./hooks/useSnapshotVault";
+import { useDynamicSync } from "./hooks/useDynamicSync";
 
 // View & Modal Components
 import { Navbar } from "./components/Navbar";
@@ -65,6 +67,7 @@ import { PeopleTeamsModal } from "./components/PeopleTeamsModal";
 import { CloudLinkModal } from "./components/CloudLinkModal";
 import { ShareModal } from "./components/ShareModal";
 import { AutoSaveModal } from "./components/AutoSaveModal";
+import { VersionHistoryModal } from "./components/VersionHistoryModal";
 import { Toast } from "./components/Toast";
 import { EmptyChartState } from "./components/EmptyChartState";
 
@@ -150,30 +153,70 @@ export function App() {
     flushPendingSave: () => flushPendingSaveRef.current()
   });
 
-  // Auto-Save Engine with Configurable Cadence
+  // Zero-Data-Loss Version History & Snapshot Vault
+  const vault = useSnapshotVault(project.activeProjectId);
+
+  // Dynamic Real-Time Collaboration Sync & Instant Cross-Tab Engine
+  const dynamicSync = useDynamicSync({
+    activeProjectId: project.activeProjectId,
+    customProjects: project.customProjects,
+    setCustomProjects: project.setCustomProjects,
+    parsedData: editor.parsedData,
+    setParsedData: editor.setParsedData,
+    setJsonText: editor.setJsonText,
+    setPeople: people.setPeople,
+    setTeams: people.setTeams,
+    setValidationResult: editor.setValidationResult,
+    showToast: toast.showToast,
+    captureSnapshot: vault.captureSnapshot
+  });
+
+  // Auto-Save Engine with Configurable Cadence, Collision Check, and Cross-Tab Broadcast
   const autoSave = useAutoSave({
     jsonText: editor.jsonText,
     parsedData: editor.parsedData,
     activeProjectId: project.activeProjectId,
     onSaveProject: project.saveProjectData,
-    showToast: toast.showToast
+    showToast: toast.showToast,
+    captureSnapshot: vault.captureSnapshot,
+    broadcastChange: dynamicSync.broadcastLocalChange
   });
   flushPendingSaveRef.current = autoSave.flushSave;
 
-  // Cloud Link & Remote Sync
+  // Cloud Link & Remote Sync with 3-Way Task Reconciliation
   const cloud = useCloudSync({
     customProjects: project.customProjects,
     setCustomProjects: project.setCustomProjects,
     activeProjectId: project.activeProjectId,
     setActiveProjectId: project.setActiveProjectId,
     handleSelectProject: project.handleSelectProject,
+    parsedData: editor.parsedData,
     setJsonText: editor.setJsonText,
     setParsedData: editor.setParsedData,
     setPeople: people.setPeople,
     setTeams: people.setTeams,
     setValidationResult: editor.setValidationResult,
-    showToast: toast.showToast
+    showToast: toast.showToast,
+    captureSnapshot: vault.captureSnapshot
   });
+
+  // 1-Click Snapshot Restoration with Audit Trail
+  const handleRestoreSnapshot = useCallback(
+    (snapshotData: JanttData, reason: string) => {
+      editor.setParsedData(snapshotData);
+      people.setPeople(snapshotData.people || []);
+      people.setTeams(snapshotData.teams || []);
+      editor.setJsonText(JSON.stringify(snapshotData, null, 2));
+      editor.setValidationResult(validate(snapshotData));
+      if (project.activeProjectId !== "default") {
+        project.saveProjectData(project.activeProjectId, snapshotData);
+      }
+      vault.captureSnapshot(project.activeProjectId, snapshotData, reason);
+      dynamicSync.broadcastLocalChange(project.activeProjectId, snapshotData);
+      toast.showToast(`Restored snapshot: ${reason}!`);
+    },
+    [editor, people, project, vault, dynamicSync, toast]
+  );
 
   // Task Actions, Multi-Sort Engines, and View Filters
   const tasks = useTaskActions({
@@ -255,6 +298,10 @@ export function App() {
         autoSaveInterval={autoSave.autoSaveInterval}
         autoSaveLabel={autoSave.autoSaveLabel}
         setShowAutoSaveModal={autoSave.setShowAutoSaveModal}
+        syncStatus={dynamicSync.syncStatus}
+        syncMessage={dynamicSync.syncMessage}
+        snapshotsCount={vault.snapshots.length}
+        setShowVersionHistoryModal={vault.setShowVersionHistoryModal}
         isSidebarCollapsed={sidebar.isSidebarCollapsed}
         setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
         activeView={viewport.activeView}
@@ -560,6 +607,15 @@ export function App() {
         onImportJson={() => project.fileInputRef.current?.click()}
         onExportJson={editor.handleDownloadJson}
         onExportCsv={editor.handleExportCsv}
+      />
+
+      <VersionHistoryModal
+        showModal={vault.showVersionHistoryModal}
+        setShowModal={vault.setShowVersionHistoryModal}
+        snapshots={vault.snapshots}
+        currentProjectName={project.currentProjectName}
+        onRestoreSnapshot={handleRestoreSnapshot}
+        onClearHistory={() => vault.clearSnapshots(project.activeProjectId)}
       />
 
       <Toast

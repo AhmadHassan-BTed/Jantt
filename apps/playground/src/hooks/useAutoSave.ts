@@ -9,6 +9,8 @@ interface UseAutoSaveOptions {
   activeProjectId: string;
   onSaveProject?: (projectId: string, data: JanttData) => void;
   showToast: (msg: string, isErr?: boolean) => void;
+  captureSnapshot?: (projectId: string, data: JanttData, reason: string) => void;
+  broadcastChange?: (projectId: string, data: JanttData) => void;
 }
 
 export function useAutoSave({
@@ -16,7 +18,9 @@ export function useAutoSave({
   parsedData,
   activeProjectId,
   onSaveProject,
-  showToast
+  showToast,
+  captureSnapshot,
+  broadcastChange
 }: UseAutoSaveOptions) {
   const [autoSaveInterval, setAutoSaveInterval] = useState<AutoSaveInterval>(() => {
     try {
@@ -42,6 +46,10 @@ export function useAutoSave({
   parsedDataRef.current = parsedData;
   const onSaveProjectRef = useRef(onSaveProject);
   onSaveProjectRef.current = onSaveProject;
+  const captureSnapshotRef = useRef(captureSnapshot);
+  captureSnapshotRef.current = captureSnapshot;
+  const broadcastChangeRef = useRef(broadcastChange);
+  broadcastChangeRef.current = broadcastChange;
 
   useEffect(() => {
     try {
@@ -55,6 +63,8 @@ export function useAutoSave({
       localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, jsonTextRef.current);
       if (activeProjectIdRef.current !== "default" && parsedDataRef.current) {
         onSaveProjectRef.current?.(activeProjectIdRef.current, parsedDataRef.current);
+        captureSnapshotRef.current?.(activeProjectIdRef.current, parsedDataRef.current, "Auto-Save");
+        broadcastChangeRef.current?.(activeProjectIdRef.current, parsedDataRef.current);
       }
     } catch (err) {
       console.error("Auto-save error:", err);

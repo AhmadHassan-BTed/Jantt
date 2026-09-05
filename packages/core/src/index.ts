@@ -25,6 +25,7 @@ export * from "./renderer";
 export * from "./exporter";
 export * from "./themes";
 export * from "./remote-sync";
+export * from "./reconciler";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
@@ -38,6 +39,7 @@ import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
 import { themeManager } from "./themes";
 import { parseCloudUrl, fetchRemotePlan } from "./remote-sync";
+import { calculatePlanHash, reconcilePlans } from "./reconciler";
 
 export const Jantt = {
   mount: renderJantt,
@@ -61,6 +63,8 @@ export const Jantt = {
   themeManager,
   parseCloudUrl,
   fetchRemotePlan,
+  calculatePlanHash,
+  reconcilePlans,
   version: "1.1.0"
 };
 

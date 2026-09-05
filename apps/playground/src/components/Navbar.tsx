@@ -15,12 +15,14 @@ import {
   CheckSquare,
   Share2,
   Activity,
-  StickyNote
+  StickyNote,
+  History
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { SavedProject, ActiveView, EffectivePerson } from "../types";
 import { DEFAULT_TEMPLATE, AVAILABLE_THEMES } from "../constants";
 import { formatRelativeTime } from "../utils";
+import type { SyncStatus } from "../hooks/useDynamicSync";
 
 interface NavbarProps {
   saveStatus: "saved" | "saving" | "pending";
@@ -28,6 +30,10 @@ interface NavbarProps {
   autoSaveInterval: string;
   autoSaveLabel: string;
   setShowAutoSaveModal: (show: boolean) => void;
+  syncStatus?: SyncStatus;
+  syncMessage?: string;
+  snapshotsCount?: number;
+  setShowVersionHistoryModal?: (show: boolean) => void;
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
   activeView: ActiveView;
@@ -59,6 +65,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   autoSaveInterval,
   autoSaveLabel,
   setShowAutoSaveModal,
+  syncStatus,
+  syncMessage,
+  snapshotsCount = 0,
+  setShowVersionHistoryModal,
   isSidebarCollapsed,
   setIsSidebarCollapsed,
   activeView,
@@ -86,7 +96,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="navbar">
-      {/* 1. Left Zone: Brand & AutoSave Status */}
+      {/* 1. Left Zone: Brand, AutoSave Status, Dynamic Sync & Version History */}
       <div className="brand-section nav-group-left">
         <JanttLogo size={28} />
         <button
@@ -104,6 +114,34 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
           <span>{autoSaveLabel}</span>
         </button>
+
+        {/* Dynamic Real-Time Collaboration Sync Badge */}
+        {syncStatus && (
+          <div
+            className={`btn-sync-badge is-${syncStatus}`}
+            title={`Real-Time Dynamic Collaboration Sync: ${syncMessage || "Live"} • Continuous change detection and collision prevention active`}
+          >
+            <span className="sync-pulse-dot" />
+            <span>{syncMessage || "In sync"}</span>
+          </div>
+        )}
+
+        {/* Version History & Recovery Vault Button */}
+        {setShowVersionHistoryModal && (
+          <button
+            type="button"
+            className="btn-nav btn-version-history"
+            onClick={() => setShowVersionHistoryModal(true)}
+            title="Version History & Recovery Vault (Roll back to past snapshots with zero data loss)"
+          >
+            <History size={12} />
+            <span>History</span>
+            {snapshotsCount > 0 && (
+              <span className="history-count-badge">{snapshotsCount}</span>
+            )}
+          </button>
+        )}
+
         {isSidebarCollapsed && (
           <button
             type="button"

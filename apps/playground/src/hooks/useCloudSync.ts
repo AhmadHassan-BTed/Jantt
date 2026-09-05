@@ -6,6 +6,7 @@ import {
   type ValidationResult,
   type RemoteFetchResult,
   fetchRemotePlan,
+  reconcilePlans,
   validate
 } from "@jantt/core";
 import type { SavedProject } from "../types";
@@ -18,12 +19,14 @@ interface UseCloudSyncOptions {
   activeProjectId: string;
   setActiveProjectId: (id: string) => void;
   handleSelectProject: (id: string) => void;
+  parsedData: JanttData | null;
   setJsonText: (text: string) => void;
   setParsedData: (data: JanttData | null) => void;
   setPeople: (people: Person[]) => void;
   setTeams: (teams: Team[]) => void;
   setValidationResult: (res: ValidationResult) => void;
   showToast: (msg: string, isErr?: boolean) => void;
+  captureSnapshot?: (projectId: string, data: JanttData, reason: string) => void;
 }
 
 export function useCloudSync({
@@ -32,12 +35,14 @@ export function useCloudSync({
   activeProjectId,
   setActiveProjectId,
   handleSelectProject,
+  parsedData,
   setJsonText,
   setParsedData,
   setPeople,
   setTeams,
   setValidationResult,
-  showToast
+  showToast,
+  captureSnapshot
 }: UseCloudSyncOptions) {
   const [showLinkCloudModal, setShowLinkCloudModal] = useState(false);
   const [linkCloudUrl, setLinkCloudUrl] = useState("");
@@ -135,14 +140,22 @@ export function useCloudSync({
     setIsSyncingProject(true);
     try {
       const res = await fetchRemotePlan(activeProj.sourceUrl);
-      const updatedData = res.data;
+      const remoteData = res.data;
+      const currentLocalData = parsedData || activeProj.data;
+
+      // Capture pre-sync safety snapshot
+      captureSnapshot?.(activeProj.id, currentLocalData, "Pre-Manual Sync Snapshot");
+
+      // Smart 3-way reconciliation
+      const reconcileResult = reconcilePlans(activeProj.data, currentLocalData, remoteData);
+      const finalData = reconcileResult.mergedData;
       const now = new Date().toISOString();
 
       const updated = customProjects.map((p) =>
         p.id === activeProjectId
           ? {
               ...p,
-              data: updatedData,
+              data: finalData,
               updatedAt: now,
               lastSyncedAt: now,
               syncError: undefined
@@ -151,12 +164,27 @@ export function useCloudSync({
       );
       setCustomProjects(updated);
       saveCustomProjects(updated);
-      setParsedData(updatedData);
-      setPeople(updatedData.people || []);
-      setTeams(updatedData.teams || []);
-      setJsonText(JSON.stringify(updatedData, null, 2));
-      setValidationResult(validate(updatedData));
-      showToast(`Synced latest version from ${res.info.label}!`);
+      setParsedData(finalData);
+      setPeople(finalData.people || []);
+      setTeams(finalData.teams || []);
+      setJsonText(JSON.stringify(finalData, null, 2));
+      setValidationResult(validate(finalData));
+
+      if (reconcileResult.hasConflicts) {
+        showToast(
+          `Synced & merged from ${res.info.label} (${reconcileResult.conflicts.length} conflict resolved, snapshot saved).`
+        );
+      } else {
+        const mergedTotal =
+          reconcileResult.summary.tasksUpdated +
+          reconcileResult.summary.tasksAdded +
+          reconcileResult.summary.fieldsMerged;
+        if (mergedTotal > 0) {
+          showToast(`Synced & cleanly merged ${mergedTotal} update(s) from ${res.info.label}!`);
+        } else {
+          showToast(`Synced latest version from ${res.info.label}!`);
+        }
+      }
     } catch (err: any) {
       showToast(`Sync failed: ${err.message}`, true);
       const updated = customProjects.map((p) =>
@@ -170,6 +198,8 @@ export function useCloudSync({
   }, [
     customProjects,
     activeProjectId,
+    parsedData,
+    captureSnapshot,
     setCustomProjects,
     setParsedData,
     setPeople,
