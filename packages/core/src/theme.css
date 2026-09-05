@@ -813,6 +813,47 @@
   transform: translateX(16px);
 }
 
+.jantt-settings-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  background: var(--jantt-surface);
+  border: 1px solid var(--jantt-border);
+  color: var(--jantt-text);
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+
+.jantt-settings-action-btn:hover {
+  background: var(--jantt-surface-hover);
+  border-color: var(--jantt-accent);
+  color: var(--jantt-accent);
+}
+
+.jantt-settings-action-btn svg {
+  flex-shrink: 0;
+}
+
+.jantt-settings-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.jantt-settings-action-grid .jantt-settings-action-btn {
+  justify-content: center;
+  padding: 5px 6px;
+  font-size: 10px;
+  margin-bottom: 0;
+}
+
 /* Active Date Filter Pill */
 .jantt-date-filter-badge {
   display: inline-flex;

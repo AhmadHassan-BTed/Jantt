@@ -30,6 +30,10 @@ export interface JanttProps {
   className?: string;
   style?: React.CSSProperties;
   readOnly?: boolean;
+  onOpenAutoSave?: () => void;
+  onImportJson?: () => void;
+  onExportJson?: () => void;
+  onExportCsv?: () => void;
 }
 
 export const Jantt: React.FC<JanttProps> = ({
@@ -53,7 +57,11 @@ export const Jantt: React.FC<JanttProps> = ({
   themeClassName,
   className,
   style,
-  readOnly
+  readOnly,
+  onOpenAutoSave,
+  onImportJson,
+  onExportJson,
+  onExportCsv
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<JanttInstance | null>(null);
@@ -69,7 +77,11 @@ export const Jantt: React.FC<JanttProps> = ({
     onDateClick,
     onClearDateFilter,
     onDayWidthChange,
-    renderDetail
+    renderDetail,
+    onOpenAutoSave,
+    onImportJson,
+    onExportJson,
+    onExportCsv
   });
 
   callbacksRef.current = {
@@ -82,7 +94,11 @@ export const Jantt: React.FC<JanttProps> = ({
     onDateClick,
     onClearDateFilter,
     onDayWidthChange,
-    renderDetail
+    renderDetail,
+    onOpenAutoSave,
+    onImportJson,
+    onExportJson,
+    onExportCsv
   };
 
   const getForwardingOptions = (): JanttOptions => ({
@@ -106,7 +122,11 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskAdd: (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask),
     renderDetail: callbacksRef.current.renderDetail
       ? (task, container, api) => callbacksRef.current.renderDetail?.(task, container, api)
-      : undefined
+      : undefined,
+    onOpenAutoSave: () => callbacksRef.current.onOpenAutoSave?.(),
+    onImportJson: () => callbacksRef.current.onImportJson?.(),
+    onExportJson: () => callbacksRef.current.onExportJson?.(),
+    onExportCsv: () => callbacksRef.current.onExportCsv?.()
   });
 
   // Mount/unmount lifecycle

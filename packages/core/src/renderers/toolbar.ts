@@ -35,6 +35,10 @@ export interface ToolbarProps {
   onClearDateFilter?: () => void;
   isSettingsOpen?: boolean;
   onSettingsOpenChange?: (open: boolean) => void;
+  onOpenAutoSave?: () => void;
+  onImportJson?: () => void;
+  onExportJson?: () => void;
+  onExportCsv?: () => void;
 }
 
 /**
@@ -549,6 +553,57 @@ function renderSettingsPopover(propsRef: { current: ToolbarProps }, onClose: () 
         </button>
       </div>
     </div>
+
+    <!-- Section 3: Data, Persistence & Export -->
+    ${props.onOpenAutoSave || props.onImportJson || props.onExportJson || props.onExportCsv ? `
+      <div class="jantt-settings-divider"></div>
+      <div class="jantt-settings-section">
+        <div class="jantt-settings-section-title">Data &amp; Persistence</div>
+        ${props.onOpenAutoSave ? `
+          <button type="button" class="jantt-settings-action-btn" data-action="open-autosave" title="Configure auto-save cadence and browser storage">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            <span>Auto-Save &amp; Storage Settings</span>
+          </button>
+        ` : ""}
+        <div class="jantt-settings-action-grid">
+          ${props.onImportJson ? `
+            <button type="button" class="jantt-settings-action-btn" data-action="import-json" title="Upload and load a Jantt JSON file">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Import JSON</span>
+            </button>
+          ` : ""}
+          ${props.onExportJson ? `
+            <button type="button" class="jantt-settings-action-btn" data-action="export-json" title="Download project schedule as JSON">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Export JSON</span>
+            </button>
+          ` : ""}
+          ${props.onExportCsv ? `
+            <button type="button" class="jantt-settings-action-btn" data-action="export-csv" title="Download tasks as spreadsheet CSV">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+              <span>Export CSV</span>
+            </button>
+          ` : ""}
+        </div>
+      </div>
+    ` : ""}
   `;
 
   // Prevent popover clicks from bubbling to document listener
@@ -584,6 +639,38 @@ function renderSettingsPopover(propsRef: { current: ToolbarProps }, onClose: () 
   baselinesRow?.addEventListener("click", (e) => {
     e.stopPropagation();
     propsRef.current.onBaselinesToggle?.();
+  });
+
+  // Action: Open Auto-Save Settings
+  const autoSaveBtn = panel.querySelector<HTMLElement>('[data-action="open-autosave"]');
+  autoSaveBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClose();
+    propsRef.current.onOpenAutoSave?.();
+  });
+
+  // Action: Import JSON
+  const importJsonBtn = panel.querySelector<HTMLElement>('[data-action="import-json"]');
+  importJsonBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClose();
+    propsRef.current.onImportJson?.();
+  });
+
+  // Action: Export JSON
+  const exportJsonBtn = panel.querySelector<HTMLElement>('[data-action="export-json"]');
+  exportJsonBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClose();
+    propsRef.current.onExportJson?.();
+  });
+
+  // Action: Export CSV
+  const exportCsvBtn = panel.querySelector<HTMLElement>('[data-action="export-csv"]');
+  exportCsvBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClose();
+    propsRef.current.onExportCsv?.();
   });
 
   return panel;

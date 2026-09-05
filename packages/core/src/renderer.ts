@@ -425,7 +425,11 @@ export function renderJantt(
         filterQuery = q;
         render();
       },
-      onAddTask: currentOptions.readOnly ? undefined : handleAddTask
+      onAddTask: currentOptions.readOnly ? undefined : handleAddTask,
+      onOpenAutoSave: currentOptions.onOpenAutoSave,
+      onImportJson: currentOptions.onImportJson,
+      onExportJson: currentOptions.onExportJson,
+      onExportCsv: currentOptions.onExportCsv
     };
 
     if (toolbar && toolbar.isConnected) {

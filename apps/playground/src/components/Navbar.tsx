@@ -1,14 +1,12 @@
-import React, { useState, useRef, useEffect } from "react";
+import React from "react";
 import {
   Sparkles,
   CheckCircle2,
-  Download,
   FileJson,
   Layers,
   Kanban,
   Users,
   Clock,
-  FileSpreadsheet,
   Trash2,
   Plus,
   Cloud,
@@ -16,10 +14,6 @@ import {
   GitFork,
   CheckSquare,
   Share2,
-  ChevronDown,
-  ArrowUpFromLine,
-  ArrowDownToLine,
-  Save,
   Activity,
   StickyNote
 } from "lucide-react";
@@ -54,8 +48,6 @@ interface NavbarProps {
   effectivePeople: EffectivePerson[];
   fileInputRef: React.RefObject<HTMLInputElement>;
   handleImportJsonFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleDownloadJson: () => void;
-  handleExportCsv: () => void;
   selectedThemeId: string;
   setSelectedThemeId: (themeId: string) => void;
   setShowPromptModal: (show: boolean) => void;
@@ -87,33 +79,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   effectivePeople,
   fileInputRef,
   handleImportJsonFile,
-  handleDownloadJson,
-  handleExportCsv,
   selectedThemeId,
   setSelectedThemeId,
   setShowPromptModal
 }) => {
-  const [ioDropdownOpen, setIoDropdownOpen] = useState(false);
-  const ioDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!ioDropdownOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (ioDropdownRef.current && !ioDropdownRef.current.contains(e.target as Node)) {
-        setIoDropdownOpen(false);
-      }
-    };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIoDropdownOpen(false);
-    };
-    document.addEventListener("click", handleClick);
-    document.addEventListener("keydown", handleEsc);
-    return () => {
-      document.removeEventListener("click", handleClick);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [ioDropdownOpen]);
 
   return (
     <header className="navbar">
@@ -360,71 +329,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           style={{ display: "none" }}
         />
 
-        {/* Unified Import / Export Dropdown */}
-        <div className="nav-io-dropdown" ref={ioDropdownRef}>
-          <button
-            type="button"
-            className={`btn-nav nav-io-trigger ${ioDropdownOpen ? "is-open" : ""}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIoDropdownOpen((o) => !o);
-            }}
-            title="Import or export project data"
-          >
-            <Download size={13} />
-            <span>Import / Export</span>
-            <ChevronDown size={11} className={`nav-io-chevron ${ioDropdownOpen ? "is-open" : ""}`} />
-          </button>
-
-          {ioDropdownOpen && (
-            <div className="nav-io-panel" onClick={(e) => e.stopPropagation()}>
-              <button
-                type="button"
-                className="nav-io-item"
-                onClick={() => {
-                  fileInputRef.current?.click();
-                  setIoDropdownOpen(false);
-                }}
-              >
-                <ArrowUpFromLine size={14} />
-                <div className="nav-io-item-text">
-                  <span className="nav-io-item-label">Import JSON</span>
-                  <span className="nav-io-item-desc">Load a .json file from your computer</span>
-                </div>
-              </button>
-              <div className="nav-io-divider" />
-              <button
-                type="button"
-                className="nav-io-item"
-                onClick={() => {
-                  handleDownloadJson();
-                  setIoDropdownOpen(false);
-                }}
-              >
-                <ArrowDownToLine size={14} />
-                <div className="nav-io-item-text">
-                  <span className="nav-io-item-label">Export as JSON</span>
-                  <span className="nav-io-item-desc">Download the Jantt project file</span>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="nav-io-item"
-                onClick={() => {
-                  handleExportCsv();
-                  setIoDropdownOpen(false);
-                }}
-              >
-                <FileSpreadsheet size={14} />
-                <div className="nav-io-item-text">
-                  <span className="nav-io-item-label">Export as CSV</span>
-                  <span className="nav-io-item-desc">Spreadsheet-compatible RFC-4180</span>
-                </div>
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Theme Selector — Sectioned by Dark Mode & Light Mode */}
         <div className="nav-select-group">
           <label htmlFor="theme-select">Theme:</label>
@@ -451,17 +355,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </optgroup>
           </select>
         </div>
-
-        {/* Auto-Save & Storage Button */}
-        <button
-          type="button"
-          className="btn-nav"
-          onClick={() => setShowAutoSaveModal(true)}
-          title="Configure Auto-Save Cadence & Storage"
-        >
-          <Save size={13} />
-          <span>Auto-Save</span>
-        </button>
 
         {/* Prompt AI Button */}
         <button
