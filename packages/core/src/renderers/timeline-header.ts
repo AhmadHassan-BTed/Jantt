@@ -62,11 +62,9 @@ function startColumnDragSession(
           rafPending = false;
           let newWidth: number;
           if (mode === "handle") {
-            // Direct width delta from border handle with calibrated, gentle damping:
-            // Since dayWidth spans only ~79px (from 1.2px to 80px), raw 1:1 mouse movement
-            // caused a tiny 30px drag to blow through 40% of the entire zoom spectrum.
-            // Damping deltaX by 0.18 makes border resizing smooth, steady, and finely controllable.
-            newWidth = clampDayWidth(initialWidth + deltaX * 0.18);
+            // Direct width delta from border handle between columns:
+            // Calibrated damping (0.35) makes border stretching smooth, responsive, and steady.
+            newWidth = clampDayWidth(initialWidth + deltaX * 0.35);
           } else {
             // Continuous zoom curve when holding the column body:
             // Dragging right stretches columns (zooms in), dragging left compresses (zooms out).
@@ -193,41 +191,17 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     } ${isSelected ? "is-date-selected" : ""}`;
     dCell.style.width = `${d.width}px`;
     dCell.title = isSelected
-      ? `${d.dateStr} (Active filter — click to clear, or drag to zoom)`
+      ? `${d.dateStr} (Active filter — click to show all dates)`
       : isBoundary
-      ? `${d.dateStr} (Task boundary date — click to show tasks, or drag to zoom)`
-      : `${d.dateStr} (Click to show tasks, or drag to zoom)`;
+      ? `${d.dateStr} (Task boundary date — click to show only tasks on this date)`
+      : `${d.dateStr} (Click to show only tasks on this date)`;
     dCell.setAttribute("data-date", d.dateStr);
 
-    let cellDragMoved = false;
-
-    // Support holding the column to zoom
-    if (options?.onColumnResize) {
-      dCell.addEventListener("pointerdown", (e) => {
-        if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
-        cellDragMoved = false;
-        startColumnDragSession(
-          e,
-          currentDayW,
-          "cell",
-          options.onColumnResize,
-          (didMove) => {
-            cellDragMoved = didMove;
-          },
-          options.onColumnResizeStart,
-          options.onColumnResizeEnd
-        );
-      });
-    }
-
-    // Support standard click to filter date (suppressed if a drag actually moved)
+    // Click on date column body to filter date
     if (options?.onDateClick) {
+      dCell.style.cursor = "pointer";
       dCell.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
-        if (cellDragMoved) {
-          cellDragMoved = false;
-          return;
-        }
         e.stopPropagation();
         options.onDateClick!(d.dateStr);
       });
