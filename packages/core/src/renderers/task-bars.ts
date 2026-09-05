@@ -47,7 +47,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       mStone.style.width = `${item.width}px`;
       mStone.style.height = `${item.height}px`;
       mStone.style.transform = "translate(-50%, -50%) rotate(45deg)";
-      mStone.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : item.category.color;
+      mStone.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : ((item.task.color as string) || item.category.color);
       mStone.setAttribute("data-task-id", item.task.id);
       mStone.setAttribute("tabindex", "0");
       mStone.setAttribute("role", "button");
@@ -81,7 +81,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     bar.style.top = `${item.y}px`;
     bar.style.width = `${item.width}px`;
     bar.style.height = `${item.height}px`;
-    bar.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : item.category.color;
+    bar.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : ((item.task.color as string) || item.category.color);
     bar.setAttribute("data-task-id", item.task.id);
     bar.setAttribute("tabindex", "0");
     bar.setAttribute("role", "button");

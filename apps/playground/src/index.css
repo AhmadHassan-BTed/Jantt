@@ -1744,7 +1744,11 @@ select option,
 
 .date-filter-behavior-btn.is-active {
   background: var(--jantt-accent, #38BDF8);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
+}
+
+.jantt-theme-dark .date-filter-behavior-btn.is-active {
+  color: #000000;
 }
 
 /* Sort / Filter by People Dropdown in Filter Bar */
@@ -2454,7 +2458,11 @@ path.jantt-dep-path.jantt-task-dimmed {
 
 .tasks-mode-btn.is-active {
   background: var(--jantt-accent, #38BDF8);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
+}
+
+.jantt-theme-dark .tasks-mode-btn.is-active {
+  color: #000000;
 }
 
 /* Tasks Todo Checklist List View */
@@ -3065,7 +3073,11 @@ path.jantt-dep-path.jantt-task-dimmed {
 .btn-note-tool.is-active {
   background: var(--jantt-accent, #0284C7);
   border-color: var(--jantt-accent, #0284C7);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
+}
+
+.jantt-theme-dark .btn-note-tool.is-active {
+  color: #000000;
 }
 
 .btn-note-tool.is-danger:hover {

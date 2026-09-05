@@ -152,7 +152,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Schedule Buffer</span>
           <span class="jantt-hover-stat-value" style="font-weight: 600; color: ${metrics.isCritical ? "var(--jantt-critical, #EF4444)" : metrics.totalFloat < 0 ? "#EF4444" : metrics.isNearCritical ? "#F59E0B" : "#10B981"};">
-            ${metrics.isCritical ? "🔥 Critical (0d buffer)" : metrics.totalFloat < 0 ? `⚠️ Overdue by ${Math.abs(metrics.totalFloat)}d` : `${metrics.totalFloat}d buffer (Free: ${metrics.freeFloat}d)`}
+            ${metrics.isCritical ? "Critical Path (0d buffer)" : metrics.totalFloat < 0 ? `Overdue by ${Math.abs(metrics.totalFloat)}d` : `${metrics.totalFloat}d buffer (Free: ${metrics.freeFloat}d)`}
           </span>
         </div>
         `

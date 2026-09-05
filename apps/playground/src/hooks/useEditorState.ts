@@ -82,6 +82,20 @@ export function useEditorState({
         finalData = { ...currentMaster, ...updated, tasks: mergedTasks };
       }
     }
+    if (currentMaster) {
+      finalData = {
+        ...currentMaster,
+        ...finalData,
+        categories: finalData.categories !== undefined ? finalData.categories : currentMaster.categories,
+        notes: finalData.notes !== undefined ? finalData.notes : currentMaster.notes,
+        people: (finalData as any).people !== undefined ? (finalData as any).people : (currentMaster as any).people,
+        teams: (finalData as any).teams !== undefined ? (finalData as any).teams : (currentMaster as any).teams,
+        milestones: finalData.milestones !== undefined ? finalData.milestones : currentMaster.milestones,
+        documents: finalData.documents !== undefined ? finalData.documents : currentMaster.documents,
+        meta: finalData.meta ? { ...currentMaster.meta, ...finalData.meta } : currentMaster.meta
+      };
+    }
+
     const syncedTasks = finalData.tasks.map((t) => {
       const synced = syncTaskProgressAndStatus({ status: t.status, progress: t.progress }, t);
       return { ...t, ...synced };
@@ -95,9 +109,15 @@ export function useEditorState({
     if (Array.isArray((finalData as any).teams) && onTeamsChangeRef.current) {
       onTeamsChangeRef.current((finalData as any).teams);
     }
-    const formatted = JSON.stringify(finalData, null, 2);
-    setJsonText(formatted);
-    setValidationResult(validate(finalData));
+
+    try {
+      const cleanJson = JSON.parse(JSON.stringify(finalData));
+      const formatted = JSON.stringify(cleanJson, null, 2);
+      setJsonText(formatted);
+      setValidationResult(validate(cleanJson));
+    } catch (err) {
+      console.error("Failed to serialize JanttData to JSON:", err);
+    }
 
     setIsLiveSyncing(true);
     if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);

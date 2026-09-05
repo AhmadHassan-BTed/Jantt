@@ -16,6 +16,7 @@ A valid Jantt JSON document is a single root object containing metadata, categor
   "categories": { ... },
   "people": [ ... ],
   "teams": [ ... ],
+  "notes": [ ... ],
   "documents": [ ... ],
   "tasks": [ ... ]
 }
@@ -32,6 +33,7 @@ A valid Jantt JSON document is a single root object containing metadata, categor
 | `categories` | `object` | Optional | Map of category IDs to visual styles (label, color, soft) |
 | `people` | `array` | Optional | Registry of team members, roles, and avatar colors |
 | `teams` | `array` | Optional | Registry of organizational squads or departments |
+| `notes` | `array` | Optional | Shared project documentation, meeting minutes, specs, and checklists |
 | `documents` | `array` | Optional | Array of document/credential checklist items |
 | `tasks` | `array` | **Required** | Array of task and milestone objects |
 

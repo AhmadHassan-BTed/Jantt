@@ -47,6 +47,37 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "icon": "<lucide_icon_name>"
     }
   },
+  "people": [
+    {
+      "id": "person-id",
+      "name": "Alex Mercer",
+      "role": "Lead Architect",
+      "email": "alex@org.com",
+      "teamId": "core-team",
+      "color": "#3B82F6"
+    }
+  ],
+  "teams": [
+    {
+      "id": "core-team",
+      "name": "Core Platform Squad",
+      "color": "#3B82F6",
+      "description": "Backend services and architecture"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-unique-id",
+      "title": "Architecture RFC & Specs",
+      "content": "Detailed markdown requirements, meeting minutes, and acceptance criteria.",
+      "color": "#3B82F6",
+      "pinned": true,
+      "category": "Architecture",
+      "tags": ["RFC", "Architecture"],
+      "createdAt": "YYYY-MM-DDTHH:mm:ssZ",
+      "updatedAt": "YYYY-MM-DDTHH:mm:ssZ"
+    }
+  ],
   "documents": [
     {
       "id": "doc-unique-id",

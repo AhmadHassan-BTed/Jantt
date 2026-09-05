@@ -3,7 +3,7 @@ import { ThemeDefinition } from "./types";
 export const swissDarkTheme: ThemeDefinition = {
   id: "swiss-dark",
   name: "Swiss Noir",
-  label: "Swiss Noir (True Black)",
+  label: "Swiss Noir",
   mode: "dark",
   className: "jantt-theme-dark",
   description: "True OLED pitch-black minimalism with titanium-silver lines, ultra-high contrast typography, and pure monochrome elegance.",

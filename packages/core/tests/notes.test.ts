@@ -77,4 +77,27 @@ describe("Notes Schema & Integration", () => {
     expect(filteredData.notes).toHaveLength(2);
     expect(validate(filteredData).valid).toBe(true);
   });
+
+  it("rejects non-array notes property", () => {
+    const invalidData = {
+      tasks: [{ id: "t1", category: "core", start: "2026-09-01", end: "2026-09-05" }],
+      notes: "not-an-array"
+    };
+    const res = validate(invalidData);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((e) => e.path === "notes")).toBe(true);
+  });
+
+  it("detects duplicate note IDs", () => {
+    const duplicateData = {
+      tasks: [{ id: "t1", category: "core", start: "2026-09-01", end: "2026-09-05" }],
+      notes: [
+        { id: "note-dup", title: "Note 1", content: "A" },
+        { id: "note-dup", title: "Note 2", content: "B" }
+      ]
+    };
+    const res = validate(duplicateData);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((e) => e.message.includes("Duplicate note id"))).toBe(true);
+  });
 });

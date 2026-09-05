@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ShieldCheck, AlertTriangle, AlertCircle, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { ShieldCheck, AlertTriangle, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
 import type { ScheduleHealthResult } from "@jantt/core";
 
 interface ScheduleHealthCardProps {
@@ -142,8 +142,9 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit })
                   {issue.message}
                 </span>
               </div>
-              <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginLeft: "20px" }}>
-                💡 <strong>Action:</strong> {issue.recommendation}
+              <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginLeft: "20px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <Lightbulb size={12} style={{ color: "var(--jantt-accent)" }} />
+                <span><strong>Action:</strong> {issue.recommendation}</span>
               </div>
             </div>
           ))}
