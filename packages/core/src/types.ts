@@ -17,7 +17,56 @@ export interface JanttMeta {
   showBaselines?: boolean;
   autoCascade?: boolean;
   generatedAt?: string;
+  revision?: number;
+  contentHash?: string;
+  updatedAt?: string;
+  sync?: PlanSyncMeta;
   [key: string]: unknown;
+}
+
+export interface PlanSyncMeta {
+  revision: number;
+  contentHash: string;
+  updatedAt: string;
+  clientId?: string;
+  baseRevision?: number;
+  [key: string]: unknown;
+}
+
+export interface ConflictRecord {
+  type: "task_field" | "task_deletion" | "note" | "meta";
+  entityId: string;
+  field?: string;
+  localValue: unknown;
+  remoteValue: unknown;
+  resolvedValue: unknown;
+  resolution: "local" | "remote" | "merged";
+  description: string;
+}
+
+export interface ReconcileResult {
+  mergedData: JanttData;
+  hasConflicts: boolean;
+  conflicts: ConflictRecord[];
+  summary: {
+    tasksAdded: number;
+    tasksUpdated: number;
+    tasksDeleted: number;
+    notesUpdated: number;
+    fieldsMerged: number;
+  };
+  remoteChanged: boolean;
+  localChanged: boolean;
+}
+
+export interface SnapshotEntry {
+  id: string;
+  projectId: string;
+  timestamp: string;
+  reason: string;
+  data: JanttData;
+  taskCount: number;
+  contentHash: string;
 }
 
 export type LinkRoutingStyle = "orthogonal" | "curved" | "direct";

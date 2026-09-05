@@ -3656,4 +3656,79 @@ path.jantt-dep-path.jantt-task-dimmed {
   border: 1px solid var(--jantt-border, #E2E8F0);
 }
 
+/* Dynamic Real-Time Sync Badge */
+.btn-sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: default;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.btn-sync-badge.is-in-sync {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.btn-sync-badge.is-syncing {
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--jantt-accent, #38BDF8);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.btn-sync-badge.is-merged {
+  background: rgba(245, 158, 11, 0.12);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-sync-badge.is-conflict {
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.sync-pulse-dot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  animation: syncPulse 2.2s infinite ease-in-out;
+}
+
+@keyframes syncPulse {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+.btn-version-history {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.history-count-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--jantt-accent, #38BDF8);
+  line-height: 1.2;
+}
+
 

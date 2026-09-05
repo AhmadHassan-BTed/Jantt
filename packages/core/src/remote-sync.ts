@@ -1,5 +1,6 @@
 import { JanttData } from "./types";
 import { validate } from "./validator";
+import { calculatePlanHash } from "./reconciler";
 
 export type CloudProviderType = "google-drive" | "github" | "dropbox" | "generic";
 
@@ -198,13 +199,19 @@ export interface RemoteFetchResult {
   fetchedAt: string;
   title: string;
   taskCount: number;
+  contentHash: string;
+  notModified?: boolean;
 }
 
 /**
  * Fetches, parses, and validates a remote Jantt plan from a shared URL.
  * Handles CORS automatically via proxy fallback for Google Drive and Dropbox links.
+ * Calculates deterministic content hash for high-efficiency collision and change detection.
  */
-export async function fetchRemotePlan(url: string): Promise<RemoteFetchResult> {
+export async function fetchRemotePlan(
+  url: string,
+  options?: { previousHash?: string }
+): Promise<RemoteFetchResult> {
   const info = parseCloudUrl(url);
 
   let rawText: string;
@@ -256,12 +263,16 @@ export async function fetchRemotePlan(url: string): Promise<RemoteFetchResult> {
   const data = parsed as JanttData;
   const title = data.meta?.title || "Untitled Remote Plan";
   const taskCount = Array.isArray(data.tasks) ? data.tasks.length : 0;
+  const contentHash = calculatePlanHash(data);
+  const notModified = Boolean(options?.previousHash && options.previousHash === contentHash);
 
   return {
     data,
     info,
     fetchedAt: new Date().toISOString(),
     title,
-    taskCount
+    taskCount,
+    contentHash,
+    notModified
   };
 }
