@@ -204,7 +204,7 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
       ...basePlan,
       tasks: [
         ...basePlan.tasks,
-        { id: "task-4", label: "QA Testing", start: "2026-09-23", end: "2026-09-28", progress: 0 }
+        { id: "task-4", label: "QA Testing", category: "engineering", start: "2026-09-23", end: "2026-09-28", progress: 0 }
       ]
     };
 
@@ -213,7 +213,7 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
       ...basePlan,
       tasks: [
         ...basePlan.tasks,
-        { id: "task-5", label: "Security Audit", start: "2026-09-25", end: "2026-09-30", progress: 0 }
+        { id: "task-5", label: "Security Audit", category: "engineering", start: "2026-09-25", end: "2026-09-30", progress: 0 }
       ]
     };
 
