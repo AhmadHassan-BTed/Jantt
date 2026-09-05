@@ -21,13 +21,14 @@ import {
   syncTaskProgressAndStatus,
   isTaskDone
 } from "@jantt/core";
-import type { DateFilterMode, EffectivePerson } from "../types";
+import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../types";
 import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
 
 interface TasksViewProps {
   parsedData: JanttData;
   dateFilterMode: DateFilterMode;
   dateFilterBehavior: "dim" | "hide";
+  completedFilterMode?: CompletedFilterMode;
   isTaskMatchingDateFilter: (task: Task) => boolean;
   tasksSearchQuery: string;
   setTasksSearchQuery: (q: string) => void;
@@ -47,6 +48,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   parsedData,
   dateFilterMode,
   dateFilterBehavior,
+  completedFilterMode = "show",
   isTaskMatchingDateFilter,
   tasksSearchQuery,
   setTasksSearchQuery,
@@ -193,6 +195,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
           tasksToDisplay = sortTasksByAssignee(tasksToDisplay, effectivePeople, teams);
         }
 
+        if (completedFilterMode === "filter") {
+          tasksToDisplay = tasksToDisplay.filter((t) => !isTaskDone(t));
+        }
+
         if (tasksSearchQuery.trim()) {
           const q = tasksSearchQuery.toLowerCase();
           tasksToDisplay = tasksToDisplay.filter((t) =>
@@ -209,8 +215,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
               <CheckCircle2 size={48} style={{ color: "#10B981" }} />
               <h3>All Clear!</h3>
               <p>
-                No tasks matching your active date filter and search criteria.
-                {dateFilterMode !== "all" && (
+                No tasks matching your active filter criteria and search query.
+                {(dateFilterMode !== "all" || completedFilterMode === "filter") && (
                   <button
                     className="date-filter-reset-btn"
                     style={{ marginTop: "12px", display: "inline-flex" }}
@@ -233,8 +239,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 const isCompleted = isTaskDone(t);
                 const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
                 const isDateMatch = isTaskMatchingDateFilter(t);
-                const isDimmed =
+                const isFilterDimmed =
                   dateFilterBehavior === "dim" && ((dateFilterMode !== "all" && !isDateMatch) || (isPersonFiltering && !isPersonMatch));
+                const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
+                const isDimmed = isFilterDimmed || isCompletedDimmed;
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 return (
                   <div
@@ -348,8 +356,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
               const isCompleted = isTaskDone(t);
               const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
               const isDateMatch = isTaskMatchingDateFilter(t);
-              const isDimmed =
+              const isFilterDimmed =
                 dateFilterBehavior === "dim" && ((dateFilterMode !== "all" && !isDateMatch) || (isPersonFiltering && !isPersonMatch));
+              const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
+              const isDimmed = isFilterDimmed || isCompletedDimmed;
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
               return (
                 <div
@@ -363,8 +373,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       <span className="kanban-cat-dot" style={{ background: catColor }} />
                       <span>{cat?.label || t.category}</span>
                       {isDimmed && (
-                        <span className="task-dimmed-tag" title="Task falls outside active filter criteria">
-                          {!isPersonMatch ? "Other Assignee" : "Outside Date"}
+                        <span className="task-dimmed-tag" title="Task is dimmed">
+                          {isCompletedDimmed ? "Completed" : !isPersonMatch ? "Other Assignee" : "Outside Date"}
                         </span>
                       )}
                     </div>

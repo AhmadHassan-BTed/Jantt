@@ -121,6 +121,7 @@ export function App() {
   // Date & People Filter Engine & Visual Dimming
   const dateFilter = useDateFilter({
     initialMode: init.initialDateFilterMode,
+    initialCompletedMode: init.initialCompletedFilterMode,
     parsedData: editor.parsedData,
     activeView: viewport.activeView,
     currentScale: viewport.currentScale,
@@ -213,8 +214,9 @@ export function App() {
     people.selectedPersonFilter !== "all" && !people.selectedPersonFilter.startsWith("sort:");
   const isPersonSorting = people.selectedPersonFilter === "sort:assignee";
   const isHideActive =
-    (dateFilter.dateFilterMode !== "all" || isPersonFiltering) &&
-    dateFilter.dateFilterBehavior === "hide";
+    ((dateFilter.dateFilterMode !== "all" || isPersonFiltering) &&
+      dateFilter.dateFilterBehavior === "hide") ||
+    dateFilter.completedFilterMode === "filter";
 
   const ganttDisplayData = useMemo(() => {
     if (!editor.parsedData) return null;
@@ -321,6 +323,8 @@ export function App() {
                     dateFilterActiveSummary={dateFilter.dateFilterActiveSummary}
                     dateFilterBehavior={dateFilter.dateFilterBehavior}
                     setDateFilterBehavior={dateFilter.setDateFilterBehavior}
+                    completedFilterMode={dateFilter.completedFilterMode}
+                    setCompletedFilterMode={dateFilter.setCompletedFilterMode}
                     selectedPersonFilter={people.selectedPersonFilter}
                     setSelectedPersonFilter={people.setSelectedPersonFilter}
                     effectivePeople={people.effectivePeople}
@@ -402,6 +406,7 @@ export function App() {
                     kanbanMultiSort={tasks.kanbanMultiSort}
                     dateFilterMode={dateFilter.dateFilterMode}
                     dateFilterBehavior={dateFilter.dateFilterBehavior}
+                    completedFilterMode={dateFilter.completedFilterMode}
                     isTaskMatchingDateFilter={dateFilter.isTaskMatchingDateFilter}
                     effectivePeople={people.effectivePeople}
                     teams={people.teams}
@@ -416,6 +421,7 @@ export function App() {
                     parsedData={editor.parsedData}
                     dateFilterMode={dateFilter.dateFilterMode}
                     dateFilterBehavior={dateFilter.dateFilterBehavior}
+                    completedFilterMode={dateFilter.completedFilterMode}
                     isTaskMatchingDateFilter={dateFilter.isTaskMatchingDateFilter}
                     tasksSearchQuery={tasks.tasksSearchQuery}
                     setTasksSearchQuery={tasks.setTasksSearchQuery}
@@ -445,6 +451,7 @@ export function App() {
                     teams={people.teams}
                     selectedPersonFilter={people.selectedPersonFilter}
                     dateFilterBehavior={dateFilter.dateFilterBehavior}
+                    completedFilterMode={dateFilter.completedFilterMode}
                   />
                 )}
 

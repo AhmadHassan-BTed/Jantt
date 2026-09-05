@@ -5,14 +5,16 @@ import {
   type Team,
   type TimeScale,
   getTodayISODate,
-  isTaskOnDate
+  isTaskOnDate,
+  isTaskDone
 } from "@jantt/core";
-import type { DateFilterMode, ActiveView, EffectivePerson } from "../types";
+import type { DateFilterMode, CompletedFilterMode, ActiveView, EffectivePerson } from "../types";
 import { STORAGE_KEYS } from "../constants";
 import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
 
 interface UseDateFilterOptions {
   initialMode: DateFilterMode;
+  initialCompletedMode?: CompletedFilterMode;
   parsedData: JanttData | null;
   activeView: ActiveView;
   currentScale?: TimeScale;
@@ -24,6 +26,7 @@ interface UseDateFilterOptions {
 
 export function useDateFilter({
   initialMode,
+  initialCompletedMode = "show",
   parsedData,
   activeView,
   currentScale,
@@ -37,6 +40,7 @@ export function useDateFilter({
   const [dateFilterRangeStart, setDateFilterRangeStart] = useState<string>("");
   const [dateFilterRangeEnd, setDateFilterRangeEnd] = useState<string>("");
   const [dateFilterBehavior, setDateFilterBehavior] = useState<"dim" | "hide">("dim");
+  const [completedFilterMode, setCompletedFilterMode] = useState<CompletedFilterMode>(initialCompletedMode);
 
   const handleSetRangeStart = useCallback((newStart: string) => {
     setDateFilterRangeStart(newStart);
@@ -57,6 +61,12 @@ export function useDateFilter({
       localStorage.setItem(STORAGE_KEYS.DATE_FILTER_MODE, dateFilterMode);
     } catch {}
   }, [dateFilterMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.COMPLETED_FILTER_MODE, completedFilterMode);
+    } catch {}
+  }, [completedFilterMode]);
 
   const dateFilterActiveDate = useMemo(() => {
     if (dateFilterMode === "today") return getTodayISODate();
@@ -116,20 +126,30 @@ export function useDateFilter({
 
   const matchingTasksCount = useMemo(() => {
     if (!parsedData) return 0;
-    return parsedData.tasks.filter(isTaskMatchingActiveFilter).length;
-  }, [parsedData, isTaskMatchingActiveFilter]);
+    return parsedData.tasks.filter((t) => {
+      if (completedFilterMode === "filter" && isTaskDone(t)) return false;
+      return isTaskMatchingActiveFilter(t);
+    }).length;
+  }, [parsedData, completedFilterMode, isTaskMatchingActiveFilter]);
 
   const summaryKpiTasks = useMemo(() => {
     if (!parsedData) return [];
-    if (hasActiveFilter && dateFilterBehavior === "hide") {
-      return parsedData.tasks.filter(isTaskMatchingActiveFilter);
+    let tasks = parsedData.tasks;
+    if (completedFilterMode === "filter") {
+      tasks = tasks.filter((t) => !isTaskDone(t));
     }
-    return parsedData.tasks;
-  }, [parsedData, hasActiveFilter, dateFilterBehavior, isTaskMatchingActiveFilter]);
+    if (hasActiveFilter && dateFilterBehavior === "hide") {
+      tasks = tasks.filter(isTaskMatchingActiveFilter);
+    }
+    return tasks;
+  }, [parsedData, completedFilterMode, hasActiveFilter, dateFilterBehavior, isTaskMatchingActiveFilter]);
 
   const ganttFilteredTasks = useMemo(() => {
     if (!parsedData) return [];
     let tasks = parsedData.tasks;
+    if (completedFilterMode === "filter") {
+      tasks = tasks.filter((t) => !isTaskDone(t));
+    }
     if (hasActiveFilter && dateFilterBehavior === "hide") {
       tasks = tasks.filter(isTaskMatchingActiveFilter);
     }
@@ -137,10 +157,10 @@ export function useDateFilter({
       tasks = sortTasksByAssignee(tasks, effectivePeople, teams);
     }
     return tasks;
-  }, [parsedData, hasActiveFilter, dateFilterBehavior, isTaskMatchingActiveFilter, isPersonSorting, effectivePeople, teams]);
+  }, [parsedData, completedFilterMode, hasActiveFilter, dateFilterBehavior, isTaskMatchingActiveFilter, isPersonSorting, effectivePeople, teams]);
 
   const dateFilterActiveSummary = useMemo(() => {
-    if (dateFilterMode === "all" && !isPersonFiltering) return null;
+    if (dateFilterMode === "all" && !isPersonFiltering && completedFilterMode === "show") return null;
     const total = parsedData?.tasks.length || 0;
     const countText = `${matchingTasksCount} of ${total} tasks active`;
     let label = "";
@@ -162,6 +182,12 @@ export function useDateFilter({
       label = label ? `${label} • ${personName}` : personName;
     }
 
+    if (completedFilterMode === "filter") {
+      label = label ? `${label} • Hide Completed` : "Hide Completed";
+    } else if (completedFilterMode === "dim") {
+      label = label ? `${label} • Dim Completed` : "Dim Completed";
+    }
+
     return { label, countText };
   }, [
     dateFilterMode,
@@ -170,16 +196,20 @@ export function useDateFilter({
     dateFilterRangeEnd,
     isPersonFiltering,
     selectedPersonFilter,
+    completedFilterMode,
     matchingTasksCount,
     parsedData,
     teams,
     effectivePeople
   ]);
 
-  // Apply Gantt date & person filter dimming via DOM after render
+  // Apply Gantt date & person filter and completed dimming via DOM after render
   useEffect(() => {
     const applyGanttDimming = () => {
-      if (activeView !== "gantt" || !hasActiveFilter || dateFilterBehavior === "hide") {
+      const isDateDimActive = hasActiveFilter && dateFilterBehavior === "dim";
+      const isCompletedDimActive = completedFilterMode === "dim";
+
+      if (activeView !== "gantt" || (!isDateDimActive && !isCompletedDimActive)) {
         document.querySelectorAll<HTMLElement | SVGElement>("[data-task-id], [data-row-id], [data-grid-row-id], .jantt-dep-path").forEach((el) => {
           el.classList.remove("jantt-task-dimmed");
         });
@@ -189,7 +219,12 @@ export function useDateFilter({
       document.querySelectorAll<HTMLElement>("[data-task-id], [data-row-id], [data-grid-row-id]").forEach((el) => {
         const taskId = el.dataset.taskId || el.dataset.rowId || el.dataset.gridRowId;
         const task = parsedData?.tasks.find((t) => t.id === taskId);
-        if (task && !isTaskMatchingActiveFilter(task)) {
+        if (!task) return;
+
+        const isDateMismatch = isDateDimActive && !isTaskMatchingActiveFilter(task);
+        const isCompletedDim = isCompletedDimActive && isTaskDone(task);
+
+        if (isDateMismatch || isCompletedDim) {
           el.classList.add("jantt-task-dimmed");
         } else {
           el.classList.remove("jantt-task-dimmed");
@@ -201,9 +236,13 @@ export function useDateFilter({
         const toId = path.getAttribute("data-to");
         const fromTask = parsedData?.tasks.find((t) => t.id === fromId);
         const toTask = parsedData?.tasks.find((t) => t.id === toId);
-        const isFromMatch = fromTask ? isTaskMatchingActiveFilter(fromTask) : true;
-        const isToMatch = toTask ? isTaskMatchingActiveFilter(toTask) : true;
-        if (!isFromMatch || !isToMatch) {
+
+        const isFromMismatch = isDateDimActive && fromTask && !isTaskMatchingActiveFilter(fromTask);
+        const isToMismatch = isDateDimActive && toTask && !isTaskMatchingActiveFilter(toTask);
+        const isFromCompletedDim = isCompletedDimActive && fromTask && isTaskDone(fromTask);
+        const isToCompletedDim = isCompletedDimActive && toTask && isTaskDone(toTask);
+
+        if (isFromMismatch || isToMismatch || isFromCompletedDim || isToCompletedDim) {
           path.classList.add("jantt-task-dimmed");
         } else {
           path.classList.remove("jantt-task-dimmed");
@@ -224,6 +263,7 @@ export function useDateFilter({
     dateFilterMode,
     dateFilterValue,
     dateFilterBehavior,
+    completedFilterMode,
     dateFilterRangeStart,
     dateFilterRangeEnd,
     selectedPersonFilter,
@@ -243,6 +283,8 @@ export function useDateFilter({
     setDateFilterRangeEnd: handleSetRangeEnd,
     dateFilterBehavior,
     setDateFilterBehavior,
+    completedFilterMode,
+    setCompletedFilterMode,
     dateFilterActiveDate,
     isTaskMatchingDateFilter,
     isTaskMatchingPerson,
