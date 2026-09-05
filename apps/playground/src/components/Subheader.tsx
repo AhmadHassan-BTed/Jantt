@@ -7,7 +7,8 @@ import {
   GitFork,
   Share2,
   Trash2,
-  Users
+  Users,
+  Radio
 } from "lucide-react";
 import type { SavedProject, EffectivePerson } from "../types";
 import { DEFAULT_TEMPLATE } from "../constants";
@@ -27,6 +28,9 @@ export interface SubheaderProps {
   handleDeleteProject: (id: string) => void;
   setShowPeopleModal: (show: boolean) => void;
   effectivePeople: EffectivePerson[];
+  onOpenRoomModal?: () => void;
+  activeRoomId?: string | null;
+  activeRoomRole?: "collaborator" | "viewer" | "none";
 }
 
 export const Subheader: React.FC<SubheaderProps> = ({
@@ -42,10 +46,14 @@ export const Subheader: React.FC<SubheaderProps> = ({
   setCopiedShareLink,
   handleDeleteProject,
   setShowPeopleModal,
-  effectivePeople
+  effectivePeople,
+  onOpenRoomModal,
+  activeRoomId,
+  activeRoomRole
 }) => {
   const activeProject = customProjects.find((p) => p.id === activeProjectId);
   const isLinked = activeProject?.source === "linked";
+  const isRoom = activeProject?.source === "room";
 
   return (
     <div className="subheader-bar">
@@ -67,10 +75,21 @@ export const Subheader: React.FC<SubheaderProps> = ({
               <optgroup label="Templates">
                 <option value="default">{DEFAULT_TEMPLATE.name}</option>
               </optgroup>
-              {customProjects.filter((p) => p.source !== "linked").length > 0 && (
-                <optgroup label={`Local Plans (${customProjects.filter((p) => p.source !== "linked").length})`}>
+              {customProjects.filter((p) => p.source === "room").length > 0 && (
+                <optgroup label={`Live Cloud Rooms (${customProjects.filter((p) => p.source === "room").length})`}>
                   {customProjects
-                    .filter((p) => p.source !== "linked")
+                    .filter((p) => p.source === "room")
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (Room: {p.roomId} • {p.role === "collaborator" ? "Collaborator" : "Viewer"} • {p.data?.tasks?.length || 0} tasks)
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+              {customProjects.filter((p) => p.source !== "linked" && p.source !== "room").length > 0 && (
+                <optgroup label={`Local Plans (${customProjects.filter((p) => p.source !== "linked" && p.source !== "room").length})`}>
+                  {customProjects
+                    .filter((p) => p.source !== "linked" && p.source !== "room")
                     .map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.data?.tasks?.length || 0} tasks)
@@ -104,15 +123,33 @@ export const Subheader: React.FC<SubheaderProps> = ({
               <span>New Plan</span>
             </button>
 
-            {/* Link Cloud Plan Button */}
+            {/* Cloud Room Button (Primary Collaboration Hub) */}
+            {onOpenRoomModal && (
+              <button
+                type="button"
+                className="btn-plan-action is-cloud"
+                onClick={onOpenRoomModal}
+                title={
+                  isRoom
+                    ? `Live Cloud Room: "${activeRoomId}" (${activeRoomRole === "collaborator" ? "Collaborator" : "Viewer"}). Click to share or manage.`
+                    : "Create or join real-time multi-user collaboration rooms powered by Firebase"
+                }
+                style={isRoom ? { borderColor: "var(--jantt-accent)", background: "rgba(56, 189, 248, 0.15)" } : {}}
+              >
+                <Radio size={13} style={{ color: "var(--jantt-accent)" }} className={isRoom ? "spin-slow" : ""} />
+                <span>{isRoom ? "Room Settings" : "Cloud Room"}</span>
+              </button>
+            )}
+
+            {/* Link Cloud Feed Button (Legacy / Read-Only fallback) */}
             <button
               type="button"
-              className="btn-plan-action is-cloud"
+              className="btn-plan-action"
               onClick={handleOpenLinkCloudModal}
-              title="Link and sync a remote plan from Google Drive, GitHub, Dropbox or direct URL"
+              title="Link external read-only feeds (Google Drive, GitHub, Dropbox)"
             >
-              <Cloud size={13} style={{ color: "var(--jantt-accent)" }} />
-              <span>Link Cloud</span>
+              <Cloud size={13} style={{ color: "var(--jantt-muted)" }} />
+              <span>External Feed</span>
             </button>
 
             {/* Linked Cloud Plan Controls */}

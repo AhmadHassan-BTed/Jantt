@@ -5,8 +5,13 @@ export interface SavedProject {
   name: string;
   updatedAt: string;
   data: JanttData;
-  source?: "local" | "linked" | "template";
+  source?: "local" | "linked" | "template" | "room";
   sourceUrl?: string;
+  roomId?: string;
+  secretKey?: string;
+  role?: "collaborator" | "viewer";
+  etag?: string | null;
+  revision?: number;
   lastSyncedAt?: string;
   syncError?: string;
 }

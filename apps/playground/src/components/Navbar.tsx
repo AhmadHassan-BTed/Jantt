@@ -14,7 +14,10 @@ import {
   ShieldCheck,
   HardDrive,
   Cloud,
-  AlertTriangle
+  AlertTriangle,
+  Radio,
+  Users,
+  Lock
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { ActiveView } from "../types";
@@ -44,6 +47,9 @@ interface NavbarProps {
   selectedThemeId: string;
   setSelectedThemeId: (themeId: string) => void;
   setShowPromptModal: (show: boolean) => void;
+  activeRoomId?: string | null;
+  activeRoomRole?: "collaborator" | "viewer" | "none";
+  onOpenRoomModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -68,7 +74,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   handleImportJsonFile,
   selectedThemeId,
   setSelectedThemeId,
-  setShowPromptModal
+  setShowPromptModal,
+  activeRoomId,
+  activeRoomRole,
+  onOpenRoomModal
 }) => {
   const isGdrive = isGoogleDrive || cloudProvider === "google-drive";
 
@@ -94,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Dynamic Real-Time Collaboration Sync Badge */}
-        {syncStatus && (
+        {syncStatus && !activeRoomId && (
           <div
             className={`btn-sync-badge is-${syncStatus}`}
             title={
@@ -112,8 +121,28 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
 
+        {/* Cloud Room Indicator */}
+        {activeRoomId && (
+          <div
+            className={`btn-cloud-source-badge ${activeRoomRole === "collaborator" ? "is-room-collaborator" : "is-room-viewer"}`}
+            onClick={onOpenRoomModal}
+            title={
+              activeRoomRole === "collaborator"
+                ? `Active Cloud Room: "${activeRoomId}" • Live Two-Way Auto-Sync Active • Click to share or manage room`
+                : `Active Cloud Room: "${activeRoomId}" • View-Only Mode • Click to enter edit key`
+            }
+          >
+            {activeRoomRole === "collaborator" ? (
+              <Radio size={11} className="spin-slow" />
+            ) : (
+              <Lock size={11} />
+            )}
+            <span>Room: {activeRoomId} ({activeRoomRole === "collaborator" ? "Live Sync" : "View Only"})</span>
+          </div>
+        )}
+
         {/* Google Drive Source Indicator */}
-        {isGdrive && (
+        {isGdrive && !activeRoomId && (
           <div
             className="btn-cloud-source-badge is-google-drive"
             title="Linked to Google Drive JSON file (Read-Only Cloud Feed). Changes you make are stored locally in your browser."
@@ -124,7 +153,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         {/* Other Cloud Provider Indicator */}
-        {cloudProvider && !isGdrive && (
+        {cloudProvider && !isGdrive && !activeRoomId && (
           <div
             className="btn-cloud-source-badge"
             title={`Linked to ${cloudProvider} file (Read-Only Cloud Feed). Changes you make are stored locally in your browser.`}
@@ -135,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         {/* Serverless Quota Shield Indicator */}
-        {isQuotaShieldActive && (
+        {isQuotaShieldActive && !activeRoomId && (
           <div
             className="btn-quota-shield-badge"
             title="Google Drive Quota Shield is ACTIVE: Request coalescing and edge cache fallback engaged to protect against rate limits (429/403)."
@@ -143,6 +172,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <ShieldCheck size={11} />
             <span>Quota Shield</span>
           </div>
+        )}
+
+        {/* Cloud Room Manage Button */}
+        {onOpenRoomModal && (
+          <button
+            type="button"
+            className="btn-nav"
+            onClick={onOpenRoomModal}
+            title="Cloud Collaboration Rooms (100+ concurrent editors with zero logins)"
+          >
+            <Users size={12} />
+            <span>{activeRoomId ? "Room" : "Collab"}</span>
+          </button>
         )}
 
         {/* Version History & Recovery Vault Button */}

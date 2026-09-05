@@ -54,6 +54,7 @@ import { useTaskDetailSidebar } from "./hooks/useTaskDetailSidebar";
 import { useSharing } from "./hooks/useSharing";
 import { useSnapshotVault } from "./hooks/useSnapshotVault";
 import { useDynamicSync } from "./hooks/useDynamicSync";
+import { useRoomSync } from "./hooks/useRoomSync";
 
 // View & Modal Components
 import { Navbar } from "./components/Navbar";
@@ -68,6 +69,7 @@ import { PromptModal } from "./components/PromptModal";
 import { AddPlanModal } from "./components/AddPlanModal";
 import { PeopleTeamsModal } from "./components/PeopleTeamsModal";
 import { CloudLinkModal } from "./components/CloudLinkModal";
+import { CloudRoomModal } from "./components/CloudRoomModal";
 import { ShareModal } from "./components/ShareModal";
 import { AutoSaveModal } from "./components/AutoSaveModal";
 import { VersionHistoryModal } from "./components/VersionHistoryModal";
@@ -201,6 +203,24 @@ export function App() {
     setValidationResult: editor.setValidationResult,
     showToast: toast.showToast,
     captureSnapshot: vault.captureSnapshot
+  });
+
+  // High-Scale Firebase Realtime Room Sync (100+ Concurrent Collaborators)
+  const roomSync = useRoomSync({
+    customProjects: project.customProjects,
+    setCustomProjects: project.setCustomProjects,
+    activeProjectId: project.activeProjectId,
+    setActiveProjectId: project.setActiveProjectId,
+    parsedData: editor.parsedData,
+    setParsedData: editor.setParsedData,
+    setJsonText: editor.setJsonText,
+    setPeople: people.setPeople,
+    setTeams: people.setTeams,
+    setValidationResult: editor.setValidationResult,
+    showToast: toast.showToast,
+    captureSnapshot: vault.captureSnapshot,
+    activeView: viewport.activeView,
+    selectedThemeId: viewport.selectedThemeId
   });
 
   // 1-Click Snapshot Restoration with Audit Trail
@@ -388,6 +408,9 @@ export function App() {
         selectedThemeId={viewport.selectedThemeId}
         setSelectedThemeId={viewport.setSelectedThemeId}
         setShowPromptModal={setShowPromptModal}
+        activeRoomId={roomSync.activeRoomId}
+        activeRoomRole={roomSync.activeRoomRole}
+        onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
       />
 
       <Subheader
@@ -404,6 +427,9 @@ export function App() {
         handleDeleteProject={project.handleDeleteProject}
         setShowPeopleModal={people.setShowPeopleModal}
         effectivePeople={people.effectivePeople}
+        onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
+        activeRoomId={roomSync.activeRoomId}
+        activeRoomRole={roomSync.activeRoomRole}
       />
 
       <main className="workspace-main">
@@ -640,6 +666,21 @@ export function App() {
         setNewTeamDesc={people.setNewTeamDesc}
         handleAddTeam={people.handleAddTeam}
         handleRemoveTeam={people.handleRemoveTeam}
+      />
+
+      <CloudRoomModal
+        showModal={roomSync.showRoomModal}
+        setShowModal={roomSync.setShowRoomModal}
+        activeProject={project.activeProject}
+        activeView={viewport.activeView}
+        selectedThemeId={viewport.selectedThemeId}
+        onCreateRoom={roomSync.handleCreateRoom}
+        onJoinRoom={roomSync.handleJoinRoom}
+        onUnlockCollaborator={roomSync.handleUnlockCollaborator}
+        isProcessing={roomSync.isProcessing}
+        activeRoomId={roomSync.activeRoomId}
+        activeRoomRole={roomSync.activeRoomRole}
+        activeSecretKey={roomSync.activeSecretKey}
       />
 
       <CloudLinkModal

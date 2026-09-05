@@ -271,8 +271,24 @@ export function loadInitialState() {
         initialScale = scaleParam;
       }
 
+      // 1. Check Room param (?room= or ?cloud=)
+      const roomParam = urlParams.get("room") || urlParams.get("cloud");
+      if (roomParam) {
+        const existingRoom = savedProjects.find(
+          (p) => p.source === "room" && p.roomId?.toLowerCase() === roomParam.toLowerCase().trim()
+        );
+        if (existingRoom) {
+          activeProjectId = existingRoom.id;
+          initialParsed = existingRoom.data;
+          initialJson = JSON.stringify(existingRoom.data, null, 2);
+          try {
+            localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, existingRoom.id);
+          } catch {}
+        }
+      }
+
       const cloudUrl = urlParams.get("url");
-      if (cloudUrl) {
+      if (cloudUrl && !roomParam) {
         const existingLinked = savedProjects.find(
           (p) => p.source === "linked" && isMatchingCloudUrl(p.sourceUrl, cloudUrl)
         );
@@ -287,7 +303,7 @@ export function loadInitialState() {
       }
 
       let dataPayload: string | null = null;
-      if (hash && !cloudUrl) {
+      if (hash && !cloudUrl && !roomParam) {
         const rawHash = hash.replace(/^#/, "");
         if (rawHash.startsWith("data=")) {
           dataPayload = rawHash.substring(5);
@@ -296,15 +312,15 @@ export function loadInitialState() {
           if (hp.get("data")) dataPayload = hp.get("data");
         }
       }
-      if (!dataPayload && !cloudUrl) {
+      if (!dataPayload && !cloudUrl && !roomParam) {
         dataPayload = urlParams.get("data");
       }
 
-      // Only import as local if not actively viewing or linking a cloud plan
+      // Only import as local if not actively viewing a room or cloud feed
       const activeCurrent = savedProjects.find((p) => p.id === activeProjectId);
-      const isCurrentlyLinked = activeCurrent?.source === "linked" || !!cloudUrl;
+      const isCurrentlyCloud = activeCurrent?.source === "linked" || activeCurrent?.source === "room" || !!cloudUrl || !!roomParam;
 
-      if (dataPayload && !isCurrentlyLinked) {
+      if (dataPayload && !isCurrentlyCloud) {
         const decoded = decodeDataFromBase64Url(dataPayload);
         if (decoded) {
           initialParsed = decoded;

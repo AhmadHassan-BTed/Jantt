@@ -27,6 +27,7 @@ export * from "./themes";
 export * from "./remote-sync";
 export * from "./reconciler";
 export * from "./share-coder";
+export * from "./firebase-sync";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
@@ -42,6 +43,7 @@ import { themeManager } from "./themes";
 import { parseCloudUrl, fetchRemotePlan, isMatchingCloudUrl } from "./remote-sync";
 import { calculatePlanHash, reconcilePlans, mergePlansCommutative, purgeTombstones, maintainPlanData } from "./reconciler";
 import { compressPlanToUrlPayload, decompressPlanFromUrlPayload, cleanPlanForSharing } from "./share-coder";
+import { createCloudRoom, fetchCloudRoom, saveCloudRoom, subscribeToCloudRoom } from "./firebase-sync";
 
 export const Jantt = {
   mount: renderJantt,
@@ -74,7 +76,11 @@ export const Jantt = {
   cleanPlanForSharing,
   compressPlanToUrlPayload,
   decompressPlanFromUrlPayload,
-  version: "1.2.0"
+  createCloudRoom,
+  fetchCloudRoom,
+  saveCloudRoom,
+  subscribeToCloudRoom,
+  version: "1.3.0"
 };
 
 
