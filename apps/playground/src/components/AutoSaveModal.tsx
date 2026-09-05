@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  Settings,
   Save,
   X,
   CheckCircle2,
@@ -44,12 +43,12 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
         <div className="prompt-modal-header">
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <div className="settings-header-icon">
-              <Settings size={18} />
+              <Save size={18} />
             </div>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <h3 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: "var(--jantt-text)" }}>
-                  Settings &amp; Auto-Save
+                  Auto-Save Settings
                 </h3>
                 <span className="brand-badge" style={{ fontSize: "11px", padding: "2px 8px" }}>
                   v1.1.1
