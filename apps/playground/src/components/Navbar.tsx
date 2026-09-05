@@ -20,7 +20,8 @@ import {
   ChevronDown,
   ArrowUpFromLine,
   ArrowDownToLine,
-  Save
+  Save,
+  Activity
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { SavedProject, ActiveView, EffectivePerson } from "../types";
@@ -180,10 +181,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             className={`jantt-scale-btn ${activeView === "summary" ? "is-active" : ""}`}
             onClick={() => setActiveView("summary")}
-            title="Project Budget & Performance Analytics"
+            title="Project Health, Schedule Buffers, EVM & Budget Performance"
           >
-            <PieChart size={13} />
-            <span>Budget &amp; KPI</span>
+            <Activity size={13} />
+            <span>Health &amp; PM</span>
           </button>
         </div>
       </div>
