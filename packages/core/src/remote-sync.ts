@@ -23,17 +23,24 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
 
   const trimmed = inputUrl.trim();
 
+  if (trimmed.includes("drive.google.com/drive/folders/")) {
+    throw new Error(
+      "The provided link is a Google Drive folder, not a file. Please open the folder, select your Jantt .json file, click Share, and paste the file link."
+    );
+  }
+
   // 1. Google Drive URLs
   // Formats:
   // - https://drive.google.com/file/d/{FILE_ID}/view?usp=sharing
-  // - https://drive.google.com/file/d/{FILE_ID}/view?usp=drive_link
+  // - https://drive.google.com/file/u/0/d/{FILE_ID}/view
+  // - https://drive.google.com/file/u/1/d/{FILE_ID}/view
   // - https://drive.google.com/open?id={FILE_ID}
   // - https://drive.google.com/uc?id={FILE_ID}
   // - https://docs.google.com/file/d/{FILE_ID}
-  const driveFileRegex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
+  const driveFileRegex = /drive\.google\.com\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/i;
   const driveOpenRegex = /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i;
   const driveUcRegex = /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/i;
-  const docsFileRegex = /docs\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
+  const docsFileRegex = /docs\.google\.com\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/i;
 
   const driveMatch =
     trimmed.match(driveFileRegex) ||

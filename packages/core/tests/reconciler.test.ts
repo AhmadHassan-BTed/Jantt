@@ -582,4 +582,37 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
     expect(purged.tasks.find((t) => t.id === "task-2")).toBeUndefined();
     expect(purged.tasks.length).toBe(1);
   });
+
+  it("cleanly prunes dangling dependencies when predecessor tasks are deleted", () => {
+    const planWithDeps: JanttData = {
+      ...basePlan,
+      tasks: [
+        { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+        { id: "t2", label: "Task 2", category: "dev", start: "2026-09-06", end: "2026-09-10", dependsOn: "t1" },
+        { id: "t3", label: "Task 3", category: "dev", start: "2026-09-11", end: "2026-09-15", dependsOn: ["t1", "t2"] }
+      ]
+    };
+
+    // User A deletes task t1
+    const userAPlan: JanttData = {
+      ...planWithDeps,
+      tasks: [
+        { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05", _deleted: true, deletedAt: "2026-09-05T12:00:00.000Z#user-A" },
+        planWithDeps.tasks[1],
+        planWithDeps.tasks[2]
+      ]
+    };
+
+    const res = reconcilePlans(planWithDeps, userAPlan, planWithDeps, { clientId: "arbiter" });
+    expect(res.mergedData.tasks.find((t) => t.id === "t1")).toBeUndefined();
+    expect(res.mergedData.meta?.tombstones?.["t1"]).toBeDefined();
+
+    // t2 had dependsOn: "t1" -> should now be null
+    const t2 = res.mergedData.tasks.find((t) => t.id === "t2");
+    expect(t2?.dependsOn).toBeNull();
+
+    // t3 had dependsOn: ["t1", "t2"] -> should now be "t2"
+    const t3 = res.mergedData.tasks.find((t) => t.id === "t3");
+    expect(t3?.dependsOn).toBe("t2");
+  });
 });

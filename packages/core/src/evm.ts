@@ -26,7 +26,9 @@ export interface EVMOptions {
 export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
   const taskMetrics = new Map<string, TaskEVMMetrics>();
 
-  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+  const liveTasks = (tasks || []).filter((t) => !t._deleted);
+
+  if (liveTasks.length === 0) {
     return {
       bac: 0,
       pv: 0,
@@ -71,11 +73,11 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
   }
 
   const byId = new Map<string, Task>();
-  tasks.forEach((t) => byId.set(t.id, t));
+  liveTasks.forEach((t) => byId.set(t.id, t));
 
   // Determine Project Bounds
-  let maxProjectEnd = tasks[0].end;
-  tasks.forEach((t) => {
+  let maxProjectEnd = liveTasks[0].end;
+  liveTasks.forEach((t) => {
     if (diffDays(maxProjectEnd, t.end) > 0) {
       maxProjectEnd = t.end;
     }
@@ -91,7 +93,7 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
   let notStartedCount = 0;
   let blockedCount = 0;
 
-  for (const t of tasks) {
+  for (const t of liveTasks) {
     const isDone = isTaskDone(t);
     const rawProgress = t.progress ?? 0;
     const actualProgress = isDone ? 1.0 : Math.min(1.0, Math.max(0, rawProgress));
@@ -193,7 +195,7 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
   let overallHealth: "healthy" | "at-risk" | "critical" = "healthy";
   if (spi < 0.88 || cpi < 0.88) {
     overallHealth = "critical";
-  } else if (spi < 0.96 || cpi < 0.96 || blockedCount > tasks.length * 0.25) {
+  } else if (spi < 0.96 || cpi < 0.96 || blockedCount > liveTasks.length * 0.25) {
     overallHealth = "at-risk";
   }
 
@@ -206,14 +208,14 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
     healthScore -= Math.min(30, Math.round((1.0 - cpi) * 100));
   }
   if (blockedCount > 0) {
-    healthScore -= Math.min(20, Math.round((blockedCount / tasks.length) * 40));
+    healthScore -= Math.min(20, Math.round((blockedCount / liveTasks.length) * 40));
   }
   healthScore = Math.max(10, Math.min(100, healthScore));
 
   const daysRemaining = Math.max(0, diffDays(statusDate, maxProjectEnd));
   const projectProgressPercent = bac > 0
     ? Math.round((ev / bac) * 100)
-    : Math.round((completedCount / Math.max(tasks.length, 1)) * 100);
+    : Math.round((completedCount / Math.max(liveTasks.length, 1)) * 100);
 
   let projectPaceLabel = "Schedule on track";
   if (scheduleStatus === "ahead") {
@@ -242,7 +244,7 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
     costStatus,
     overallHealth,
     healthScore,
-    taskCountTotal: tasks.length,
+    taskCountTotal: liveTasks.length,
     taskCountCompleted: completedCount,
     taskCountInProgress: inProgressCount,
     taskCountNotStarted: notStartedCount,

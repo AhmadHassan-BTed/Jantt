@@ -57,7 +57,7 @@ export function useTaskActions({
 
   const sortedSummaryTasks = useMemo(() => {
     if (!parsedData) return [];
-    let baseTasks = parsedData.tasks;
+    let baseTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
     if (dateFilterMode !== "all" && dateFilterBehavior === "hide") {
       baseTasks = baseTasks.filter(isTaskMatchingDateFilter);
     }
@@ -141,14 +141,29 @@ export function useTaskActions({
 
   const handleAddNewTask = useCallback(() => {
     if (!parsedData) return;
+    const activeTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
     const today = getTodayISODate();
     let lastEnd = today;
-    if (parsedData.tasks.length > 0) {
-      lastEnd = parsedData.tasks[parsedData.tasks.length - 1].end || today;
+    if (activeTasks.length > 0) {
+      lastEnd = activeTasks[activeTasks.length - 1].end || today;
     }
     const catKeys = Object.keys(parsedData.categories || {});
     const defaultCat = catKeys.length > 0 ? catKeys[0] : "general";
-    const nextIdx = parsedData.tasks.length + 1;
+    const nextIdx = activeTasks.length + 1;
+    const nowIso = new Date().toISOString();
+    const peerId = (() => {
+      try {
+        let id = localStorage.getItem("jantt_peer_id");
+        if (!id) {
+          id = `peer-${Math.random().toString(36).slice(2, 8)}`;
+          localStorage.setItem("jantt_peer_id", id);
+        }
+        return id;
+      } catch {
+        return "peer-serverless";
+      }
+    })();
+    const compositeTs = `${nowIso}#${peerId}`;
     const newTask: Task = {
       id: `task-${Date.now().toString(36)}`,
       wbs: `${nextIdx}.0`,
@@ -158,13 +173,31 @@ export function useTaskActions({
       end: addDays(lastEnd, 7),
       progress: 0,
       status: "not-started",
-      dependsOn: parsedData.tasks.length > 0 ? parsedData.tasks[parsedData.tasks.length - 1].id : null,
-      gapDays: parsedData.meta?.defaultGapDays ?? 2
+      dependsOn: activeTasks.length > 0 ? activeTasks[activeTasks.length - 1].id : null,
+      gapDays: parsedData.meta?.defaultGapDays ?? 2,
+      fieldTimestamps: {
+        label: compositeTs,
+        start: compositeTs,
+        end: compositeTs,
+        progress: compositeTs,
+        status: compositeTs,
+        category: compositeTs,
+        dependsOn: compositeTs
+      },
+      updatedAt: nowIso,
+      updatedBy: peerId
     };
 
-    const nextTasks = [...parsedData.tasks, newTask];
+    const nextTasks = [...activeTasks, newTask];
     const resolved = resolveSchedule(nextTasks, parsedData.meta?.defaultGapDays ?? 2);
-    const updated = { ...parsedData, tasks: resolved };
+    const updated = {
+      ...parsedData,
+      meta: {
+        ...parsedData.meta,
+        updatedAt: nowIso
+      },
+      tasks: resolved
+    };
     setParsedData(updated);
     setJsonText(JSON.stringify(updated, null, 2));
     setValidationResult(validate(updated));

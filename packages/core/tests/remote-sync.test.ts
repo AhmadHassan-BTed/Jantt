@@ -24,6 +24,24 @@ describe("Cloud Remote Sync & URL Parsing", () => {
       expect(info.downloadUrl).toContain("1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ");
     });
 
+    it("parses Google Drive multi-account URLs (/file/u/0/d/ and /file/u/1/d/)", () => {
+      const url0 = "https://drive.google.com/file/u/0/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y/view";
+      const info0 = parseCloudUrl(url0);
+      expect(info0.provider).toBe("google-drive");
+      expect(info0.fileId).toBe("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y");
+      expect(info0.downloadUrl).toContain("id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y");
+
+      const url1 = "https://drive.google.com/file/u/1/d/1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ/view";
+      const info1 = parseCloudUrl(url1);
+      expect(info1.provider).toBe("google-drive");
+      expect(info1.fileId).toBe("1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ");
+    });
+
+    it("rejects Google Drive folder URLs with actionable explanation", () => {
+      const folderUrl = "https://drive.google.com/drive/folders/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs";
+      expect(() => parseCloudUrl(folderUrl)).toThrowError(/Google Drive folder/i);
+    });
+
     it("parses Google Drive open?id= URLs", () => {
       const url = "https://drive.google.com/open?id=abc123XYZ_456";
       const info = parseCloudUrl(url);
