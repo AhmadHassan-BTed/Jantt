@@ -1,9 +1,5 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
-  DollarSign,
-  TrendingUp,
-  Zap,
-  Clock,
   ArrowUp,
   ArrowDown,
   Check
@@ -13,10 +9,15 @@ import {
   type Task,
   type Team,
   resolveTaskAssignee,
-  isTaskDone
+  isTaskDone,
+  calculateCriticalPath,
+  calculateEVM,
+  auditScheduleIntegrity
 } from "@jantt/core";
 import type { SummarySortConfig, EffectivePerson } from "../types";
 import { isTaskMatchingPersonFilter } from "../utils";
+import { EvmKpiCards } from "./EvmKpiCards";
+import { ScheduleHealthCard } from "./ScheduleHealthCard";
 
 interface BudgetKpiViewProps {
   parsedData: JanttData;
@@ -45,58 +46,49 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   selectedPersonFilter = "all",
   dateFilterBehavior = "dim"
 }) => {
+  // 1. Calculate Comprehensive Project Management Math
+  const cpm = useMemo(() => {
+    return calculateCriticalPath(summaryKpiTasks, {
+      targetDate: parsedData.meta?.targetDate as string | undefined,
+      defaultGapDays: parsedData.meta?.defaultGapDays
+    });
+  }, [summaryKpiTasks, parsedData.meta?.targetDate, parsedData.meta?.defaultGapDays]);
+
+  const evm = useMemo(() => {
+    return calculateEVM(summaryKpiTasks, {
+      defaultGapDays: parsedData.meta?.defaultGapDays
+    });
+  }, [summaryKpiTasks, parsedData.meta?.defaultGapDays]);
+
+  const audit = useMemo(() => {
+    return auditScheduleIntegrity(summaryKpiTasks, cpm);
+  }, [summaryKpiTasks, cpm]);
+
+  // Handle local buffer/float sorting if requested
+  const displayTasks = useMemo(() => {
+    if (summarySortConfig.column === "buffer" && summarySortConfig.direction) {
+      const dir = summarySortConfig.direction === "asc" ? 1 : -1;
+      return [...sortedSummaryTasks].sort((a, b) => {
+        const floatA = cpm.metrics.get(a.id)?.totalFloat ?? 999;
+        const floatB = cpm.metrics.get(b.id)?.totalFloat ?? 999;
+        return (floatA - floatB) * dir;
+      });
+    }
+    return sortedSummaryTasks;
+  }, [sortedSummaryTasks, summarySortConfig, cpm]);
+
   return (
     <div className="summary-view-container">
-      <div className="summary-kpi-grid">
-        <div className="summary-kpi-card">
-          <div className="kpi-icon-wrap" style={{ color: "var(--jantt-accent)" }}>
-            <DollarSign size={20} />
-          </div>
-          <div className="kpi-data">
-            <span className="kpi-label">Total Estimated Budget</span>
-            <span className="kpi-value">
-              ${summaryKpiTasks.reduce((sum, t) => sum + (t.estimatedCost || 0), 0).toLocaleString()}
-            </span>
-          </div>
-        </div>
-        <div className="summary-kpi-card">
-          <div className="kpi-icon-wrap" style={{ color: "#10B981" }}>
-            <TrendingUp size={20} />
-          </div>
-          <div className="kpi-data">
-            <span className="kpi-label">Project Progress</span>
-            <span className="kpi-value">
-              {Math.round(
-                (summaryKpiTasks.reduce((sum, t) => sum + (isTaskDone(t) ? 1 : (t.progress || 0)), 0) /
-                  Math.max(summaryKpiTasks.length, 1)) *
-                  100
-              )}%
-            </span>
-          </div>
-        </div>
-        <div className="summary-kpi-card">
-          <div className="kpi-icon-wrap" style={{ color: "var(--jantt-today)" }}>
-            <Zap size={20} />
-          </div>
-          <div className="kpi-data">
-            <span className="kpi-label">Total Active Tasks</span>
-            <span className="kpi-value">{summaryKpiTasks.length}</span>
-          </div>
-        </div>
-        <div className="summary-kpi-card">
-          <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical)" }}>
-            <Clock size={20} />
-          </div>
-          <div className="kpi-data">
-            <span className="kpi-label">Milestones Tracked</span>
-            <span className="kpi-value">{summaryKpiTasks.filter((t) => t.milestone).length}</span>
-          </div>
-        </div>
-      </div>
+      {/* 1. Intuitive Project Pulse + Senior EVM Suite */}
+      <EvmKpiCards evm={evm} cpm={cpm} />
 
+      {/* 2. Schedule Health & Integrity Diagnostic Card */}
+      <ScheduleHealthCard audit={audit} />
+
+      {/* 3. Work Breakdown & Performance Table */}
       <div className="summary-breakdown-card">
         <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px" }}>
-          Work Breakdown &amp; Category Distribution
+          Work Breakdown &amp; Performance Metrics
           {summarySortConfig.column && (
             <span style={{ fontSize: "11px", fontWeight: 400, marginLeft: "10px", color: "var(--jantt-text-muted)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
               <span>Sorted by {summarySortConfig.column}</span>
@@ -131,6 +123,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                   {summarySortConfig.column === "end" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
                 </span>
               </th>
+              <th className={`summary-th-sortable ${summarySortConfig.column === "buffer" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("buffer")}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <span>Buffer (Slack)</span>
+                  {summarySortConfig.column === "buffer" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                </span>
+              </th>
               <th className={`summary-th-sortable ${summarySortConfig.column === "budget" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("budget")}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                   <span>Budget ($)</span>
@@ -152,7 +150,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             </tr>
           </thead>
           <tbody>
-            {sortedSummaryTasks.map((t) => {
+            {displayTasks.map((t) => {
               const cat = parsedData.categories?.[t.category];
               const isCompleted = isTaskDone(t);
               const effectiveProgress = isCompleted ? 1.0 : (t.progress ?? 0);
@@ -162,10 +160,38 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               const isDimmed =
                 dateFilterBehavior === "dim" && ((!isDateMatch) || (isPersonFiltering && !isPersonMatch));
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
+
+              // CPM & Float metrics
+              const scheduleMetrics = cpm.metrics.get(t.id);
+              const isCrit = scheduleMetrics?.isCritical ?? false;
+              const isNearCrit = scheduleMetrics?.isNearCritical ?? false;
+              const tf = scheduleMetrics?.totalFloat ?? 0;
+              const ff = scheduleMetrics?.freeFloat ?? 0;
+
               return (
                 <tr key={t.id} className={`${isCompleted ? "summary-row-completed" : ""} ${isDimmed ? "summary-row-dimmed" : ""}`.trim()}>
                   <td style={{ fontFamily: "var(--jantt-font-mono)", fontWeight: 700 }}>{t.wbs || "-"}</td>
-                  <td style={{ fontWeight: 600, color: isCompleted ? "var(--jantt-text-muted)" : "inherit" }}>{t.label || t.name || t.id}</td>
+                  <td style={{ fontWeight: 600, color: isCompleted ? "var(--jantt-text-muted)" : "inherit" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>{t.label || t.name || t.id}</span>
+                      {isCrit && (
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            fontWeight: 800,
+                            padding: "1px 5px",
+                            borderRadius: "4px",
+                            background: "var(--jantt-critical, #EF4444)20",
+                            color: "var(--jantt-critical, #EF4444)",
+                            border: "1px solid var(--jantt-critical, #EF4444)40",
+                            textTransform: "uppercase"
+                          }}
+                        >
+                          Critical
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td>
                     <span className="jantt-label-dot" style={{ background: isCompleted ? "var(--jantt-bar-done, #64748B)" : (cat?.color || "var(--jantt-accent)"), display: "inline-block", marginRight: "6px" }} />
                     {cat?.label || t.category}
@@ -194,12 +220,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                         {assigneeInfo.team && (
                           <span
                             style={{
-                              fontSize: "9.5px",
-                              fontWeight: 600,
-                              background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1A`,
-                              color: assigneeInfo.team.color || "var(--jantt-accent)",
-                              padding: "1px 5px",
-                              borderRadius: "4px"
+                            fontSize: "9.5px",
+                            fontWeight: 600,
+                            background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1A`,
+                            color: assigneeInfo.team.color || "var(--jantt-accent)",
+                            padding: "1px 5px",
+                            borderRadius: "4px"
                             }}
                           >
                             {assigneeInfo.team.name}
@@ -212,6 +238,22 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                   </td>
                   <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.start}</td>
                   <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.end}</td>
+                  <td>
+                    <span
+                      title={`Total Float: ${tf}d (Project Delay Threshold), Free Float: ${ff}d (Successor Delay Threshold)`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        fontFamily: "var(--jantt-font-mono)",
+                        color: isCrit ? "var(--jantt-critical, #EF4444)" : tf < 0 ? "#EF4444" : isNearCrit ? "#F59E0B" : "#10B981"
+                      }}
+                    >
+                      {isCrit ? "0d (Critical)" : tf < 0 ? `Overdue ${tf}d` : `${tf}d buffer`}
+                    </span>
+                  </td>
                   <td style={{ fontFamily: "var(--jantt-font-mono)" }}>
                     {t.estimatedCost ? `$${t.estimatedCost.toLocaleString()}` : "-"}
                   </td>

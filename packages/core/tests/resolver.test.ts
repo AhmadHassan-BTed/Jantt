@@ -274,4 +274,53 @@ describe("Critical Path Calculator", () => {
     expect(criticalTaskIds.size).toBeGreaterThan(0);
     expect(criticalDepKeys.size).toBeGreaterThan(0);
   });
+
+  it("calculates Total Float and Free Float accurately on parallel paths", () => {
+    const tasks: Task[] = [
+      { id: "start", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+      { id: "driving", category: "dev", start: "2026-09-05", end: "2026-09-15", dependsOn: "start" },
+      { id: "float-branch", category: "dev", start: "2026-09-05", end: "2026-09-08", dependsOn: "start" },
+      { id: "finish", category: "dev", start: "2026-09-15", end: "2026-09-20", dependsOn: ["driving", "float-branch"] }
+    ];
+
+    const res = calculateCriticalPath(tasks);
+    expect(res.criticalTaskIds.has("start")).toBe(true);
+    expect(res.criticalTaskIds.has("driving")).toBe(true);
+    expect(res.criticalTaskIds.has("finish")).toBe(true);
+    expect(res.criticalTaskIds.has("float-branch")).toBe(false);
+
+    const floatBranchMetrics = res.metrics.get("float-branch")!;
+    expect(floatBranchMetrics.totalFloat).toBe(7); // 10 days duration vs 3 days duration
+    expect(floatBranchMetrics.freeFloat).toBe(7);
+    expect(floatBranchMetrics.isCritical).toBe(false);
+  });
+
+  it("supports contractual target deadlines producing negative float when breached", () => {
+    const tasks: Task[] = [
+      { id: "A", category: "dev", start: "2026-09-01", end: "2026-09-10" },
+      { id: "B", category: "dev", start: "2026-09-10", end: "2026-09-20", dependsOn: "A" }
+    ];
+
+    // Project finishes early on 09-20. Contract deadline is 09-16 (-4 days late!)
+    const res = calculateCriticalPath(tasks, { targetDate: "2026-09-16" });
+    expect(res.projectTotalFloat).toBe(-4);
+    expect(res.metrics.get("B")!.totalFloat).toBe(-4);
+    expect(res.metrics.get("B")!.slackLabel).toBe("Overdue by 4d");
+    expect(res.criticalTaskIds.has("B")).toBe(true);
+  });
+
+  it("identifies near-critical tasks within customizable threshold", () => {
+    const tasks: Task[] = [
+      { id: "start", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+      { id: "crit-chain", category: "dev", start: "2026-09-05", end: "2026-09-20", dependsOn: "start" },
+      // Near-critical branch has 2 days of float
+      { id: "near-chain", category: "dev", start: "2026-09-05", end: "2026-09-18", dependsOn: "start" },
+      { id: "end", category: "dev", start: "2026-09-20", end: "2026-09-22", dependsOn: ["crit-chain", "near-chain"] }
+    ];
+
+    const res = calculateCriticalPath(tasks, { nearCriticalThresholdDays: 3 });
+    expect(res.criticalTaskIds.has("crit-chain")).toBe(true);
+    expect(res.nearCriticalTaskIds.has("near-chain")).toBe(true);
+    expect(res.metrics.get("near-chain")!.isNearCritical).toBe(true);
+  });
 });

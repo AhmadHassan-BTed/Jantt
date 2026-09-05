@@ -166,9 +166,111 @@ export interface ViewportOptions {
   criticalResult?: CriticalPathResult;
 }
 
+export interface CriticalPathOptions {
+  targetDate?: string; // Contractual completion deadline (causes negative float if project slips)
+  nearCriticalThresholdDays?: number; // Default: 3 days
+  defaultGapDays?: number;
+}
+
+export interface TaskScheduleMetrics {
+  taskId: string;
+  earlyStart: string;
+  earlyFinish: string;
+  lateStart: string;
+  lateFinish: string;
+  totalFloat: number; // in days: LS - ES = LF - EF
+  freeFloat: number; // in days: min(succ.ES - lag) - EF
+  isCritical: boolean;
+  isNearCritical: boolean;
+  drivingPredecessors: string[];
+  slackLabel: string; // Intuitive label: e.g. "0d (Critical)", "4d buffer", "Overdue by 2d"
+}
+
 export interface CriticalPathResult {
   criticalTaskIds: Set<string>;
   criticalDepKeys: Set<string>;
+  nearCriticalTaskIds: Set<string>;
+  projectEarlyFinish: string;
+  projectLateFinish: string;
+  projectTotalFloat: number;
+  criticalPaths: string[][]; // Ordered sequences of task IDs along each critical path
+  metrics: Map<string, TaskScheduleMetrics>;
+}
+
+export interface TaskEVMMetrics {
+  taskId: string;
+  plannedValue: number; // PV
+  earnedValue: number; // EV
+  actualCost: number; // AC
+  scheduleVariance: number; // SV = EV - PV
+  costVariance: number; // CV = EV - AC
+  plannedProgress: number; // 0.0 - 1.0
+  actualProgress: number; // 0.0 - 1.0
+  isBlocked: boolean; // True if any predecessor is not yet completed
+}
+
+export interface EVMResult {
+  // Classical ANSI/EIA-748 Metrics
+  bac: number; // Budget at Completion
+  pv: number; // Planned Value
+  ev: number; // Earned Value
+  ac: number; // Actual Cost
+  sv: number; // Schedule Variance (EV - PV)
+  cv: number; // Cost Variance (EV - AC)
+  svPercent: number; // SV / PV * 100
+  cvPercent: number; // CV / EV * 100
+  spi: number; // Schedule Performance Index (EV / PV)
+  cpi: number; // Cost Performance Index (EV / AC)
+  criticalRatio: number; // SPI * CPI
+  eac: number; // Estimate at Completion (BAC / CPI)
+  etc: number; // Estimate to Complete (EAC - AC)
+  vac: number; // Variance at Completion (BAC - EAC)
+  tcpi: number; // To-Complete Performance Index
+
+  // Intuitive Executive & Hobbyist Metrics
+  scheduleStatus: "ahead" | "on-track" | "behind";
+  costStatus: "under-budget" | "on-budget" | "over-budget";
+  overallHealth: "healthy" | "at-risk" | "critical";
+  healthScore: number; // 0 to 100
+  taskCountTotal: number;
+  taskCountCompleted: number;
+  taskCountInProgress: number;
+  taskCountNotStarted: number;
+  taskCountBlocked: number;
+  daysRemaining: number;
+  projectProgressPercent: number;
+  projectPaceLabel: string;
+  taskMetrics: Map<string, TaskEVMMetrics>;
+}
+
+export interface ScheduleHealthIssue {
+  type: "missing-logic" | "high-float" | "negative-float" | "out-of-sequence" | "broken-chain";
+  severity: "low" | "medium" | "high";
+  taskId?: string;
+  taskName?: string;
+  message: string;
+  recommendation: string;
+}
+
+export interface ScheduleHealthResult {
+  healthScore: number; // 0 - 100
+  grade: "A" | "B" | "C" | "D" | "F";
+  summary: string;
+  issues: ScheduleHealthIssue[];
+  missingLogicCount: number;
+  negativeFloatCount: number;
+  highFloatCount: number;
+  totalTasksChecked: number;
+}
+
+export interface PertRiskResult {
+  expectedProjectDurationDays: number;
+  standardDeviationDays: number;
+  varianceDays: number;
+  confidencePercentages: {
+    targetDate?: string;
+    onTimeProbability: number; // 0.0 - 1.0 (e.g. 0.85 = 85%)
+  };
 }
 
 export interface TaskLayout {
@@ -183,6 +285,7 @@ export interface TaskLayout {
   durationDays: number;
   isMilestone: boolean;
   isCritical: boolean;
+  scheduleMetrics?: TaskScheduleMetrics;
   anchorInX?: number;
   anchorInY?: number;
   anchorOutX?: number;

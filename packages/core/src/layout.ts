@@ -185,8 +185,9 @@ export function layout(
   const canvasHeight = Math.max(tasks.length * viewport.rowHeight, viewport.rowHeight);
 
   // Critical path calculation (use pre-computed master critical path if provided, or compute on tasks)
-  const { criticalTaskIds, criticalDepKeys } =
+  const criticalResult =
     viewportOptions.criticalResult || calculateCriticalPath(tasks);
+  const { criticalTaskIds, criticalDepKeys } = criticalResult;
 
   // Compute TaskLayouts: Proportional bar height (~62% of row height) with vertical padding for dependency clearance
   const verticalPadding = Math.max(8, Math.round(viewport.rowHeight * 0.36));
@@ -239,6 +240,7 @@ export function layout(
     const cat = categories[task.category] || DEFAULT_CATEGORY;
     const displayLabel = getTaskDisplayName(task);
     const isCritical = criticalTaskIds.has(task.id);
+    const scheduleMetrics = criticalResult.metrics?.get(task.id);
 
     let baselineLayout: TaskLayout["baselineLayout"] | undefined;
     if (task.baseline && viewport.showBaselines) {
@@ -265,6 +267,7 @@ export function layout(
       durationDays: Math.max(durationDays, 0),
       isMilestone,
       isCritical,
+      scheduleMetrics,
       baselineLayout,
       anchorInX,
       anchorInY,

@@ -1,4 +1,4 @@
-import { Task, Category } from "../types";
+import { Task, Category, TaskScheduleMetrics } from "../types";
 import { formatHumanDate, diffDays } from "../date-math";
 
 export interface TooltipOptions {
@@ -7,7 +7,7 @@ export interface TooltipOptions {
 }
 
 export interface TooltipController {
-  show: (task: Task, category: Category, e: MouseEvent) => void;
+  show: (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics) => void;
   hide: () => void;
   updateTheme: (theme?: Record<string, string>, themeClassName?: string) => void;
 }
@@ -32,7 +32,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
     }
   };
 
-  const show = (task: Task, category: Category, e: MouseEvent) => {
+  const show = (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics) => {
     hide();
     const duration = Math.max(diffDays(task.start, task.end), task.milestone ? 0 : 1);
     const progressPercent = Math.round((task.progress || 0) * 100);
@@ -140,6 +140,19 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
           <span class="jantt-hover-stat-label">Depends On</span>
           <span class="jantt-hover-stat-value" style="font-family: var(--jantt-font-mono); color: var(--jantt-accent); font-weight: 600;">
             ${escapeHtml(Array.isArray(task.dependsOn) ? task.dependsOn.join(", ") : (task.dependsOn || ""))}
+          </span>
+        </div>
+        `
+            : ""
+        }
+
+        ${
+          metrics
+            ? `
+        <div class="jantt-hover-stat-row">
+          <span class="jantt-hover-stat-label">Schedule Buffer</span>
+          <span class="jantt-hover-stat-value" style="font-weight: 600; color: ${metrics.isCritical ? "var(--jantt-critical, #EF4444)" : metrics.totalFloat < 0 ? "#EF4444" : metrics.isNearCritical ? "#F59E0B" : "#10B981"};">
+            ${metrics.isCritical ? "🔥 Critical (0d buffer)" : metrics.totalFloat < 0 ? `⚠️ Overdue by ${Math.abs(metrics.totalFloat)}d` : `${metrics.totalFloat}d buffer (Free: ${metrics.freeFloat}d)`}
           </span>
         </div>
         `
