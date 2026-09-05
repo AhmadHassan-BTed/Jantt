@@ -11,6 +11,10 @@ export * from "./types";
 export * from "./date-math";
 export * from "./validator";
 export * from "./resolver";
+export * from "./cpm";
+export * from "./evm";
+export * from "./schedule-health";
+export * from "./pert";
 export * from "./team-resolver";
 export * from "./layout";
 export * from "./controller";
@@ -24,7 +28,11 @@ export * from "./remote-sync";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
-import { resolveSchedule, calculateCriticalPath, getTaskDependencies } from "./resolver";
+import { resolveSchedule } from "./resolver";
+import { calculateCriticalPath, getTaskDependencies } from "./cpm";
+import { calculateEVM } from "./evm";
+import { auditScheduleIntegrity } from "./schedule-health";
+import { calculatePertRisk, estimateTaskPert } from "./pert";
 import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "./layout";
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
@@ -38,6 +46,10 @@ export const Jantt = {
   resolveSchedule,
   calculateCriticalPath,
   getTaskDependencies,
+  calculateEVM,
+  auditScheduleIntegrity,
+  calculatePertRisk,
+  estimateTaskPert,
   layout,
   computeDependencyPath,
   getScaleFromDayWidth,

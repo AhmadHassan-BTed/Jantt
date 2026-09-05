@@ -56,7 +56,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       mStone.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "move", mStone);
       });
-      mStone.addEventListener("mouseenter", (e) => props.tooltip.show(item.task, item.category, e));
+      mStone.addEventListener("mouseenter", (e) => props.tooltip.show(item.task, item.category, e, item.scheduleMetrics));
       mStone.addEventListener("mouseleave", props.tooltip.hide);
 
       // Milestone Link Port
@@ -222,7 +222,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
     // Hover Tooltip & Dependency Highlight Wire Sync
     bar.addEventListener("mouseenter", (e) => {
-      props.tooltip.show(item.task, item.category, e);
+      props.tooltip.show(item.task, item.category, e, item.scheduleMetrics);
       props.dependencies.forEach((dep) => {
         if (dep.fromTaskId === item.task.id || dep.toTaskId === item.task.id) {
           const el = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
