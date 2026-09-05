@@ -143,9 +143,10 @@ function populateEditorWithContent(
           pill.setAttribute("data-mention-id", person.id);
           pill.setAttribute("data-mention-label", person.name);
           pill.innerHTML = `
-            <span class="note-pill-avatar" style="background: ${person.color || "var(--jantt-accent, #0284C7)"}">
-              ${(person.name || "U").charAt(0).toUpperCase()}
-            </span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
+            </svg>
             <span class="note-pill-text">@${person.name}</span>
           `;
           div.appendChild(pill);
@@ -199,9 +200,10 @@ function insertPillAtRange(
 
   if (pillData.type === "person") {
     pill.innerHTML = `
-      <span class="note-pill-avatar" style="background: ${pillData.color || "var(--jantt-accent, #0284C7)"}">
-        ${(pillData.label || "U").charAt(0).toUpperCase()}
-      </span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
+      </svg>
       <span class="note-pill-text">@${pillData.label}</span>
     `;
   } else {
@@ -257,9 +259,10 @@ function insertPillAtCurrentCaret(
 
   if (pillData.type === "person") {
     pill.innerHTML = `
-      <span class="note-pill-avatar" style="background: ${pillData.color || "var(--jantt-accent, #0284C7)"}">
-        ${(pillData.label || "U").charAt(0).toUpperCase()}
-      </span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
+      </svg>
       <span class="note-pill-text">@${pillData.label}</span>
     `;
   } else {

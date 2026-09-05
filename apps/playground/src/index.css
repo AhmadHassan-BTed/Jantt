@@ -3203,17 +3203,23 @@ path.jantt-dep-path.jantt-task-dimmed {
 .note-mention-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
+  gap: 4.5px;
+  padding: 1.5px 7px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
-  vertical-align: baseline;
+  vertical-align: middle;
   margin: 0 2px;
   transition: all 0.15s ease;
   user-select: none;
   cursor: default;
+}
+
+.note-mention-pill svg {
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .note-mention-pill.is-person {
@@ -3241,22 +3247,26 @@ path.jantt-dep-path.jantt-task-dimmed {
 }
 
 .note-pill-avatar {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   color: #FFFFFF;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .note-pill-text {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  display: inline-block;
+  line-height: 1.4;
+  vertical-align: middle;
 }
 
 /* Notion-style Live Rich Contenteditable Editor */
