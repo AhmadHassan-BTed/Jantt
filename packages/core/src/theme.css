@@ -1251,10 +1251,10 @@
 .jantt-col-resize-handle {
   position: absolute;
   top: 0;
-  right: -5px;
-  width: 11px;
+  right: -4px;
+  width: 9px;
   height: 100%;
-  cursor: col-resize;
+  cursor: col-resize !important;
   z-index: 15;
   touch-action: none;
   user-select: none;
@@ -1278,10 +1278,21 @@
   box-shadow: 0 0 6px var(--jantt-accent-glow, rgba(56, 189, 248, 0.6));
 }
 
-.jantt-day-cell:hover,
+.jantt-day-cell:hover {
+  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.15));
+  color: var(--jantt-accent);
+  cursor: pointer;
+}
+
 .jantt-month-cell:hover {
   background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.08));
   cursor: col-resize;
+}
+
+.jantt-day-name,
+.jantt-day-num,
+.jantt-boundary-marker {
+  pointer-events: none;
 }
 
 .jantt-day-name {
