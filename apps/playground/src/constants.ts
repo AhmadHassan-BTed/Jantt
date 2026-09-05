@@ -36,6 +36,7 @@ export const STORAGE_KEYS = {
   KANBAN_SORT: "jantt_kanban_sort",
   PERSON_FILTER: "jantt_person_filter",
   DATE_FILTER_MODE: "jantt_date_filter_mode",
+  COMPLETED_FILTER_MODE: "jantt_completed_filter_mode",
   AUTOSAVE_INTERVAL: "jantt_autosave_interval",
   AUTO_CASCADE: "jantt_saved_auto_cascade"
 };

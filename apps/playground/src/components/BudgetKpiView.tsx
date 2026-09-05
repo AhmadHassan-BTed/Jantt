@@ -23,7 +23,7 @@ import {
   auditScheduleIntegrity,
   getTaskDependencies
 } from "@jantt/core";
-import type { SummarySortConfig, EffectivePerson } from "../types";
+import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "../types";
 import { isTaskMatchingPersonFilter } from "../utils";
 import { EvmKpiCards } from "./EvmKpiCards";
 import { ScheduleHealthCard } from "./ScheduleHealthCard";
@@ -40,6 +40,7 @@ interface BudgetKpiViewProps {
   teams: Team[];
   selectedPersonFilter?: string;
   dateFilterBehavior?: "dim" | "hide";
+  completedFilterMode?: CompletedFilterMode;
 }
 
 export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
@@ -53,7 +54,8 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   effectivePeople,
   teams,
   selectedPersonFilter = "all",
-  dateFilterBehavior = "dim"
+  dateFilterBehavior = "dim",
+  completedFilterMode = "show"
 }) => {
   // Mode switcher: "essential" (simple/hobbyist/team lead) vs "advanced" (senior PM/EVM/audit)
   const [viewMode, setViewMode] = useState<"essential" | "advanced">("essential");
@@ -125,6 +127,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
       tasks = tasks.filter((t) => cpm.criticalTaskIds.has(t.id));
     }
 
+    if (completedFilterMode === "filter") {
+      tasks = tasks.filter((t) => !isTaskDone(t));
+    }
+
     if (summarySortConfig.column === "buffer" && summarySortConfig.direction) {
       const dir = summarySortConfig.direction === "asc" ? 1 : -1;
       return tasks.sort((a, b) => {
@@ -135,7 +141,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
     }
 
     return tasks;
-  }, [sortedSummaryTasks, summarySortConfig, cpm, quickFilter, readyTaskIds, blockedTaskIds]);
+  }, [sortedSummaryTasks, summarySortConfig, cpm, quickFilter, completedFilterMode, readyTaskIds, blockedTaskIds]);
 
   return (
     <div className="summary-view-container">
@@ -463,8 +469,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
               const isDateMatch = isTaskMatchingDateFilter(t);
               const isPersonFiltering = selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
-              const isDimmed =
+              const isFilterDimmed =
                 dateFilterBehavior === "dim" && ((!isDateMatch) || (isPersonFiltering && !isPersonMatch));
+              const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
+              const isDimmed = isFilterDimmed || isCompletedDimmed;
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
 
               // CPM & Float metrics

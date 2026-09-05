@@ -20,6 +20,7 @@ import type {
   KanbanSortRule,
   KanbanSortField,
   DateFilterMode,
+  CompletedFilterMode,
   EffectivePerson
 } from "../types";
 import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
@@ -31,6 +32,7 @@ interface KanbanViewProps {
   kanbanMultiSort: (tasks: Task[]) => Task[];
   dateFilterMode: DateFilterMode;
   dateFilterBehavior: "dim" | "hide";
+  completedFilterMode?: CompletedFilterMode;
   isTaskMatchingDateFilter: (task: Task) => boolean;
   effectivePeople: EffectivePerson[];
   teams: Team[];
@@ -46,6 +48,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   kanbanMultiSort,
   dateFilterMode,
   dateFilterBehavior,
+  completedFilterMode = "show",
   isTaskMatchingDateFilter,
   effectivePeople,
   teams,
@@ -145,17 +148,26 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
           if (isPersonSorting) {
             colTasks = sortTasksByAssignee(colTasks, effectivePeople, teams);
           }
-          const visibleTasks =
-            hasActiveFilter && dateFilterBehavior === "hide"
-              ? colTasks.filter(isTaskActiveMatch)
-              : colTasks;
-          const matchingCount = colTasks.filter(isTaskActiveMatch).length;
+          let visibleTasks = colTasks;
+          if (hasActiveFilter && dateFilterBehavior === "hide") {
+            visibleTasks = visibleTasks.filter(isTaskActiveMatch);
+          }
+          if (completedFilterMode === "filter") {
+            visibleTasks = visibleTasks.filter((t) => !isTaskDone(t));
+          }
+          const matchingCount = colTasks.filter((t) => {
+            if (completedFilterMode === "filter" && isTaskDone(t)) return false;
+            return isTaskActiveMatch(t);
+          }).length;
+          const displayTotal =
+            completedFilterMode === "filter" ? colTasks.filter((t) => !isTaskDone(t)).length : colTasks.length;
+
           return (
             <div key={col.id} className="kanban-column">
               <div className="kanban-col-header">
                 <span className="kanban-col-title">{col.label}</span>
                 <span className="kanban-col-count">
-                  {hasActiveFilter ? `${matchingCount}/${colTasks.length}` : colTasks.length}
+                  {hasActiveFilter ? `${matchingCount}/${displayTotal}` : displayTotal}
                 </span>
               </div>
               <div className="kanban-card-list">
@@ -165,8 +177,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                   const isCompleted = isTaskDone(t);
                   const isPersonMatch = isTaskMatchingPerson(t);
                   const isDateMatch = isTaskMatchingDateFilter(t);
-                  const isDimmed =
+                  const isFilterDimmed =
                     hasActiveFilter && dateFilterBehavior === "dim" && (!isPersonMatch || !isDateMatch);
+                  const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
+                  const isDimmed = isFilterDimmed || isCompletedDimmed;
                   const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                   return (
                     <div

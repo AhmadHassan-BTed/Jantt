@@ -12,6 +12,7 @@ export interface SavedProject {
 }
 
 export type DateFilterMode = "all" | "today" | "week" | "date" | "range";
+export type CompletedFilterMode = "show" | "dim" | "filter";
 export type ActiveView = "gantt" | "kanban" | "tasks" | "summary" | "notes";
 
 export type KanbanSortField = "priority" | "start" | "end" | "wbs" | "assignee" | "progress" | "name";

@@ -15,6 +15,7 @@ import {
 import type {
   SavedProject,
   DateFilterMode,
+  CompletedFilterMode,
   ActiveView,
   KanbanSortRule,
   EffectivePerson
@@ -253,6 +254,13 @@ export function loadInitialState() {
     if (savedDFM && ["all", "today", "week", "date", "range"].includes(savedDFM)) initialDateFilterMode = savedDFM;
   } catch {}
 
+  // Restore completed filter mode
+  let initialCompletedFilterMode: CompletedFilterMode = "show";
+  try {
+    const savedCFM = localStorage.getItem(STORAGE_KEYS.COMPLETED_FILTER_MODE) as CompletedFilterMode;
+    if (savedCFM && ["show", "dim", "filter"].includes(savedCFM)) initialCompletedFilterMode = savedCFM;
+  } catch {}
+
   // Check URL share params (?view=, ?theme=, ?scale=, #data=, ?data=, ?plan=default)
   if (typeof window !== "undefined") {
     try {
@@ -262,6 +270,11 @@ export function loadInitialState() {
       const viewParam = urlParams.get("view");
       if (viewParam && ["gantt", "kanban", "summary", "tasks", "notes"].includes(viewParam)) {
         initialView = viewParam as ActiveView;
+      }
+
+      const completedParam = urlParams.get("completed") as CompletedFilterMode;
+      if (completedParam && ["show", "dim", "filter"].includes(completedParam)) {
+        initialCompletedFilterMode = completedParam;
       }
 
       const themeParam = urlParams.get("theme");
@@ -338,7 +351,8 @@ export function loadInitialState() {
     initialWidth,
     initialKanbanSort,
     initialPersonFilter,
-    initialDateFilterMode
+    initialDateFilterMode,
+    initialCompletedFilterMode
   };
 }
 

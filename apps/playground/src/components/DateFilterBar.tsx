@@ -1,7 +1,7 @@
 import React from "react";
-import { Clock, Calendar, Filter, X, EyeOff, Users } from "lucide-react";
+import { Clock, Calendar, Filter, X, Eye, EyeOff, Users } from "lucide-react";
 import { getTodayISODate, type Task, type Team } from "@jantt/core";
-import type { DateFilterMode, EffectivePerson } from "../types";
+import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../types";
 
 interface DateFilterBarProps {
   dateFilterMode: DateFilterMode;
@@ -15,6 +15,8 @@ interface DateFilterBarProps {
   dateFilterActiveSummary: { label: string; countText: string } | null;
   dateFilterBehavior: "dim" | "hide";
   setDateFilterBehavior: (b: "dim" | "hide") => void;
+  completedFilterMode?: CompletedFilterMode;
+  setCompletedFilterMode?: (m: CompletedFilterMode) => void;
   selectedPersonFilter?: string;
   setSelectedPersonFilter?: (filter: string) => void;
   effectivePeople?: EffectivePerson[];
@@ -34,6 +36,8 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
   dateFilterActiveSummary,
   dateFilterBehavior,
   setDateFilterBehavior,
+  completedFilterMode = "show",
+  setCompletedFilterMode,
   selectedPersonFilter = "all",
   setSelectedPersonFilter,
   effectivePeople = [],
@@ -163,7 +167,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
         {/* Universal Mode Toggle (Dim vs Filter) */}
         <div
           className="date-filter-behavior-group"
-          title="Filter display mode: Dim non-matching tasks or completely Filter/Hide them"
+          title="Date & person filter mode: Dim non-matching tasks or completely Filter/Hide them"
         >
           <span className="date-filter-behavior-label">Mode:</span>
           <button
@@ -185,6 +189,43 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             <span>Filter</span>
           </button>
         </div>
+
+        {/* Completed Tasks Toggle (Show vs Dim vs Filter) */}
+        {setCompletedFilterMode && (
+          <div
+            className="date-filter-behavior-group"
+            title="Completed tasks display mode: Show normally, Dim, or Filter/Hide them"
+          >
+            <span className="date-filter-behavior-label">Completed:</span>
+            <button
+              type="button"
+              className={`date-filter-behavior-btn ${completedFilterMode === "show" ? "is-active" : ""}`}
+              onClick={() => setCompletedFilterMode("show")}
+              title="Show Completed: Display completed tasks normally"
+            >
+              <Eye size={11} />
+              <span>Show</span>
+            </button>
+            <button
+              type="button"
+              className={`date-filter-behavior-btn ${completedFilterMode === "dim" ? "is-active" : ""}`}
+              onClick={() => setCompletedFilterMode("dim")}
+              title="Dim Completed: Fade out completed tasks to emphasize active work"
+            >
+              <EyeOff size={11} />
+              <span>Dim</span>
+            </button>
+            <button
+              type="button"
+              className={`date-filter-behavior-btn ${completedFilterMode === "filter" ? "is-active" : ""}`}
+              onClick={() => setCompletedFilterMode("filter")}
+              title="Filter Completed: Completely hide completed tasks"
+            >
+              <Filter size={11} />
+              <span>Filter</span>
+            </button>
+          </div>
+        )}
 
         {/* Sort & Filter by People Dropdown */}
         {setSelectedPersonFilter && (
