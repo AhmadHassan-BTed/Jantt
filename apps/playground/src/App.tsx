@@ -58,6 +58,7 @@ import { DateFilterBar } from "./components/DateFilterBar";
 import { KanbanView } from "./components/KanbanView";
 import { BudgetKpiView } from "./components/BudgetKpiView";
 import { TasksView } from "./components/TasksView";
+import { NotesView } from "./components/NotesView";
 import { PromptModal } from "./components/PromptModal";
 import { AddPlanModal } from "./components/AddPlanModal";
 import { PeopleTeamsModal } from "./components/PeopleTeamsModal";
@@ -256,6 +257,7 @@ export function App() {
         setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
         activeView={viewport.activeView}
         setActiveView={viewport.setActiveView}
+        notesCount={editor.parsedData?.notes?.length || 0}
         activeProjectId={project.activeProjectId}
         customProjects={project.customProjects}
         handleSelectProject={project.handleSelectProject}
@@ -308,24 +310,26 @@ export function App() {
           <div className="chart-container-card">
             {editor.parsedData ? (
               <>
-                <DateFilterBar
-                  dateFilterMode={dateFilter.dateFilterMode}
-                  setDateFilterMode={dateFilter.setDateFilterMode}
-                  dateFilterValue={dateFilter.dateFilterValue}
-                  setDateFilterValue={dateFilter.setDateFilterValue}
-                  dateFilterRangeStart={dateFilter.dateFilterRangeStart}
-                  setDateFilterRangeStart={dateFilter.setDateFilterRangeStart}
-                  dateFilterRangeEnd={dateFilter.dateFilterRangeEnd}
-                  setDateFilterRangeEnd={dateFilter.setDateFilterRangeEnd}
-                  dateFilterActiveSummary={dateFilter.dateFilterActiveSummary}
-                  dateFilterBehavior={dateFilter.dateFilterBehavior}
-                  setDateFilterBehavior={dateFilter.setDateFilterBehavior}
-                  selectedPersonFilter={people.selectedPersonFilter}
-                  setSelectedPersonFilter={people.setSelectedPersonFilter}
-                  effectivePeople={people.effectivePeople}
-                  teams={people.teams}
-                  tasks={editor.parsedData.tasks}
-                />
+                {viewport.activeView !== "notes" && (
+                  <DateFilterBar
+                    dateFilterMode={dateFilter.dateFilterMode}
+                    setDateFilterMode={dateFilter.setDateFilterMode}
+                    dateFilterValue={dateFilter.dateFilterValue}
+                    setDateFilterValue={dateFilter.setDateFilterValue}
+                    dateFilterRangeStart={dateFilter.dateFilterRangeStart}
+                    setDateFilterRangeStart={dateFilter.setDateFilterRangeStart}
+                    dateFilterRangeEnd={dateFilter.dateFilterRangeEnd}
+                    setDateFilterRangeEnd={dateFilter.setDateFilterRangeEnd}
+                    dateFilterActiveSummary={dateFilter.dateFilterActiveSummary}
+                    dateFilterBehavior={dateFilter.dateFilterBehavior}
+                    setDateFilterBehavior={dateFilter.setDateFilterBehavior}
+                    selectedPersonFilter={people.selectedPersonFilter}
+                    setSelectedPersonFilter={people.setSelectedPersonFilter}
+                    effectivePeople={people.effectivePeople}
+                    teams={people.teams}
+                    tasks={editor.parsedData.tasks}
+                  />
+                )}
 
                 {viewport.activeView === "gantt" && ganttDisplayData && (
                   <Jantt
@@ -439,6 +443,13 @@ export function App() {
                     teams={people.teams}
                     selectedPersonFilter={people.selectedPersonFilter}
                     dateFilterBehavior={dateFilter.dateFilterBehavior}
+                  />
+                )}
+
+                {viewport.activeView === "notes" && (
+                  <NotesView
+                    parsedData={editor.parsedData}
+                    handleChartCommit={editor.handleChartCommit}
                   />
                 )}
               </>

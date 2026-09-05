@@ -39,6 +39,19 @@ export interface DocumentItem {
   [key: string]: unknown;
 }
 
+export interface NoteItem {
+  id: string;
+  title: string;
+  content: string; // Markdown or plaintext body
+  createdAt?: string; // ISO 8601 string
+  updatedAt?: string; // ISO 8601 string
+  color?: string; // Hex tint / accent (e.g. #3B82F6, #10B981, #F59E0B, #8B5CF6, #EF4444)
+  pinned?: boolean;
+  category?: string;
+  tags?: string[];
+  [key: string]: unknown;
+}
+
 export interface Team {
   id: string;
   name: string;
@@ -97,6 +110,7 @@ export interface JanttData {
   meta?: JanttMeta;
   categories?: CategoriesMap;
   documents?: DocumentItem[];
+  notes?: NoteItem[];
   teams?: Team[];
   people?: Person[];
   tasks: Task[];
