@@ -27,7 +27,7 @@
     "@types/jsdom": "^30.0.0",
     "jsdom": "^29.1.1",
     "typescript": "^5.4.5",
-    "vite": "^5.2.11",
+    "vite": "^8.2.2",
     "vite-plugin-dts": "^3.9.1",
     "vitest": "^1.6.0"
   },
