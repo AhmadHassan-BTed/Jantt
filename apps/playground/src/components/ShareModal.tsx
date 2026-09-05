@@ -7,7 +7,10 @@ import {
   Cloud,
   FileJson,
   ExternalLink,
-  Download
+  Download,
+  MessageSquare,
+  CheckCircle2,
+  AlertTriangle
 } from "lucide-react";
 import type { JanttData, ThemeDefinition } from "@jantt/core";
 import type { SavedProject, ActiveView } from "../types";
@@ -25,6 +28,9 @@ interface ShareModalProps {
   handleCopyShareLink: () => void;
   copiedShareLink: boolean;
   handleNativeShare: () => void;
+  handleWhatsAppShare?: () => void;
+  isWhatsAppSafe?: boolean;
+  handleOpenLinkCloudModal?: () => void;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
   handleDownloadJson: () => void;
 }
@@ -42,6 +48,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   handleCopyShareLink,
   copiedShareLink,
   handleNativeShare,
+  handleWhatsAppShare,
+  isWhatsAppSafe = true,
+  handleOpenLinkCloudModal,
   setIsSidebarCollapsed,
   handleDownloadJson
 }) => {
@@ -123,17 +132,35 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
           {/* Shareable Link Input Section */}
           <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: "12.5px",
-                fontWeight: 600,
-                marginBottom: "6px",
-                color: "var(--jantt-text)"
-              }}
-            >
-              Shareable Link:
-            </label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+              <label
+                style={{
+                  fontSize: "12.5px",
+                  fontWeight: 600,
+                  color: "var(--jantt-text)"
+                }}
+              >
+                Shareable Link:
+              </label>
+              <div
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "2px 8px",
+                  borderRadius: "100px",
+                  background: isWhatsAppSafe ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                  color: isWhatsAppSafe ? "#10B981" : "#F59E0B",
+                  border: `1px solid ${isWhatsAppSafe ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.25)"}`
+                }}
+              >
+                {isWhatsAppSafe ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+                <span>{shareUrl.length} chars &bull; {isWhatsAppSafe ? "WhatsApp Safe" : "Long Plan"}</span>
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: "8px" }}>
               <input
                 type="text"
@@ -157,22 +184,90 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 <span>{copiedShareLink ? "Copied!" : "Copy Link"}</span>
               </button>
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "6px", gap: "8px" }}>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                Opens the exact schedule, active view, and theme in any browser.
+                Compressed &bull; Opens exact view and schedule in any browser without account.
               </span>
-              {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
-                <button
-                  className="btn-nav"
-                  style={{ fontSize: "11px", padding: "2px 8px" }}
-                  onClick={handleNativeShare}
-                  title="Open native device share dialog"
-                >
-                  <Share2 size={11} />
-                  <span>Share Device...</span>
-                </button>
-              )}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {handleWhatsAppShare && (
+                  <button
+                    className="btn-nav"
+                    style={{
+                      fontSize: "11.5px",
+                      padding: "4px 10px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      background: "rgba(37, 211, 102, 0.12)",
+                      color: "#16a34a",
+                      borderColor: "rgba(37, 211, 102, 0.3)"
+                    }}
+                    onClick={handleWhatsAppShare}
+                    title={isWhatsAppSafe ? "Share link directly to WhatsApp" : "Share via WhatsApp"}
+                  >
+                    <MessageSquare size={13} />
+                    <span>WhatsApp</span>
+                  </button>
+                )}
+                {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+                  <button
+                    className="btn-nav"
+                    style={{ fontSize: "11.5px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                    onClick={handleNativeShare}
+                    title="Open native device share dialog"
+                  >
+                    <Share2 size={13} />
+                    <span>Device...</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {!isWhatsAppSafe && (
+              <div
+                style={{
+                  marginTop: "10px",
+                  background: "rgba(245, 158, 11, 0.08)",
+                  border: "1px solid rgba(245, 158, 11, 0.25)",
+                  borderRadius: "8px",
+                  padding: "10px 12px",
+                  fontSize: "11.5px",
+                  color: "var(--jantt-text)"
+                }}
+              >
+                <div style={{ fontWeight: 600, color: "#D97706", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                  <AlertTriangle size={13} />
+                  <span>WhatsApp Link Recommendation</span>
+                </div>
+                <div style={{ color: "var(--jantt-text-muted)", lineHeight: "1.4" }}>
+                  This plan is detailed ({shareUrl.length} chars). WhatsApp truncates links over 2,000 characters. For 100% reliable WhatsApp sharing:
+                </div>
+                <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                  <button
+                    className="btn-nav"
+                    style={{ fontSize: "11px", padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                    onClick={handleDownloadJson}
+                  >
+                    <Download size={12} />
+                    <span>Download JSON File</span>
+                  </button>
+                  {handleOpenLinkCloudModal && (
+                    <button
+                      className="btn-nav btn-nav-primary"
+                      style={{ fontSize: "11px", padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                      onClick={() => {
+                        setShowShareModal(false);
+                        handleOpenLinkCloudModal();
+                      }}
+                    >
+                      <Cloud size={12} />
+                      <span>Link Cloud Source (~80 chars)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Source Document Section */}

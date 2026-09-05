@@ -183,8 +183,12 @@ export function useCloudSync({
       setParsedData(finalData);
       setPeople(finalData.people || []);
       setTeams(finalData.teams || []);
-      setJsonText(JSON.stringify(finalData, null, 2));
+      const formatted = JSON.stringify(finalData, null, 2);
+      setJsonText(formatted);
       setValidationResult(validate(finalData));
+      try {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, formatted);
+      } catch {}
 
       if (reconcileResult.hasConflicts) {
         showToast(
@@ -261,11 +265,15 @@ export function useCloudSync({
         try {
           localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
         } catch {}
-        setJsonText(JSON.stringify(res.data, null, 2));
+        const formatted = JSON.stringify(res.data, null, 2);
+        setJsonText(formatted);
         setParsedData(res.data);
         setPeople(res.data.people || []);
         setTeams(res.data.teams || []);
         setValidationResult(validate(res.data));
+        try {
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, formatted);
+        } catch {}
         showToast(`Loaded shared plan from ${res.info.label}!`);
       } catch (err: any) {
         if (!cancelled) {

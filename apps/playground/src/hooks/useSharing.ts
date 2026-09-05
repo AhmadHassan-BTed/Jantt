@@ -94,6 +94,18 @@ export function useSharing({
     }
   }, [shareUrl, currentProjectName, showToast]);
 
+  const isWhatsAppSafe = useMemo(() => {
+    // WhatsApp GET /send query limit is 2,048 chars; keeping shareUrl under 1,900 ensures the full message sends cleanly
+    return shareUrl.length <= 1900;
+  }, [shareUrl]);
+
+  const handleWhatsAppShare = useCallback(() => {
+    if (!shareUrl) return;
+    const msg = `Check out this project plan: ${currentProjectName}\n\n${shareUrl}`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+  }, [shareUrl, currentProjectName]);
+
   return {
     showShareModal,
     setShowShareModal,
@@ -101,6 +113,8 @@ export function useSharing({
     setCopiedShareLink,
     shareUrl,
     handleCopyShareLink,
-    handleNativeShare
+    handleNativeShare,
+    handleWhatsAppShare,
+    isWhatsAppSafe
   };
 }

@@ -26,6 +26,7 @@ export * from "./exporter";
 export * from "./themes";
 export * from "./remote-sync";
 export * from "./reconciler";
+export * from "./share-coder";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
@@ -40,6 +41,7 @@ import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./expor
 import { themeManager } from "./themes";
 import { parseCloudUrl, fetchRemotePlan } from "./remote-sync";
 import { calculatePlanHash, reconcilePlans, mergePlansCommutative, purgeTombstones, maintainPlanData } from "./reconciler";
+import { compressPlanToUrlPayload, decompressPlanFromUrlPayload, cleanPlanForSharing } from "./share-coder";
 
 export const Jantt = {
   mount: renderJantt,
@@ -68,6 +70,9 @@ export const Jantt = {
   mergePlansCommutative,
   purgeTombstones,
   maintainPlanData,
+  cleanPlanForSharing,
+  compressPlanToUrlPayload,
+  decompressPlanFromUrlPayload,
   version: "1.2.0"
 };
 

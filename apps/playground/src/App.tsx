@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useCallback } from "react";
+import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { Jantt } from "@jantt/react";
 import { getTodayISODate, validate, type Person, type Team, type JanttData } from "@jantt/core";
 
@@ -35,7 +35,9 @@ export {
   createBlankPlan
 } from "./utils";
 
-import { loadInitialState, loadSavedProjects } from "./utils";
+import type { SavedProject } from "./types";
+import { STORAGE_KEYS } from "./constants";
+import { loadInitialState, loadSavedProjects, saveCustomProjects, decodeDataFromBase64Url } from "./utils";
 
 // Custom Hooks
 import { useToast } from "./hooks/useToast";
@@ -218,6 +220,70 @@ export function App() {
     },
     [editor, people, project, vault, dynamicSync, toast]
   );
+
+  // Dynamic Live URL Navigation without Reload (seamlessly handles in-place link clicks & address bar updates)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleHashOrUrlChange = () => {
+      try {
+        const hash = window.location.hash.replace(/^#/, "");
+        let dataPayload: string | null = null;
+        if (hash.startsWith("data=")) {
+          dataPayload = hash.substring(5);
+        } else {
+          const hp = new URLSearchParams(hash);
+          if (hp.get("data")) dataPayload = hp.get("data");
+        }
+        if (!dataPayload) {
+          const sp = new URLSearchParams(window.location.search);
+          dataPayload = sp.get("data");
+        }
+
+        if (dataPayload) {
+          const decoded = decodeDataFromBase64Url(dataPayload);
+          if (decoded) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sharedName = urlParams.get("name") || decoded.meta?.title || "Shared Plan";
+            const sharedId = `shared-${Date.now().toString(36)}`;
+            const sharedProj: SavedProject = {
+              id: sharedId,
+              name: sharedName,
+              updatedAt: new Date().toISOString(),
+              data: decoded,
+              source: "local"
+            };
+            project.setCustomProjects((prev) => {
+              const next = [sharedProj, ...prev.filter((p) => p.name !== sharedName)];
+              saveCustomProjects(next);
+              return next;
+            });
+            project.setActiveProjectId(sharedId);
+            editor.setParsedData(decoded);
+            people.setPeople(decoded.people || []);
+            people.setTeams(decoded.teams || []);
+            const formatted = JSON.stringify(decoded, null, 2);
+            editor.setJsonText(formatted);
+            editor.setValidationResult(validate(decoded));
+            try {
+              localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, formatted);
+              localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, sharedId);
+            } catch {}
+            toast.showToast(`Updated to shared plan version: ${sharedName}!`);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to dynamically update plan on URL change:", err);
+      }
+    };
+
+    window.addEventListener("hashchange", handleHashOrUrlChange);
+    window.addEventListener("popstate", handleHashOrUrlChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashOrUrlChange);
+      window.removeEventListener("popstate", handleHashOrUrlChange);
+    };
+  }, [editor, people, project, toast]);
 
   // Task Actions, Multi-Sort Engines, and View Filters
   const tasks = useTaskActions({
@@ -603,6 +669,9 @@ export function App() {
         handleCopyShareLink={sharing.handleCopyShareLink}
         copiedShareLink={sharing.copiedShareLink}
         handleNativeShare={sharing.handleNativeShare}
+        handleWhatsAppShare={sharing.handleWhatsAppShare}
+        isWhatsAppSafe={sharing.isWhatsAppSafe}
+        handleOpenLinkCloudModal={cloud.handleOpenLinkCloudModal}
         setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
         handleDownloadJson={editor.handleDownloadJson}
       />
