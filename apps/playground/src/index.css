@@ -3199,7 +3199,7 @@ path.jantt-dep-path.jantt-task-dimmed {
   font-weight: 600;
 }
 
-/* Mention Pills in Note Preview & Text */
+/* Mention Pills in Note Preview & Notion-Style Rich Editor */
 .note-mention-pill {
   display: inline-flex;
   align-items: center;
@@ -3209,21 +3209,152 @@ path.jantt-dep-path.jantt-task-dimmed {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
-  vertical-align: middle;
+  vertical-align: baseline;
+  margin: 0 2px;
   transition: all 0.15s ease;
   user-select: none;
+  cursor: default;
 }
 
 .note-mention-pill.is-person {
   background: rgba(56, 189, 248, 0.15);
   color: var(--jantt-accent, #0284C7);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
 .note-mention-pill.is-task {
   background: rgba(16, 185, 129, 0.14);
   color: #10B981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.jantt-theme-dark .note-mention-pill.is-person {
+  background: rgba(56, 189, 248, 0.22);
+  color: #7DD3FC;
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.jantt-theme-dark .note-mention-pill.is-task {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6EE7B7;
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.note-pill-avatar {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: #FFFFFF;
+  font-size: 9px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.note-pill-text {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Notion-style Live Rich Contenteditable Editor */
+.note-editor-contenteditable {
+  flex: 1;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--jantt-text, #0F172A);
+  font-family: inherit;
+  box-sizing: border-box;
+  min-height: 340px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.note-editor-contenteditable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--jantt-text-muted, #94A3B8);
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* Floating Autocomplete Dropdown (Notion-style near caret) */
+.note-floating-autocomplete {
+  position: fixed;
+  width: 290px;
+  max-height: 250px;
+  overflow-y: auto;
+  background: var(--jantt-surface-solid, #FFFFFF);
+  border: 1px solid var(--jantt-border-strong, #CBD5E1);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25), 0 4px 10px rgba(0, 0, 0, 0.12);
+  z-index: 10000;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jantt-theme-dark .note-floating-autocomplete {
+  background: #0B0F17;
+  border-color: #334155;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+}
+
+.note-autocomplete-header {
+  padding: 4px 8px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--jantt-text-muted, #64748B);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--jantt-border-subtle, #E2E8F0);
+  margin-bottom: 4px;
+}
+
+.note-autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--jantt-text, #0F172A);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: all 0.12s ease;
+}
+
+.note-autocomplete-item:hover,
+.note-autocomplete-item.is-selected {
+  background: var(--jantt-accent, #0284C7);
+  color: var(--jantt-accent-contrast, #FFFFFF);
+}
+
+.jantt-theme-dark .note-autocomplete-item.is-selected,
+.jantt-theme-dark .note-autocomplete-item:hover {
+  color: #000000;
+}
+
+.note-autocomplete-item:hover .note-autocomplete-sub,
+.note-autocomplete-item.is-selected .note-autocomplete-sub {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.note-autocomplete-sub {
+  font-size: 10.5px;
+  color: var(--jantt-text-muted, #64748B);
+  flex-shrink: 0;
 }
 
 /* Quick Mention & Attachment Toolbar inside Note Editor */
