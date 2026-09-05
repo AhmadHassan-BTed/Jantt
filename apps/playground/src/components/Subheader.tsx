@@ -79,12 +79,12 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 </optgroup>
               )}
               {customProjects.filter((p) => p.source === "linked").length > 0 && (
-                <optgroup label={`Linked Cloud Plans (${customProjects.filter((p) => p.source === "linked").length})`}>
+                <optgroup label={`Linked Cloud Feeds (${customProjects.filter((p) => p.source === "linked").length})`}>
                   {customProjects
                     .filter((p) => p.source === "linked")
                     .map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.data?.tasks?.length || 0} tasks)
+                        {p.name} (Cloud Feed • {p.data?.tasks?.length || 0} tasks)
                       </option>
                     ))}
                 </optgroup>
@@ -123,10 +123,10 @@ export const Subheader: React.FC<SubheaderProps> = ({
                   className="btn-plan-action is-sync"
                   onClick={handleSyncActiveProject}
                   disabled={isSyncingProject}
-                  title={`Re-fetch and update this plan from the cloud URL (Last synced: ${formatRelativeTime(activeProject.lastSyncedAt)})`}
+                  title={`Pull latest updates from cloud feed into your browser (Last synced: ${formatRelativeTime(activeProject.lastSyncedAt)}). Remote cloud file is a read-only feed; your local edits are kept in browser storage.`}
                 >
                   <RefreshCw size={12} className={isSyncingProject ? "spin-sync-icon" : ""} />
-                  <span>Sync</span>
+                  <span>Pull Cloud</span>
                 </button>
                 <button
                   type="button"

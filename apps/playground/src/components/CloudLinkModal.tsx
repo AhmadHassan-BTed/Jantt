@@ -107,6 +107,9 @@ export const CloudLinkModal: React.FC<CloudLinkModalProps> = ({
               <li>
                 <strong>Direct URL:</strong> Any public HTTPS endpoint serving valid Jantt JSON.
               </li>
+              <li>
+                <strong>Read-Only Feed:</strong> Changes to the remote cloud file are pulled in automatically. Any edits you make in this browser are stored as a local draft (not written to the remote cloud file).
+              </li>
             </ul>
           </div>
 

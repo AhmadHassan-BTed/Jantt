@@ -3847,6 +3847,12 @@ path.jantt-dep-path.jantt-task-dimmed {
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.btn-sync-badge.is-draft {
+  background: rgba(245, 158, 11, 0.12);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
 .sync-pulse-dot {
   width: 6.5px;
   height: 6.5px;

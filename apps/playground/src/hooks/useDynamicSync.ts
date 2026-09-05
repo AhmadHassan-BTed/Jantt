@@ -5,6 +5,7 @@ import {
   type Team,
   type ValidationResult,
   fetchRemotePlan,
+  parseCloudUrl,
   calculatePlanHash,
   reconcilePlans,
   validate
@@ -13,7 +14,7 @@ import type { SavedProject } from "../types";
 import { saveCustomProjects } from "../utils";
 import { STORAGE_KEYS } from "../constants";
 
-export type SyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict";
+export type SyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict" | "draft";
 
 interface UseDynamicSyncOptions {
   activeProjectId: string;
@@ -75,6 +76,41 @@ export function useDynamicSync({
   // Track base data per project when first loaded/synced
   const baseDataMapRef = useRef<Map<string, JanttData>>(new Map());
   const lastKnownRemoteHashMapRef = useRef<Map<string, string>>(new Map());
+
+  // Dynamically compute sync status: detect local un-uploadable edits on read-only cloud feeds
+  useEffect(() => {
+    const currentProj = customProjects.find((p) => p.id === activeProjectId);
+    if (!currentProj || currentProj.source !== "linked") {
+      setSyncStatus("in-sync");
+      setSyncMessage("Local plan saved");
+      setCloudProvider(undefined);
+      return;
+    }
+
+    if (currentProj.sourceUrl) {
+      try {
+        const info = parseCloudUrl(currentProj.sourceUrl);
+        setCloudProvider(info.provider);
+      } catch {}
+    }
+
+    if (!baseDataMapRef.current.has(currentProj.id)) {
+      baseDataMapRef.current.set(currentProj.id, currentProj.data);
+    }
+
+    const currentLocalData = parsedData || currentProj.data;
+    const localHash = calculatePlanHash(currentLocalData);
+    const baseData = baseDataMapRef.current.get(currentProj.id) || currentProj.data;
+    const baseHash = calculatePlanHash(baseData);
+
+    if (localHash !== baseHash) {
+      setSyncStatus("draft");
+      setSyncMessage("Local edits (Source is read-only)");
+    } else {
+      setSyncStatus("in-sync");
+      setSyncMessage("Up to date with Cloud");
+    }
+  }, [parsedData, activeProjectId, customProjects]);
 
   // BroadcastChannel for instant cross-tab coherence
   const channelRef = useRef<BroadcastChannel | null>(null);
@@ -142,7 +178,7 @@ export function useDynamicSync({
       const prevHash = lastKnownRemoteHashMapRef.current.get(currentProj.id) || "";
       if (!isBackground) {
         setSyncStatus("syncing");
-        setSyncMessage("Checking remote plan...");
+        setSyncMessage("Pulling cloud updates...");
       }
 
       try {
@@ -157,22 +193,29 @@ export function useDynamicSync({
           setCloudProvider(res.info.provider);
         }
 
+        const currentLocalData = parsedDataRef.current || currentProj.data;
+        const localHash = calculatePlanHash(currentLocalData);
+        const baseData = baseDataMapRef.current.get(currentProj.id) || currentProj.data;
+        const baseHash = calculatePlanHash(baseData);
+        const hasLocalEdits = localHash !== baseHash;
+
         // If remote file is unchanged according to content hash, nothing to merge
         if (res.notModified) {
-          setSyncStatus("in-sync");
-          setLastSyncTime(new Date());
-          setSyncMessage(res.quotaShieldActive ? "In sync (Shield active)" : "In sync");
+          if (hasLocalEdits) {
+            setSyncStatus("draft");
+            setLastSyncTime(new Date());
+            setSyncMessage("Local edits (Cloud source is read-only)");
+          } else {
+            setSyncStatus("in-sync");
+            setLastSyncTime(new Date());
+            setSyncMessage(res.quotaShieldActive ? "Up to date (Shield active)" : "Up to date with Cloud");
+          }
           return;
         }
 
         const remoteData = res.data;
         const remoteHash = res.contentHash;
         lastKnownRemoteHashMapRef.current.set(currentProj.id, remoteHash);
-
-        const currentLocalData = parsedDataRef.current || currentProj.data;
-        const localHash = calculatePlanHash(currentLocalData);
-        const baseData = baseDataMapRef.current.get(currentProj.id) || currentProj.data;
-        const baseHash = calculatePlanHash(baseData);
 
         // Case 1: Local made no changes since base -> adopt remote directly!
         if (localHash === baseHash) {
@@ -206,8 +249,8 @@ export function useDynamicSync({
 
           setSyncStatus("in-sync");
           setLastSyncTime(new Date());
-          setSyncMessage(res.quotaShieldActive ? "Updated (Shield active)" : "Updated from collaborator");
-          showToast(`Synced latest updates from ${res.info.label}!`);
+          setSyncMessage(res.quotaShieldActive ? "Up to date (Shield active)" : "Up to date with Cloud");
+          showToast(`Pulled latest updates from ${res.info.label}! (Cloud source is read-only)`);
           return;
         }
 

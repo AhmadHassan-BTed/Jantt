@@ -113,7 +113,40 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
   };
 }
 
+/**
+ * Compares two cloud URLs to determine if they reference the identical remote resource.
+ * Intelligently recognizes identical Google Drive files (matching file IDs across /view, /open, /uc endpoints),
+ * GitHub files (matching repo & branch paths), Dropbox links, and normalized URLs.
+ */
+export function isMatchingCloudUrl(urlA?: string | null, urlB?: string | null): boolean {
+  if (!urlA || !urlB) return false;
+  const a = urlA.trim();
+  const b = urlB.trim();
+  if (a === b) return true;
+
+  try {
+    const infoA = parseCloudUrl(a);
+    const infoB = parseCloudUrl(b);
+
+    if (infoA.provider !== infoB.provider) return false;
+
+    if (infoA.provider === "google-drive") {
+      return !!infoA.fileId && infoA.fileId === infoB.fileId;
+    }
+
+    if (infoA.downloadUrl === infoB.downloadUrl) return true;
+  } catch {
+    // Fall back to clean URL comparison
+  }
+
+  // Fallback: strip query params, hash and trailing slash
+  const cleanA = a.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
+  const cleanB = b.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
+  return cleanA === cleanB;
+}
+
 // ---------------------------------------------------------------------------
+
 // CORS-aware fetch helper
 // ---------------------------------------------------------------------------
 

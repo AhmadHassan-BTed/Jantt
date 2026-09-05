@@ -72,9 +72,24 @@ export function useProjectState({
       } catch {}
 
       let targetData: JanttData = DEFAULT_TEMPLATE.data;
-      if (projectId !== "default") {
-        const found = customProjects.find((p) => p.id === projectId);
-        if (found) targetData = found.data;
+      const found = projectId !== "default" ? customProjects.find((p) => p.id === projectId) : null;
+      if (found) {
+        targetData = found.data;
+      }
+
+      if (typeof window !== "undefined") {
+        try {
+          const url = new URL(window.location.href);
+          if (found && found.source === "linked" && found.sourceUrl) {
+            url.searchParams.set("url", found.sourceUrl);
+            url.searchParams.delete("data");
+            url.searchParams.delete("name");
+            url.hash = "";
+          } else {
+            url.searchParams.delete("url");
+          }
+          window.history.replaceState(null, "", url.toString());
+        } catch {}
       }
 
       const formatted = JSON.stringify(targetData, null, 2);
