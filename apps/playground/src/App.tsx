@@ -452,6 +452,8 @@ export function App() {
                   <NotesView
                     parsedData={editor.parsedData}
                     handleChartCommit={editor.handleChartCommit}
+                    effectivePeople={people.effectivePeople}
+                    teams={people.teams}
                   />
                 )}
               </>

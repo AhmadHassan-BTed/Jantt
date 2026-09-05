@@ -172,8 +172,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   fontWeight: 700,
                   padding: "1px 5px",
                   borderRadius: "10px",
-                  background: activeView === "notes" ? "rgba(255,255,255,0.28)" : "var(--jantt-border)",
-                  color: activeView === "notes" ? "#FFFFFF" : "var(--jantt-text-muted)",
+                  background: activeView === "notes" ? "rgba(0,0,0,0.18)" : "var(--jantt-border)",
+                  color: activeView === "notes" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)",
                   marginLeft: "2px"
                 }}
               >

@@ -49,6 +49,7 @@ export interface NoteItem {
   pinned?: boolean;
   category?: string;
   tags?: string[];
+  task_ids?: string[]; // Attached task IDs
   [key: string]: unknown;
 }
 

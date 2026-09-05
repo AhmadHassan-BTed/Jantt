@@ -21,10 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Diagnostic issues drawer detecting Missing Logic, Negative Float, High Float ($>44$d), and Out-of-Sequence tasks with actionable advice.
 - **PERT 3-Point Risk & Confidence Engine**:
   - Beta-distribution expected duration ($\mu = \frac{O + 4M + P}{6}$) and Central Limit Theorem normal distribution confidence intervals ($Z$-score).
-- **Shared Project Notes Workspace in JSON**:
-  - Root `"notes"` collection in Jantt JSON with support for titles, markdown content, color tints, tags, and pinning.
-  - Dedicated Notes view featuring responsive gallery cards, instant search, and full markdown editor.
+- **Shared Project Notes Workspace & Task Attachments**:
+  - Root `"notes"` collection in Jantt JSON with support for titles, markdown content, color tints, tags, pinning, and `task_ids` task attachments.
+  - Interactive `@person` and `/task-id` mentions with real-time highlighted pills in Markdown preview mode.
+  - Sectioned views for Attached Tasks, Mentioned Tasks, and Mentioned People with 1-click attach/detach actions and quick insertion toolbar.
   - Persistent active note state: open notes remain opened across tab transitions and browser reloads with safe flush on unmount.
+- **Concise & Streamlined Feature Matrix**:
+  - Re-architected README.md and documentation with clear visual tables placing interactive human features up front and complex mathematical algorithms down below.
 - **Centralized Data & Persistence Navigation**:
   - Removed cluttered standalone Auto-Save and Import/Export buttons from the top navbar.
   - Consolidated Import JSON, Export JSON, Export CSV, and Auto-Save cadence into the Gantt chart toolbar's Settings popover and the Auto-Save & Storage modal.

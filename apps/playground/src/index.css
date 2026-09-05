@@ -400,7 +400,13 @@ select option,
 
 .btn-plan-action.is-add:hover {
   background: var(--jantt-accent, #38BDF8);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
+}
+
+.jantt-theme-dark .btn-plan-action.is-add:hover,
+.jantt-theme-nordic-frost .btn-plan-action.is-add:hover,
+.jantt-theme-cyber-emerald .btn-plan-action.is-add:hover {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .btn-plan-action.is-share {
@@ -552,7 +558,7 @@ select option,
 
 .btn-nav-primary {
   background: var(--jantt-accent, #38BDF8);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   border-color: var(--jantt-accent, #38BDF8);
   font-weight: 700;
 }
@@ -569,9 +575,12 @@ select option,
   color: #000000;
 }
 
+.jantt-theme-nordic-frost .btn-nav-primary {
+  color: #031326;
+}
+
 .jantt-theme-midnight-rose .btn-nav-primary,
 .jantt-theme-sunset-crimson .btn-nav-primary,
-.jantt-theme-nordic-frost .btn-nav-primary,
 .jantt-theme-beenie .btn-nav-primary {
   color: #FFFFFF;
 }
@@ -608,7 +617,7 @@ select option,
   gap: 6px;
   background: var(--jantt-accent, #0284C7);
   border: 1px solid var(--jantt-accent, #0284C7);
-  color: var(--jantt-btn-text, #FFFFFF);
+  color: var(--jantt-accent-contrast, #FFFFFF);
   padding: 0 14px;
   height: 32px;
   border-radius: 8px;
@@ -633,9 +642,12 @@ select option,
   color: #000000;
 }
 
+.jantt-theme-nordic-frost .btn-prompt {
+  color: #031326;
+}
+
 .jantt-theme-midnight-rose .btn-prompt,
 .jantt-theme-sunset-crimson .btn-prompt,
-.jantt-theme-nordic-frost .btn-prompt,
 .jantt-theme-beenie .btn-prompt {
   color: #FFFFFF;
 }
@@ -1959,7 +1971,13 @@ path.jantt-dep-path.jantt-task-dimmed {
 
 .kanban-sort-dir-btn:hover {
   background: var(--jantt-accent, #0284C7);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
+}
+
+.jantt-theme-dark .kanban-sort-dir-btn:hover,
+.jantt-theme-nordic-frost .kanban-sort-dir-btn:hover,
+.jantt-theme-cyber-emerald .kanban-sort-dir-btn:hover {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .kanban-sort-remove-btn {
@@ -2792,7 +2810,7 @@ path.jantt-dep-path.jantt-task-dimmed {
   align-items: center;
   gap: 6px;
   background: var(--jantt-accent, #0284C7);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   border: none;
   border-radius: 8px;
   padding: 6px 14px;
@@ -2800,6 +2818,12 @@ path.jantt-dep-path.jantt-task-dimmed {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.jantt-theme-dark .btn-create-note,
+.jantt-theme-nordic-frost .btn-create-note,
+.jantt-theme-cyber-emerald .btn-create-note {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .btn-create-note:hover {
@@ -2865,8 +2889,14 @@ path.jantt-dep-path.jantt-task-dimmed {
 
 .note-card-create-prompt:hover .note-create-icon-wrap {
   background: var(--jantt-accent, #0284C7);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   border-color: var(--jantt-accent, #0284C7);
+}
+
+.jantt-theme-dark .note-card-create-prompt:hover .note-create-icon-wrap,
+.jantt-theme-nordic-frost .note-card-create-prompt:hover .note-create-icon-wrap,
+.jantt-theme-cyber-emerald .note-card-create-prompt:hover .note-create-icon-wrap {
+  color: var(--jantt-accent-contrast, #000000);
 }
 
 .note-card-header {
@@ -3167,6 +3197,322 @@ path.jantt-dep-path.jantt-task-dimmed {
   font-size: 15px;
   margin: 12px 0 4px 0;
   font-weight: 600;
+}
+
+/* Mention Pills in Note Preview & Text */
+.note-mention-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.note-mention-pill.is-person {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--jantt-accent, #0284C7);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.note-mention-pill.is-task {
+  background: rgba(16, 185, 129, 0.14);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* Quick Mention & Attachment Toolbar inside Note Editor */
+.note-quick-tools-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--jantt-surface, #F1F5F9);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+
+.note-quick-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  background: var(--jantt-bg, #FFFFFF);
+  border: 1px solid var(--jantt-border, #CBD5E1);
+  border-radius: 6px;
+  color: var(--jantt-text, #0F172A);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.note-quick-tool-btn:hover {
+  border-color: var(--jantt-accent, #0284C7);
+  color: var(--jantt-accent, #0284C7);
+  background: var(--jantt-surface-hover, rgba(56, 189, 248, 0.08));
+}
+
+/* Sectioned Container for Attached & Mentioned Entities */
+.note-sections-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--jantt-border, #E2E8F0);
+}
+
+.note-section-card {
+  background: var(--jantt-surface-solid, #F8FAFC);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.note-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.note-section-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--jantt-text, #0F172A);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.note-section-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 100px;
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
+  color: var(--jantt-accent, #0284C7);
+  border: 1px solid var(--jantt-border, #CBD5E1);
+}
+
+.note-entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.note-task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--jantt-bg, #FFFFFF);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.note-task-row:hover {
+  border-color: var(--jantt-accent, #0284C7);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.note-task-info-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.note-task-id-tag {
+  font-family: var(--jantt-font-mono, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--jantt-surface, #F1F5F9);
+  color: var(--jantt-text-muted, #64748B);
+  border: 1px solid var(--jantt-border, #CBD5E1);
+  flex-shrink: 0;
+}
+
+.note-task-label-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--jantt-text, #0F172A);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-task-info-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.note-task-status-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.note-task-status-tag.is-completed {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+}
+
+.note-task-status-tag.is-in-progress {
+  background: rgba(56, 189, 248, 0.15);
+  color: #0284C7;
+}
+
+.note-task-status-tag.is-blocked {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+}
+
+.note-task-status-tag.is-pending {
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748B;
+}
+
+.note-detach-btn {
+  background: transparent;
+  border: none;
+  color: var(--jantt-text-muted, #94A3B8);
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.note-detach-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+}
+
+.note-person-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--jantt-bg, #FFFFFF);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 8px;
+}
+
+.note-person-avatar-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Dropdown Pickers */
+.note-picker-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  width: 320px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--jantt-surface-solid, #FFFFFF);
+  border: 1px solid var(--jantt-border-strong, #CBD5E1);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.note-picker-search-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 6px;
+  background: var(--jantt-bg, #F8FAFC);
+  color: var(--jantt-text, #0F172A);
+  font-size: 12px;
+  margin-bottom: 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.note-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--jantt-text, #0F172A);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 12px;
+  transition: background 0.12s ease;
+}
+
+.note-picker-item:hover {
+  background: var(--jantt-surface-hover, rgba(56, 189, 248, 0.1));
+  color: var(--jantt-accent, #0284C7);
+}
+
+/* Gallery Card Attached Badges */
+.note-card-badges-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.note-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: var(--jantt-surface, #F1F5F9);
+  color: var(--jantt-text-muted, #64748B);
+  border: 1px solid var(--jantt-border, #E2E8F0);
 }
 
 
