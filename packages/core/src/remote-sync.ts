@@ -130,11 +130,17 @@ function getWorkerUrl(): string {
   return DEFAULT_WORKER_URL;
 }
 
+interface FetchRawResult {
+  text: string;
+  quotaShieldActive?: boolean;
+  source?: string;
+}
+
 /**
  * Fetches a URL, routing through our own Cloudflare Worker proxy
  * when the provider is known to block CORS (Google Drive, Dropbox).
  */
-async function fetchWithCorsFallback(url: string, provider: CloudProviderType): Promise<string> {
+async function fetchWithCorsFallback(url: string, provider: CloudProviderType): Promise<FetchRawResult> {
   // Google Drive ALWAYS blocks CORS — go straight to our worker
   if (provider === "google-drive") {
     return fetchViaWorker(url);
@@ -146,7 +152,10 @@ async function fetchWithCorsFallback(url: string, provider: CloudProviderType): 
       method: "GET",
       headers: { Accept: "application/json, text/plain, */*" }
     });
-    if (res.ok) return res.text();
+    if (res.ok) {
+      const text = await res.text();
+      return { text, quotaShieldActive: false, source: "direct" };
+    }
   } catch {
     // CORS / network error — fall through to worker
   }
@@ -158,7 +167,7 @@ async function fetchWithCorsFallback(url: string, provider: CloudProviderType): 
 /**
  * Fetches via our Cloudflare Worker CORS proxy.
  */
-async function fetchViaWorker(targetUrl: string): Promise<string> {
+async function fetchViaWorker(targetUrl: string): Promise<FetchRawResult> {
   const workerBase = getWorkerUrl();
   const proxyUrl = `${workerBase}?url=${encodeURIComponent(targetUrl)}`;
 
@@ -176,9 +185,17 @@ async function fetchViaWorker(targetUrl: string): Promise<string> {
     );
   }
 
+  const quotaShieldActive = Boolean(res.headers?.get?.("X-Jantt-Quota-Shield") === "active");
+  const source = res.headers?.get?.("X-Jantt-Cache") || undefined;
+
   if (!res.ok) {
     if (res.status === 404) {
       throw new Error("File not found (404). Verify the share link is correct and the file is publicly accessible.");
+    }
+    if (res.status === 429) {
+      throw new Error(
+        "Google Drive download quota temporarily exceeded. The serverless Quota Shield is pacing requests."
+      );
     }
     if (res.status === 403 || res.status === 401) {
       throw new Error(
@@ -188,7 +205,8 @@ async function fetchViaWorker(targetUrl: string): Promise<string> {
     throw new Error(`Proxy returned error ${res.status}: ${res.statusText}`);
   }
 
-  return res.text();
+  const text = await res.text();
+  return { text, quotaShieldActive, source };
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +219,8 @@ export interface RemoteFetchResult {
   taskCount: number;
   contentHash: string;
   notModified?: boolean;
+  quotaShieldActive?: boolean;
+  source?: string;
 }
 
 /**
@@ -214,9 +234,9 @@ export async function fetchRemotePlan(
 ): Promise<RemoteFetchResult> {
   const info = parseCloudUrl(url);
 
-  let rawText: string;
+  let rawResult: FetchRawResult;
   try {
-    rawText = await fetchWithCorsFallback(info.downloadUrl, info.provider);
+    rawResult = await fetchWithCorsFallback(info.downloadUrl, info.provider);
   } catch (err: any) {
     if (info.provider === "google-drive") {
       throw new Error(
@@ -228,6 +248,8 @@ export async function fetchRemotePlan(
     }
     throw err;
   }
+
+  const rawText = rawResult.text;
 
   // Detect HTML error pages (private Drive links, login redirects, etc.)
   if (rawText.trimStart().startsWith("<!DOCTYPE") || rawText.trimStart().startsWith("<html")) {
@@ -273,6 +295,8 @@ export async function fetchRemotePlan(
     title,
     taskCount,
     contentHash,
-    notModified
+    notModified,
+    quotaShieldActive: rawResult.quotaShieldActive,
+    source: rawResult.source
   };
 }

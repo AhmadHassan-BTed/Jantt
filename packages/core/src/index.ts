@@ -39,7 +39,7 @@ import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
 import { themeManager } from "./themes";
 import { parseCloudUrl, fetchRemotePlan } from "./remote-sync";
-import { calculatePlanHash, reconcilePlans } from "./reconciler";
+import { calculatePlanHash, reconcilePlans, mergePlansCommutative, purgeTombstones } from "./reconciler";
 
 export const Jantt = {
   mount: renderJantt,
@@ -65,7 +65,9 @@ export const Jantt = {
   fetchRemotePlan,
   calculatePlanHash,
   reconcilePlans,
-  version: "1.1.0"
+  mergePlansCommutative,
+  purgeTombstones,
+  version: "1.2.0"
 };
 
 
