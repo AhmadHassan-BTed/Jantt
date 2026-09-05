@@ -20,7 +20,7 @@ import {
   ChevronDown,
   ArrowUpFromLine,
   ArrowDownToLine,
-  Settings
+  Save
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { SavedProject, ActiveView, EffectivePerson } from "../types";
@@ -415,15 +415,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           </select>
         </div>
 
-        {/* Settings Button */}
+        {/* Auto-Save & Storage Button */}
         <button
           type="button"
           className="btn-nav"
           onClick={() => setShowAutoSaveModal(true)}
-          title="Open Settings & Auto-Save (Cadence, Storage, Engine Version)"
+          title="Configure Auto-Save Cadence & Storage"
         >
-          <Settings size={13} />
-          <span>Settings</span>
+          <Save size={13} />
+          <span>Auto-Save</span>
         </button>
 
         {/* Prompt AI Button */}
