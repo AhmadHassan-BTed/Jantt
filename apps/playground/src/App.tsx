@@ -55,6 +55,7 @@ import { useDynamicSync } from "./hooks/useDynamicSync";
 
 // View & Modal Components
 import { Navbar } from "./components/Navbar";
+import { Subheader } from "./components/Subheader";
 import { EditorPane } from "./components/EditorPane";
 import { DateFilterBar } from "./components/DateFilterBar";
 import { KanbanView } from "./components/KanbanView";
@@ -303,6 +304,11 @@ export function App() {
         syncMessage={dynamicSync.syncMessage}
         isQuotaShieldActive={dynamicSync.isQuotaShieldActive}
         cloudProvider={dynamicSync.cloudProvider}
+        isGoogleDrive={Boolean(
+          dynamicSync.cloudProvider === "google-drive" ||
+          (project.customProjects.find((p) => p.id === project.activeProjectId)?.source === "linked" &&
+           project.customProjects.find((p) => p.id === project.activeProjectId)?.sourceUrl?.includes("drive.google.com"))
+        )}
         snapshotsCount={vault.snapshots.length}
         setShowVersionHistoryModal={vault.setShowVersionHistoryModal}
         isSidebarCollapsed={sidebar.isSidebarCollapsed}
@@ -310,6 +316,14 @@ export function App() {
         activeView={viewport.activeView}
         setActiveView={viewport.setActiveView}
         notesCount={editor.parsedData?.notes?.length || 0}
+        fileInputRef={project.fileInputRef}
+        handleImportJsonFile={project.handleImportJsonFile}
+        selectedThemeId={viewport.selectedThemeId}
+        setSelectedThemeId={viewport.setSelectedThemeId}
+        setShowPromptModal={setShowPromptModal}
+      />
+
+      <Subheader
         activeProjectId={project.activeProjectId}
         customProjects={project.customProjects}
         handleSelectProject={project.handleSelectProject}
@@ -323,11 +337,6 @@ export function App() {
         handleDeleteProject={project.handleDeleteProject}
         setShowPeopleModal={people.setShowPeopleModal}
         effectivePeople={people.effectivePeople}
-        fileInputRef={project.fileInputRef}
-        handleImportJsonFile={project.handleImportJsonFile}
-        selectedThemeId={viewport.selectedThemeId}
-        setSelectedThemeId={viewport.setSelectedThemeId}
-        setShowPromptModal={setShowPromptModal}
       />
 
       <main className="workspace-main">
