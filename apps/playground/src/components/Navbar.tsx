@@ -12,7 +12,9 @@ import {
   StickyNote,
   History,
   ShieldCheck,
-  HardDrive
+  HardDrive,
+  Cloud,
+  AlertTriangle
 } from "lucide-react";
 import { JanttLogo } from "./JanttLogo";
 import type { ActiveView } from "../types";
@@ -95,9 +97,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         {syncStatus && (
           <div
             className={`btn-sync-badge is-${syncStatus}`}
-            title={`Real-Time Dynamic Collaboration Sync: ${syncMessage || "Live"} • Continuous change detection and collision prevention active`}
+            title={
+              syncStatus === "draft"
+                ? "This linked cloud source is read-only (view access). Your edits are saved in browser storage, but not written to Google Drive."
+                : `Real-Time Collaboration Sync: ${syncMessage || "Live"} • Continuous change detection active`
+            }
           >
-            <span className="sync-pulse-dot" />
+            {syncStatus === "draft" ? (
+              <AlertTriangle size={11} style={{ marginRight: 4, flexShrink: 0 }} />
+            ) : (
+              <span className="sync-pulse-dot" />
+            )}
             <span>{syncMessage || "In sync"}</span>
           </div>
         )}
@@ -106,10 +116,21 @@ export const Navbar: React.FC<NavbarProps> = ({
         {isGdrive && (
           <div
             className="btn-cloud-source-badge is-google-drive"
-            title="Linked to Google Drive JSON file share"
+            title="Linked to Google Drive JSON file (Read-Only Cloud Feed). Changes you make are stored locally in your browser."
           >
             <HardDrive size={11} />
-            <span>Google Drive</span>
+            <span>Google Drive (View Feed)</span>
+          </div>
+        )}
+
+        {/* Other Cloud Provider Indicator */}
+        {cloudProvider && !isGdrive && (
+          <div
+            className="btn-cloud-source-badge"
+            title={`Linked to ${cloudProvider} file (Read-Only Cloud Feed). Changes you make are stored locally in your browser.`}
+          >
+            <Cloud size={11} />
+            <span>{cloudProvider} (View Feed)</span>
           </div>
         )}
 

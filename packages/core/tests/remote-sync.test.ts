@@ -172,4 +172,35 @@ describe("Cloud Remote Sync & URL Parsing", () => {
       await expect(fetchRemotePlan("https://example.com/bad.json")).rejects.toThrow("not a valid Jantt plan");
     });
   });
+
+  describe("isMatchingCloudUrl", () => {
+    it("matches identical Google Drive files across sharing params and endpoints", async () => {
+      const { isMatchingCloudUrl } = await import("../src/remote-sync");
+      const urlA = "https://drive.google.com/file/d/1eYx1TQ51DcKq9xbIO7c-tlmjJXQ1Bf6e/view?usp=sharing";
+      const urlB = "https://drive.google.com/file/d/1eYx1TQ51DcKq9xbIO7c-tlmjJXQ1Bf6e/view";
+      const urlC = "https://drive.google.com/open?id=1eYx1TQ51DcKq9xbIO7c-tlmjJXQ1Bf6e";
+      const urlDifferent = "https://drive.google.com/file/d/99999DifferentFileId/view?usp=sharing";
+
+      expect(isMatchingCloudUrl(urlA, urlB)).toBe(true);
+      expect(isMatchingCloudUrl(urlA, urlC)).toBe(true);
+      expect(isMatchingCloudUrl(urlB, urlC)).toBe(true);
+      expect(isMatchingCloudUrl(urlA, urlDifferent)).toBe(false);
+    });
+
+    it("matches identical GitHub URLs across blob and raw forms", async () => {
+      const { isMatchingCloudUrl } = await import("../src/remote-sync");
+      const blob = "https://github.com/org/repo/blob/main/schedule.json";
+      const raw = "https://raw.githubusercontent.com/org/repo/main/schedule.json";
+      expect(isMatchingCloudUrl(blob, raw)).toBe(true);
+    });
+
+    it("handles trailing slashes, case and query differences", async () => {
+      const { isMatchingCloudUrl } = await import("../src/remote-sync");
+      expect(isMatchingCloudUrl("https://example.com/plan.json?v=1", "https://example.com/plan.json")).toBe(true);
+      expect(isMatchingCloudUrl("https://example.com/plan.json/", "https://example.com/plan.json")).toBe(true);
+      expect(isMatchingCloudUrl("", "https://example.com")).toBe(false);
+      expect(isMatchingCloudUrl(null, "https://example.com")).toBe(false);
+    });
+  });
 });
+

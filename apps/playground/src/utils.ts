@@ -12,7 +12,8 @@ import {
   addDays,
   resolveTaskAssignee,
   compressPlanToUrlPayload,
-  decompressPlanFromUrlPayload
+  decompressPlanFromUrlPayload,
+  isMatchingCloudUrl
 } from "@jantt/core";
 import type {
   SavedProject,
@@ -270,8 +271,23 @@ export function loadInitialState() {
         initialScale = scaleParam;
       }
 
+      const cloudUrl = urlParams.get("url");
+      if (cloudUrl) {
+        const existingLinked = savedProjects.find(
+          (p) => p.source === "linked" && isMatchingCloudUrl(p.sourceUrl, cloudUrl)
+        );
+        if (existingLinked) {
+          activeProjectId = existingLinked.id;
+          initialParsed = existingLinked.data;
+          initialJson = JSON.stringify(existingLinked.data, null, 2);
+          try {
+            localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, existingLinked.id);
+          } catch {}
+        }
+      }
+
       let dataPayload: string | null = null;
-      if (hash) {
+      if (hash && !cloudUrl) {
         const rawHash = hash.replace(/^#/, "");
         if (rawHash.startsWith("data=")) {
           dataPayload = rawHash.substring(5);
@@ -280,11 +296,15 @@ export function loadInitialState() {
           if (hp.get("data")) dataPayload = hp.get("data");
         }
       }
-      if (!dataPayload) {
+      if (!dataPayload && !cloudUrl) {
         dataPayload = urlParams.get("data");
       }
 
-      if (dataPayload) {
+      // Only import as local if not actively viewing or linking a cloud plan
+      const activeCurrent = savedProjects.find((p) => p.id === activeProjectId);
+      const isCurrentlyLinked = activeCurrent?.source === "linked" || !!cloudUrl;
+
+      if (dataPayload && !isCurrentlyLinked) {
         const decoded = decodeDataFromBase64Url(dataPayload);
         if (decoded) {
           initialParsed = decoded;
@@ -298,7 +318,10 @@ export function loadInitialState() {
             data: decoded,
             source: "local"
           };
-          const existingIndex = savedProjects.findIndex((p) => p.name === sharedName && p.data?.tasks?.length === decoded.tasks?.length);
+          // Never overwrite a linked cloud project with a local copy
+          const existingIndex = savedProjects.findIndex(
+            (p) => p.name === sharedName && p.source !== "linked" && p.data?.tasks?.length === decoded.tasks?.length
+          );
           if (existingIndex >= 0) {
             savedProjects[existingIndex] = sharedProj;
           } else {

@@ -235,15 +235,16 @@ export function App() {
           const hp = new URLSearchParams(hash);
           if (hp.get("data")) dataPayload = hp.get("data");
         }
-        if (!dataPayload) {
-          const sp = new URLSearchParams(window.location.search);
-          dataPayload = sp.get("data");
-        }
+        const urlParams = new URLSearchParams(window.location.search);
+        // Never import hash payload as local plan if ?url= cloud link is active
+        if (urlParams.get("url")) return;
 
         if (dataPayload) {
+          const currentActive = project.customProjects.find((p) => p.id === project.activeProjectId);
+          if (currentActive?.source === "linked") return;
+
           const decoded = decodeDataFromBase64Url(dataPayload);
           if (decoded) {
-            const urlParams = new URLSearchParams(window.location.search);
             const sharedName = urlParams.get("name") || decoded.meta?.title || "Shared Plan";
             const sharedId = `shared-${Date.now().toString(36)}`;
             const sharedProj: SavedProject = {

@@ -7,6 +7,7 @@ import {
   type RemoteFetchResult,
   fetchRemotePlan,
   reconcilePlans,
+  isMatchingCloudUrl,
   validate
 } from "@jantt/core";
 import type { SavedProject } from "../types";
@@ -125,13 +126,25 @@ export function useCloudSync({
     try {
       localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
     } catch {}
+
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("url", result.info.originalUrl);
+        url.searchParams.delete("data");
+        url.searchParams.delete("name");
+        url.hash = "";
+        window.history.replaceState(null, "", url.toString());
+      } catch {}
+    }
+
     setJsonText(JSON.stringify(result.data, null, 2));
     setParsedData(result.data);
     setPeople(result.data.people || []);
     setTeams(result.data.teams || []);
     setValidationResult(validate(result.data));
     setShowLinkCloudModal(false);
-    showToast(`Linked "${newProj.name}" from ${result.info.label}!`);
+    showToast(`Linked "${newProj.name}" from ${result.info.label} (Live Read-Only Feed)`);
   }, [
     cloudPreviewResult,
     linkCloudUrl,
@@ -200,9 +213,9 @@ export function useCloudSync({
           reconcileResult.summary.tasksAdded +
           reconcileResult.summary.fieldsMerged;
         if (mergedTotal > 0) {
-          showToast(`Synced & cleanly merged ${mergedTotal} update(s) from ${res.info.label}!`);
+          showToast(`Pulled & cleanly merged ${mergedTotal} update(s) from ${res.info.label}!`);
         } else {
-          showToast(`Synced latest version from ${res.info.label}!`);
+          showToast(`Up to date with ${res.info.label}! (Cloud source is read-only)`);
         }
       }
     } catch (err: any) {
@@ -236,7 +249,7 @@ export function useCloudSync({
     const remoteUrl = params.get("url");
     if (!remoteUrl) return;
 
-    const existing = customProjects.find((p) => p.sourceUrl === remoteUrl);
+    const existing = customProjects.find((p) => p.source === "linked" && isMatchingCloudUrl(p.sourceUrl, remoteUrl));
     if (existing) {
       if (activeProjectId !== existing.id) {
         handleSelectProject(existing.id);

@@ -39,7 +39,7 @@ import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS }
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
 import { themeManager } from "./themes";
-import { parseCloudUrl, fetchRemotePlan } from "./remote-sync";
+import { parseCloudUrl, fetchRemotePlan, isMatchingCloudUrl } from "./remote-sync";
 import { calculatePlanHash, reconcilePlans, mergePlansCommutative, purgeTombstones, maintainPlanData } from "./reconciler";
 import { compressPlanToUrlPayload, decompressPlanFromUrlPayload, cleanPlanForSharing } from "./share-coder";
 
@@ -65,6 +65,7 @@ export const Jantt = {
   themeManager,
   parseCloudUrl,
   fetchRemotePlan,
+  isMatchingCloudUrl,
   calculatePlanHash,
   reconcilePlans,
   mergePlansCommutative,
