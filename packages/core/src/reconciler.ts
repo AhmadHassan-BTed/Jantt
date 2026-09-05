@@ -770,11 +770,12 @@ export function reconcilePlans(
     ...(remote.categories || {})
   };
 
-  // Optional Tombstone Pruning
+  // Automated Tombstone Pruning (Prevents JSON bloat while preserving convergence)
   let finalTasks = mergedTasks;
   let finalNotes = mergedNotes;
-  if (options?.purgeTombstones) {
-    const maxAge = options.tombstoneMaxAgeDays ?? 30;
+  const shouldPurge = options?.purgeTombstones !== false;
+  if (shouldPurge) {
+    const maxAge = options?.tombstoneMaxAgeDays ?? 30;
     const cutoff = Date.now() - maxAge * 24 * 60 * 60 * 1000;
     for (const [id, rec] of Array.from(tombstoneMap.entries())) {
       const ts = new Date(rec.deletedAt.split("#")[0]).getTime();
@@ -782,7 +783,34 @@ export function reconcilePlans(
         tombstoneMap.delete(id);
       }
     }
+    // Hard ceiling: retain at most 50 most recent tombstones to strictly avoid JSON payload bloat
+    const MAX_TOMBSTONES = 50;
+    if (tombstoneMap.size > MAX_TOMBSTONES) {
+      const sortedEntries = Array.from(tombstoneMap.entries()).sort((a, b) =>
+        compareCompositeTimestamps(b[1].deletedAt, a[1].deletedAt)
+      );
+      tombstoneMap.clear();
+      for (let i = 0; i < MAX_TOMBSTONES; i++) {
+        tombstoneMap.set(sortedEntries[i][0], sortedEntries[i][1]);
+      }
+    }
   }
+
+  // Strip empty fieldTimestamps on tasks and notes to keep JSON lean and unbloated
+  finalTasks = finalTasks.map((t) => {
+    if (t.fieldTimestamps && Object.keys(t.fieldTimestamps).length === 0) {
+      const { fieldTimestamps, ...rest } = t;
+      return rest as Task;
+    }
+    return t;
+  });
+  finalNotes = finalNotes.map((n) => {
+    if (n.fieldTimestamps && Object.keys(n.fieldTimestamps).length === 0) {
+      const { fieldTimestamps, ...rest } = n;
+      return rest as NoteItem;
+    }
+    return n;
+  });
 
   // ===========================================================================
   // 6. Assemble Merged Plan
@@ -800,7 +828,7 @@ export function reconcilePlans(
       title: remote.meta?.title || local.meta?.title || "Project Plan",
       revision: nextRevision,
       updatedAt: nowIso,
-      tombstones: Object.fromEntries(tombstoneMap.entries()),
+      tombstones: tombstoneMap.size > 0 ? Object.fromEntries(tombstoneMap.entries()) : undefined,
       sync: {
         revision: nextRevision,
         contentHash: "",
@@ -881,10 +909,120 @@ export function purgeTombstones(data: JanttData, maxAgeDays = 30): JanttData {
       }
     }
   }
+  const hasTombstones = Object.keys(nextTombstones).length > 0;
   return {
     ...data,
-    meta: data.meta ? { ...data.meta, tombstones: nextTombstones } : undefined,
+    meta: data.meta ? { ...data.meta, tombstones: hasTombstones ? nextTombstones : undefined } : undefined,
     tasks: purgedTasks,
     notes: purgedNotes
   };
+}
+
+/**
+ * Performs routine maintenance on a Jantt plan directly from its JSON structure:
+ * 1. Prunes expired tombstones (>30 days) and caps total tombstones to at most 50 to prevent JSON bloat.
+ * 2. Prunes dangling dependencies referencing deleted or nonexistent tasks.
+ * 3. Removes empty fieldTimestamps objects to minimize payload byte size.
+ * 4. Normalizes and re-syncs canonical 64-bit contentHash.
+ */
+export function maintainPlanData(
+  data: JanttData,
+  options?: { maxAgeDays?: number; maxTombstones?: number }
+): JanttData {
+  if (!data) return data;
+  const maxAge = options?.maxAgeDays ?? 30;
+  const maxTombstones = options?.maxTombstones ?? 50;
+  const cutoffMs = Date.now() - maxAge * 24 * 60 * 60 * 1000;
+
+  const tombstoneMap = new Map<string, { deletedAt: string; entityType?: string }>();
+  if (data.meta?.tombstones) {
+    for (const [id, rec] of Object.entries(data.meta.tombstones)) {
+      if (!rec?.deletedAt) continue;
+      const ts = new Date(rec.deletedAt.split("#")[0]).getTime();
+      if (isNaN(ts) || ts >= cutoffMs) {
+        tombstoneMap.set(id, rec);
+      }
+    }
+  }
+
+  (data.tasks || []).forEach((t) => {
+    if (t._deleted) {
+      const delAt = t.deletedAt || t.updatedAt || new Date().toISOString();
+      const ts = new Date(delAt.split("#")[0]).getTime();
+      if (isNaN(ts) || ts >= cutoffMs) {
+        tombstoneMap.set(t.id, { deletedAt: delAt, entityType: "task" });
+      }
+    }
+  });
+
+  if (tombstoneMap.size > maxTombstones) {
+    const sorted = Array.from(tombstoneMap.entries()).sort((a, b) =>
+      compareCompositeTimestamps(b[1].deletedAt, a[1].deletedAt)
+    );
+    tombstoneMap.clear();
+    for (let i = 0; i < maxTombstones; i++) {
+      tombstoneMap.set(sorted[i][0], sorted[i][1]);
+    }
+  }
+
+  const deletedIds = new Set(tombstoneMap.keys());
+  const activeTaskIdSet = new Set<string>(
+    (data.tasks || []).filter((t) => !t._deleted && !deletedIds.has(t.id)).map((t) => t.id)
+  );
+
+  const activeTasks: Task[] = (data.tasks || [])
+    .filter((t) => !t._deleted && !deletedIds.has(t.id))
+    .map((t) => {
+      let dependsOn = t.dependsOn;
+      if (dependsOn) {
+        const deps = Array.isArray(dependsOn)
+          ? dependsOn
+          : String(dependsOn).split(",").map((s) => s.trim()).filter(Boolean);
+        const pruned = deps.filter((d) => activeTaskIdSet.has(d) && !deletedIds.has(d) && d !== t.id);
+        dependsOn = pruned.length === 0 ? null : (pruned.length === 1 ? pruned[0] : pruned);
+      }
+
+      let fieldTimestamps = t.fieldTimestamps;
+      if (fieldTimestamps && Object.keys(fieldTimestamps).length === 0) {
+        fieldTimestamps = undefined;
+      }
+
+      return {
+        ...t,
+        dependsOn,
+        fieldTimestamps
+      };
+    });
+
+  const activeNotes: NoteItem[] = (data.notes || [])
+    .filter((n) => !n._deleted && !deletedIds.has(n.id))
+    .map((n) => {
+      let fieldTimestamps = n.fieldTimestamps;
+      if (fieldTimestamps && Object.keys(fieldTimestamps).length === 0) {
+        fieldTimestamps = undefined;
+      }
+      return {
+        ...n,
+        fieldTimestamps
+      };
+    });
+
+  const nextTombstones = tombstoneMap.size > 0 ? Object.fromEntries(tombstoneMap.entries()) : undefined;
+
+  const interim: JanttData = {
+    ...data,
+    meta: data.meta ? { ...data.meta, tombstones: nextTombstones } : undefined,
+    tasks: activeTasks,
+    notes: activeNotes
+  };
+
+  const finalHash = calculatePlanHash(interim);
+  if (interim.meta) {
+    interim.meta.contentHash = finalHash;
+    if (interim.meta.sync) {
+      interim.meta.sync.contentHash = finalHash;
+    }
+  }
+
+  return interim;
 }
