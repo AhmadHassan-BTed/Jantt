@@ -4564,3 +4564,41 @@ path.jantt-dep-path.jantt-task-dimmed {
   margin: auto 0;
 }
 
+/* Prevent child cards from capturing drag events during drag over columns */
+.plan-board-container.is-dragging-card .plan-card {
+  pointer-events: none !important;
+}
+
+.card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--jantt-text, #f8fafc);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+
+.card-menu-item:hover {
+  background: var(--jantt-surface-hover, rgba(56, 189, 248, 0.12));
+  color: var(--jantt-accent, #38bdf8);
+}
+
+.card-menu-item.is-danger:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #f87171 !important;
+}
+
+.card-menu-item.is-warning:hover {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+}
+
+
+

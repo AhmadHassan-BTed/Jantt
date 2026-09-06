@@ -92,7 +92,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 <option value="default">{DEFAULT_TEMPLATE.name}</option>
               </optgroup>
               {ownedRooms.length > 0 && (
-                <optgroup label={`👑 My Rooms (${ownedRooms.length})`}>
+                <optgroup label={`My Cloud Rooms (${ownedRooms.length})`}>
                   {ownedRooms.map((r) => (
                     <option key={`room-${r.roomId}`} value={`room-${r.roomId}`}>
                       {r.title} (Owner • {r.roomId})
@@ -101,7 +101,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 </optgroup>
               )}
               {sharedRooms.length > 0 && (
-                <optgroup label={`👥 Shared With Me (${sharedRooms.length})`}>
+                <optgroup label={`Shared With Me (${sharedRooms.length})`}>
                   {sharedRooms.map((r) => (
                     <option key={`room-${r.roomId}`} value={`room-${r.roomId}`}>
                       {r.title} (@{r.ownerUsername} • {r.role === "editor" ? "Editor" : "Viewer"})
