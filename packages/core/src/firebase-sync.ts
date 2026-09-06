@@ -124,6 +124,78 @@ export function normalizeUsername(raw: string): string {
 }
 
 /**
+ * Firebase Realtime Database Key Codec.
+ * Firebase RTDB prohibits keys containing: '.', '#', '$', '/', '[', or ']'.
+ * This codec reversibly transforms prohibited characters so any valid JSON/Jantt schema
+ * (including "$schema", category keys with dots/slashes, etc.) can be safely persisted
+ * and restored with 100% roundtrip fidelity.
+ */
+
+export function encodeRtdbKey(key: string): string {
+  if (key === "$schema") return "__schema";
+  return key
+    .replace(/~/g, "~0")
+    .replace(/\$/g, "~d")
+    .replace(/\./g, "~p")
+    .replace(/#/g, "~h")
+    .replace(/\//g, "~s")
+    .replace(/\[/g, "~b1")
+    .replace(/\]/g, "~b2");
+}
+
+export function decodeRtdbKey(key: string): string {
+  if (key === "__schema") return "$schema";
+  return key
+    .replace(/~b2/g, "]")
+    .replace(/~b1/g, "[")
+    .replace(/~s/g, "/")
+    .replace(/~h/g, "#")
+    .replace(/~p/g, ".")
+    .replace(/~d/g, "$")
+    .replace(/~0/g, "~");
+}
+
+/**
+ * Recursively encodes all object keys to be safe for Firebase Realtime Database.
+ */
+export function encodePlanForRtdb<T>(val: T): T {
+  if (val === null || val === undefined || typeof val !== "object") {
+    return val;
+  }
+
+  if (Array.isArray(val)) {
+    return val.map((item) => encodePlanForRtdb(item)) as unknown as T;
+  }
+
+  const encoded: Record<string, any> = {};
+  for (const [key, item] of Object.entries(val)) {
+    const safeKey = encodeRtdbKey(key);
+    encoded[safeKey] = encodePlanForRtdb(item);
+  }
+  return encoded as unknown as T;
+}
+
+/**
+ * Recursively decodes all object keys from Firebase Realtime Database back to their original form.
+ */
+export function decodePlanFromRtdb<T>(val: T): T {
+  if (val === null || val === undefined || typeof val !== "object") {
+    return val;
+  }
+
+  if (Array.isArray(val)) {
+    return val.map((item) => decodePlanFromRtdb(item)) as unknown as T;
+  }
+
+  const decoded: Record<string, any> = {};
+  for (const [key, item] of Object.entries(val)) {
+    const originalKey = decodeRtdbKey(key);
+    decoded[originalKey] = decodePlanFromRtdb(item);
+  }
+  return decoded as unknown as T;
+}
+
+/**
  * Generates clean, readable unique room identifier slug.
  */
 export function generateRoomSlug(prefix = "room"): string {

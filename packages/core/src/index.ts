@@ -50,7 +50,11 @@ import {
   subscribeToCloudRoom,
   normalizeUsername,
   generateRoomSlug,
-  sanitizeRoomId
+  sanitizeRoomId,
+  encodeRtdbKey,
+  decodeRtdbKey,
+  encodePlanForRtdb,
+  decodePlanFromRtdb
 } from "./firebase-sync";
 
 export const Jantt = {
@@ -92,6 +96,10 @@ export const Jantt = {
   normalizeUsername,
   generateRoomSlug,
   sanitizeRoomId,
+  encodeRtdbKey,
+  decodeRtdbKey,
+  encodePlanForRtdb,
+  decodePlanFromRtdb,
   version: "1.3.0"
 };
 
