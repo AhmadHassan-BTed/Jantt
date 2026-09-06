@@ -14,6 +14,7 @@ import {
   Sparkles
 } from "lucide-react";
 import type { SavedProject, ActiveView } from "../../types";
+import type { UserProfile } from "../../firebase";
 import {
   buildRoomViewerUrl,
   buildRoomCollaboratorUrl,
@@ -33,6 +34,7 @@ interface CloudRoomModalProps {
   activeRoomId?: string | null;
   activeRoomRole?: "collaborator" | "viewer" | "none";
   activeSecretKey?: string | null;
+  currentUserProfile?: UserProfile | null;
 }
 
 export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
@@ -47,7 +49,8 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
   isProcessing,
   activeRoomId,
   activeRoomRole = "none",
-  activeSecretKey
+  activeSecretKey,
+  currentUserProfile
 }) => {
   const isCurrentlyInRoom = Boolean(activeRoomId && activeProject?.source === "room");
 
@@ -132,8 +135,11 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
     let targetRoomId = joinRoomInput.trim();
     let targetSecret = joinSecretKey.trim();
 
-    // Check if user pasted a full room URL
-    if (targetRoomId.includes("http://") || targetRoomId.includes("https://")) {
+    // Check if user pasted a full room URL or query parameter
+    const match = targetRoomId.match(/[?&](?:room|cloud)=([^&#]+)/);
+    if (match && match[1]) {
+      targetRoomId = decodeURIComponent(match[1]);
+    } else if (targetRoomId.includes("http://") || targetRoomId.includes("https://")) {
       try {
         const parsed = new URL(targetRoomId);
         const qRoom = parsed.searchParams.get("room") || parsed.searchParams.get("cloud");
@@ -676,34 +682,54 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                 />
               </div>
 
-              <div style={{ marginBottom: "18px" }}>
-                <label
+              {currentUserProfile ? (
+                <div
                   style={{
-                    display: "block",
-                    fontSize: "0.82rem",
-                    fontWeight: 600,
-                    marginBottom: "6px",
-                    color: "var(--jantt-text)"
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    background: "rgba(56, 189, 248, 0.08)",
+                    border: "1px solid rgba(56, 189, 248, 0.2)",
+                    marginBottom: "18px"
                   }}
                 >
-                  Secret Edit Key <span style={{ color: "var(--jantt-muted)", fontWeight: 400 }}>(Optional for edit mode)</span>
-                </label>
-                <input
-                  type="password"
-                  placeholder="Leave empty to join as View-Only"
-                  value={joinSecretKey}
-                  onChange={(e) => setJoinSecretKey(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    background: "rgba(15, 23, 42, 0.7)",
-                    border: "1px solid var(--jantt-border)",
-                    color: "var(--jantt-text)",
-                    fontSize: "0.85rem"
-                  }}
-                />
-              </div>
+                  <Sparkles size={16} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
+                  <span style={{ fontSize: "0.8rem", color: "var(--jantt-muted)", lineHeight: 1.4 }}>
+                    Logged in as <strong style={{ color: "var(--jantt-text)" }}>@{currentUserProfile.username}</strong>: You will join automatically with your collaborator permissions. No secret key needed!
+                  </span>
+                </div>
+              ) : (
+                <div style={{ marginBottom: "18px" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "0.82rem",
+                      fontWeight: 600,
+                      marginBottom: "6px",
+                      color: "var(--jantt-text)"
+                    }}
+                  >
+                    Secret Edit Key <span style={{ color: "var(--jantt-muted)", fontWeight: 400 }}>(Optional for legacy anonymous links)</span>
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Leave empty to join as View-Only"
+                    value={joinSecretKey}
+                    onChange={(e) => setJoinSecretKey(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      background: "rgba(15, 23, 42, 0.7)",
+                      border: "1px solid var(--jantt-border)",
+                      color: "var(--jantt-text)",
+                      fontSize: "0.85rem"
+                    }}
+                  />
+                </div>
+              )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--jantt-border)" }}>
                 <button
