@@ -16,8 +16,8 @@ import {
   LogIn,
   ArrowRight
 } from "lucide-react";
-import type { RoomPresence } from "../firebase/types";
-import type { RoomSyncStatus } from "../hooks/useRoomSync";
+import type { RoomPresence } from "../../firebase/types";
+import type { RoomSyncStatus } from "../../hooks/useRoomSync";
 
 export interface CloudBarProps {
   activeRoomId?: string | null;

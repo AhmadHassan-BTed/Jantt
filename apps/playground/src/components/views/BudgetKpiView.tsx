@@ -23,8 +23,8 @@ import {
   auditScheduleIntegrity,
   getTaskDependencies
 } from "@jantt/core";
-import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "../types";
-import { isTaskMatchingPersonFilter } from "../utils";
+import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "../../types";
+import { isTaskMatchingPersonFilter } from "../../utils";
 import { EvmKpiCards } from "./EvmKpiCards";
 import { ScheduleHealthCard } from "./ScheduleHealthCard";
 

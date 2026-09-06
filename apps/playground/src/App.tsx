@@ -62,31 +62,33 @@ import {
   leaveRoom,
   getRoom
 } from "./firebase/roomService";
-import type { UserRoomPointer, FullRoomPayload } from "./firebase/types";
+import type { UserRoomPointer, FullRoomPayload } from "./firebase";
 
-// View & Modal Components
-import { Navbar } from "./components/Navbar";
-import { Subheader } from "./components/Subheader";
-import { EditorPane } from "./components/EditorPane";
-import { DateFilterBar } from "./components/DateFilterBar";
-import { KanbanView } from "./components/KanbanView";
-import { BudgetKpiView } from "./components/BudgetKpiView";
-import { TasksView } from "./components/TasksView";
-import { NotesView } from "./components/NotesView";
-import { PromptModal } from "./components/PromptModal";
-import { AddPlanModal } from "./components/AddPlanModal";
-import { PeopleTeamsModal } from "./components/PeopleTeamsModal";
-import { CloudRoomModal } from "./components/CloudRoomModal";
-import { ShareModal } from "./components/ShareModal";
-import { AutoSaveModal } from "./components/AutoSaveModal";
-import { VersionHistoryModal } from "./components/VersionHistoryModal";
-import { UsernameOnboardingModal } from "./components/UsernameOnboardingModal";
-import { UserHubModal } from "./components/UserHubModal";
-import { ShareRoomModal } from "./components/ShareRoomModal";
-import { GitHubVerificationModal } from "./components/GitHubVerificationModal";
-import { CloudBar } from "./components/CloudBar";
-import { Toast } from "./components/Toast";
-import { EmptyChartState } from "./components/EmptyChartState";
+// View & Layout & Modal Components (Domain-Driven Architecture)
+import {
+  Navbar,
+  Subheader,
+  CloudBar,
+  EditorPane,
+  DateFilterBar,
+  KanbanView,
+  BudgetKpiView,
+  TasksView,
+  NotesView,
+  PromptModal,
+  AddPlanModal,
+  PeopleTeamsModal,
+  CloudRoomModal,
+  ShareModal,
+  AutoSaveModal,
+  VersionHistoryModal,
+  UsernameOnboardingModal,
+  UserHubModal,
+  ShareRoomModal,
+  GitHubVerificationModal,
+  Toast,
+  EmptyChartState
+} from "./components";
 
 export function App() {
   const init = useMemo(() => loadInitialState(), []);

@@ -13,12 +13,12 @@ import {
   Loader2,
   Sparkles
 } from "lucide-react";
-import type { SavedProject, ActiveView } from "../types";
+import type { SavedProject, ActiveView } from "../../types";
 import {
   buildRoomViewerUrl,
   buildRoomCollaboratorUrl,
   getStoredRoomSecret
-} from "../room-storage";
+} from "../../room-storage";
 
 interface CloudRoomModalProps {
   showModal: boolean;

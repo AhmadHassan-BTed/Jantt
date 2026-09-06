@@ -20,8 +20,8 @@ import {
   PlusCircle
 } from "lucide-react";
 import type { JanttData, NoteItem, Task, Team } from "@jantt/core";
-import { formatRelativeTime } from "../utils";
-import type { EffectivePerson } from "../types";
+import { formatRelativeTime } from "../../utils";
+import type { EffectivePerson } from "../../types";
 
 const NOTE_PALETTE = [
   { id: "#3B82F6", label: "Blue", bg: "#3B82F6" },

@@ -16,9 +16,8 @@ import {
   type JanttData,
   resolveTeamById
 } from "@jantt/core";
-import type { EffectivePerson } from "../types";
-import { searchUsersByUsername } from "../firebase/authService";
-import type { UserProfile } from "../firebase/types";
+import type { EffectivePerson } from "../../types";
+import { searchUsersByUsername, type UserProfile } from "../../firebase";
 
 interface PeopleTeamsModalProps {
   showPeopleModal: boolean;

@@ -17,6 +17,7 @@ import {
 } from "firebase/database";
 import { auth, githubProvider, rtdb } from "./firebaseConfig";
 import type { UserProfile } from "./types";
+import { normalizeUsername } from "./dtos/UserDto";
 import { isCreatorAccount } from "./githubVerificationService";
 
 const GH_TOKEN_KEY = "jantt_gh_access_token";
@@ -43,19 +44,8 @@ export function clearStoredGitHubToken(): void {
     sessionStorage.removeItem(GH_TOKEN_KEY);
     localStorage.removeItem(GH_TOKEN_KEY);
   } catch {
-    // Ignore storage errors
+    // Ignore storage quota errors
   }
-}
-
-/**
- * Normalizes username to lowercase alphanumeric and underscores only.
- */
-export function normalizeUsername(raw: string): string {
-  return raw
-    .trim()
-    .toLowerCase()
-    .replace(/^@+/, "")
-    .replace(/[^a-z0-9_]/g, "");
 }
 
 /**

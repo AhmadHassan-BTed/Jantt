@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { UserCheck, Check, AlertCircle, Loader2, Sparkles } from "lucide-react";
-import { checkUsernameAvailable, normalizeUsername } from "../firebase/authService";
+import { checkUsernameAvailable, normalizeUsername } from "../../firebase";
 import type { User as FirebaseUser } from "firebase/auth";
 
 interface UsernameOnboardingModalProps {

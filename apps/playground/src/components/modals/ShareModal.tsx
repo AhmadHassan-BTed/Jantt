@@ -19,8 +19,8 @@ import {
   Loader2
 } from "lucide-react";
 import type { JanttData, ThemeDefinition } from "@jantt/core";
-import type { SavedProject, ActiveView } from "../types";
-import type { UserProfile } from "../firebase/types";
+import type { SavedProject, ActiveView } from "../../types";
+import type { UserProfile } from "../../firebase";
 
 interface ShareModalProps {
   showShareModal: boolean;

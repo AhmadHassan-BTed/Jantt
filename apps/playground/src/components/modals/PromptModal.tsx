@@ -7,8 +7,8 @@ import {
   Copy,
   Check
 } from "lucide-react";
-import { JanttIcon } from "./JanttLogo";
-import masterTemplateFixture from "../../../../examples/master-template.json";
+import { JanttIcon } from "../common/JanttLogo";
+import masterTemplateFixture from "../../../../../examples/master-template.json";
 
 interface PromptModalProps {
   showPromptModal: boolean;

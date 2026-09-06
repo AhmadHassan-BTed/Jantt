@@ -22,8 +22,8 @@ import type {
   DateFilterMode,
   CompletedFilterMode,
   EffectivePerson
-} from "../types";
-import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
+} from "../../types";
+import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
 
 interface KanbanViewProps {
   parsedData: JanttData;

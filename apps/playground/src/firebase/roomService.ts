@@ -9,14 +9,18 @@ import {
 import type { JanttData } from "@jantt/core";
 import { calculatePlanHash, validate, reconcilePlans, sanitizePlanForJson } from "@jantt/core";
 import { rtdb } from "./firebaseConfig";
-import type {
-  UserProfile,
-  RoomMember,
-  RoomMetadata,
-  UserRoomPointer,
-  FullRoomPayload,
-  RoomTeam
-} from "./types";
+import {
+  validateRoomMetadata,
+  validateRoomMember,
+  validateRoomTeam,
+  validateUserProfile,
+  type UserProfile,
+  type RoomMember,
+  type RoomMetadata,
+  type UserRoomPointer,
+  type FullRoomPayload,
+  type RoomTeam
+} from "./dtos";
 
 /**
  * Generates clean, readable unique room identifier slug.
@@ -39,6 +43,11 @@ export async function createRoom(
   title: string,
   initialData: JanttData
 ): Promise<FullRoomPayload> {
+  const userValidation = validateUserProfile(user);
+  if (!userValidation.valid) {
+    throw new Error(userValidation.error || "Invalid user profile.");
+  }
+
   const validation = validate(initialData);
   if (!validation.valid) {
     throw new Error(`Invalid plan data: ${validation.errors[0]?.message || "Validation failed"}`);
@@ -61,6 +70,11 @@ export async function createRoom(
     taskCount
   };
 
+  const metaValidation = validateRoomMetadata(meta);
+  if (!metaValidation.valid) {
+    throw new Error(metaValidation.error || "Invalid room metadata.");
+  }
+
   const ownerMember: RoomMember = {
     uid: user.uid,
     username: user.username,
@@ -69,6 +83,11 @@ export async function createRoom(
     role: "owner",
     joinedAt: now
   };
+
+  const ownerMemberValidation = validateRoomMember(ownerMember);
+  if (!ownerMemberValidation.valid) {
+    throw new Error(ownerMemberValidation.error || "Invalid owner member.");
+  }
 
   const userPointer: UserRoomPointer = {
     roomId,
@@ -122,6 +141,11 @@ export async function shareRoomWithUser(
     joinedAt: now
   };
 
+  const newMemberValidation = validateRoomMember(newMember);
+  if (!newMemberValidation.valid) {
+    throw new Error(newMemberValidation.error || "Invalid member data.");
+  }
+
   const sharedPointer: UserRoomPointer = {
     roomId,
     title: meta.title,
@@ -169,6 +193,11 @@ export async function shareRoomWithTeam(
     addedAt: now
   };
 
+  const teamValidation = validateRoomTeam(roomTeam);
+  if (!teamValidation.valid) {
+    throw new Error(teamValidation.error || "Invalid room team.");
+  }
+
   updates[`rooms/${roomId}/teams/${team.id}`] = roomTeam;
 
   for (const user of membersToAdd) {
@@ -201,22 +230,39 @@ export async function shareRoomWithTeam(
 }
 
 /**
- * Removes an entire team and all its members from a room.
+ * Removes an entire team from a room while protecting independent members and the room owner.
  */
 export async function removeTeamFromRoom(
   roomId: string,
   teamId: string
 ): Promise<void> {
-  const teamSnap = await get(ref(rtdb, `rooms/${roomId}/teams/${teamId}`));
+  const [teamSnap, membersSnap, metaSnap] = await Promise.all([
+    get(ref(rtdb, `rooms/${roomId}/teams/${teamId}`)),
+    get(ref(rtdb, `rooms/${roomId}/members`)),
+    get(ref(rtdb, `rooms/${roomId}/meta`))
+  ]);
+
   const updates: Record<string, any> = {};
   updates[`rooms/${roomId}/teams/${teamId}`] = null;
 
   if (teamSnap.exists()) {
     const team = teamSnap.val() as RoomTeam;
+    const meta = metaSnap.exists() ? (metaSnap.val() as RoomMetadata) : null;
+    const members = membersSnap.exists() ? (membersSnap.val() as Record<string, RoomMember>) : {};
+
     if (Array.isArray(team.memberUids)) {
       for (const uid of team.memberUids) {
-        updates[`rooms/${roomId}/members/${uid}`] = null;
-        updates[`user_rooms/${uid}/shared/${roomId}`] = null;
+        // Safety check 1: Never remove the room owner
+        if (meta && meta.ownerUid === uid) {
+          continue;
+        }
+
+        // Safety check 2: Only remove member if their membership was tied specifically to this team
+        const member = members[uid];
+        if (member && member.teamId && member.teamId === teamId) {
+          updates[`rooms/${roomId}/members/${uid}`] = null;
+          updates[`user_rooms/${uid}/shared/${roomId}`] = null;
+        }
       }
     }
   }
@@ -347,7 +393,8 @@ export async function getRoom(roomId: string): Promise<FullRoomPayload | null> {
 }
 
 /**
- * Atomically updates room data using ACID transactions with CRDT merge conflict protection.
+ * Atomically updates room data using a single ACID transaction with CRDT merge conflict protection
+ * and strict member permission enforcement.
  */
 export async function saveRoomDataAtomic(
   roomId: string,
@@ -355,12 +402,8 @@ export async function saveRoomDataAtomic(
   user: UserProfile,
   baseData?: JanttData
 ): Promise<{ success: boolean; revision: number; data: JanttData }> {
-  const dataRef = ref(rtdb, `rooms/${roomId}/data`);
-  const metaRef = ref(rtdb, `rooms/${roomId}/meta`);
-
+  const roomRef = ref(rtdb, `rooms/${roomId}`);
   const sanitizedIncoming = sanitizePlanForJson(updatedData);
-  let finalMergedData = sanitizedIncoming;
-  let finalRevision = 1;
 
   const mentionClient = user.username
     ? `@${user.username}`
@@ -368,51 +411,77 @@ export async function saveRoomDataAtomic(
     ? `@${user.displayUsername}`
     : "collaborator";
 
-  await runTransaction(dataRef, (currentRemoteData: JanttData | null) => {
-    if (!currentRemoteData) {
-      return sanitizedIncoming;
+  let finalMergedData = sanitizedIncoming;
+  let finalRevision = 1;
+  let permissionDenied = false;
+
+  const result = await runTransaction(roomRef, (currentRoom: FullRoomPayload | null) => {
+    // If not yet loaded or room does not exist, return current
+    if (!currentRoom) {
+      return currentRoom;
     }
 
-    const currentHash = calculatePlanHash(currentRemoteData);
-    const incomingHash = calculatePlanHash(sanitizedIncoming);
-
-    if (currentHash === incomingHash) {
-      return sanitizedIncoming;
+    // Strict Permission check: caller must be member with editor or owner role
+    const member = currentRoom.members?.[user.uid];
+    if (!member) {
+      permissionDenied = true;
+      return; // abort transaction
+    }
+    if (member.role === "viewer") {
+      permissionDenied = true;
+      return; // abort transaction
     }
 
-    // 3-Way CRDT Reconcile if remote has diverged from what caller based their edits on
-    if (baseData) {
-      const reconcile = reconcilePlans(baseData, sanitizedIncoming, currentRemoteData, {
-        clientId: mentionClient
-      });
-      finalMergedData = sanitizePlanForJson(reconcile.mergedData);
-      return finalMergedData;
+    const currentRemoteData = currentRoom.data;
+    let nextData = sanitizedIncoming;
+
+    if (currentRemoteData) {
+      const currentHash = calculatePlanHash(currentRemoteData);
+      const incomingHash = calculatePlanHash(sanitizedIncoming);
+
+      if (currentHash === incomingHash) {
+        // No modification needed
+        nextData = currentRemoteData;
+      } else if (baseData) {
+        const reconcile = reconcilePlans(baseData, sanitizedIncoming, currentRemoteData, {
+          clientId: mentionClient
+        });
+        nextData = sanitizePlanForJson(reconcile.mergedData);
+      }
     }
 
-    return sanitizedIncoming;
-  });
+    finalMergedData = nextData;
+    const now = new Date().toISOString();
+    const contentHash = calculatePlanHash(finalMergedData);
+    const taskCount = finalMergedData.tasks?.length || 0;
+    finalRevision = (currentRoom.meta?.revision || 1) + 1;
 
-  // Update room metadata (revision, contentHash, updatedAt)
-  const now = new Date().toISOString();
-  const contentHash = calculatePlanHash(finalMergedData);
-  const taskCount = finalMergedData.tasks?.length || 0;
-
-  await runTransaction(metaRef, (currentMeta: RoomMetadata | null) => {
-    if (!currentMeta) return currentMeta;
-    finalRevision = (currentMeta.revision || 1) + 1;
-    return {
-      ...currentMeta,
+    currentRoom.data = finalMergedData;
+    currentRoom.meta = {
+      ...currentRoom.meta,
       revision: finalRevision,
       contentHash,
       updatedAt: now,
       taskCount
     };
+
+    return currentRoom;
   });
+
+  if (permissionDenied) {
+    throw new Error("Permission denied: You do not have edit access to this room.");
+  }
+
+  if (!result.committed) {
+    throw new Error("Failed to save room data atomically. The room may have been deleted or modified.");
+  }
+
+  const committedRoom = result.snapshot.val() as FullRoomPayload;
 
   return {
     success: true,
-    revision: finalRevision,
-    data: finalMergedData
+    revision: committedRoom?.meta?.revision || finalRevision,
+    data: committedRoom?.data || finalMergedData
   };
 }
 
