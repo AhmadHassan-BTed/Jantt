@@ -2,40 +2,26 @@ import React from "react";
 import {
   FolderKanban,
   Plus,
-  Cloud,
-  RefreshCw,
-  GitFork,
   Share2,
   Trash2,
-  Users,
-  Radio
+  Users
 } from "lucide-react";
 import type { SavedProject, EffectivePerson } from "../types";
 import type { UserRoomPointer } from "../firebase/types";
 import { DEFAULT_TEMPLATE } from "../constants";
-import { formatRelativeTime } from "../utils";
 
 export interface SubheaderProps {
   activeProjectId: string;
   customProjects: SavedProject[];
   handleSelectProject: (id: string) => void;
   handleOpenAddPlanModal: () => void;
-  handleOpenLinkCloudModal: () => void;
-  isSyncingProject: boolean;
-  handleSyncActiveProject: () => void;
-  handleForkToLocalPlan: () => void;
   setShowShareModal: (show: boolean) => void;
   setCopiedShareLink: (copied: boolean) => void;
   handleDeleteProject: (id: string) => void;
   setShowPeopleModal: (show: boolean) => void;
   effectivePeople: EffectivePerson[];
-  onOpenRoomModal?: () => void;
-  activeRoomId?: string | null;
-  activeRoomRole?: "collaborator" | "viewer" | "none";
   ownedRooms?: UserRoomPointer[];
   sharedRooms?: UserRoomPointer[];
-  onOpenShareRoom?: (roomId: string) => void;
-  onOpenUserHub?: () => void;
 }
 
 export const Subheader: React.FC<SubheaderProps> = ({
@@ -43,27 +29,14 @@ export const Subheader: React.FC<SubheaderProps> = ({
   customProjects,
   handleSelectProject,
   handleOpenAddPlanModal,
-  handleOpenLinkCloudModal,
-  isSyncingProject,
-  handleSyncActiveProject,
-  handleForkToLocalPlan,
   setShowShareModal,
   setCopiedShareLink,
   handleDeleteProject,
   setShowPeopleModal,
   effectivePeople,
-  onOpenRoomModal,
-  activeRoomId,
-  activeRoomRole,
   ownedRooms = [],
-  sharedRooms = [],
-  onOpenShareRoom,
-  onOpenUserHub
+  sharedRooms = []
 }) => {
-  const activeProject = customProjects.find((p) => p.id === activeProjectId);
-  const isLinked = activeProject?.source === "linked";
-  const isRoom = activeProject?.source === "room";
-
   return (
     <div className="subheader-bar">
       {/* Left: Expanded Plan Management Section */}
@@ -123,24 +96,13 @@ export const Subheader: React.FC<SubheaderProps> = ({
                     ))}
                 </optgroup>
               )}
-              {customProjects.filter((p) => p.source !== "linked" && p.source !== "room").length > 0 && (
-                <optgroup label={`Local Plans (${customProjects.filter((p) => p.source !== "linked" && p.source !== "room").length})`}>
+              {customProjects.filter((p) => p.source !== "room").length > 0 && (
+                <optgroup label={`Local Plans (${customProjects.filter((p) => p.source !== "room").length})`}>
                   {customProjects
-                    .filter((p) => p.source !== "linked" && p.source !== "room")
+                    .filter((p) => p.source !== "room")
                     .map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.data?.tasks?.length || 0} tasks)
-                      </option>
-                    ))}
-                </optgroup>
-              )}
-              {customProjects.filter((p) => p.source === "linked").length > 0 && (
-                <optgroup label={`Linked Cloud Feeds (${customProjects.filter((p) => p.source === "linked").length})`}>
-                  {customProjects
-                    .filter((p) => p.source === "linked")
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} (Cloud Feed • {p.data?.tasks?.length || 0} tasks)
                       </option>
                     ))}
                 </optgroup>
@@ -160,94 +122,28 @@ export const Subheader: React.FC<SubheaderProps> = ({
               <span>New Plan</span>
             </button>
 
-            {/* Cloud Room Button (Primary Collaboration Hub) */}
-            {(onOpenUserHub || onOpenRoomModal) && (
-              <button
-                type="button"
-                className="btn-plan-action is-cloud"
-                onClick={onOpenUserHub || onOpenRoomModal}
-                title={
-                  isRoom
-                    ? `Live Cloud Room: "${activeRoomId || activeProject?.roomId}" (${activeRoomRole === "collaborator" ? "Collaborator" : "Viewer"}). Click to open Room Hub.`
-                    : "Create or join real-time multi-user collaboration rooms"
-                }
-                style={isRoom ? { borderColor: "var(--jantt-accent)", background: "rgba(56, 189, 248, 0.15)" } : {}}
-              >
-                <Radio size={13} style={{ color: "var(--jantt-accent)" }} className={isRoom ? "spin-slow" : ""} />
-                <span>{isRoom ? "Room Hub" : "Cloud Rooms"}</span>
-              </button>
-            )}
-
-            {/* Link Cloud Feed Button (Legacy / Read-Only fallback) */}
-            <button
-              type="button"
-              className="btn-plan-action"
-              onClick={handleOpenLinkCloudModal}
-              title="Link external read-only feeds (Google Drive, GitHub, Dropbox)"
-            >
-              <Cloud size={13} style={{ color: "var(--jantt-muted)" }} />
-              <span>External Feed</span>
-            </button>
-
-            {/* Linked Cloud Plan Controls */}
-            {isLinked && activeProject && (
-              <>
-                <button
-                  type="button"
-                  className="btn-plan-action is-sync"
-                  onClick={handleSyncActiveProject}
-                  disabled={isSyncingProject}
-                  title={`Pull latest updates from cloud feed into your browser (Last synced: ${formatRelativeTime(activeProject.lastSyncedAt)}). Remote cloud file is a read-only feed; your local edits are kept in browser storage.`}
-                >
-                  <RefreshCw size={12} className={isSyncingProject ? "spin-sync-icon" : ""} />
-                  <span>Pull Cloud</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn-plan-action"
-                  onClick={handleForkToLocalPlan}
-                  title="Create an editable local copy of this cloud plan"
-                >
-                  <GitFork size={12} />
-                  <span>Fork</span>
-                </button>
-              </>
-            )}
-
-            {/* Share Active Plan Button */}
+            {/* Export / Share Active Plan Button */}
             <button
               type="button"
               className="btn-plan-action is-share"
               onClick={() => {
-                if (isRoom && onOpenShareRoom && (activeRoomId || activeProject?.roomId)) {
-                  onOpenShareRoom(activeRoomId || activeProject!.roomId!);
-                } else {
-                  setShowShareModal(true);
-                  setCopiedShareLink(false);
-                }
+                setShowShareModal(true);
+                setCopiedShareLink(false);
               }}
-              title={
-                isRoom
-                  ? "Share this Cloud Room with teammates by username or invite link"
-                  : "Share this project plan via link or open source"
-              }
+              title="Export or share this project plan via compressed link, WhatsApp, or JSON file"
             >
               <Share2 size={12} />
-              <span>Share</span>
+              <span>Export / Share</span>
             </button>
 
-            {/* Delete / Unlink Active Plan Button */}
+            {/* Delete Active Plan Button */}
             {activeProjectId !== "default" && (
               <button
                 type="button"
                 className="btn-plan-action is-delete"
                 style={{ color: "#EF4444" }}
                 onClick={() => handleDeleteProject(activeProjectId)}
-                title={
-                  isLinked
-                    ? "Unlink this cloud plan from browser storage"
-                    : "Delete this custom plan from browser memory"
-                }
+                title="Delete this custom plan from browser memory"
               >
                 <Trash2 size={12} />
               </button>

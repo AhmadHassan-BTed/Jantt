@@ -66,11 +66,10 @@ To be the world's most capable, lightweight, dependency-free Gantt chart engine 
   - Ultra-high performance rendering for 5,000+ tasks.
 
 ### Phase 4: Cloud Sync & Collaborative Ecosystem (v2.0.0 Vision) [Planned]
-- [ ] **Google Drive OAuth App-Connected Cloud Sync**:
-  - Full Google Identity Services (GIS) OAuth 2.0 integration.
-  - Automatic bidirectional syncing to personal Google Drive folder (`jantt-plans/`).
-  - Native Google Drive File Picker & Google Workspace share permissions manager.
-  - Real-time multi-user conflict resolution with last-write-wins and 3-way merge prompts.
+- [ ] **Firebase Cloud Storage & Real-Time Rooms**:
+  - Save, load, and manage Jantt plans directly in Firebase Cloud Firestore.
+  - Live collaboration rooms with real-time multi-user syncing.
+  - Clean GitHub sign-in for Firebase authentication and repository star verification.
 - [ ] **Real-Time Multi-Agent Collaboration (CRDTs)**:
   - Yjs / Automerge bindings for real-time collaborative schedule editing.
 - [ ] **AI Natural Language Command Extension**:

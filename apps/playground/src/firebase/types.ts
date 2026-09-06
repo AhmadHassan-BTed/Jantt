@@ -43,6 +43,29 @@ export interface RoomMember {
   photoURL?: string;
   role: RoomMemberRole;
   joinedAt: string;
+  teamId?: string;
+  teamName?: string;
+}
+
+export interface RoomTeam {
+  id: string;
+  name: string;
+  color?: string;
+  memberUids: string[];
+  memberUsernames: string[];
+  role: "editor" | "viewer";
+  addedAt: string;
+}
+
+export interface RoomPresence {
+  uid: string;
+  username: string;
+  displayName: string;
+  photoURL?: string;
+  status: "online";
+  lastSeen: string;
+  joinedAt: string;
+  isOwner?: boolean;
 }
 
 export interface RoomMetadata {
@@ -71,5 +94,7 @@ export interface UserRoomPointer {
 export interface FullRoomPayload {
   meta: RoomMetadata;
   members: Record<string, RoomMember>;
+  teams?: Record<string, RoomTeam>;
+  presence?: Record<string, RoomPresence>;
   data: JanttData;
 }

@@ -77,7 +77,32 @@ export function loadSavedProjects(): SavedProject[] {
     const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_PROJECTS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        let changed = false;
+        const sanitized = parsed.map((p) => {
+          let updated = { ...p };
+          // If project was linked to Google Drive or legacy external feed, auto-migrate to local plan
+          if (
+            updated.source === "linked" ||
+            (updated.sourceUrl && (updated.sourceUrl.includes("drive.google.com") || updated.sourceUrl.includes("docs.google.com")))
+          ) {
+            delete updated.source;
+            delete updated.sourceUrl;
+            delete updated.lastSyncedAt;
+            delete updated.syncError;
+            if (updated.name) {
+              // Strip legacy "(Cloud Feed...)" or "(Cloud Feed + N tasks)" badges from title
+              updated.name = updated.name.replace(/\s*\((?:Cloud Feed|\d+\s*tasks)[^)]*\)/gi, "").trim();
+            }
+            changed = true;
+          }
+          return updated;
+        });
+        if (changed) {
+          saveCustomProjects(sanitized);
+        }
+        return sanitized;
+      }
     }
   } catch {}
   return [];
@@ -108,6 +133,17 @@ export function decodeDataFromBase64Url(base64url: string): JanttData | null {
 }
 
 export function loadInitialState() {
+  if (typeof window !== "undefined" && window.location.search) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const targetUrl = params.get("url");
+      if (targetUrl && (targetUrl.includes("drive.google.com") || targetUrl.includes("docs.google.com"))) {
+        params.delete("url");
+        const newSearch = params.toString() ? `?${params.toString()}` : "";
+        window.history.replaceState({}, document.title, window.location.pathname + newSearch);
+      }
+    } catch {}
+  }
   const savedProjects = loadSavedProjects();
   let activeProjectId = "default";
   try {

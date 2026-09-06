@@ -48,7 +48,6 @@ import { usePeopleTeams } from "./hooks/usePeopleTeams";
 import { useProjectState } from "./hooks/useProjectState";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useDateFilter } from "./hooks/useDateFilter";
-import { useCloudSync } from "./hooks/useCloudSync";
 import { useTaskActions } from "./hooks/useTaskActions";
 import { useTaskDetailSidebar } from "./hooks/useTaskDetailSidebar";
 import { useSharing } from "./hooks/useSharing";
@@ -77,7 +76,6 @@ import { NotesView } from "./components/NotesView";
 import { PromptModal } from "./components/PromptModal";
 import { AddPlanModal } from "./components/AddPlanModal";
 import { PeopleTeamsModal } from "./components/PeopleTeamsModal";
-import { CloudLinkModal } from "./components/CloudLinkModal";
 import { CloudRoomModal } from "./components/CloudRoomModal";
 import { ShareModal } from "./components/ShareModal";
 import { AutoSaveModal } from "./components/AutoSaveModal";
@@ -86,6 +84,7 @@ import { UsernameOnboardingModal } from "./components/UsernameOnboardingModal";
 import { UserHubModal } from "./components/UserHubModal";
 import { ShareRoomModal } from "./components/ShareRoomModal";
 import { GitHubVerificationModal } from "./components/GitHubVerificationModal";
+import { CloudBar } from "./components/CloudBar";
 import { Toast } from "./components/Toast";
 import { EmptyChartState } from "./components/EmptyChartState";
 
@@ -224,23 +223,6 @@ export function App() {
     broadcastChange: dynamicSync.broadcastLocalChange
   });
   flushPendingSaveRef.current = autoSave.flushSave;
-
-  // Cloud Link & Remote Sync with 3-Way Task Reconciliation
-  const cloud = useCloudSync({
-    customProjects: project.customProjects,
-    setCustomProjects: project.setCustomProjects,
-    activeProjectId: project.activeProjectId,
-    setActiveProjectId: project.setActiveProjectId,
-    handleSelectProject: project.handleSelectProject,
-    parsedData: editor.parsedData,
-    setJsonText: editor.setJsonText,
-    setParsedData: editor.setParsedData,
-    setPeople: people.setPeople,
-    setTeams: people.setTeams,
-    setValidationResult: editor.setValidationResult,
-    showToast: toast.showToast,
-    captureSnapshot: vault.captureSnapshot
-  });
 
   // High-Scale Firebase Realtime Room Sync (100+ Concurrent Collaborators)
   const roomSync = useRoomSync({
@@ -550,15 +532,6 @@ export function App() {
         autoSaveInterval={autoSave.autoSaveInterval}
         autoSaveLabel={autoSave.autoSaveLabel}
         setShowAutoSaveModal={autoSave.setShowAutoSaveModal}
-        syncStatus={dynamicSync.syncStatus}
-        syncMessage={dynamicSync.syncMessage}
-        isQuotaShieldActive={dynamicSync.isQuotaShieldActive}
-        cloudProvider={dynamicSync.cloudProvider}
-        isGoogleDrive={Boolean(
-          dynamicSync.cloudProvider === "google-drive" ||
-          (project.customProjects.find((p) => p.id === project.activeProjectId)?.source === "linked" &&
-           project.customProjects.find((p) => p.id === project.activeProjectId)?.sourceUrl?.includes("drive.google.com"))
-        )}
         snapshotsCount={vault.snapshots.length}
         setShowVersionHistoryModal={vault.setShowVersionHistoryModal}
         isSidebarCollapsed={sidebar.isSidebarCollapsed}
@@ -571,15 +544,11 @@ export function App() {
         selectedThemeId={viewport.selectedThemeId}
         setSelectedThemeId={viewport.setSelectedThemeId}
         setShowPromptModal={setShowPromptModal}
-        activeRoomId={roomSync.activeRoomId}
-        activeRoomRole={roomSync.activeRoomRole}
-        onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
         currentUser={auth.currentUser}
         userProfile={auth.userProfile}
         isSigningIn={auth.isSigningIn}
         onLogin={auth.loginWithGitHub}
         onOpenUserHub={() => setShowUserHubModal(true)}
-        onOpenShareRoom={() => roomSync.activeRoomId && handleOpenShareRoom(roomSync.activeRoomId)}
         isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
         onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
       />
@@ -589,21 +558,45 @@ export function App() {
         customProjects={project.customProjects}
         handleSelectProject={handleSelectProjectOrRoom}
         handleOpenAddPlanModal={project.handleOpenAddPlanModal}
-        handleOpenLinkCloudModal={cloud.handleOpenLinkCloudModal}
-        isSyncingProject={cloud.isSyncingProject}
-        handleSyncActiveProject={cloud.handleSyncActiveProject}
-        handleForkToLocalPlan={project.handleForkToLocalPlan}
         setShowShareModal={sharing.setShowShareModal}
         setCopiedShareLink={sharing.setCopiedShareLink}
         handleDeleteProject={project.handleDeleteProject}
         setShowPeopleModal={people.setShowPeopleModal}
         effectivePeople={people.effectivePeople}
-        onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
-        activeRoomId={roomSync.activeRoomId}
-        activeRoomRole={roomSync.activeRoomRole}
         ownedRooms={ownedRooms}
         sharedRooms={sharedRooms}
+      />
+
+      {/* Dedicated Real-Time Cloud Collaboration Bar */}
+      <CloudBar
+        activeRoomId={roomSync.activeRoomId}
+        activeRoomRole={roomSync.activeRoomRole}
+        activeRoomTitle={
+          ownedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
+          sharedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
+          project.customProjects.find((p) => p.roomId === roomSync.activeRoomId)?.name ||
+          "Project Room"
+        }
+        onlineUsers={roomSync.onlineUsers}
+        syncStatus={roomSync.syncStatus}
+        syncMessage={roomSync.syncMessage}
+        isProcessing={roomSync.isProcessing}
+        onStartCloudRoom={async () => {
+          if (!auth.currentUser) {
+            auth.loginWithGitHub();
+            return;
+          }
+          if (!auth.userProfile?.githubVerified) {
+            auth.setShowVerificationModal(true);
+            return;
+          }
+          const newRoomId = await roomSync.createRoomFromActive(project.currentProjectName);
+          if (newRoomId) {
+            handleOpenShareRoom(newRoomId);
+          }
+        }}
         onOpenShareRoom={handleOpenShareRoom}
+        onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
         onOpenUserHub={() => {
           if (!auth.currentUser) {
             auth.loginWithGitHub();
@@ -865,21 +858,6 @@ export function App() {
         activeSecretKey={roomSync.activeSecretKey}
       />
 
-      <CloudLinkModal
-        showLinkCloudModal={cloud.showLinkCloudModal}
-        setShowLinkCloudModal={cloud.setShowLinkCloudModal}
-        linkCloudUrl={cloud.linkCloudUrl}
-        setLinkCloudUrl={cloud.setLinkCloudUrl}
-        linkCloudName={cloud.linkCloudName}
-        setLinkCloudName={cloud.setLinkCloudName}
-        isFetchingCloudPreview={cloud.isFetchingCloudPreview}
-        cloudPreviewResult={cloud.cloudPreviewResult}
-        cloudPreviewError={cloud.cloudPreviewError}
-        setCloudPreviewError={cloud.setCloudPreviewError}
-        handleFetchCloudPreview={cloud.handleFetchCloudPreview}
-        handleSaveLinkedCloudPlan={cloud.handleSaveLinkedCloudPlan}
-      />
-
       <ShareModal
         showShareModal={sharing.showShareModal}
         setShowShareModal={sharing.setShowShareModal}
@@ -895,9 +873,18 @@ export function App() {
         handleNativeShare={sharing.handleNativeShare}
         handleWhatsAppShare={sharing.handleWhatsAppShare}
         isWhatsAppSafe={sharing.isWhatsAppSafe}
-        handleOpenLinkCloudModal={cloud.handleOpenLinkCloudModal}
+        onOpenCloudRooms={() =>
+          roomSync.activeRoomId
+            ? handleOpenShareRoom(roomSync.activeRoomId)
+            : roomSync.setShowRoomModal(true)
+        }
         setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
         handleDownloadJson={editor.handleDownloadJson}
+        currentUserProfile={auth.userProfile}
+        onCreateRoomFromActive={roomSync.createRoomFromActive}
+        onOpenShareRoom={handleOpenShareRoom}
+        onLogin={auth.loginWithGitHub}
+        onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
       />
 
       <AutoSaveModal
@@ -969,6 +956,8 @@ export function App() {
         }
         currentUserProfile={auth.userProfile}
         showToast={toast.showToast}
+        planTeams={people.teams}
+        planPeople={people.people}
       />
 
       {/* GitHub Creator Follow & Repo Star Gate Modal */}

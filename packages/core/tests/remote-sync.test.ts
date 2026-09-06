@@ -1,53 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseCloudUrl, fetchRemotePlan } from "../src/remote-sync";
+import { parseCloudUrl, fetchRemotePlan, isMatchingCloudUrl } from "../src/remote-sync";
 import { JanttData } from "../src/types";
 
 describe("Cloud Remote Sync & URL Parsing", () => {
   describe("parseCloudUrl", () => {
-    it("parses Google Drive standard share URLs (usp=sharing)", () => {
-      const url = "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y/view?usp=sharing";
-      const info = parseCloudUrl(url);
-      expect(info.provider).toBe("google-drive");
-      expect(info.fileId).toBe("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y");
-      // New format uses /uc?export=download endpoint
-      expect(info.downloadUrl).toContain("drive.google.com/uc?export=download");
-      expect(info.downloadUrl).toContain("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y");
-      expect(info.label).toBe("Google Drive");
-    });
+    it("rejects Google Drive share URLs with actionable deprecation message", () => {
+      const urlSharing = "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y/view?usp=sharing";
+      expect(() => parseCloudUrl(urlSharing)).toThrowError(/Google Drive linking is no longer supported/i);
 
-    it("parses Google Drive drive_link share URLs (usp=drive_link)", () => {
-      const url = "https://drive.google.com/file/d/1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ/view?usp=drive_link";
-      const info = parseCloudUrl(url);
-      expect(info.provider).toBe("google-drive");
-      expect(info.fileId).toBe("1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ");
-      expect(info.downloadUrl).toContain("drive.google.com/uc?export=download");
-      expect(info.downloadUrl).toContain("1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ");
-    });
+      const urlFolder = "https://drive.google.com/drive/folders/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs";
+      expect(() => parseCloudUrl(urlFolder)).toThrowError(/Google Drive linking is no longer supported/i);
 
-    it("parses Google Drive multi-account URLs (/file/u/0/d/ and /file/u/1/d/)", () => {
-      const url0 = "https://drive.google.com/file/u/0/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y/view";
-      const info0 = parseCloudUrl(url0);
-      expect(info0.provider).toBe("google-drive");
-      expect(info0.fileId).toBe("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y");
-      expect(info0.downloadUrl).toContain("id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y");
-
-      const url1 = "https://drive.google.com/file/u/1/d/1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ/view";
-      const info1 = parseCloudUrl(url1);
-      expect(info1.provider).toBe("google-drive");
-      expect(info1.fileId).toBe("1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ");
-    });
-
-    it("rejects Google Drive folder URLs with actionable explanation", () => {
-      const folderUrl = "https://drive.google.com/drive/folders/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs";
-      expect(() => parseCloudUrl(folderUrl)).toThrowError(/Google Drive folder/i);
-    });
-
-    it("parses Google Drive open?id= URLs", () => {
-      const url = "https://drive.google.com/open?id=abc123XYZ_456";
-      const info = parseCloudUrl(url);
-      expect(info.provider).toBe("google-drive");
-      expect(info.fileId).toBe("abc123XYZ_456");
-      expect(info.downloadUrl).toContain("id=abc123XYZ_456");
+      const urlDocs = "https://docs.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OIvE2up0Y";
+      expect(() => parseCloudUrl(urlDocs)).toThrowError(/Google Drive linking is no longer supported/i);
     });
 
     it("parses GitHub blob URLs and transforms to raw.githubusercontent.com", () => {
@@ -55,6 +20,7 @@ describe("Cloud Remote Sync & URL Parsing", () => {
       const info = parseCloudUrl(url);
       expect(info.provider).toBe("github");
       expect(info.downloadUrl).toBe("https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/examples/master-template.json");
+      expect(info.label).toBe("GitHub");
     });
 
     it("recognizes raw.githubusercontent.com and gists directly", () => {
@@ -116,23 +82,6 @@ describe("Cloud Remote Sync & URL Parsing", () => {
       expect(result.info.provider).toBe("github");
     });
 
-    it("fetches a Google Drive plan via CORS proxy", async () => {
-      // Google Drive always routes through the proxy; mock should be called with proxy URL
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: async () => JSON.stringify(validPlan)
-      });
-      global.fetch = mockFetch;
-
-      const result = await fetchRemotePlan("https://drive.google.com/file/d/1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ/view?usp=drive_link");
-      expect(result.info.provider).toBe("google-drive");
-      expect(result.info.fileId).toBe("1I2xzinkooMvki_7Cm8tpK1i0hfr7nAmZ");
-      // Ensure fetch was called with our Cloudflare Worker proxy URL
-      const calledUrl = mockFetch.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("jantt-cors-proxy");
-    });
-
     it("handles 404 file not found error", async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -144,7 +93,7 @@ describe("Cloud Remote Sync & URL Parsing", () => {
       await expect(fetchRemotePlan("https://api.example.com/missing.json")).rejects.toThrow("File not found (404)");
     });
 
-    it("handles HTML response (private Drive link) gracefully", async () => {
+    it("handles HTML response gracefully", async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -152,7 +101,7 @@ describe("Cloud Remote Sync & URL Parsing", () => {
       });
       global.fetch = mockFetch;
 
-      await expect(fetchRemotePlan("https://drive.google.com/file/d/12345/view")).rejects.toThrow("HTML page instead of JSON");
+      await expect(fetchRemotePlan("https://api.example.com/login-redirect.json")).rejects.toThrow("HTML page instead of JSON");
     });
 
     it("handles invalid Jantt schema", async () => {
@@ -174,28 +123,13 @@ describe("Cloud Remote Sync & URL Parsing", () => {
   });
 
   describe("isMatchingCloudUrl", () => {
-    it("matches identical Google Drive files across sharing params and endpoints", async () => {
-      const { isMatchingCloudUrl } = await import("../src/remote-sync");
-      const urlA = "https://drive.google.com/file/d/1eYx1TQ51DcKq9xbIO7c-tlmjJXQ1Bf6e/view?usp=sharing";
-      const urlB = "https://drive.google.com/file/d/1eYx1TQ51DcKq9xbIO7c-tlmjJXQ1Bf6e/view";
-      const urlC = "https://drive.google.com/open?id=1eYx1TQ51DcKq9xbIO7c-tlmjJXQ1Bf6e";
-      const urlDifferent = "https://drive.google.com/file/d/99999DifferentFileId/view?usp=sharing";
-
-      expect(isMatchingCloudUrl(urlA, urlB)).toBe(true);
-      expect(isMatchingCloudUrl(urlA, urlC)).toBe(true);
-      expect(isMatchingCloudUrl(urlB, urlC)).toBe(true);
-      expect(isMatchingCloudUrl(urlA, urlDifferent)).toBe(false);
-    });
-
-    it("matches identical GitHub URLs across blob and raw forms", async () => {
-      const { isMatchingCloudUrl } = await import("../src/remote-sync");
+    it("matches identical GitHub URLs across blob and raw forms", () => {
       const blob = "https://github.com/org/repo/blob/main/schedule.json";
       const raw = "https://raw.githubusercontent.com/org/repo/main/schedule.json";
       expect(isMatchingCloudUrl(blob, raw)).toBe(true);
     });
 
-    it("handles trailing slashes, case and query differences", async () => {
-      const { isMatchingCloudUrl } = await import("../src/remote-sync");
+    it("handles trailing slashes, case and query differences", () => {
       expect(isMatchingCloudUrl("https://example.com/plan.json?v=1", "https://example.com/plan.json")).toBe(true);
       expect(isMatchingCloudUrl("https://example.com/plan.json/", "https://example.com/plan.json")).toBe(true);
       expect(isMatchingCloudUrl("", "https://example.com")).toBe(false);
@@ -203,4 +137,3 @@ describe("Cloud Remote Sync & URL Parsing", () => {
     });
   });
 });
-

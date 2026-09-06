@@ -214,6 +214,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
         >
           {isCurrentlyInRoom && (
             <button
+              type="button"
               onClick={() => setActiveTab("current")}
               style={{
                 flex: 1,
@@ -228,7 +229,8 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                 justifyContent: "center",
                 gap: "6px",
                 background: activeTab === "current" ? "var(--jantt-accent)" : "transparent",
-                color: activeTab === "current" ? "#FFFFFF" : "var(--jantt-muted)",
+                color: activeTab === "current" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted, #A1A1AA)",
+                boxShadow: activeTab === "current" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
                 transition: "all 0.15s ease"
               }}
             >
@@ -236,6 +238,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
             </button>
           )}
           <button
+            type="button"
             onClick={() => setActiveTab("create")}
             style={{
               flex: 1,
@@ -250,13 +253,15 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
               justifyContent: "center",
               gap: "6px",
               background: activeTab === "create" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "create" ? "#FFFFFF" : "var(--jantt-muted)",
+              color: activeTab === "create" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted, #A1A1AA)",
+              boxShadow: activeTab === "create" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
               transition: "all 0.15s ease"
             }}
           >
             <Plus size={15} /> New Room
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab("join")}
             style={{
               flex: 1,
@@ -271,7 +276,8 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
               justifyContent: "center",
               gap: "6px",
               background: activeTab === "join" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "join" ? "#FFFFFF" : "var(--jantt-muted)",
+              color: activeTab === "join" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted, #A1A1AA)",
+              boxShadow: activeTab === "join" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
               transition: "all 0.15s ease"
             }}
           >
@@ -604,7 +610,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                 </span>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--jantt-border)" }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -616,15 +622,16 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                   type="submit"
                   className="btn btn-primary"
                   disabled={!newRoomTitle.trim() || isProcessing}
-                  style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px" }}
                 >
                   {isProcessing ? (
                     <>
-                      <Loader2 size={16} className="spin" /> Creating Room...
+                      <Loader2 size={15} className="spin" />
+                      <span>Creating Room...</span>
                     </>
                   ) : (
                     <>
-                      <Radio size={16} /> Create Room & Start Sync
+                      <Radio size={15} />
+                      <span>Create Room &amp; Start Sync</span>
                     </>
                   )}
                 </button>
@@ -698,7 +705,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                 />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--jantt-border)" }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -710,15 +717,16 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                   type="submit"
                   className="btn btn-primary"
                   disabled={!joinRoomInput.trim() || isProcessing}
-                  style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px" }}
                 >
                   {isProcessing ? (
                     <>
-                      <Loader2 size={16} className="spin" /> Connecting...
+                      <Loader2 size={15} className="spin" />
+                      <span>Connecting...</span>
                     </>
                   ) : (
                     <>
-                      <ArrowRight size={16} /> Connect to Room
+                      <ArrowRight size={15} />
+                      <span>Connect to Room</span>
                     </>
                   )}
                 </button>

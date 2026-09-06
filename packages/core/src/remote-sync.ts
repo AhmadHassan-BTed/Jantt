@@ -2,7 +2,7 @@ import { JanttData } from "./types";
 import { validate } from "./validator";
 import { calculatePlanHash } from "./reconciler";
 
-export type CloudProviderType = "google-drive" | "github" | "dropbox" | "generic";
+export type CloudProviderType = "github" | "dropbox" | "generic";
 
 export interface CloudUrlInfo {
   originalUrl: string;
@@ -23,44 +23,12 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
 
   const trimmed = inputUrl.trim();
 
-  if (trimmed.includes("drive.google.com/drive/folders/")) {
+  // Reject Google Drive URLs explicitly
+  const driveRegex = /drive\.google\.com|docs\.google\.com/i;
+  if (driveRegex.test(trimmed)) {
     throw new Error(
-      "The provided link is a Google Drive folder, not a file. Please open the folder, select your Jantt .json file, click Share, and paste the file link."
+      "Google Drive linking is no longer supported. Please use Firebase Cloud Storage or Cloud Rooms."
     );
-  }
-
-  // 1. Google Drive URLs
-  // Formats:
-  // - https://drive.google.com/file/d/{FILE_ID}/view?usp=sharing
-  // - https://drive.google.com/file/u/0/d/{FILE_ID}/view
-  // - https://drive.google.com/file/u/1/d/{FILE_ID}/view
-  // - https://drive.google.com/open?id={FILE_ID}
-  // - https://drive.google.com/uc?id={FILE_ID}
-  // - https://docs.google.com/file/d/{FILE_ID}
-  const driveFileRegex = /drive\.google\.com\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/i;
-  const driveOpenRegex = /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i;
-  const driveUcRegex = /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/i;
-  const docsFileRegex = /docs\.google\.com\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/i;
-
-  const driveMatch =
-    trimmed.match(driveFileRegex) ||
-    trimmed.match(driveOpenRegex) ||
-    trimmed.match(driveUcRegex) ||
-    trimmed.match(docsFileRegex);
-
-  if (driveMatch && driveMatch[1]) {
-    const fileId = driveMatch[1];
-    // Direct usercontent endpoint — works for public files but blocked by CORS
-    // when fetched from browser JS. We store it and handle CORS via proxy fallback
-    // inside fetchRemotePlan().
-    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
-    return {
-      originalUrl: trimmed,
-      provider: "google-drive",
-      downloadUrl,
-      fileId,
-      label: "Google Drive"
-    };
   }
 
   // 2. GitHub URLs (convert blob URL to raw.githubusercontent.com)
@@ -115,8 +83,7 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
 
 /**
  * Compares two cloud URLs to determine if they reference the identical remote resource.
- * Intelligently recognizes identical Google Drive files (matching file IDs across /view, /open, /uc endpoints),
- * GitHub files (matching repo & branch paths), Dropbox links, and normalized URLs.
+ * Intelligently recognizes GitHub files (matching repo & branch paths), Dropbox links, and normalized URLs.
  */
 export function isMatchingCloudUrl(urlA?: string | null, urlB?: string | null): boolean {
   if (!urlA || !urlB) return false;
@@ -129,10 +96,6 @@ export function isMatchingCloudUrl(urlA?: string | null, urlB?: string | null): 
     const infoB = parseCloudUrl(b);
 
     if (infoA.provider !== infoB.provider) return false;
-
-    if (infoA.provider === "google-drive") {
-      return !!infoA.fileId && infoA.fileId === infoB.fileId;
-    }
 
     if (infoA.downloadUrl === infoB.downloadUrl) return true;
   } catch {
@@ -178,15 +141,11 @@ interface FetchRawResult {
 
 /**
  * Fetches a URL, routing through our own Cloudflare Worker proxy
- * when the provider is known to block CORS (Google Drive, Dropbox).
+ * Fetches a URL, routing through our own Cloudflare Worker proxy
+ * when needed or when CORS is blocked.
  */
-async function fetchWithCorsFallback(url: string, provider: CloudProviderType): Promise<FetchRawResult> {
-  // Google Drive ALWAYS blocks CORS — go straight to our worker
-  if (provider === "google-drive") {
-    return fetchViaWorker(url);
-  }
-
-  // For others (GitHub, generic), try direct first
+async function fetchWithCorsFallback(url: string, _provider?: CloudProviderType): Promise<FetchRawResult> {
+  // For GitHub, generic, try direct first
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -234,12 +193,12 @@ async function fetchViaWorker(targetUrl: string): Promise<FetchRawResult> {
     }
     if (res.status === 429) {
       throw new Error(
-        "Google Drive download quota temporarily exceeded. The serverless Quota Shield is pacing requests."
+        "Download rate limit temporarily exceeded. The serverless proxy is pacing requests."
       );
     }
     if (res.status === 403 || res.status === 401) {
       throw new Error(
-        `Access denied (${res.status}). Ensure the file sharing is set to "Anyone with the link can view".`
+        `Access denied (${res.status}). Ensure the file is public or has appropriate access permissions.`
       );
     }
     throw new Error(`Proxy returned error ${res.status}: ${res.statusText}`);
@@ -265,7 +224,7 @@ export interface RemoteFetchResult {
 
 /**
  * Fetches, parses, and validates a remote Jantt plan from a shared URL.
- * Handles CORS automatically via proxy fallback for Google Drive and Dropbox links.
+ * Handles CORS automatically via proxy fallback.
  * Calculates deterministic content hash for high-efficiency collision and change detection.
  */
 export async function fetchRemotePlan(
@@ -274,35 +233,14 @@ export async function fetchRemotePlan(
 ): Promise<RemoteFetchResult> {
   const info = parseCloudUrl(url);
 
-  let rawResult: FetchRawResult;
-  try {
-    rawResult = await fetchWithCorsFallback(info.downloadUrl, info.provider);
-  } catch (err: any) {
-    if (info.provider === "google-drive") {
-      throw new Error(
-        `Unable to fetch Google Drive file.\n\n` +
-        `Make sure the file sharing is set to "Anyone with the link can view":\n` +
-        `Right-click → Share → Change to "Anyone with the link" → Copy link.\n\n` +
-        `(${err.message || "Network error"})`
-      );
-    }
-    throw err;
-  }
-
+  const rawResult = await fetchWithCorsFallback(info.downloadUrl, info.provider);
   const rawText = rawResult.text;
 
-  // Detect HTML error pages (private Drive links, login redirects, etc.)
+  // Detect HTML error pages (login redirects, 404 HTML pages, etc.)
   if (rawText.trimStart().startsWith("<!DOCTYPE") || rawText.trimStart().startsWith("<html")) {
-    if (info.provider === "google-drive") {
-      throw new Error(
-        `Google Drive returned an HTML page instead of JSON.\n\n` +
-        `This usually means the file is not publicly shared.\n` +
-        `In Google Drive: right-click the file → Share → "Anyone with the link can view".`
-      );
-    }
     throw new Error(
       `The URL returned an HTML page instead of JSON. ` +
-      `Make sure the link points directly to a public Jantt JSON file.`
+      `Make sure the link points directly to a public Jantt JSON file or raw GitHub URL.`
     );
   }
 

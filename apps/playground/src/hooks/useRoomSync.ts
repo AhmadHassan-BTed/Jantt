@@ -18,13 +18,17 @@ import {
   getStoredRoomSecret,
   storeRoomSecret
 } from "../room-storage";
-import type { UserProfile } from "../firebase/types";
+import type { UserProfile, RoomPresence } from "../firebase/types";
 import {
   createRoom,
   joinRoomViaInvite,
   saveRoomDataAtomic,
   listenToRoom
 } from "../firebase/roomService";
+import {
+  trackRoomPresence,
+  listenToRoomPresence
+} from "../firebase/presenceService";
 
 export type RoomSyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict" | "error";
 
@@ -84,6 +88,7 @@ export function useRoomSync({
   const [syncStatus, setSyncStatus] = useState<RoomSyncStatus>("in-sync");
   const [syncMessage, setSyncMessage] = useState<string>("In sync");
   const [lastSyncTime, setLastSyncTime] = useState<Date>(() => new Date());
+  const [onlineUsers, setOnlineUsers] = useState<RoomPresence[]>([]);
 
   const clientIdRef = useRef<string>(getCollaboratorId());
   const activeProj = customProjects.find((p) => p.id === activeProjectId);
@@ -130,6 +135,24 @@ export function useRoomSync({
       }
     }
   }, [activeProj]);
+
+  // Live Presence Tracking for Active Cloud Room
+  useEffect(() => {
+    if (!activeRoomId) {
+      setOnlineUsers([]);
+      return;
+    }
+
+    const stopTracking = trackRoomPresence(activeRoomId, userProfile || null);
+    const unsubscribePresence = listenToRoomPresence(activeRoomId, (presenceList) => {
+      setOnlineUsers(presenceList);
+    });
+
+    return () => {
+      stopTracking();
+      unsubscribePresence();
+    };
+  }, [activeRoomId, userProfile]);
 
   // Keep address bar synced with active room ID & secret key
   useEffect(() => {
@@ -594,6 +617,54 @@ export function useRoomSync({
     if (!activeRoomId || typeof window === "undefined") return;
 
     const unsubscribe = listenToRoom(activeRoomId, (incomingRoom) => {
+      // Case 0: Room was deleted by owner -> Instant zero-refresh fallback to default
+      if (incomingRoom === null) {
+        showToast("This cloud room was deleted by its owner.", true);
+        const updated = customProjectsRef.current.filter((p) => p.roomId !== activeRoomId);
+        setCustomProjects(updated);
+        saveCustomProjects(updated);
+        setActiveProjectId("default");
+        try {
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, "default");
+          const url = new URL(window.location.href);
+          url.searchParams.delete("room");
+          url.searchParams.delete("cloud");
+          url.hash = "";
+          window.history.replaceState(null, "", url.toString());
+        } catch {}
+        return;
+      }
+
+      // Case 0.5: User/team access was revoked by owner -> Instant fallback to local copy
+      if (userProfile && incomingRoom.meta?.ownerUid !== userProfile.uid) {
+        const isStillMember = Boolean(incomingRoom.members && incomingRoom.members[userProfile.uid]);
+        if (!isStillMember) {
+          showToast("Your access to this cloud room was removed by the owner.", true);
+          const updated = customProjectsRef.current.map((p) => {
+            if (p.roomId === activeRoomId) {
+              return {
+                ...p,
+                source: "local" as const,
+                roomId: undefined,
+                secretKey: undefined,
+                role: undefined
+              };
+            }
+            return p;
+          });
+          setCustomProjects(updated);
+          saveCustomProjects(updated);
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("room");
+            url.searchParams.delete("cloud");
+            url.hash = "";
+            window.history.replaceState(null, "", url.toString());
+          } catch {}
+          return;
+        }
+      }
+
       if (!incomingRoom?.data) return;
 
       const currentLocal = parsedDataRef.current;
@@ -686,6 +757,65 @@ export function useRoomSync({
     handleJoinRoom(roomParam, secretFromHash);
   }, [handleJoinRoom, handleUnlockCollaborator]);
 
+  // Action: Create Cloud Room from Active Plan directly (1-Click Flow)
+  const createRoomFromActive = useCallback(
+    async (title?: string, dataOverride?: JanttData) => {
+      const dataToUse = dataOverride || parsedData;
+      if (!dataToUse) {
+        showToast("No plan data to create room with", true);
+        return null;
+      }
+      const roomTitle = title || activeProj?.name || "Shared Jantt Plan";
+      setIsProcessing(true);
+      try {
+        if (!userProfile) {
+          showToast("Please sign in with GitHub to create a live cloud room.", true);
+          return null;
+        }
+        if (!userProfile.githubVerified) {
+          onRequireVerification?.();
+          showToast("Please verify GitHub stars & follow creator to create cloud rooms.", true);
+          return null;
+        }
+        const roomPayload = await createRoom(userProfile, roomTitle, dataToUse);
+        baseDataMapRef.current.set(roomPayload.meta.roomId, dataToUse);
+        revisionMapRef.current.set(roomPayload.meta.roomId, roomPayload.meta.revision);
+
+        const newProj: SavedProject = {
+          id: `room-${roomPayload.meta.roomId}`,
+          name: roomPayload.meta.title,
+          updatedAt: roomPayload.meta.updatedAt,
+          data: dataToUse,
+          source: "room",
+          roomId: roomPayload.meta.roomId,
+          role: "collaborator",
+          revision: roomPayload.meta.revision,
+          lastSyncedAt: new Date().toISOString()
+        };
+
+        const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+        setCustomProjects(updated);
+        saveCustomProjects(updated);
+        setActiveProjectId(newProj.id);
+        try {
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+        } catch {}
+
+        setSyncStatus("in-sync");
+        setSyncMessage("Live Room Active");
+        setLastSyncTime(new Date());
+        showToast(`Cloud Room "${roomPayload.meta.title}" is live! Add teammates now.`);
+        return roomPayload.meta.roomId;
+      } catch (err: any) {
+        showToast(`Failed to create room: ${err.message}`, true);
+        return null;
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [parsedData, activeProj?.name, userProfile, onRequireVerification, setCustomProjects, setActiveProjectId, showToast]
+  );
+
   return {
     showRoomModal,
     setShowRoomModal,
@@ -696,8 +826,10 @@ export function useRoomSync({
     activeRoomId,
     activeRoomRole,
     activeSecretKey,
+    onlineUsers,
     handleCreateRoom,
     handleJoinRoom,
-    handleUnlockCollaborator
+    handleUnlockCollaborator,
+    createRoomFromActive
   };
 }
