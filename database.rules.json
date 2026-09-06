@@ -2,16 +2,15 @@
   "rules": {
     "users": {
       ".indexOn": ["username"],
-      ".read": "auth != null",
+      ".read": true,
       "$uid": {
-        ".write": "auth != null && auth.uid === $uid",
-        ".validate": "newData.hasChildren(['username', 'uid']) && newData.child('uid').val() === auth.uid"
+        ".write": "auth != null && auth.uid === $uid"
       }
     },
     "usernames": {
-      ".read": "auth != null",
+      ".read": true,
       "$username": {
-        ".write": "auth != null && (!data.exists() && newData.val() === auth.uid || data.val() === auth.uid)"
+        ".write": "auth != null && (!data.exists() || data.val() === auth.uid) && newData.val() === auth.uid"
       }
     },
     "user_rooms": {
@@ -27,7 +26,7 @@
     },
     "rooms": {
       "$roomId": {
-        ".read": "auth != null && (!data.exists() || data.child('meta/ownerUid').val() === auth.uid || data.child('members/' + auth.uid).exists())",
+        ".read": "auth != null",
         ".write": "auth != null && (!data.exists() && newData.child('meta/ownerUid').val() === auth.uid || data.child('meta/ownerUid').val() === auth.uid || data.child('members/' + auth.uid + '/role').val() === 'owner' || data.child('members/' + auth.uid + '/role').val() === 'editor')",
         "meta": {
           ".read": "auth != null",
@@ -35,12 +34,18 @@
         },
         "members": {
           "$memberUid": {
-            ".read": "auth != null && (data.parent().parent().child('meta/ownerUid').val() === auth.uid || data.parent().child(auth.uid).exists())",
+            ".read": "auth != null",
             ".write": "auth != null && (!data.parent().parent().exists() || data.parent().parent().child('meta/ownerUid').val() === auth.uid || auth.uid === $memberUid)"
           }
         },
+        "presence": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
         "data": {
-          ".read": "auth != null && (data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid).exists())",
+          ".read": "auth != null",
           ".write": "auth != null && (!data.parent().exists() || data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid + '/role').val() === 'editor')"
         }
       }
