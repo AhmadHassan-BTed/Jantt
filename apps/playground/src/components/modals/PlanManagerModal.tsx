@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Layers,
   X,
@@ -15,7 +15,15 @@ import {
   Sparkles,
   GripVertical,
   LogOut,
-  CloudUpload
+  CloudUpload,
+  Trash2,
+  UserMinus,
+  MoreVertical,
+  ExternalLink,
+  Edit2,
+  Files,
+  FileJson,
+  FileSpreadsheet
 } from "lucide-react";
 import type { SavedProject } from "../../types";
 import type { UserRoomPointer, UserProfile } from "../../firebase";
@@ -89,11 +97,23 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [isActionBusy, setIsActionBusy] = useState(false);
+  const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null);
   const modalFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag Mode: "move" (default per user requirement) vs "copy"
+  const [dragMode, setDragMode] = useState<"move" | "copy">("move");
 
   // HTML5 Drag and Drop State
   const [draggedPlan, setDraggedPlan] = useState<PlanCardItem | null>(null);
   const [dragOverCol, setDragOverCol] = useState<"local" | "owned" | null>(null);
+
+  // Click outside listener for card floating menu
+  useEffect(() => {
+    if (!openCardMenuId) return;
+    const handleDocumentClick = () => setOpenCardMenuId(null);
+    document.addEventListener("click", handleDocumentClick);
+    return () => document.removeEventListener("click", handleDocumentClick);
+  }, [openCardMenuId]);
 
   if (!show) return null;
 
@@ -205,22 +225,24 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
   };
 
   const handlePublishLocalToCloud = async (title: string, data?: JanttData) => {
-    if (!data) return;
+    if (!data) return null;
     setIsActionBusy(true);
     try {
       showToast(`Publishing "${title}" to Cloud Room...`);
       const roomId = await onPublishToCloud(title, data);
       if (roomId) {
-        showToast(`Published! Cloud Room #${roomId} ready.`);
+        showToast(`Published! Cloud Room #${roomId} created.`);
       }
+      return roomId;
     } catch (err: any) {
       showToast(err.message || "Failed to publish room", true);
+      return null;
     } finally {
       setIsActionBusy(false);
     }
   };
 
-  // Card Action Handler (from card action menu or select dropdown)
+  // Card Action Handler
   const handleCardAction = async (action: string, item: PlanCardItem) => {
     switch (action) {
       case "open":
@@ -249,18 +271,20 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
         if (item.roomId && onOpenShareRoom) onOpenShareRoom(item.roomId);
         break;
       case "delete_local":
-        onDeleteProject(item.id);
+        if (window.confirm(`Delete local plan "${item.name}" from browser storage?`)) {
+          onDeleteProject(item.id);
+        }
         break;
       case "delete_room":
         if (item.roomId && onDeleteCloudRoom) {
-          if (window.confirm(`Permanently delete cloud room "${item.name}"? Collaborators will lose access.`)) {
+          if (window.confirm(`Permanently delete cloud room "${item.name}"? All collaborators will lose access.`)) {
             await onDeleteCloudRoom(item.roomId);
           }
         }
         break;
       case "leave_room":
         if (item.roomId && onLeaveCloudRoom) {
-          if (window.confirm(`Leave room "${item.name}"?`)) {
+          if (window.confirm(`Leave shared room "${item.name}"? You can rejoin later if invited.`)) {
             await onLeaveCloudRoom(item.roomId);
           }
         }
@@ -270,7 +294,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
     }
   };
 
-  // Drag and Drop Handlers for Dropping on Columns
+  // Drag and Drop Handlers with Move vs Copy Logic
   const handleDropOnCloudColumn = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOverCol(null);
@@ -278,12 +302,16 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
 
     if (draggedPlan.type === "local" || draggedPlan.type === "template") {
       if (draggedPlan.data) {
-        await handlePublishLocalToCloud(draggedPlan.name, draggedPlan.data);
+        const newRoomId = await handlePublishLocalToCloud(draggedPlan.name, draggedPlan.data);
+        if (newRoomId && dragMode === "move" && draggedPlan.type === "local") {
+          onDeleteProject(draggedPlan.id);
+          showToast(`Moved "${draggedPlan.name}" to Cloud Room #${newRoomId}`);
+        }
       }
     }
   };
 
-  const handleDropOnLocalColumn = (e: React.DragEvent) => {
+  const handleDropOnLocalColumn = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOverCol(null);
     if (!draggedPlan) return;
@@ -291,8 +319,18 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
     if (draggedPlan.type === "owned_room" || draggedPlan.type === "shared_room") {
       if (draggedPlan.data) {
         onCreateLocalCopy(draggedPlan.name, draggedPlan.data);
+
+        if (dragMode === "move") {
+          if (draggedPlan.type === "owned_room" && draggedPlan.roomId && onDeleteCloudRoom) {
+            await onDeleteCloudRoom(draggedPlan.roomId);
+            showToast(`Moved "${draggedPlan.name}" from Cloud to Local Offline`);
+          } else if (draggedPlan.type === "shared_room" && draggedPlan.roomId && onLeaveCloudRoom) {
+            await onLeaveCloudRoom(draggedPlan.roomId);
+            showToast(`Moved "${draggedPlan.name}" to Local Offline & left cloud room`);
+          }
+        }
       } else {
-        showToast("Switch to this room first to load full data before saving offline copy.", true);
+        showToast("Open this room first to load its full data before saving offline copy.", true);
       }
     }
   };
@@ -305,6 +343,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
     const isShared = item.type === "shared_room";
     const isBeingRenamed = renamingId === item.id;
     const isCurrentlyDragged = draggedPlan?.id === item.id;
+    const isMenuOpen = openCardMenuId === item.id;
 
     return (
       <div
@@ -314,7 +353,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
         onDragStart={(e) => {
           setDraggedPlan(item);
           e.dataTransfer.setData("text/plain", item.id);
-          e.dataTransfer.effectAllowed = "copyMove";
+          e.dataTransfer.effectAllowed = dragMode === "move" ? "move" : "copy";
         }}
         onDragEnd={() => {
           setDraggedPlan(null);
@@ -331,7 +370,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 display: "flex",
                 alignItems: "center"
               }}
-              title={!isTemplate ? "Drag this card to move or copy across columns" : "Built-in Template"}
+              title={!isTemplate ? `Drag this card to ${dragMode === "move" ? "Move" : "Copy"} across columns` : "Built-in Template"}
             >
               {!isTemplate ? <GripVertical size={14} /> : null}
             </div>
@@ -449,7 +488,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
           )}
         </div>
 
-        {/* Action Bar: Open Plan + Card Action Dropdown + Quick Buttons */}
+        {/* Action Bar: Open Plan + Quick Buttons + Delete + Proper SVG Icon Floating Menu */}
         <div className="plan-card-action-bar">
           {/* Primary Open Button */}
           {item.isActive ? (
@@ -524,41 +563,244 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
             </button>
           )}
 
-          {/* Action Select Dropdown (User Requirement #2: "select from the dropdown or drag & drop") */}
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "4px" }}>
-            <select
-              className="select-input"
-              style={{
-                padding: "3px 8px",
-                fontSize: "11px",
-                height: "26px",
-                background: "rgba(255, 255, 255, 0.05)",
-                borderRadius: "6px",
-                cursor: "pointer"
-              }}
-              value=""
-              onChange={(e) => {
-                const act = e.target.value;
-                if (act) handleCardAction(act, item);
-                e.target.value = "";
-              }}
-              title="Select action for this plan"
+          {/* Direct Visible Delete / Leave Button */}
+          {isLocal && !isTemplate && (
+            <button
+              type="button"
+              className="btn-nav btn-delete-plan"
+              style={{ padding: "4px 7px", fontSize: "11px", color: "#EF4444" }}
+              onClick={() => handleCardAction("delete_local", item)}
+              title="Delete this local plan"
             >
-              <option value="" disabled>
-                Actions ▾
-              </option>
-              <option value="open">Open Plan</option>
-              {isLocal && <option value="publish_cloud">🚀 Publish to Cloud Room</option>}
-              {!isLocal && <option value="copy_local">💾 Save Offline Local Copy</option>}
-              {!isTemplate && (isLocal || isOwned) && <option value="rename">✏️ Rename Plan</option>}
-              {isLocal && !isTemplate && <option value="duplicate">📑 Duplicate Plan</option>}
-              <option value="export_json">📥 Export JSON</option>
-              <option value="export_csv">📊 Export CSV</option>
-              {item.roomId && <option value="share">🔗 Invite & Share</option>}
-              {isLocal && !isTemplate && <option value="delete_local">🗑️ Delete Plan</option>}
-              {isOwned && <option value="delete_room">🗑️ Delete Cloud Room</option>}
-              {isShared && <option value="leave_room">🚪 Leave Room</option>}
-            </select>
+              <Trash2 size={12} />
+            </button>
+          )}
+
+          {isOwned && (
+            <button
+              type="button"
+              className="btn-nav btn-delete-plan"
+              style={{ padding: "4px 7px", fontSize: "11px", color: "#EF4444" }}
+              onClick={() => handleCardAction("delete_room", item)}
+              title="Delete cloud room permanently"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+
+          {isShared && (
+            <button
+              type="button"
+              className="btn-nav btn-delete-plan"
+              style={{ padding: "4px 7px", fontSize: "11px", color: "#F59E0B" }}
+              onClick={() => handleCardAction("leave_room", item)}
+              title="Leave this shared cloud room"
+            >
+              <UserMinus size={12} />
+            </button>
+          )}
+
+          {/* Proper SVG Icon Floating Menu (Zero emojis) */}
+          <div style={{ position: "relative", marginLeft: "auto" }}>
+            <button
+              type="button"
+              className={`btn-nav ${isMenuOpen ? "btn-nav-primary" : ""}`}
+              style={{ padding: "4px 6px", fontSize: "11px" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpenCardMenuId(isMenuOpen ? null : item.id);
+              }}
+              title="More actions"
+            >
+              <MoreVertical size={13} />
+            </button>
+
+            {isMenuOpen && (
+              <div
+                className="card-floating-actions-menu"
+                style={{
+                  position: "absolute",
+                  bottom: "calc(100% + 4px)",
+                  right: 0,
+                  zIndex: 100,
+                  minWidth: "210px",
+                  background: "var(--jantt-surface-elevated, #1e293b)",
+                  border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.12))",
+                  borderRadius: "8px",
+                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4)",
+                  padding: "5px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                  backdropFilter: "blur(12px)"
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="card-menu-item"
+                  onClick={() => {
+                    setOpenCardMenuId(null);
+                    handleCardAction("open", item);
+                  }}
+                >
+                  <ExternalLink size={13} style={{ color: "var(--jantt-accent, #38BDF8)" }} />
+                  <span>Open Plan</span>
+                </button>
+
+                {isLocal && (
+                  <button
+                    type="button"
+                    className="card-menu-item"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("publish_cloud", item);
+                    }}
+                  >
+                    <CloudUpload size={13} style={{ color: "#38BDF8" }} />
+                    <span>Publish to Cloud Room</span>
+                  </button>
+                )}
+
+                {!isLocal && (
+                  <button
+                    type="button"
+                    className="card-menu-item"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("copy_local", item);
+                    }}
+                  >
+                    <Copy size={13} style={{ color: "#10B981" }} />
+                    <span>Save Offline Local Copy</span>
+                  </button>
+                )}
+
+                {!isTemplate && (isLocal || isOwned) && (
+                  <button
+                    type="button"
+                    className="card-menu-item"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("rename", item);
+                    }}
+                  >
+                    <Edit2 size={13} style={{ color: "#F59E0B" }} />
+                    <span>Rename Plan</span>
+                  </button>
+                )}
+
+                {isLocal && !isTemplate && (
+                  <button
+                    type="button"
+                    className="card-menu-item"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("duplicate", item);
+                    }}
+                  >
+                    <Files size={13} style={{ color: "#818CF8" }} />
+                    <span>Duplicate Plan</span>
+                  </button>
+                )}
+
+                <div
+                  style={{
+                    height: "1px",
+                    background: "var(--jantt-border-subtle, rgba(255, 255, 255, 0.08))",
+                    margin: "3px 4px"
+                  }}
+                />
+
+                <button
+                  type="button"
+                  className="card-menu-item"
+                  onClick={() => {
+                    setOpenCardMenuId(null);
+                    handleCardAction("export_json", item);
+                  }}
+                >
+                  <FileJson size={13} style={{ color: "#38BDF8" }} />
+                  <span>Export as JSON</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="card-menu-item"
+                  onClick={() => {
+                    setOpenCardMenuId(null);
+                    handleCardAction("export_csv", item);
+                  }}
+                >
+                  <FileSpreadsheet size={13} style={{ color: "#10B981" }} />
+                  <span>Export as CSV</span>
+                </button>
+
+                {item.roomId && (
+                  <button
+                    type="button"
+                    className="card-menu-item"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("share", item);
+                    }}
+                  >
+                    <Share2 size={13} style={{ color: "#A855F7" }} />
+                    <span>Invite &amp; Share</span>
+                  </button>
+                )}
+
+                <div
+                  style={{
+                    height: "1px",
+                    background: "var(--jantt-border-subtle, rgba(255, 255, 255, 0.08))",
+                    margin: "3px 4px"
+                  }}
+                />
+
+                {isLocal && !isTemplate && (
+                  <button
+                    type="button"
+                    className="card-menu-item is-danger"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("delete_local", item);
+                    }}
+                  >
+                    <Trash2 size={13} style={{ color: "#EF4444" }} />
+                    <span style={{ color: "#EF4444" }}>Delete Plan</span>
+                  </button>
+                )}
+
+                {isOwned && (
+                  <button
+                    type="button"
+                    className="card-menu-item is-danger"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("delete_room", item);
+                    }}
+                  >
+                    <Trash2 size={13} style={{ color: "#EF4444" }} />
+                    <span style={{ color: "#EF4444" }}>Delete Cloud Room</span>
+                  </button>
+                )}
+
+                {isShared && (
+                  <button
+                    type="button"
+                    className="card-menu-item is-warning"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      handleCardAction("leave_room", item);
+                    }}
+                  >
+                    <UserMinus size={13} style={{ color: "#F59E0B" }} />
+                    <span style={{ color: "#F59E0B" }}>Leave Room</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -609,7 +851,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 Plan &amp; Project Manager
               </h3>
               <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--jantt-text-muted, #94A3B8)" }}>
-                Drag and drop between columns to publish or save copies, or choose actions from each card dropdown.
+                Drag and drop between columns to move or copy, or choose actions from any card.
               </p>
             </div>
           </div>
@@ -728,7 +970,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
           </div>
         </div>
 
-        {/* Search Bar Strip */}
+        {/* Search Bar & Drag Mode Selector Strip */}
         <div
           style={{
             padding: "10px 22px",
@@ -736,11 +978,13 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
             borderBottom: "1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.06))",
             display: "flex",
             alignItems: "center",
-            gap: "12px",
+            justifyContent: "space-between",
+            gap: "16px",
             flexShrink: 0
           }}
         >
-          <div style={{ position: "relative", flex: 1, maxWidth: "420px" }}>
+          {/* Search Input */}
+          <div style={{ position: "relative", flex: 1, maxWidth: "380px" }}>
             <Search
               size={14}
               style={{
@@ -767,13 +1011,82 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
             />
           </div>
 
-          <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
-            Tip: Drag a local card onto Cloud Rooms to publish, or drag a cloud room to Local to save an offline copy.
-          </span>
+          {/* Drag Action Toggle: Move (Default) vs Copy (Clean Segmented Selector) */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              background: "rgba(255, 255, 255, 0.05)",
+              padding: "3px 6px",
+              borderRadius: "8px",
+              border: "1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.08))"
+            }}
+          >
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--jantt-text-muted)", marginRight: "4px" }}>
+              Drag Action:
+            </span>
+
+            {/* Move Button (Default) */}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                fontSize: "11.5px",
+                cursor: "pointer",
+                padding: "3px 9px",
+                borderRadius: "6px",
+                background: dragMode === "move" ? "var(--jantt-accent, #38BDF8)" : "transparent",
+                color: dragMode === "move" ? "#0F172A" : "var(--jantt-text)",
+                fontWeight: dragMode === "move" ? 700 : 500,
+                transition: "all 0.15s ease",
+                userSelect: "none"
+              }}
+            >
+              <input
+                type="radio"
+                name="dragMode"
+                value="move"
+                checked={dragMode === "move"}
+                onChange={() => setDragMode("move")}
+                style={{ display: "none" }}
+              />
+              <span>Move (Default)</span>
+            </label>
+
+            {/* Copy Button */}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                fontSize: "11.5px",
+                cursor: "pointer",
+                padding: "3px 9px",
+                borderRadius: "6px",
+                background: dragMode === "copy" ? "var(--jantt-accent, #38BDF8)" : "transparent",
+                color: dragMode === "copy" ? "#0F172A" : "var(--jantt-text)",
+                fontWeight: dragMode === "copy" ? 700 : 500,
+                transition: "all 0.15s ease",
+                userSelect: "none"
+              }}
+            >
+              <input
+                type="radio"
+                name="dragMode"
+                value="copy"
+                checked={dragMode === "copy"}
+                onChange={() => setDragMode("copy")}
+                style={{ display: "none" }}
+              />
+              <span>Copy</span>
+            </label>
+          </div>
         </div>
 
         {/* 3-List Board Container */}
-        <div className="plan-board-container">
+        <div className={`plan-board-container ${draggedPlan ? "is-dragging-card" : ""}`}>
           {/* ========================================================= */}
           {/* Column 1: Local Offline Plans                             */}
           {/* ========================================================= */}
@@ -782,12 +1095,14 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
             onDragOver={(e) => {
               if (draggedPlan && (draggedPlan.type === "owned_room" || draggedPlan.type === "shared_room")) {
                 e.preventDefault();
-                e.dataTransfer.dropEffect = "copy";
+                e.dataTransfer.dropEffect = dragMode === "move" ? "move" : "copy";
                 if (dragOverCol !== "local") setDragOverCol("local");
               }
             }}
-            onDragLeave={() => {
-              setDragOverCol(null);
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setDragOverCol(null);
+              }
             }}
             onDrop={handleDropOnLocalColumn}
           >
@@ -810,6 +1125,22 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 >
                   {localItems.length}
                 </span>
+
+                {dragOverCol === "local" && (
+                  <span
+                    style={{
+                      fontSize: "10.5px",
+                      fontWeight: 700,
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      background: "rgba(16, 185, 129, 0.2)",
+                      color: "#10B981",
+                      border: "1px solid rgba(16, 185, 129, 0.4)"
+                    }}
+                  >
+                    Drop to {dragMode === "move" ? "Move" : "Copy"} Here
+                  </span>
+                )}
               </div>
 
               <button
@@ -827,25 +1158,8 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               </button>
             </div>
 
-            {/* Column Drop Helper / Body */}
+            {/* Column Body: Cards stay completely stable without shifting layout! */}
             <div className="plan-board-column-body">
-              {dragOverCol === "local" && (
-                <div
-                  style={{
-                    padding: "14px",
-                    border: "2px dashed #10B981",
-                    borderRadius: "8px",
-                    background: "rgba(16, 185, 129, 0.1)",
-                    color: "#10B981",
-                    textAlign: "center",
-                    fontWeight: 600,
-                    fontSize: "12.5px"
-                  }}
-                >
-                  Drop here to save an Offline Local Copy!
-                </div>
-              )}
-
               {filteredLocal.map(renderPlanCard)}
 
               {filteredLocal.length === 0 && (
@@ -865,12 +1179,14 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
             onDragOver={(e) => {
               if (draggedPlan && (draggedPlan.type === "local" || draggedPlan.type === "template")) {
                 e.preventDefault();
-                e.dataTransfer.dropEffect = "copy";
+                e.dataTransfer.dropEffect = dragMode === "move" ? "move" : "copy";
                 if (dragOverCol !== "owned") setDragOverCol("owned");
               }
             }}
-            onDragLeave={() => {
-              setDragOverCol(null);
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setDragOverCol(null);
+              }
             }}
             onDrop={handleDropOnCloudColumn}
           >
@@ -893,6 +1209,22 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 >
                   {ownedItems.length}
                 </span>
+
+                {dragOverCol === "owned" && (
+                  <span
+                    style={{
+                      fontSize: "10.5px",
+                      fontWeight: 700,
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      background: "rgba(56, 189, 248, 0.2)",
+                      color: "#38BDF8",
+                      border: "1px solid rgba(56, 189, 248, 0.4)"
+                    }}
+                  >
+                    Drop to {dragMode === "move" ? "Move" : "Copy"} Here
+                  </span>
+                )}
               </div>
 
               {onCreateNewRoom && (
@@ -912,25 +1244,8 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               )}
             </div>
 
-            {/* Column Drop Helper / Body */}
+            {/* Column Body: Cards stay completely stable without shifting layout! */}
             <div className="plan-board-column-body">
-              {dragOverCol === "owned" && (
-                <div
-                  style={{
-                    padding: "14px",
-                    border: "2px dashed #38BDF8",
-                    borderRadius: "8px",
-                    background: "rgba(56, 189, 248, 0.1)",
-                    color: "#38BDF8",
-                    textAlign: "center",
-                    fontWeight: 600,
-                    fontSize: "12.5px"
-                  }}
-                >
-                  Drop here to Publish to a new Cloud Room!
-                </div>
-              )}
-
               {filteredOwned.map(renderPlanCard)}
 
               {filteredOwned.length === 0 && (
@@ -938,7 +1253,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                   <Cloud size={24} style={{ opacity: 0.5 }} />
                   <span style={{ fontWeight: 500 }}>No owned cloud rooms yet.</span>
                   <span style={{ fontSize: "11px", maxWidth: "220px", lineHeight: "1.4" }}>
-                    Drag any local plan here to publish it to the cloud, or click + Room above.
+                    Drag any local plan here to {dragMode} it to the cloud, or click + Room above.
                   </span>
                 </div>
               )}
@@ -1001,7 +1316,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
           <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
             Total Plans: <strong>{localItems.length + ownedItems.length + sharedItems.length}</strong> • Local:{" "}
             <strong>{localItems.length}</strong> • Owned Rooms: <strong>{ownedItems.length}</strong> • Shared:{" "}
-            <strong>{sharedItems.length}</strong>
+            <strong>{sharedItems.length}</strong> • Drag Mode: <strong>{dragMode.toUpperCase()}</strong>
           </div>
           <button type="button" className="btn-nav" onClick={() => setShow(false)}>
             Close
