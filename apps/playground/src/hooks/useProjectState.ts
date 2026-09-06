@@ -26,6 +26,8 @@ interface UseProjectStateOptions {
   setShowBaselines: (val: boolean) => void;
   showToast: (msg: string, isErr?: boolean) => void;
   flushPendingSave?: () => void;
+  onCreateCloudRoom?: (title: string, data: JanttData) => Promise<string | null>;
+  onUpdateExistingRoom?: (roomId: string, data: JanttData) => Promise<boolean>;
 }
 
 export function useProjectState({
@@ -41,7 +43,9 @@ export function useProjectState({
   setShowCriticalPath,
   setShowBaselines,
   showToast,
-  flushPendingSave
+  flushPendingSave,
+  onCreateCloudRoom,
+  onUpdateExistingRoom
 }: UseProjectStateOptions) {
   const [customProjects, setCustomProjects] = useState<SavedProject[]>(initialProjects);
   const [activeProjectId, setActiveProjectId] = useState<string>(initialActiveId);
@@ -131,65 +135,94 @@ export function useProjectState({
     setShowAddPlanModal(true);
   }, [customProjects.length]);
 
-  const handleCreateNewPlan = useCallback(() => {
-    if (!newPlanTitle.trim()) return;
-    let data: JanttData;
-    if (newPlanTemplateType === "blank") {
-      data = createBlankPlan(newPlanTitle.trim());
-    } else if (newPlanTemplateType === "master") {
-      data = {
-        ...JSON.parse(JSON.stringify(masterTemplateFixture)),
-        meta: {
-          ...(masterTemplateFixture.meta || {}),
-          title: newPlanTitle.trim()
-        }
-      };
-    } else {
-      data = parsedData
-        ? {
-            ...JSON.parse(JSON.stringify(parsedData)),
-            meta: {
-              ...(parsedData.meta || {}),
-              title: newPlanTitle.trim()
-            }
+  const handleCreateNewPlan = useCallback(
+    async (
+      customTitle?: string,
+      customTemplateType?: "blank" | "master" | "clone",
+      destination: "local" | "new_room" | "existing_room" = "local",
+      targetRoomId?: string
+    ) => {
+      const title = (customTitle !== undefined ? customTitle : newPlanTitle).trim();
+      if (!title) return;
+
+      const templateType = customTemplateType || newPlanTemplateType;
+
+      let data: JanttData;
+      if (templateType === "blank") {
+        data = createBlankPlan(title);
+      } else if (templateType === "master") {
+        data = {
+          ...JSON.parse(JSON.stringify(masterTemplateFixture)),
+          meta: {
+            ...(masterTemplateFixture.meta || {}),
+            title
           }
-        : createBlankPlan(newPlanTitle.trim());
-    }
+        };
+      } else {
+        data = parsedData
+          ? {
+              ...JSON.parse(JSON.stringify(parsedData)),
+              meta: {
+                ...(parsedData.meta || {}),
+                title
+              }
+            }
+          : createBlankPlan(title);
+      }
 
-    const newProj: SavedProject = {
-      id: `plan-${Date.now().toString(36)}`,
-      name: newPlanTitle.trim(),
-      updatedAt: new Date().toISOString(),
-      data,
-      source: "local"
-    };
+      if (destination === "new_room") {
+        if (onCreateCloudRoom) {
+          setShowAddPlanModal(false);
+          await onCreateCloudRoom(title, data);
+          return;
+        }
+      } else if (destination === "existing_room" && targetRoomId) {
+        if (onUpdateExistingRoom) {
+          setShowAddPlanModal(false);
+          await onUpdateExistingRoom(targetRoomId, data);
+          return;
+        }
+      }
 
-    const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
-    setCustomProjects(updated);
-    saveCustomProjects(updated);
-    setActiveProjectId(newProj.id);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
-    } catch {}
-    setJsonText(JSON.stringify(data, null, 2));
-    setParsedData(data);
-    setPeople(data.people || []);
-    setTeams(data.teams || []);
-    setValidationResult(validate(data));
-    setShowAddPlanModal(false);
-    showToast(`Created local plan "${newProj.name}"`);
-  }, [
-    newPlanTitle,
-    newPlanTemplateType,
-    parsedData,
-    customProjects,
-    setJsonText,
-    setParsedData,
-    setPeople,
-    setTeams,
-    setValidationResult,
-    showToast
-  ]);
+      // Default Destination: "local"
+      const newProj: SavedProject = {
+        id: `plan-${Date.now().toString(36)}`,
+        name: title,
+        updatedAt: new Date().toISOString(),
+        data,
+        source: "local"
+      };
+
+      const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
+      setCustomProjects(updated);
+      saveCustomProjects(updated);
+      setActiveProjectId(newProj.id);
+      try {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+      } catch {}
+      setJsonText(JSON.stringify(data, null, 2));
+      setParsedData(data);
+      setPeople(data.people || []);
+      setTeams(data.teams || []);
+      setValidationResult(validate(data));
+      setShowAddPlanModal(false);
+      showToast(`Created local plan "${newProj.name}"`);
+    },
+    [
+      newPlanTitle,
+      newPlanTemplateType,
+      parsedData,
+      customProjects,
+      onCreateCloudRoom,
+      onUpdateExistingRoom,
+      setJsonText,
+      setParsedData,
+      setPeople,
+      setTeams,
+      setValidationResult,
+      showToast
+    ]
+  );
 
   const handleForkToLocalPlan = useCallback(() => {
     const activeProj = customProjects.find((p) => p.id === activeProjectId);
@@ -227,6 +260,144 @@ export function useProjectState({
     setValidationResult,
     showToast
   ]);
+
+  const handleCreateLocalCopyFromData = useCallback(
+    (title: string, data: JanttData) => {
+      const copyTitle = title.endsWith("(Local Copy)") ? title : `${title} (Local Copy)`;
+      const copyData = {
+        ...JSON.parse(JSON.stringify(data)),
+        meta: {
+          ...(data.meta || {}),
+          title: copyTitle
+        }
+      };
+
+      const newProj: SavedProject = {
+        id: `plan-${Date.now().toString(36)}`,
+        name: copyTitle,
+        updatedAt: new Date().toISOString(),
+        data: copyData,
+        source: "local"
+      };
+
+      const updated = [newProj, ...customProjects];
+      setCustomProjects(updated);
+      saveCustomProjects(updated);
+      setActiveProjectId(newProj.id);
+      try {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+      } catch {}
+      setJsonText(JSON.stringify(copyData, null, 2));
+      setParsedData(copyData);
+      setPeople(copyData.people || []);
+      setTeams(copyData.teams || []);
+      setValidationResult(validate(copyData));
+      showToast(`Saved local offline copy: "${copyTitle}"`);
+    },
+    [
+      customProjects,
+      setJsonText,
+      setParsedData,
+      setPeople,
+      setTeams,
+      setValidationResult,
+      showToast
+    ]
+  );
+
+  const handleRenameProject = useCallback(
+    (projectId: string, newName: string) => {
+      const trimmed = newName.trim();
+      if (!trimmed) return;
+      setCustomProjects((prev) => {
+        const updated = prev.map((p) => {
+          if (p.id === projectId) {
+            const nextData = p.data
+              ? { ...p.data, meta: { ...(p.data.meta || {}), title: trimmed } }
+              : p.data;
+            return {
+              ...p,
+              name: trimmed,
+              data: nextData,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return p;
+        });
+        saveCustomProjects(updated);
+        return updated;
+      });
+
+      if (activeProjectId === projectId && parsedData) {
+        const updatedActiveData = {
+          ...parsedData,
+          meta: { ...(parsedData.meta || {}), title: trimmed }
+        };
+        setParsedData(updatedActiveData);
+        setJsonText(JSON.stringify(updatedActiveData, null, 2));
+      }
+      showToast(`Renamed plan to "${trimmed}"`);
+    },
+    [activeProjectId, parsedData, setParsedData, setJsonText, showToast]
+  );
+
+  const handleDuplicateProject = useCallback(
+    (projectId: string) => {
+      let sourceData: JanttData | null = null;
+      let baseName = "Plan";
+      if (projectId === "default") {
+        sourceData = DEFAULT_TEMPLATE.data;
+        baseName = DEFAULT_TEMPLATE.name;
+      } else {
+        const found = customProjects.find((p) => p.id === projectId);
+        if (found) {
+          sourceData = found.data;
+          baseName = found.name;
+        }
+      }
+      if (!sourceData) return;
+
+      const copyTitle = `${baseName} (Copy)`;
+      const copyData = {
+        ...JSON.parse(JSON.stringify(sourceData)),
+        meta: {
+          ...(sourceData.meta || {}),
+          title: copyTitle
+        }
+      };
+
+      const newProj: SavedProject = {
+        id: `plan-${Date.now().toString(36)}`,
+        name: copyTitle,
+        updatedAt: new Date().toISOString(),
+        data: copyData,
+        source: "local"
+      };
+
+      const updated = [newProj, ...customProjects];
+      setCustomProjects(updated);
+      saveCustomProjects(updated);
+      setActiveProjectId(newProj.id);
+      try {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+      } catch {}
+      setJsonText(JSON.stringify(copyData, null, 2));
+      setParsedData(copyData);
+      setPeople(copyData.people || []);
+      setTeams(copyData.teams || []);
+      setValidationResult(validate(copyData));
+      showToast(`Duplicated into "${copyTitle}"`);
+    },
+    [
+      customProjects,
+      setJsonText,
+      setParsedData,
+      setPeople,
+      setTeams,
+      setValidationResult,
+      showToast
+    ]
+  );
 
   const handleDeleteProject = useCallback(
     (projectId: string) => {
@@ -285,7 +456,10 @@ export function useProjectState({
             setValidationResult(val);
             showToast(`Imported "${newProj.name}"`);
           } else {
-            alert("The imported file has schema errors:\n" + val.errors.map((err) => `${err.path}: ${err.message}`).join("\n"));
+            alert(
+              "The imported file has schema errors:\n" +
+                val.errors.map((err) => `${err.path}: ${err.message}`).join("\n")
+            );
           }
         } catch (err: any) {
           alert("Invalid JSON file: " + err.message);
@@ -294,7 +468,15 @@ export function useProjectState({
       reader.readAsText(file);
       e.target.value = "";
     },
-    [customProjects, setJsonText, setParsedData, setPeople, setTeams, setValidationResult, showToast]
+    [
+      customProjects,
+      setJsonText,
+      setParsedData,
+      setPeople,
+      setTeams,
+      setValidationResult,
+      showToast
+    ]
   );
 
   const handleResetActiveProject = useCallback(() => {
@@ -361,6 +543,9 @@ export function useProjectState({
     handleOpenAddPlanModal,
     handleCreateNewPlan,
     handleForkToLocalPlan,
+    handleCreateLocalCopyFromData,
+    handleRenameProject,
+    handleDuplicateProject,
     handleDeleteProject,
     handleImportJsonFile,
     handleResetActiveProject,

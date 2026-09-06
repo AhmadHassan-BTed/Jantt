@@ -442,6 +442,27 @@ select option,
   color: var(--jantt-accent-contrast, #000000);
 }
 
+.btn-plan-action.is-manage {
+  color: var(--jantt-text, #F8FAFC);
+  background: var(--jantt-surface, rgba(255, 255, 255, 0.05));
+  border-color: var(--jantt-border, rgba(255, 255, 255, 0.12));
+}
+
+.btn-plan-action.is-manage:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.12));
+  color: var(--jantt-accent, #38BDF8);
+  border-color: var(--jantt-accent-glow, rgba(56, 189, 248, 0.3));
+}
+
+.btn-plan-action.is-import {
+  color: var(--jantt-text-muted, #94A3B8);
+}
+
+.btn-plan-action.is-import:hover {
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.15));
+  color: var(--jantt-accent, #38BDF8);
+}
+
 .btn-plan-action.is-cloud {
   color: var(--jantt-accent, #38BDF8);
 }

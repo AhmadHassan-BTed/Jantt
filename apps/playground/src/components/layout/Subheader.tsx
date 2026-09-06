@@ -4,7 +4,11 @@ import {
   Plus,
   Share2,
   Trash2,
-  Users
+  Users,
+  Layers,
+  Upload,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
 import type { SavedProject, EffectivePerson } from "../../types";
 import type { UserRoomPointer } from "../../firebase/types";
@@ -22,6 +26,10 @@ export interface SubheaderProps {
   effectivePeople: EffectivePerson[];
   ownedRooms?: UserRoomPointer[];
   sharedRooms?: UserRoomPointer[];
+  onOpenPlanManager?: () => void;
+  onImportJson?: () => void;
+  onExportJson?: () => void;
+  onExportCsv?: () => void;
 }
 
 export const Subheader: React.FC<SubheaderProps> = ({
@@ -35,7 +43,11 @@ export const Subheader: React.FC<SubheaderProps> = ({
   setShowPeopleModal,
   effectivePeople,
   ownedRooms = [],
-  sharedRooms = []
+  sharedRooms = [],
+  onOpenPlanManager,
+  onImportJson,
+  onExportJson,
+  onExportCsv
 }) => {
   return (
     <div className="subheader-bar">
@@ -111,6 +123,19 @@ export const Subheader: React.FC<SubheaderProps> = ({
           </div>
 
           <div className="subheader-plan-actions">
+            {/* Manage Plans Button */}
+            {onOpenPlanManager && (
+              <button
+                type="button"
+                className="btn-plan-action is-manage"
+                onClick={onOpenPlanManager}
+                title="Open Plan Manager to organize all local & cloud plans"
+              >
+                <Layers size={13} />
+                <span>Manage Plans</span>
+              </button>
+            )}
+
             {/* + Add Plan Button */}
             <button
               type="button"
@@ -121,6 +146,45 @@ export const Subheader: React.FC<SubheaderProps> = ({
               <Plus size={13} />
               <span>New Plan</span>
             </button>
+
+            {/* Quick Import Plan Button */}
+            {onImportJson && (
+              <button
+                type="button"
+                className="btn-plan-action is-import"
+                onClick={onImportJson}
+                title="Import a Jantt JSON file"
+              >
+                <Upload size={12} />
+                <span>Import</span>
+              </button>
+            )}
+
+            {/* Quick Export JSON */}
+            {onExportJson && (
+              <button
+                type="button"
+                className="btn-plan-action is-export"
+                onClick={onExportJson}
+                title="Download active plan as JSON"
+              >
+                <Download size={12} />
+                <span>JSON</span>
+              </button>
+            )}
+
+            {/* Quick Export CSV */}
+            {onExportCsv && (
+              <button
+                type="button"
+                className="btn-plan-action is-export"
+                onClick={onExportCsv}
+                title="Export active plan as CSV"
+              >
+                <FileSpreadsheet size={12} />
+                <span>CSV</span>
+              </button>
+            )}
 
             {/* Export / Share Active Plan Button */}
             <button
@@ -133,7 +197,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
               title="Export or share this project plan via compressed link, WhatsApp, or JSON file"
             >
               <Share2 size={12} />
-              <span>Export / Share</span>
+              <span>Share</span>
             </button>
 
             {/* Delete Active Plan Button */}

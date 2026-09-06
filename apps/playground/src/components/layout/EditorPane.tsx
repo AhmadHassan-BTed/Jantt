@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   FileJson,
   Zap,
@@ -8,7 +8,10 @@ import {
   ChevronLeft,
   CheckCircle2,
   AlertTriangle,
-  Info
+  Info,
+  Upload,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
 import type { JanttData, ValidationResult } from "@jantt/core";
 
@@ -25,6 +28,9 @@ interface EditorPaneProps {
   handleCopyJson: () => void;
   copiedJson: boolean;
   handleEditorChange: (text: string) => void;
+  handleImportJsonFile?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleDownloadJson?: () => void;
+  handleExportCsv?: () => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
@@ -39,8 +45,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   handleResetActiveProject,
   handleCopyJson,
   copiedJson,
-  handleEditorChange
+  handleEditorChange,
+  handleImportJsonFile,
+  handleDownloadJson,
+  handleExportCsv
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <section
       id="editor-pane"
@@ -59,14 +70,56 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           )}
         </div>
         <div className="pane-actions">
-          <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
+          {handleImportJsonFile && (
+            <>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".json"
+                style={{ display: "none" }}
+                onChange={handleImportJsonFile}
+              />
+              <button
+                className="btn-nav"
+                style={{ padding: "3px 7px", fontSize: "11px", gap: "4px" }}
+                onClick={() => fileInputRef.current?.click()}
+                title="Import JSON plan file directly into editor"
+              >
+                <Upload size={12} />
+                <span>Import</span>
+              </button>
+            </>
+          )}
+          {handleDownloadJson && (
+            <button
+              className="btn-nav"
+              style={{ padding: "3px 7px", fontSize: "11px", gap: "4px" }}
+              onClick={handleDownloadJson}
+              title="Download active plan as JSON"
+            >
+              <Download size={12} />
+              <span>JSON</span>
+            </button>
+          )}
+          {handleExportCsv && (
+            <button
+              className="btn-nav"
+              style={{ padding: "3px 7px", fontSize: "11px", gap: "4px" }}
+              onClick={handleExportCsv}
+              title="Export active plan as CSV"
+            >
+              <FileSpreadsheet size={12} />
+              <span>CSV</span>
+            </button>
+          )}
+          <button className="btn-nav" style={{ padding: "3px 7px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
             Format
           </button>
-          <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleResetActiveProject} title="Reset current plan back to saved state or default template">
+          <button className="btn-nav" style={{ padding: "3px 7px", fontSize: "11px" }} onClick={handleResetActiveProject} title="Reset current plan back to saved state or default template">
             <RotateCcw size={12} />
             <span>Reset</span>
           </button>
-          <button className="btn-nav" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={handleCopyJson} title="Copy JSON">
+          <button className="btn-nav" style={{ padding: "3px 7px", fontSize: "11px" }} onClick={handleCopyJson} title="Copy JSON">
             {copiedJson ? <Check size={12} /> : <Copy size={12} />}
             {copiedJson ? "Copied" : "Copy"}
           </button>

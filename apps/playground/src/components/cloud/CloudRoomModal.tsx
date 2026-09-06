@@ -355,7 +355,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                     className="btn btn-secondary"
                     style={{ fontSize: "0.78rem", padding: "5px 10px", display: "flex", gap: "5px", alignItems: "center" }}
                   >
-                    <Key size={13} /> Unlock Edit Mode
+                    <Key size={13} /> {showUnlockInput ? "Hide Legacy Key Input" : "Legacy Secret Key"}
                   </button>
                 )}
               </div>
@@ -364,13 +364,28 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
               {showUnlockInput && (
                 <div
                   style={{
-                    padding: "12px",
+                    padding: "14px",
                     background: "rgba(30, 41, 59, 0.7)",
                     borderRadius: "8px",
                     border: "1px solid rgba(56, 189, 248, 0.3)",
                     marginBottom: "16px"
                   }}
                 >
+                  <div style={{ marginBottom: "10px", fontSize: "0.8rem", color: "var(--jantt-text)", lineHeight: 1.4 }}>
+                    {currentUserProfile ? (
+                      <div>
+                        <strong>Modern GitHub Authentication:</strong> You are signed in as{" "}
+                        <span style={{ color: "var(--jantt-accent)" }}>@{currentUserProfile.username}</span>. Editing permissions are managed directly via Role-Based Access Control. Ask the room owner to assign you the <strong>Editor</strong> role in their Share dialog.
+                        <div style={{ fontSize: "0.74rem", color: "var(--jantt-muted)", marginTop: "4px" }}>
+                          Secret Edit Keys are only used as an older fallback for legacy anonymous room links.
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong>Sign in with GitHub</strong> for automatic editor permissions, or paste a legacy secret edit key below.
+                      </div>
+                    )}
+                  </div>
                   <form
                     onSubmit={handleUnlockSubmit}
                     style={{
@@ -380,7 +395,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                   >
                     <input
                       type="password"
-                      placeholder={currentUserProfile ? "Paste Legacy Secret Edit Key (sec_...)" : "Paste Secret Edit Key (sec_...)"}
+                      placeholder="Paste Legacy Secret Edit Key (sec_...)"
                       value={unlockKeyInput}
                       onChange={(e) => setUnlockKeyInput(e.target.value)}
                       style={{
@@ -402,11 +417,6 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                       {isProcessing ? <Loader2 size={14} className="spin" /> : "Unlock"}
                     </button>
                   </form>
-                  {currentUserProfile && (
-                    <div style={{ fontSize: "0.74rem", color: "var(--jantt-muted)", marginTop: "8px" }}>
-                      Tip: As @{currentUserProfile.username}, you can also simply ask the room owner to grant you Editor role directly in their Share & Collaborators dialog.
-                    </div>
-                  )}
                 </div>
               )}
 
