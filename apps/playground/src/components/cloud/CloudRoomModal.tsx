@@ -362,42 +362,52 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
 
               {/* Unlock Input Drawer */}
               {showUnlockInput && (
-                <form
-                  onSubmit={handleUnlockSubmit}
+                <div
                   style={{
                     padding: "12px",
                     background: "rgba(30, 41, 59, 0.7)",
                     borderRadius: "8px",
                     border: "1px solid rgba(56, 189, 248, 0.3)",
-                    marginBottom: "16px",
-                    display: "flex",
-                    gap: "8px"
+                    marginBottom: "16px"
                   }}
                 >
-                  <input
-                    type="password"
-                    placeholder="Paste Secret Edit Key (sec_...)"
-                    value={unlockKeyInput}
-                    onChange={(e) => setUnlockKeyInput(e.target.value)}
+                  <form
+                    onSubmit={handleUnlockSubmit}
                     style={{
-                      flex: 1,
-                      padding: "8px 12px",
-                      borderRadius: "6px",
-                      background: "rgba(15, 23, 42, 0.8)",
-                      border: "1px solid var(--jantt-border)",
-                      color: "var(--jantt-text)",
-                      fontSize: "0.85rem"
+                      display: "flex",
+                      gap: "8px"
                     }}
-                  />
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={!unlockKeyInput.trim() || isProcessing}
-                    style={{ padding: "8px 14px", fontSize: "0.82rem" }}
                   >
-                    {isProcessing ? <Loader2 size={14} className="spin" /> : "Unlock"}
-                  </button>
-                </form>
+                    <input
+                      type="password"
+                      placeholder={currentUserProfile ? "Paste Legacy Secret Edit Key (sec_...)" : "Paste Secret Edit Key (sec_...)"}
+                      value={unlockKeyInput}
+                      onChange={(e) => setUnlockKeyInput(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        borderRadius: "6px",
+                        background: "rgba(15, 23, 42, 0.8)",
+                        border: "1px solid var(--jantt-border)",
+                        color: "var(--jantt-text)",
+                        fontSize: "0.85rem"
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={!unlockKeyInput.trim() || isProcessing}
+                      style={{ padding: "8px 14px", fontSize: "0.82rem" }}
+                    >
+                      {isProcessing ? <Loader2 size={14} className="spin" /> : "Unlock"}
+                    </button>
+                  </form>
+                  {currentUserProfile && (
+                    <div style={{ fontSize: "0.74rem", color: "var(--jantt-muted)", marginTop: "8px" }}>
+                      Tip: As @{currentUserProfile.username}, you can also simply ask the room owner to grant you Editor role directly in their Share & Collaborators dialog.
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Link Option 1: Collaborator Link */}

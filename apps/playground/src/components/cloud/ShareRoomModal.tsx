@@ -11,7 +11,9 @@ import {
   Trash2,
   Loader2,
   Globe,
-  Layers
+  Layers,
+  Eye,
+  Edit3
 } from "lucide-react";
 import type { Team, Person } from "@jantt/core";
 import { ref, onValue } from "firebase/database";
@@ -65,7 +67,8 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   // Members & Teams in active room
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [roomTeams, setRoomTeams] = useState<RoomTeam[]>([]);
-  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedEditLink, setCopiedEditLink] = useState(false);
+  const [copiedViewLink, setCopiedViewLink] = useState(false);
 
   // Listen to members of active room
   useEffect(() => {
@@ -139,15 +142,25 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   if (!show || !roomId) return null;
 
   const origin = typeof window !== "undefined" ? window.location.origin + window.location.pathname : "";
-  const inviteLink = `${origin}?room=${encodeURIComponent(roomId)}`;
+  const editLink = `${origin}?room=${encodeURIComponent(roomId)}&role=editor`;
+  const viewLink = `${origin}?room=${encodeURIComponent(roomId)}&role=viewer`;
   const isOwner = currentUserProfile && members.some((m) => m.uid === currentUserProfile.uid && m.role === "owner");
 
-  const handleCopyLink = async () => {
+  const handleCopyEditLink = async () => {
     try {
-      await navigator.clipboard.writeText(inviteLink);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2500);
-      showToast("Invite link copied to clipboard!");
+      await navigator.clipboard.writeText(editLink);
+      setCopiedEditLink(true);
+      setTimeout(() => setCopiedEditLink(false), 2500);
+      showToast("Collaborator Edit link copied to clipboard!");
+    } catch {}
+  };
+
+  const handleCopyViewLink = async () => {
+    try {
+      await navigator.clipboard.writeText(viewLink);
+      setCopiedViewLink(true);
+      setTimeout(() => setCopiedViewLink(false), 2500);
+      showToast("Pure View (Read-Only) link copied to clipboard!");
     } catch {}
   };
 
@@ -378,38 +391,64 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
 
         {/* Modal Body */}
         <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
-          {/* TAB 1: INVITE LINK */}
+          {/* TAB 1: INVITE LINKS (EDIT vs VIEW) */}
           {activeTab === "link" && (
-            <div>
-              <p style={{ margin: "0 0 14px 0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
-                Share this direct invite link with teammates. When they open it, they can immediately join and collaborate live.
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <p style={{ margin: "0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
+                Choose between an <strong>Edit Mode Link</strong> for teammates to collaborate live, or a <strong>Pure View Link</strong> for stakeholders to inspect the roadmap safely.
               </p>
 
+              {/* Option A: Edit Mode Link */}
               <div
                 style={{
                   padding: "16px",
                   borderRadius: "10px",
-                  background: "rgba(30, 41, 59, 0.5)",
-                  border: "1px solid var(--jantt-border)",
-                  marginBottom: "16px"
+                  background: "rgba(16, 185, 129, 0.05)",
+                  border: "1px solid rgba(16, 185, 129, 0.25)"
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--jantt-text)" }}>
-                    Room Invite Link
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Edit3 size={16} style={{ color: "#34D399" }} />
+                    <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--jantt-text)" }}>
+                      Edit Mode Link (Collaborative Live Sync)
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: "100px",
+                        background: "rgba(16, 185, 129, 0.15)",
+                        color: "#34D399",
+                        border: "1px solid rgba(16, 185, 129, 0.3)"
+                      }}
+                    >
+                      Editor Access
+                    </span>
+                  </div>
                   <button
-                    onClick={handleCopyLink}
+                    onClick={handleCopyEditLink}
                     className="btn btn-primary"
-                    style={{ padding: "6px 14px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "6px" }}
+                    style={{
+                      padding: "6px 14px",
+                      fontSize: "0.82rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      background: copiedEditLink ? "#059669" : "var(--jantt-accent)"
+                    }}
                   >
-                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedLink ? "Copied!" : "Copy Link"}
+                    {copiedEditLink ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedEditLink ? "Copied!" : "Copy Edit Link"}
                   </button>
                 </div>
+                <p style={{ margin: "0 0 10px 0", fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
+                  Teammates sign in via GitHub to edit tasks, adjust schedules, and auto-sync in real time.
+                </p>
                 <input
                   readOnly
-                  value={inviteLink}
+                  value={editLink}
                   onFocus={(e) => e.target.select()}
                   style={{
                     width: "100%",
@@ -424,10 +463,75 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                 />
               </div>
 
+              {/* Option B: Pure View Link */}
+              <div
+                style={{
+                  padding: "16px",
+                  borderRadius: "10px",
+                  background: "rgba(56, 189, 248, 0.05)",
+                  border: "1px solid rgba(56, 189, 248, 0.25)"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Eye size={16} style={{ color: "var(--jantt-accent)" }} />
+                    <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--jantt-text)" }}>
+                      Pure View Link (Safe Read-Only)
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: "100px",
+                        background: "rgba(56, 189, 248, 0.15)",
+                        color: "var(--jantt-accent)",
+                        border: "1px solid rgba(56, 189, 248, 0.3)"
+                      }}
+                    >
+                      Read-Only
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleCopyViewLink}
+                    className="btn btn-secondary"
+                    style={{
+                      padding: "6px 14px",
+                      fontSize: "0.82rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}
+                  >
+                    {copiedViewLink ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedViewLink ? "Copied!" : "Copy View Link"}
+                  </button>
+                </div>
+                <p style={{ margin: "0 0 10px 0", fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
+                  Share with clients, executives, and observers. They can view live updates but cannot modify tasks or sync edits. No login required.
+                </p>
+                <input
+                  readOnly
+                  value={viewLink}
+                  onFocus={(e) => e.target.select()}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    background: "rgba(15, 23, 42, 0.8)",
+                    border: "1px solid var(--jantt-border)",
+                    color: "var(--jantt-text)",
+                    fontSize: "0.82rem",
+                    fontFamily: "monospace"
+                  }}
+                />
+              </div>
+
+              {/* Security & Access Summary */}
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: "10px",
                   padding: "12px 14px",
                   borderRadius: "8px",
@@ -435,9 +539,9 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                   border: "1px solid rgba(16, 185, 129, 0.2)"
                 }}
               >
-                <Shield size={16} style={{ color: "#34D399", flexShrink: 0 }} />
-                <span style={{ fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
-                  Only users authenticated via GitHub can access this room. Real-time changes are synced via persistent WebSockets with zero overwrite conflicts.
+                <Shield size={16} style={{ color: "#34D399", flexShrink: 0, marginTop: "2px" }} />
+                <span style={{ fontSize: "0.78rem", color: "var(--jantt-muted)", lineHeight: 1.45 }}>
+                  <strong>Edit Protection:</strong> Anyone not signed in via GitHub can only view the chart via the Pure View link. Performing edits to the shared cloud room strictly requires a GitHub account and verified editor permissions.
                 </span>
               </div>
             </div>

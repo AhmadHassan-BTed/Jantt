@@ -26,26 +26,26 @@
     },
     "rooms": {
       "$roomId": {
-        ".read": "auth != null",
+        ".read": true,
         ".write": "auth != null && (!data.exists() && newData.child('meta/ownerUid').val() === auth.uid || data.child('meta/ownerUid').val() === auth.uid || data.child('members/' + auth.uid + '/role').val() === 'owner' || data.child('members/' + auth.uid + '/role').val() === 'editor')",
         "meta": {
-          ".read": "auth != null",
+          ".read": true,
           ".write": "auth != null && (!data.exists() || data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid + '/role').val() === 'editor')"
         },
         "members": {
           "$memberUid": {
-            ".read": "auth != null",
+            ".read": true,
             ".write": "auth != null && (!data.parent().parent().exists() || data.parent().parent().child('meta/ownerUid').val() === auth.uid || auth.uid === $memberUid)"
           }
         },
         "presence": {
-          ".read": "auth != null",
+          ".read": true,
           "$uid": {
             ".write": "auth != null && auth.uid === $uid"
           }
         },
         "data": {
-          ".read": "auth != null",
+          ".read": true,
           ".write": "auth != null && (!data.parent().exists() || data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid + '/role').val() === 'editor')"
         }
       }
