@@ -6,9 +6,9 @@ import {
   Trash2,
   Users
 } from "lucide-react";
-import type { SavedProject, EffectivePerson } from "../types";
-import type { UserRoomPointer } from "../firebase/types";
-import { DEFAULT_TEMPLATE } from "../constants";
+import type { SavedProject, EffectivePerson } from "../../types";
+import type { UserRoomPointer } from "../../firebase/types";
+import { DEFAULT_TEMPLATE } from "../../constants";
 
 export interface SubheaderProps {
   activeProjectId: string;

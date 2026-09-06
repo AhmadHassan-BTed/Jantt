@@ -22,8 +22,8 @@ import {
   isTaskDone,
   getTaskDependencies
 } from "@jantt/core";
-import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../types";
-import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
+import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
+import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
 
 interface TasksViewProps {
   parsedData: JanttData;

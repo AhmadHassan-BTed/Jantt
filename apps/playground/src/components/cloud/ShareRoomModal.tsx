@@ -13,18 +13,20 @@ import {
   Globe,
   Layers
 } from "lucide-react";
-import type { UserProfile, RoomMember, RoomTeam } from "../firebase/types";
 import type { Team, Person } from "@jantt/core";
-import { searchUsersByUsername } from "../firebase/authService";
+import { ref, onValue } from "firebase/database";
 import {
+  rtdb,
+  searchUsersByUsername,
   shareRoomWithUser,
   shareRoomWithTeam,
   removeTeamFromRoom,
   removeMemberFromRoom,
-  updateMemberRole
-} from "../firebase/roomService";
-import { ref, onValue } from "firebase/database";
-import { rtdb } from "../firebase/firebaseConfig";
+  updateMemberRole,
+  type UserProfile,
+  type RoomMember,
+  type RoomTeam
+} from "../../firebase";
 
 interface ShareRoomModalProps {
   show: boolean;

@@ -9,7 +9,7 @@ import {
   Unlock,
   AlertCircle
 } from "lucide-react";
-import type { VerificationStatus, RepoItem } from "../firebase/types";
+import type { VerificationStatus, RepoItem } from "../../firebase";
 
 interface GitHubVerificationModalProps {
   show: boolean;

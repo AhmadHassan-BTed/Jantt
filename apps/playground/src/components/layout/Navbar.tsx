@@ -14,10 +14,10 @@ import {
   Star
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
-import type { UserProfile } from "../firebase/types";
-import { JanttLogo } from "./JanttLogo";
-import type { ActiveView } from "../types";
-import { AVAILABLE_THEMES } from "../constants";
+import type { UserProfile } from "../../firebase/types";
+import { JanttLogo } from "../common/JanttLogo";
+import type { ActiveView } from "../../types";
+import { AVAILABLE_THEMES } from "../../constants";
 
 interface NavbarProps {
   saveStatus: "saved" | "saving" | "pending";

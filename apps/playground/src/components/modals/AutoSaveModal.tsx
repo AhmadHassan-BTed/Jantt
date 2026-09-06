@@ -10,8 +10,8 @@ import {
   ArrowDownToLine,
   FileSpreadsheet
 } from "lucide-react";
-import type { AutoSaveInterval } from "../types";
-import { AUTOSAVE_OPTIONS } from "../constants";
+import type { AutoSaveInterval } from "../../types";
+import { AUTOSAVE_OPTIONS } from "../../constants";
 
 interface AutoSaveModalProps {
   showAutoSaveModal: boolean;

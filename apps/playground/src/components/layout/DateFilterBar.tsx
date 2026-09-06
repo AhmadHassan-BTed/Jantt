@@ -1,7 +1,7 @@
 import React from "react";
 import { Clock, Calendar, Filter, X, Eye, EyeOff, Users } from "lucide-react";
 import { getTodayISODate, type Task, type Team } from "@jantt/core";
-import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../types";
+import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
 
 interface DateFilterBarProps {
   dateFilterMode: DateFilterMode;

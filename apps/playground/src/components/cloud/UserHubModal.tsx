@@ -12,8 +12,8 @@ import {
   Radio,
   UserMinus
 } from "lucide-react";
-import type { UserProfile, UserRoomPointer } from "../firebase/types";
-import { formatRelativeTime } from "../utils";
+import type { UserProfile, UserRoomPointer } from "../../firebase";
+import { formatRelativeTime } from "../../utils";
 
 interface UserHubModalProps {
   show: boolean;
