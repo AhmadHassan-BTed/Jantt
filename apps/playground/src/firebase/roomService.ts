@@ -14,7 +14,8 @@ import type {
   RoomMember,
   RoomMetadata,
   UserRoomPointer,
-  FullRoomPayload
+  FullRoomPayload,
+  RoomTeam
 } from "./types";
 
 /**
@@ -137,6 +138,90 @@ export async function shareRoomWithUser(
 
   await update(ref(rtdb), updates);
   return newMember;
+}
+
+/**
+ * Shares a room with an entire team in bulk.
+ * Adds all team members as room members atomically and tags them with the team identity.
+ */
+export async function shareRoomWithTeam(
+  roomId: string,
+  team: { id: string; name: string; color?: string },
+  membersToAdd: UserProfile[],
+  role: "editor" | "viewer" = "editor"
+): Promise<void> {
+  const metaSnap = await get(ref(rtdb, `rooms/${roomId}/meta`));
+  if (!metaSnap.exists()) {
+    throw new Error("Room does not exist.");
+  }
+  const meta = metaSnap.val() as RoomMetadata;
+  const now = new Date().toISOString();
+
+  const updates: Record<string, any> = {};
+
+  const roomTeam: RoomTeam = {
+    id: team.id,
+    name: team.name,
+    color: team.color,
+    memberUids: membersToAdd.map((m) => m.uid),
+    memberUsernames: membersToAdd.map((m) => m.username),
+    role,
+    addedAt: now
+  };
+
+  updates[`rooms/${roomId}/teams/${team.id}`] = roomTeam;
+
+  for (const user of membersToAdd) {
+    const newMember: RoomMember = {
+      uid: user.uid,
+      username: user.username,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      role,
+      joinedAt: now,
+      teamId: team.id,
+      teamName: team.name
+    };
+
+    const sharedPointer: UserRoomPointer = {
+      roomId,
+      title: meta.title,
+      ownerUid: meta.ownerUid,
+      ownerUsername: meta.ownerUsername,
+      role,
+      createdAt: meta.createdAt,
+      updatedAt: now
+    };
+
+    updates[`rooms/${roomId}/members/${user.uid}`] = newMember;
+    updates[`user_rooms/${user.uid}/shared/${roomId}`] = sharedPointer;
+  }
+
+  await update(ref(rtdb), updates);
+}
+
+/**
+ * Removes an entire team and all its members from a room.
+ */
+export async function removeTeamFromRoom(
+  roomId: string,
+  teamId: string
+): Promise<void> {
+  const teamSnap = await get(ref(rtdb, `rooms/${roomId}/teams/${teamId}`));
+  const updates: Record<string, any> = {};
+  updates[`rooms/${roomId}/teams/${teamId}`] = null;
+
+  if (teamSnap.exists()) {
+    const team = teamSnap.val() as RoomTeam;
+    if (Array.isArray(team.memberUids)) {
+      for (const uid of team.memberUids) {
+        updates[`rooms/${roomId}/members/${uid}`] = null;
+        updates[`user_rooms/${uid}/shared/${roomId}`] = null;
+      }
+    }
+  }
+
+  await update(ref(rtdb), updates);
 }
 
 /**

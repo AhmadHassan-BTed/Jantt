@@ -173,6 +173,7 @@ export const UserHubModal: React.FC<UserHubModalProps> = ({
         >
           <div style={{ display: "flex", gap: "6px" }}>
             <button
+              type="button"
               onClick={() => setActiveTab("owned")}
               style={{
                 padding: "6px 14px",
@@ -185,12 +186,15 @@ export const UserHubModal: React.FC<UserHubModalProps> = ({
                 alignItems: "center",
                 gap: "6px",
                 background: activeTab === "owned" ? "var(--jantt-accent)" : "transparent",
-                color: activeTab === "owned" ? "#FFFFFF" : "var(--jantt-muted)"
+                color: activeTab === "owned" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)",
+                boxShadow: activeTab === "owned" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
+                transition: "all 0.15s ease"
               }}
             >
               <Crown size={14} /> My Rooms ({ownedRooms.length})
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab("shared")}
               style={{
                 padding: "6px 14px",
@@ -203,7 +207,9 @@ export const UserHubModal: React.FC<UserHubModalProps> = ({
                 alignItems: "center",
                 gap: "6px",
                 background: activeTab === "shared" ? "var(--jantt-accent)" : "transparent",
-                color: activeTab === "shared" ? "#FFFFFF" : "var(--jantt-muted)"
+                color: activeTab === "shared" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)",
+                boxShadow: activeTab === "shared" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
+                transition: "all 0.15s ease"
               }}
             >
               <Users size={14} /> Shared with Me ({sharedRooms.length})

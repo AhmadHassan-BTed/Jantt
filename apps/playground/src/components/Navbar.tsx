@@ -11,13 +11,6 @@ import {
   Activity,
   StickyNote,
   History,
-  ShieldCheck,
-  HardDrive,
-  Cloud,
-  AlertTriangle,
-  Radio,
-  Users,
-  Lock,
   Star
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
@@ -25,7 +18,6 @@ import type { UserProfile } from "../firebase/types";
 import { JanttLogo } from "./JanttLogo";
 import type { ActiveView } from "../types";
 import { AVAILABLE_THEMES } from "../constants";
-import type { SyncStatus } from "../hooks/useDynamicSync";
 
 interface NavbarProps {
   saveStatus: "saved" | "saving" | "pending";
@@ -33,11 +25,6 @@ interface NavbarProps {
   autoSaveInterval: string;
   autoSaveLabel: string;
   setShowAutoSaveModal: (show: boolean) => void;
-  syncStatus?: SyncStatus;
-  syncMessage?: string;
-  isQuotaShieldActive?: boolean;
-  cloudProvider?: string;
-  isGoogleDrive?: boolean;
   snapshotsCount?: number;
   setShowVersionHistoryModal?: (show: boolean) => void;
   isSidebarCollapsed: boolean;
@@ -50,15 +37,11 @@ interface NavbarProps {
   selectedThemeId: string;
   setSelectedThemeId: (themeId: string) => void;
   setShowPromptModal: (show: boolean) => void;
-  activeRoomId?: string | null;
-  activeRoomRole?: "collaborator" | "viewer" | "none";
-  onOpenRoomModal?: () => void;
   currentUser?: FirebaseUser | null;
   userProfile?: UserProfile | null;
   isSigningIn?: boolean;
   onLogin?: () => void;
   onOpenUserHub?: () => void;
-  onOpenShareRoom?: () => void;
   isGitHubVerified?: boolean;
   onOpenVerificationModal?: () => void;
 }
@@ -69,11 +52,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   autoSaveInterval,
   autoSaveLabel,
   setShowAutoSaveModal,
-  syncStatus,
-  syncMessage,
-  isQuotaShieldActive,
-  cloudProvider,
-  isGoogleDrive = false,
   snapshotsCount = 0,
   setShowVersionHistoryModal,
   isSidebarCollapsed,
@@ -86,23 +64,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   selectedThemeId,
   setSelectedThemeId,
   setShowPromptModal,
-  activeRoomId,
-  activeRoomRole,
-  onOpenRoomModal,
   currentUser,
   userProfile,
   isSigningIn = false,
   onLogin,
   onOpenUserHub,
-  onOpenShareRoom,
   isGitHubVerified = false,
   onOpenVerificationModal
 }) => {
-  const isGdrive = isGoogleDrive || cloudProvider === "google-drive";
-
   return (
     <header className="navbar">
-      {/* 1. Left Zone: Brand, AutoSave Status, Dynamic Sync & Version History */}
+      {/* 1. Left Zone: Brand, AutoSave Status & Version History */}
       <div className="brand-section nav-group-left">
         <JanttLogo size={28} />
         <button
@@ -120,91 +92,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
           <span>{autoSaveLabel}</span>
         </button>
-
-        {/* Dynamic Real-Time Collaboration Sync Badge */}
-        {syncStatus && !activeRoomId && (
-          <div
-            className={`btn-sync-badge is-${syncStatus}`}
-            title={
-              syncStatus === "draft"
-                ? "This linked cloud source is read-only (view access). Your edits are saved in browser storage, but not written to Google Drive."
-                : `Real-Time Collaboration Sync: ${syncMessage || "Live"} • Continuous change detection active`
-            }
-          >
-            {syncStatus === "draft" ? (
-              <AlertTriangle size={11} style={{ marginRight: 4, flexShrink: 0 }} />
-            ) : (
-              <span className="sync-pulse-dot" />
-            )}
-            <span>{syncMessage || "In sync"}</span>
-          </div>
-        )}
-
-        {/* Cloud Room Indicator */}
-        {activeRoomId && (
-          <div
-            className={`btn-cloud-source-badge ${activeRoomRole === "collaborator" ? "is-room-collaborator" : "is-room-viewer"}`}
-            onClick={onOpenShareRoom || onOpenRoomModal}
-            title={
-              activeRoomRole === "collaborator"
-                ? `Active Cloud Room: "${activeRoomId}" • Live Two-Way Auto-Sync Active • Click to share with teammates`
-                : `Active Cloud Room: "${activeRoomId}" • View-Only Mode`
-            }
-          >
-            {activeRoomRole === "collaborator" ? (
-              <Radio size={11} className="spin-slow" />
-            ) : (
-              <Lock size={11} />
-            )}
-            <span>Room: {activeRoomId} ({activeRoomRole === "collaborator" ? "Live Sync" : "View Only"})</span>
-          </div>
-        )}
-
-        {/* Google Drive Source Indicator */}
-        {isGdrive && !activeRoomId && (
-          <div
-            className="btn-cloud-source-badge is-google-drive"
-            title="Linked to Google Drive JSON file (Read-Only Cloud Feed). Changes you make are stored locally in your browser."
-          >
-            <HardDrive size={11} />
-            <span>Google Drive (View Feed)</span>
-          </div>
-        )}
-
-        {/* Other Cloud Provider Indicator */}
-        {cloudProvider && !isGdrive && !activeRoomId && (
-          <div
-            className="btn-cloud-source-badge"
-            title={`Linked to ${cloudProvider} file (Read-Only Cloud Feed). Changes you make are stored locally in your browser.`}
-          >
-            <Cloud size={11} />
-            <span>{cloudProvider} (View Feed)</span>
-          </div>
-        )}
-
-        {/* Serverless Quota Shield Indicator */}
-        {isQuotaShieldActive && !activeRoomId && (
-          <div
-            className="btn-quota-shield-badge"
-            title="Google Drive Quota Shield is ACTIVE: Request coalescing and edge cache fallback engaged to protect against rate limits (429/403)."
-          >
-            <ShieldCheck size={11} />
-            <span>Quota Shield</span>
-          </div>
-        )}
-
-        {/* Cloud Room Manage Button */}
-        {onOpenRoomModal && (
-          <button
-            type="button"
-            className="btn-nav"
-            onClick={onOpenRoomModal}
-            title="Cloud Collaboration Rooms (100+ concurrent editors with zero logins)"
-          >
-            <Users size={12} />
-            <span>{activeRoomId ? "Room" : "Collab"}</span>
-          </button>
-        )}
 
         {/* Version History & Recovery Vault Button */}
         {setShowVersionHistoryModal && (

@@ -4,11 +4,11 @@
  * Provides:
  * 1. Live Collaboration Rooms (/api/room/:id) with Optimistic Concurrency Control (OCC),
  *    ETag change detection, and multi-peer convergence.
- * 2. High-Scale Google Drive Quota Shield & Edge Request Coalescer:
- *    - In-Flight Request Deduplication: Coalesces 10–40+ simultaneous client fetches into 1 request.
+ * 2. High-Scale Remote Cloud File Quota Shield & Edge Request Coalescer:
+ *    - In-Flight Request Deduplication: Coalesces simultaneous client fetches into 1 outbound request.
  *    - Edge Caching (4s TTL) with stale-while-revalidate protection.
- *    - Automatic 429/403 Quota Shield: Serves last known good snapshot if Google Drive rate-limits.
- *    - URL Normalization: Converts Google Drive sharing links to direct download endpoints.
+ *    - Automatic 429/403 Quota Shield: Serves last known good snapshot if upstream rate-limits.
+ *    - URL Normalization: Normalizes cloud sharing links to direct download endpoints.
  *
  * 100% serverless, zero-maintenance, runs on Cloudflare Workers free tier (100K req/day).
  */
@@ -35,24 +35,17 @@ function corsHeaders(origin) {
 // In-memory room store (persists across warm isolate invocations)
 const memoryRooms = new Map();
 
-// High-Scale Edge Cache & Request Coalescer for Cloud Files (Google Drive, GitHub, etc.)
-const driveResponseCache = new Map();
+// High-Scale Edge Cache & Request Coalescer for Cloud Files (GitHub, Dropbox, etc.)
+const cloudResponseCache = new Map();
 const inFlightFetches = new Map();
 
 const CACHE_TTL_MS = 4000; // 4 seconds fresh cache TTL
 
 /**
- * Normalizes Google Drive sharing links to direct download endpoints.
+ * Normalizes cloud sharing links to direct download endpoints.
  */
 function normalizeCloudUrl(rawUrl) {
-  const trimmed = rawUrl.trim();
-  const driveFileRegex = /drive\.google\.com\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/i;
-  const driveOpenRegex = /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i;
-  const match = trimmed.match(driveFileRegex) || trimmed.match(driveOpenRegex);
-  if (match && match[1]) {
-    return `https://drive.google.com/uc?export=download&id=${match[1]}&confirm=t`;
-  }
-  return trimmed;
+  return rawUrl.trim();
 }
 
 export default {
@@ -192,7 +185,7 @@ export default {
     }
 
     // -------------------------------------------------------------------------
-    // 2. High-Scale Google Drive Quota Shield & CORS Proxy (?url=...)
+    // 2. High-Scale Cloud File Quota Shield & CORS Proxy (?url=...)
     // -------------------------------------------------------------------------
     const targetUrl = url.searchParams.get("url");
 
@@ -203,17 +196,10 @@ export default {
       );
     }
 
-    if (targetUrl.includes("drive.google.com/drive/folders/")) {
-      return new Response(
-        JSON.stringify({ error: "The provided URL is a Google Drive folder link. Please share the specific project .json file." }),
-        { status: 400, headers: { ...corsHeaders(origin), "Content-Type": "application/json" } }
-      );
-    }
-
     const normalizedUrl = normalizeCloudUrl(targetUrl);
 
     // 1. Fast Path: Check warm edge cache
-    const cachedEntry = driveResponseCache.get(normalizedUrl);
+    const cachedEntry = cloudResponseCache.get(normalizedUrl);
     const now = Date.now();
     if (cachedEntry && now - cachedEntry.timestamp < CACHE_TTL_MS) {
       return new Response(cachedEntry.body, {
@@ -259,14 +245,14 @@ export default {
         const contentType = response.headers.get("Content-Type") || "text/plain";
         const body = await response.text();
 
-        // If Google Drive succeeded (200 OK)
+        // If upstream fetch succeeded (200 OK)
         if (status === 200) {
           const entry = { body, contentType, status: 200, timestamp: Date.now() };
-          driveResponseCache.set(normalizedUrl, entry);
+          cloudResponseCache.set(normalizedUrl, entry);
           return { body, contentType, status: 200, quotaShield: false };
         }
 
-        // If Google Drive rate limited (429 or 403 Download quota exceeded)
+        // If upstream rate limited (429 or 403)
         if (status === 429 || status === 403) {
           // If we have ANY previous cached version, activate Quota Shield and serve stale!
           if (cachedEntry) {
@@ -281,7 +267,7 @@ export default {
           // No cache available: return rate limit notice with backoff instruction
           return {
             body: JSON.stringify({
-              error: "Google Drive download quota temporarily exceeded.",
+              error: "Upstream cloud file rate limit exceeded.",
               quotaShieldActive: true,
               retryAfter: 5
             }),

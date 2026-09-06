@@ -234,7 +234,7 @@ export function useProjectState({
       const projToDelete = customProjects.find((p) => p.id === projectId);
       const isLinked = projToDelete?.source === "linked";
       const promptMsg = isLinked
-        ? `Unlink cloud plan "${projToDelete?.name || projectId}" from this browser? (Your original cloud file on Google Drive/GitHub remains untouched).`
+        ? `Unlink cloud plan "${projToDelete?.name || projectId}" from this browser? (Your original file on GitHub remains untouched).`
         : `Delete local plan "${projToDelete?.name || projectId}" from browser storage?`;
       const confirmed = window.confirm(promptMsg);
       if (!confirmed) return;

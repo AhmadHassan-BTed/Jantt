@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Share2,
   X,
@@ -10,10 +10,17 @@ import {
   Download,
   MessageSquare,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Users,
+  Sparkles,
+  LogIn,
+  ShieldCheck,
+  ArrowRight,
+  Loader2
 } from "lucide-react";
 import type { JanttData, ThemeDefinition } from "@jantt/core";
 import type { SavedProject, ActiveView } from "../types";
+import type { UserProfile } from "../firebase/types";
 
 interface ShareModalProps {
   showShareModal: boolean;
@@ -30,9 +37,14 @@ interface ShareModalProps {
   handleNativeShare: () => void;
   handleWhatsAppShare?: () => void;
   isWhatsAppSafe?: boolean;
-  handleOpenLinkCloudModal?: () => void;
+  onOpenCloudRooms?: () => void;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
   handleDownloadJson: () => void;
+  currentUserProfile?: UserProfile | null;
+  onCreateRoomFromActive?: (title?: string) => Promise<string | null>;
+  onOpenShareRoom?: (roomId: string) => void;
+  onLogin?: () => void;
+  onOpenVerificationModal?: () => void;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -50,11 +62,20 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   handleNativeShare,
   handleWhatsAppShare,
   isWhatsAppSafe = true,
-  handleOpenLinkCloudModal,
+  onOpenCloudRooms,
   setIsSidebarCollapsed,
-  handleDownloadJson
+  handleDownloadJson,
+  currentUserProfile,
+  onCreateRoomFromActive,
+  onOpenShareRoom,
+  onLogin,
+  onOpenVerificationModal
 }) => {
+  const [isStartingRoom, setIsStartingRoom] = useState(false);
+
   if (!showShareModal) return null;
+
+  const isRoomActive = activeProject?.source === "room" && Boolean(activeProject.roomId);
 
   return (
     <div className="prompt-modal-backdrop" onClick={() => setShowShareModal(false)}>
@@ -84,7 +105,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 Share Project Plan
               </h3>
               <p style={{ margin: 0, fontSize: "12px", color: "var(--jantt-text-muted)" }}>
-                Copy a direct shareable link or open the original plan source.
+                Collaborate live in real-time or share an offline link.
               </p>
             </div>
           </div>
@@ -121,13 +142,215 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 fontWeight: 600,
                 padding: "3px 9px",
                 borderRadius: "100px",
-                background: activeProject?.source === "linked" ? "rgba(16, 185, 129, 0.12)" : "rgba(56, 189, 248, 0.12)",
-                color: activeProject?.source === "linked" ? "#10B981" : "var(--jantt-accent)",
-                border: `1px solid ${activeProject?.source === "linked" ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.3)"}`
+                background: isRoomActive
+                  ? "rgba(34, 197, 94, 0.15)"
+                  : activeProject?.source === "linked"
+                  ? "rgba(16, 185, 129, 0.12)"
+                  : "rgba(56, 189, 248, 0.12)",
+                color: isRoomActive ? "#22c55e" : activeProject?.source === "linked" ? "#10B981" : "var(--jantt-accent)",
+                border: `1px solid ${
+                  isRoomActive
+                    ? "rgba(34, 197, 94, 0.35)"
+                    : activeProject?.source === "linked"
+                    ? "rgba(16, 185, 129, 0.3)"
+                    : "rgba(56, 189, 248, 0.3)"
+                }`
               }}
             >
-              {activeProject?.source === "linked" ? "Cloud Linked" : activeProjectId === "default" ? "Template" : "Direct Plan"}
+              {isRoomActive ? "Live Cloud Room" : activeProject?.source === "linked" ? "Cloud Linked" : activeProjectId === "default" ? "Template" : "Direct Plan"}
             </span>
+          </div>
+
+          {/* Real-time Collaboration Hero Section */}
+          {isRoomActive && activeProject?.roomId ? (
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(129, 140, 248, 0.08) 100%)",
+                border: "1px solid rgba(56, 189, 248, 0.35)",
+                borderRadius: "12px",
+                padding: "16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      padding: "3px 10px",
+                      borderRadius: "100px",
+                      background: "rgba(34, 197, 94, 0.15)",
+                      color: "#22c55e",
+                      border: "1px solid rgba(34, 197, 94, 0.3)"
+                    }}
+                  >
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                    Active Cloud Room
+                  </span>
+                  <span style={{ fontSize: "12px", fontFamily: "var(--jantt-font-mono, monospace)", color: "var(--jantt-text-muted)" }}>
+                    #{activeProject.roomId}
+                  </span>
+                </div>
+                <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                  Role: <strong style={{ color: "var(--jantt-text)" }}>{activeProject.role || "collaborator"}</strong>
+                </span>
+              </div>
+
+              <div style={{ fontSize: "12.5px", color: "var(--jantt-text)", lineHeight: "1.4" }}>
+                This plan is synced in real-time. You can invite individuals by username, bulk-invite entire teams, or share a direct join link.
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowShareModal(false);
+                  if (onOpenShareRoom && activeProject.roomId) {
+                    onOpenShareRoom(activeProject.roomId);
+                  }
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  padding: "9px 16px",
+                  fontWeight: 600,
+                  fontSize: "13px"
+                }}
+              >
+                <Users size={15} />
+                <span>Manage Teammates &amp; Invite Link</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)",
+                border: "1px solid rgba(56, 189, 248, 0.3)",
+                borderRadius: "12px",
+                padding: "16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "34px",
+                    height: "34px",
+                    borderRadius: "8px",
+                    background: "rgba(56, 189, 248, 0.18)",
+                    color: "var(--jantt-accent)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0
+                  }}
+                >
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--jantt-text)" }}>
+                    Collaborate Live in Real-Time
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
+                    Invite individuals, bulk-add teams, and auto-sync with live presence &amp; CRDT conflict resolution.
+                  </div>
+                </div>
+              </div>
+
+              {currentUserProfile ? (
+                currentUserProfile.githubVerified ? (
+                  <button
+                    className="btn btn-primary"
+                    disabled={isStartingRoom}
+                    onClick={async () => {
+                      if (!onCreateRoomFromActive) return;
+                      setIsStartingRoom(true);
+                      try {
+                        const newRoomId = await onCreateRoomFromActive(currentProjectName);
+                        if (newRoomId) {
+                          setShowShareModal(false);
+                          onOpenShareRoom?.(newRoomId);
+                        }
+                      } finally {
+                        setIsStartingRoom(false);
+                      }
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      padding: "9px 16px",
+                      fontWeight: 600,
+                      fontSize: "13px"
+                    }}
+                  >
+                    {isStartingRoom ? <Loader2 size={15} className="spin-sync-icon" /> : <Users size={15} />}
+                    <span>{isStartingRoom ? "Starting Cloud Room..." : "Start Live Cloud Room & Share"}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      setShowShareModal(false);
+                      onOpenVerificationModal?.();
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      padding: "9px 16px",
+                      fontWeight: 600,
+                      fontSize: "13px"
+                    }}
+                  >
+                    <ShieldCheck size={15} />
+                    <span>Verify GitHub Stars to Start Room</span>
+                  </button>
+                )
+              ) : (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setShowShareModal(false);
+                    onLogin?.();
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    padding: "9px 16px",
+                    fontWeight: 600,
+                    fontSize: "13px"
+                  }}
+                >
+                  <LogIn size={15} />
+                  <span>Sign in with GitHub to Share Room</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Section Divider */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "2px 0" }}>
+            <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
+            <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Or Share Offline Snapshot
+            </span>
+            <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
           </div>
 
           {/* Shareable Link Input Section */}
@@ -252,17 +475,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                     <Download size={12} />
                     <span>Download JSON File</span>
                   </button>
-                  {handleOpenLinkCloudModal && (
+                  {onOpenCloudRooms && (
                     <button
                       className="btn-nav btn-nav-primary"
                       style={{ fontSize: "11px", padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: "4px" }}
                       onClick={() => {
                         setShowShareModal(false);
-                        handleOpenLinkCloudModal();
+                        onOpenCloudRooms();
                       }}
                     >
                       <Cloud size={12} />
-                      <span>Link Cloud Source (~80 chars)</span>
+                      <span>Share via Cloud Room</span>
                     </button>
                   )}
                 </div>
