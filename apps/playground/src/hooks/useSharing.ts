@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type { JanttData } from "@jantt/core";
 import type { SavedProject, ActiveView } from "../types";
 import { DEFAULT_TEMPLATE } from "../constants";
@@ -62,37 +62,68 @@ export function useSharing({
     return `${origin}${pathname}`;
   }, [activeProjectId, activeProject, activeView, selectedThemeId, parsedData, jsonText, currentProjectName]);
 
-  // Keep browser address bar continuously updated with active plan's shareable link
-  const prevViewRef = useRef(activeView);
-  const prevProjectRef = useRef(activeProjectId);
-
+  // Keep browser address bar clean and synchronized with view/theme/room without hash-thrashing local plans
   useEffect(() => {
-    if (typeof window === "undefined" || !shareUrl) return;
+    if (typeof window === "undefined") return;
 
-    const isViewOrProjectChange =
-      prevViewRef.current !== activeView || prevProjectRef.current !== activeProjectId;
-    prevViewRef.current = activeView;
-    prevProjectRef.current = activeProjectId;
+    try {
+      const currentUrl = new URL(window.location.href);
+      let changed = false;
 
-    const syncUrl = () => {
-      try {
-        const currentHref = window.location.href;
-        if (currentHref !== shareUrl) {
-          window.history.replaceState(null, "", shareUrl);
+      // Handle room URL parameters
+      if (activeProject?.source === "room" && activeProject.roomId) {
+        if (currentUrl.searchParams.get("room") !== activeProject.roomId) {
+          currentUrl.searchParams.set("room", activeProject.roomId);
+          changed = true;
         }
-      } catch {
-        // Cross-origin iframe fallback
+        if (activeProject.secretKey) {
+          const expectedHash = `#key=${encodeURIComponent(activeProject.secretKey)}`;
+          if (window.location.hash !== expectedHash) {
+            currentUrl.hash = expectedHash;
+            changed = true;
+          }
+        }
+      } else {
+        if (currentUrl.searchParams.has("room")) {
+          currentUrl.searchParams.delete("room");
+          changed = true;
+        }
+        if (currentUrl.searchParams.has("cloud")) {
+          currentUrl.searchParams.delete("cloud");
+          changed = true;
+        }
+        if (currentUrl.searchParams.has("plan")) {
+          currentUrl.searchParams.delete("plan");
+          changed = true;
+        }
+        if (currentUrl.searchParams.has("data")) {
+          currentUrl.searchParams.delete("data");
+          changed = true;
+        }
+        if (currentUrl.searchParams.has("name")) {
+          currentUrl.searchParams.delete("name");
+          changed = true;
+        }
+        if (window.location.hash.startsWith("#key=") || window.location.hash.startsWith("#edit=")) {
+          currentUrl.hash = "";
+          changed = true;
+        }
       }
-    };
 
-    if (isViewOrProjectChange) {
-      syncUrl();
-      return;
-    }
+      if (currentUrl.searchParams.get("view") !== activeView) {
+        currentUrl.searchParams.set("view", activeView);
+        changed = true;
+      }
+      if (currentUrl.searchParams.get("theme") !== selectedThemeId) {
+        currentUrl.searchParams.set("theme", selectedThemeId);
+        changed = true;
+      }
 
-    const timer = setTimeout(syncUrl, 250);
-    return () => clearTimeout(timer);
-  }, [shareUrl, activeView, activeProjectId]);
+      if (changed) {
+        window.history.replaceState(null, "", currentUrl.toString());
+      }
+    } catch {}
+  }, [activeProject?.source, activeProject?.roomId, activeProject?.secretKey, activeView, selectedThemeId]);
 
   const handleCopyShareLink = useCallback(async () => {
     if (!shareUrl) return;

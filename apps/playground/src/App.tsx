@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { Jantt } from "@jantt/react";
-import { getTodayISODate, validate, type Person, type Team, type JanttData } from "@jantt/core";
+import { getTodayISODate, validate, calculatePlanHash, type Person, type Team, type JanttData } from "@jantt/core";
 
 // Re-export all types, constants, and utilities for external consumers
 export type {
@@ -472,6 +472,11 @@ export function App() {
 
           const decoded = decodeDataFromBase64Url(dataPayload);
           if (decoded) {
+            // Guard: don't re-import if current plan already matches decoded payload
+            if (editor.parsedData && calculatePlanHash(editor.parsedData) === calculatePlanHash(decoded)) {
+              return;
+            }
+
             const sharedName = urlParams.get("name") || decoded.meta?.title || "Shared Plan";
             const sharedId = `shared-${Date.now().toString(36)}`;
             const sharedProj: SavedProject = {

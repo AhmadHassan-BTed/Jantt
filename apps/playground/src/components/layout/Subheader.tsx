@@ -63,9 +63,23 @@ export const Subheader: React.FC<SubheaderProps> = ({
               id="subheader-project-select"
               className="select-input subheader-plan-select"
               value={activeProjectId}
-              onChange={(e) => handleSelectProject(e.target.value)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                if (nextId && nextId !== activeProjectId) {
+                  handleSelectProject(nextId);
+                }
+              }}
               title="Select Active Project Plan"
             >
+              {/* Fallback option so browser never collapses activeProjectId to default if options are pending render */}
+              {activeProjectId !== "default" &&
+                !customProjects.some((p) => p.id === activeProjectId) &&
+                !ownedRooms.some((r) => `room-${r.roomId}` === activeProjectId) &&
+                !sharedRooms.some((s) => `room-${s.roomId}` === activeProjectId) && (
+                  <option value={activeProjectId} style={{ display: "none" }}>
+                    Active Plan
+                  </option>
+                )}
               <optgroup label="Templates">
                 <option value="default">{DEFAULT_TEMPLATE.name}</option>
               </optgroup>
