@@ -67,7 +67,12 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
     try {
       await onClaimUsername(usernameInput);
     } catch (err: any) {
-      setErrorMessage(err.message || "Could not claim username. Please try again.");
+      const msg = String(err?.message || err || "");
+      if (msg.toLowerCase().includes("permission denied") || msg.toLowerCase().includes("permission_denied")) {
+        setErrorMessage("Database permission denied. Make sure database.rules.json is applied to your Firebase Realtime Database in the Firebase Console.");
+      } else {
+        setErrorMessage(err.message || "Could not claim username. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }

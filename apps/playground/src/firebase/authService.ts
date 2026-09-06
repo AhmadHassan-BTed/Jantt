@@ -87,7 +87,6 @@ export async function signInWithGitHub(): Promise<{
       uid: user.uid,
       email: user.email || "",
       displayName: user.displayName || rawGhUsername,
-      photoURL: user.photoURL || undefined,
       username: normalized,
       displayUsername: rawGhUsername,
       githubUsername: rawGhUsername,
@@ -96,6 +95,9 @@ export async function signInWithGitHub(): Promise<{
       createdAt: now,
       updatedAt: now
     };
+    if (user.photoURL) {
+      profile.photoURL = user.photoURL;
+    }
 
     const updates: Record<string, any> = {};
     updates[`usernames/${normalized}`] = user.uid;
@@ -188,18 +190,34 @@ export async function checkUsernameAvailable(rawUsername: string): Promise<{
     };
   }
 
-  const snap = await get(ref(rtdb, `usernames/${normalized}`));
-  if (snap.exists()) {
-    const existingUid = snap.val();
-    const isCurrent = auth.currentUser && auth.currentUser.uid === existingUid;
+  try {
+    const snap = await get(ref(rtdb, `usernames/${normalized}`));
+    if (snap.exists()) {
+      const existingUid = snap.val();
+      const isCurrent = auth.currentUser && auth.currentUser.uid === existingUid;
+      return {
+        available: Boolean(isCurrent),
+        normalized,
+        error: isCurrent ? undefined : "This username is already taken. Try another."
+      };
+    }
+
+    return { available: true, normalized };
+  } catch (err: any) {
+    const errMsg = String(err?.message || err || "");
+    if (errMsg.toLowerCase().includes("permission denied") || errMsg.toLowerCase().includes("permission_denied")) {
+      return {
+        available: false,
+        normalized,
+        error: "Database permission denied. Make sure database.rules.json is applied to your Firebase Realtime Database in the Firebase Console."
+      };
+    }
     return {
-      available: Boolean(isCurrent),
+      available: false,
       normalized,
-      error: isCurrent ? undefined : "This username is already taken. Try another."
+      error: errMsg || "Failed to check username availability."
     };
   }
-
-  return { available: true, normalized };
 }
 
 /**
@@ -219,12 +237,14 @@ export async function claimUsername(
     uid: user.uid,
     email: user.email || "",
     displayName: user.displayName || normalized,
-    photoURL: user.photoURL || undefined,
     username: normalized,
     displayUsername: rawUsername.trim().replace(/^@+/, ""),
     createdAt: now,
     updatedAt: now
   };
+  if (user.photoURL) {
+    profile.photoURL = user.photoURL;
+  }
 
   const updates: Record<string, any> = {};
   updates[`usernames/${normalized}`] = user.uid;
