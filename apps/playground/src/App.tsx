@@ -856,6 +856,7 @@ export function App() {
         activeRoomId={roomSync.activeRoomId}
         activeRoomRole={roomSync.activeRoomRole}
         activeSecretKey={roomSync.activeSecretKey}
+        currentUserProfile={auth.userProfile}
       />
 
       <ShareModal
