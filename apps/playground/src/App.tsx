@@ -85,6 +85,7 @@ import { VersionHistoryModal } from "./components/VersionHistoryModal";
 import { UsernameOnboardingModal } from "./components/UsernameOnboardingModal";
 import { UserHubModal } from "./components/UserHubModal";
 import { ShareRoomModal } from "./components/ShareRoomModal";
+import { GitHubVerificationModal } from "./components/GitHubVerificationModal";
 import { Toast } from "./components/Toast";
 import { EmptyChartState } from "./components/EmptyChartState";
 
@@ -257,13 +258,20 @@ export function App() {
     captureSnapshot: vault.captureSnapshot,
     activeView: viewport.activeView,
     selectedThemeId: viewport.selectedThemeId,
-    userProfile: auth.userProfile
+    userProfile: auth.userProfile,
+    onRequireVerification: () => auth.setShowVerificationModal(true)
   });
 
   // Handlers for Cloud Rooms & User Hub
   const handleSelectCloudRoom = useCallback(
     async (roomId: string) => {
       try {
+        if (auth.userProfile && !auth.userProfile.githubVerified) {
+          auth.setShowVerificationModal(true);
+          toast.showToast("Support the creator by following & starring repos to collaborate in cloud rooms.", true);
+          return;
+        }
+
         let roomPayload: FullRoomPayload | null = null;
         if (auth.userProfile) {
           roomPayload = await joinRoomViaInvite(roomId, auth.userProfile);
@@ -569,9 +577,11 @@ export function App() {
         currentUser={auth.currentUser}
         userProfile={auth.userProfile}
         isSigningIn={auth.isSigningIn}
-        onLogin={auth.loginWithGoogle}
+        onLogin={auth.loginWithGitHub}
         onOpenUserHub={() => setShowUserHubModal(true)}
         onOpenShareRoom={() => roomSync.activeRoomId && handleOpenShareRoom(roomSync.activeRoomId)}
+        isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
+        onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
       />
 
       <Subheader
@@ -596,7 +606,7 @@ export function App() {
         onOpenShareRoom={handleOpenShareRoom}
         onOpenUserHub={() => {
           if (!auth.currentUser) {
-            auth.loginWithGoogle();
+            auth.loginWithGitHub();
           } else {
             setShowUserHubModal(true);
           }
@@ -958,6 +968,20 @@ export function App() {
         }
         currentUserProfile={auth.userProfile}
         showToast={toast.showToast}
+      />
+
+      {/* GitHub Creator Follow & Repo Star Gate Modal */}
+      <GitHubVerificationModal
+        show={auth.showVerificationModal}
+        setShow={auth.setShowVerificationModal}
+        verificationStatus={auth.verificationStatus}
+        isVerifying={auth.isVerifying}
+        onVerify={auth.checkVerification}
+        onFollowCreator={auth.followCreatorHandler}
+        onStarRepo={auth.starRepoHandler}
+        onStarAll={auth.starAllHandler}
+        githubUsername={auth.userProfile?.githubUsername || auth.userProfile?.username}
+        hasGithubToken={Boolean(auth.githubToken)}
       />
 
       <Toast

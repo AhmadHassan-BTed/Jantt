@@ -44,6 +44,7 @@ interface UseRoomSyncOptions {
   activeView: ActiveView;
   selectedThemeId: string;
   userProfile?: UserProfile | null;
+  onRequireVerification?: () => void;
 }
 
 function getCollaboratorId(): string {
@@ -75,7 +76,8 @@ export function useRoomSync({
   captureSnapshot,
   activeView,
   selectedThemeId,
-  userProfile
+  userProfile,
+  onRequireVerification
 }: UseRoomSyncOptions) {
   const [showRoomModal, setShowRoomModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -162,6 +164,11 @@ export function useRoomSync({
       setIsProcessing(true);
       try {
         if (userProfile) {
+          if (!userProfile.githubVerified) {
+            onRequireVerification?.();
+            showToast("Please verify GitHub following & starred repos to create cloud rooms.", true);
+            return;
+          }
           const roomPayload = await createRoom(userProfile, options.title, parsedData);
           baseDataMapRef.current.set(roomPayload.meta.roomId, parsedData);
           revisionMapRef.current.set(roomPayload.meta.roomId, roomPayload.meta.revision);
@@ -242,6 +249,11 @@ export function useRoomSync({
       setIsProcessing(true);
       try {
         if (userProfile) {
+          if (!userProfile.githubVerified) {
+            onRequireVerification?.();
+            showToast("Please star developer repos & follow creator to join cloud rooms.", true);
+            return;
+          }
           const roomPayload = await joinRoomViaInvite(roomId, userProfile);
           const isOwner = roomPayload.meta.ownerUid === userProfile.uid;
           const memberRecord = roomPayload.members?.[userProfile.uid];
@@ -399,6 +411,12 @@ export function useRoomSync({
 
       try {
         if (userProfile) {
+          if (!userProfile.githubVerified) {
+            onRequireVerification?.();
+            setSyncStatus("error");
+            setSyncMessage("Verification required");
+            return;
+          }
           const baseData = baseDataMapRef.current.get(activeRoomId) || currentData;
           const result = await saveRoomDataAtomic(activeRoomId, currentData, userProfile, baseData);
           if (result.success) {
