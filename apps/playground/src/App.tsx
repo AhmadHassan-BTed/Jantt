@@ -60,7 +60,8 @@ import {
   joinRoomViaInvite,
   deleteRoom,
   leaveRoom,
-  getRoom
+  getRoom,
+  saveRoomDataAtomic
 } from "./firebase/roomService";
 import type { UserRoomPointer, FullRoomPayload } from "./firebase";
 
@@ -77,6 +78,7 @@ import {
   NotesView,
   PromptModal,
   AddPlanModal,
+  PlanManagerModal,
   PeopleTeamsModal,
   CloudRoomModal,
   ShareModal,
@@ -96,6 +98,7 @@ export function App() {
   // UI Modals & Notifications
   const toast = useToast();
   const [showPromptModal, setShowPromptModal] = useState(false);
+  const [showPlanManagerModal, setShowPlanManagerModal] = useState(false);
 
   // Firebase Authentication & Cloud User Identity
   const auth = useAuth();
@@ -104,6 +107,10 @@ export function App() {
   const [showUserHubModal, setShowUserHubModal] = useState(false);
   const [shareModalRoomId, setShareModalRoomId] = useState<string | null>(null);
   const [showShareRoomModal, setShowShareRoomModal] = useState(false);
+
+  // Handlers refs for circular hook bindings
+  const onCreateCloudRoomRef = useRef<((title: string, data: JanttData) => Promise<string | null>) | undefined>();
+  const onUpdateExistingRoomRef = useRef<((roomId: string, data: JanttData) => Promise<boolean>) | undefined>();
 
   // Real-time synchronization of user's personal hub (owned & shared rooms)
   useEffect(() => {
@@ -193,7 +200,11 @@ export function App() {
     setShowCriticalPath: viewport.setShowCriticalPath,
     setShowBaselines: viewport.setShowBaselines,
     showToast: toast.showToast,
-    flushPendingSave: () => flushPendingSaveRef.current()
+    flushPendingSave: () => flushPendingSaveRef.current(),
+    onCreateCloudRoom: (title, data) =>
+      onCreateCloudRoomRef.current ? onCreateCloudRoomRef.current(title, data) : Promise.resolve(null),
+    onUpdateExistingRoom: (roomId, data) =>
+      onUpdateExistingRoomRef.current ? onUpdateExistingRoomRef.current(roomId, data) : Promise.resolve(false)
   });
 
   // Zero-Data-Loss Version History & Snapshot Vault
@@ -307,6 +318,55 @@ export function App() {
     },
     [auth.userProfile, editor, people, project, toast]
   );
+
+  const handleCreateCloudRoomFromData = useCallback(
+    async (title: string, data: JanttData): Promise<string | null> => {
+      if (!auth.currentUser) {
+        auth.loginWithGitHub();
+        return null;
+      }
+      if (!auth.userProfile?.githubVerified) {
+        auth.setShowVerificationModal(true);
+        toast.showToast("Support the creator by following & starring repos to collaborate in cloud rooms.", true);
+        return null;
+      }
+      const roomId = await roomSync.createRoomFromActive(title, data);
+      if (roomId) {
+        setShowPlanManagerModal(false);
+      }
+      return roomId;
+    },
+    [auth, roomSync, toast]
+  );
+  onCreateCloudRoomRef.current = handleCreateCloudRoomFromData;
+
+  const handleUpdateExistingCloudRoom = useCallback(
+    async (roomId: string, data: JanttData): Promise<boolean> => {
+      if (!auth.userProfile) {
+        auth.loginWithGitHub();
+        return false;
+      }
+      if (!auth.userProfile.githubVerified) {
+        auth.setShowVerificationModal(true);
+        toast.showToast("Support the creator by following & starring repos to collaborate in cloud rooms.", true);
+        return false;
+      }
+      try {
+        const result = await saveRoomDataAtomic(roomId, data, auth.userProfile);
+        if (result.success) {
+          toast.showToast(`Updated cloud room "${roomId}" with new plan!`);
+          await handleSelectCloudRoom(roomId);
+          return true;
+        }
+        return false;
+      } catch (err: any) {
+        toast.showToast(`Failed to update room: ${err.message}`, true);
+        return false;
+      }
+    },
+    [auth, handleSelectCloudRoom, toast]
+  );
+  onUpdateExistingRoomRef.current = handleUpdateExistingCloudRoom;
 
   const handleSelectProjectOrRoom = useCallback(
     async (projectId: string) => {
@@ -565,6 +625,10 @@ export function App() {
         effectivePeople={people.effectivePeople}
         ownedRooms={ownedRooms}
         sharedRooms={sharedRooms}
+        onOpenPlanManager={() => setShowPlanManagerModal(true)}
+        onImportJson={() => project.fileInputRef.current?.click()}
+        onExportJson={editor.handleDownloadJson}
+        onExportCsv={editor.handleExportCsv}
       />
 
       {/* Dedicated Real-Time Cloud Collaboration Bar */}
@@ -620,6 +684,9 @@ export function App() {
           handleCopyJson={editor.handleCopyJson}
           copiedJson={editor.copiedJson}
           handleEditorChange={editor.handleEditorChange}
+          handleImportJsonFile={project.handleImportJsonFile}
+          handleDownloadJson={editor.handleDownloadJson}
+          handleExportCsv={editor.handleExportCsv}
         />
 
         {!sidebar.isSidebarCollapsed && (
@@ -811,6 +878,34 @@ export function App() {
         newPlanTemplateType={project.newPlanTemplateType}
         setNewPlanTemplateType={project.setNewPlanTemplateType}
         handleCreateNewPlan={project.handleCreateNewPlan}
+        ownedRooms={ownedRooms}
+        sharedRooms={sharedRooms}
+        isLoggedIn={Boolean(auth.currentUser)}
+        isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
+        onLogin={auth.loginWithGitHub}
+        onRequireVerification={() => auth.setShowVerificationModal(true)}
+      />
+
+      <PlanManagerModal
+        show={showPlanManagerModal}
+        setShow={setShowPlanManagerModal}
+        activeProjectId={project.activeProjectId}
+        customProjects={project.customProjects}
+        ownedRooms={ownedRooms}
+        sharedRooms={sharedRooms}
+        userProfile={auth.userProfile}
+        onSelectProject={handleSelectProjectOrRoom}
+        onDeleteProject={project.handleDeleteProject}
+        onDuplicateProject={project.handleDuplicateProject}
+        onRenameProject={project.handleRenameProject}
+        onCreateLocalCopy={project.handleCreateLocalCopyFromData}
+        onPublishToCloud={handleCreateCloudRoomFromData}
+        onDeleteCloudRoom={handleDeleteCloudRoom}
+        onLeaveCloudRoom={handleLeaveCloudRoom}
+        onOpenShareRoom={handleOpenShareRoom}
+        onOpenAddPlanModal={project.handleOpenAddPlanModal}
+        onImportJsonFile={project.handleImportJsonFile}
+        showToast={toast.showToast}
       />
 
       <PeopleTeamsModal
