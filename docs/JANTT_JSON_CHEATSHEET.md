@@ -68,12 +68,20 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
   },
   "people": [
     {
-      "id": "person-id",
+      "id": "@alex",
       "name": "Alex Mercer",
+      "username": "@alex",
       "role": "Lead Architect",
       "email": "alex@org.com",
       "teamId": "core-team",
       "color": "#3B82F6"
+    },
+    {
+      "id": "person-contractor",
+      "name": "Sarah Miller",
+      "role": "External Specialist",
+      "teamId": "core-team",
+      "color": "#10B981"
     }
   ],
   "teams": [
@@ -116,7 +124,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "category": "<matching_category_id>",
       "start": "YYYY-MM-DD",
       "end": "YYYY-MM-DD",
-      "assignee": "Team Member Name",
+      "assignee": "@alex",
       "phase": "Phase 1: Foundation",
       "priority": "low" | "medium" | "high" | "urgent",
       "estimatedCost": 28000,
@@ -155,6 +163,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 5. PROGRESS: Must be a decimal float from 0.0 (0%) to 1.0 (100%).
 6. BASELINES: Optional planned timeframe object { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } for baseline variance tracking.
 7. LOCKED: Set "locked": true on fixed gates or hard-deadline milestones to prevent accidental drag shifts.
+8. SINGLE SOURCE OF TRUTH & NO DATABASE IDS IN JSON:
+   - Real registered accounts use "@username" for both "id" and "username".
+   - Non-account individuals are defined as offline personas with local ID (e.g. "person-contractor", without "username").
+   - Tasks assigned to registered accounts reference the mention in "assignee": "@username".
+   - Zero internal database IDs (no Firebase UIDs, auth tokens, or secret keys) in JSON. The only exception is public "@username" mentions.
 ```
 
 ---
@@ -449,24 +462,36 @@ The `@jantt/core` validation engine enforces:
 
 ---
 
+---
+
 ## 9. People & Teams Registry (`people`, `teams`)
 
-The Jantt engine manages human resources, squad allocations, and avatar presentation through optional top-level `people` and `teams` arrays:
+The Jantt engine manages human resources, squad allocations, and avatar presentation through optional top-level `people` and `teams` arrays.
+
+### Single Source of Truth & Dual-Mode Member Architecture
+
+To maintain strict database and JSON coherence without leaking internal IDs:
+- **Real Registered Teammates**: Defined using their canonical GitHub handle mention for both `id` and `username` (e.g. `"id": "@ahmadhassan"`, `"username": "@ahmadhassan"`).
+- **Offline / Non-Account Personas**: Defined with standard local IDs without a `username` (e.g. `"id": "person-contractor"`, `"name": "Contractor Sarah"`).
+- **Task Assignees**: Tasks assigned to real accounts reference the handle mention (`"assignee": "@ahmadhassan"`).
+- **Zero Internal Database IDs in JSON**: No Firebase UIDs (`uid`, `ownerUid`), secret keys, or auth tokens are ever exposed in JSON. The single canonical exception is public `@username` mentions.
 
 ```json
 {
   "people": [
     {
-      "id": "ahmad-hassan",
+      "id": "@ahmadhassan",
       "name": "Ahmad Hassan",
+      "username": "@ahmadhassan",
       "role": "Project Lead / Principal Investigator",
+      "avatar": "https://avatars.githubusercontent.com/u/104278065?v=4",
       "teamId": "ai-core",
       "color": "#38BDF8"
     },
     {
-      "id": "sarah-chen",
-      "name": "Sarah Chen",
-      "role": "Distributed Systems Researcher",
+      "id": "person-contractor",
+      "name": "Sarah Miller",
+      "role": "External Security Auditor",
       "teamId": "ai-core",
       "color": "#10B981"
     }
@@ -481,11 +506,42 @@ The Jantt engine manages human resources, squad allocations, and avatar presenta
 }
 ```
 
-> **Automatic Discovery**: If `people` is omitted, the Jantt UI automatically infers assignees and owners from `meta.person`, `tasks[].assignee`, and `documents[].owner`. Inferred members can be formalized into the JSON schema with a single click.
+### People Field Reference
+
+| Field | Type | Required | Description | Example |
+|---|---|:---:|---|---|
+| `id` | `string` | **Yes** | Unique identifier: `@username` mention for registered accounts, or `person-xxx` for offline personas. | `"@ahmadhassan"` |
+| `name` | `string` | **Yes** | Full display name. | `"Ahmad Hassan"` |
+| `username` | `string` | No | Canonical GitHub username mention. Present **only** for registered accounts. | `"@ahmadhassan"` |
+| `role` | `string` | No | Job title, position, or specialty. | `"Lead Architect"` |
+| `teamId` | `string` | No | Identifier referencing an entry in `teams[].id`. | `"ai-core"` |
+| `avatar` | `string` | No | Profile photo URL or fallback avatar graphic. | `"https://..."` |
+| `color` | `string` | No | Hex color used for visual badge & timeline avatar. | `"#38BDF8"` |
+| `email` | `string` | No | Contact email address. | `"user@org.com"` |
+
+> **Automatic Discovery**: If `people` is omitted, the Jantt UI automatically infers assignees from `meta.person`, `tasks[].assignee`, and `documents[].owner`. Inferred members can be formalized into the JSON schema with a single click.
 
 ---
 
-## 10. Academic Pipeline & Research Planning Benchmark
+## 10. Cloud Security, Plan Sanitization & Real-Time Sync
+
+Jantt integrates a multi-user real-time collaboration engine backed by Firebase Realtime Database and Cloudflare edge proxies:
+
+1. **GitHub-Only Authentication**:
+   - Google login is strictly removed. Only GitHub OAuth 2.0 is allowed.
+   - Usernames are claimed directly from verified GitHub handles with zero manual typing modal.
+2. **Plan Sanitization Pipeline (`sanitizePlanForJson`)**:
+   - Every plan document is sanitized before saving to the database or exporting.
+   - Recursively purges `uid`, `ownerUid`, `firebaseUid`, `secretKey`, `authId`, `authToken`, and `peerId`.
+   - Reconciler timestamps and audit metadata strictly use `@${username}` mentions as client identifiers.
+3. **Database Security Rules (`database.rules.json`)**:
+   - Explicit index on `username` (`.indexOn: ["username"]`) for high-performance prefix autocomplete.
+   - Role-based authorization matrix ensuring only room owners and editors can modify room data and metadata.
+
+
+---
+
+## 11. Academic Pipeline & Research Planning Benchmark
 
 Jantt is designed to coordinate complex academic pipelines (such as PhD/MS admissions, scholarship competitions, thesis defenses, and visa pathways). Below is a minimal production benchmark:
 
@@ -566,7 +622,7 @@ Jantt is designed to coordinate complex academic pipelines (such as PhD/MS admis
 
 ---
 
-## 11. Personal Productivity & Time Blocking
+## 12. Personal Productivity & Time Blocking
 
 For daily work, sprint planning, and time blocking:
 1. **Daily Focus**: Switch the Date Filter subheader to **Today** to isolate active tasks.
