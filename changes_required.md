@@ -1,0 +1,4 @@
+1. when ciritcal path is clicked, and the stuff is highlieted. when i scrool, it passses over the top days/months etc header. fix this.
+2. tofr the management of the palns, you shuold put just 3 lists, and i can selecte from the dropdown, or if you can, do implemenet drag and drop of it. fix it
+3. instead of putting the stuff ugly subheader  for the cloud stuff, like the import, room, etc. we shuold move it to the poupup.
+4. right now, many things are missimplmeneted. the popups are not right where they belong. are very ambigious. we have to make stuff intuitive and perfet, powerful while it being easy.

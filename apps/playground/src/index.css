@@ -4394,5 +4394,32 @@ path.jantt-dep-path.jantt-task-dimmed {
   to { transform: rotate(360deg); }
 }
 
+/* Editor Toolbar Import / Export Popup Menu */
+.editor-import-export-popup {
+  animation: fadeInDownMenu 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+}
 
+@keyframes fadeInDownMenu {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 
+.editor-popup-item {
+  transition: background 0.12s ease, color 0.12s ease, transform 0.08s ease;
+}
+
+.editor-popup-item:hover {
+  background: var(--jantt-surface-hover, rgba(56, 189, 248, 0.12)) !important;
+  color: var(--jantt-accent, #38BDF8) !important;
+}
+
+.editor-popup-item:active {
+  transform: scale(0.98);
+}

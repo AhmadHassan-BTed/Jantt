@@ -9,7 +9,7 @@ import {
 } from "@jantt/core";
 import type { SavedProject } from "../types";
 import { DEFAULT_TEMPLATE, STORAGE_KEYS } from "../constants";
-import { saveCustomProjects, createBlankPlan } from "../utils";
+import { saveCustomProjects, createBlankPlan, loadSavedProjects } from "../utils";
 import masterTemplateFixture from "../../../../examples/master-template.json";
 
 interface UseProjectStateOptions {
@@ -28,6 +28,21 @@ interface UseProjectStateOptions {
   flushPendingSave?: () => void;
   onCreateCloudRoom?: (title: string, data: JanttData) => Promise<string | null>;
   onUpdateExistingRoom?: (roomId: string, data: JanttData) => Promise<boolean>;
+}
+
+function cleanUrlForLocalProject() {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("room");
+    url.searchParams.delete("cloud");
+    url.searchParams.delete("url");
+    url.searchParams.delete("data");
+    url.searchParams.delete("name");
+    url.searchParams.delete("plan");
+    url.hash = "";
+    window.history.replaceState(null, "", url.toString());
+  } catch {}
 }
 
 export function useProjectState({
@@ -49,6 +64,11 @@ export function useProjectState({
 }: UseProjectStateOptions) {
   const [customProjects, setCustomProjects] = useState<SavedProject[]>(initialProjects);
   const [activeProjectId, setActiveProjectId] = useState<string>(initialActiveId);
+  const customProjectsRef = useRef(customProjects);
+  customProjectsRef.current = customProjects;
+  const activeProjectIdRef = useRef(activeProjectId);
+  activeProjectIdRef.current = activeProjectId;
+
   const flushPendingSaveRef = useRef(flushPendingSave);
   flushPendingSaveRef.current = flushPendingSave;
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
@@ -71,12 +91,17 @@ export function useProjectState({
       flushPendingSaveRef.current?.();
 
       setActiveProjectId(projectId);
+      activeProjectIdRef.current = projectId;
       try {
         localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, projectId);
       } catch {}
 
       let targetData: JanttData = DEFAULT_TEMPLATE.data;
-      const found = projectId !== "default" ? customProjects.find((p) => p.id === projectId) : null;
+      const found =
+        projectId !== "default"
+          ? customProjectsRef.current.find((p) => p.id === projectId) ||
+            loadSavedProjects().find((p) => p.id === projectId)
+          : null;
       if (found) {
         targetData = found.data;
       }
@@ -88,9 +113,29 @@ export function useProjectState({
             url.searchParams.set("url", found.sourceUrl);
             url.searchParams.delete("data");
             url.searchParams.delete("name");
+            url.searchParams.delete("room");
+            url.searchParams.delete("cloud");
+            url.searchParams.delete("plan");
             url.hash = "";
+          } else if (found && found.source === "room" && found.roomId) {
+            url.searchParams.set("room", found.roomId);
+            url.searchParams.delete("url");
+            url.searchParams.delete("data");
+            url.searchParams.delete("name");
+            url.searchParams.delete("plan");
+            if (found.secretKey) {
+              url.hash = `key=${encodeURIComponent(found.secretKey)}`;
+            } else {
+              url.hash = "";
+            }
           } else {
             url.searchParams.delete("url");
+            url.searchParams.delete("room");
+            url.searchParams.delete("cloud");
+            url.searchParams.delete("data");
+            url.searchParams.delete("name");
+            url.searchParams.delete("plan");
+            url.hash = "";
           }
           window.history.replaceState(null, "", url.toString());
         } catch {}
@@ -194,12 +239,15 @@ export function useProjectState({
       };
 
       const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
+      customProjectsRef.current = updated;
+      activeProjectIdRef.current = newProj.id;
       setCustomProjects(updated);
       saveCustomProjects(updated);
       setActiveProjectId(newProj.id);
       try {
         localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
       } catch {}
+      cleanUrlForLocalProject();
       setJsonText(JSON.stringify(data, null, 2));
       setParsedData(data);
       setPeople(data.people || []);
@@ -241,12 +289,15 @@ export function useProjectState({
     };
 
     const updated = [newProj, ...customProjects];
+    customProjectsRef.current = updated;
+    activeProjectIdRef.current = newProj.id;
     setCustomProjects(updated);
     saveCustomProjects(updated);
     setActiveProjectId(newProj.id);
     try {
       localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
     } catch {}
+    cleanUrlForLocalProject();
     setJsonText(JSON.stringify(forkedData, null, 2));
     setParsedData(forkedData);
     setValidationResult(validate(forkedData));
@@ -281,12 +332,15 @@ export function useProjectState({
       };
 
       const updated = [newProj, ...customProjects];
+      customProjectsRef.current = updated;
+      activeProjectIdRef.current = newProj.id;
       setCustomProjects(updated);
       saveCustomProjects(updated);
       setActiveProjectId(newProj.id);
       try {
         localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
       } catch {}
+      cleanUrlForLocalProject();
       setJsonText(JSON.stringify(copyData, null, 2));
       setParsedData(copyData);
       setPeople(copyData.people || []);
@@ -324,6 +378,7 @@ export function useProjectState({
           }
           return p;
         });
+        customProjectsRef.current = updated;
         saveCustomProjects(updated);
         return updated;
       });
@@ -375,12 +430,15 @@ export function useProjectState({
       };
 
       const updated = [newProj, ...customProjects];
+      customProjectsRef.current = updated;
+      activeProjectIdRef.current = newProj.id;
       setCustomProjects(updated);
       saveCustomProjects(updated);
       setActiveProjectId(newProj.id);
       try {
         localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
       } catch {}
+      cleanUrlForLocalProject();
       setJsonText(JSON.stringify(copyData, null, 2));
       setParsedData(copyData);
       setPeople(copyData.people || []);
@@ -413,6 +471,7 @@ export function useProjectState({
         flushPendingSaveRef.current?.();
       }
       const updated = customProjects.filter((p) => p.id !== projectId);
+      customProjectsRef.current = updated;
       setCustomProjects(updated);
       saveCustomProjects(updated);
       if (activeProjectId === projectId) {
@@ -443,6 +502,8 @@ export function useProjectState({
               source: "local"
             };
             const updated = [newProj, ...customProjects];
+            customProjectsRef.current = updated;
+            activeProjectIdRef.current = newProj.id;
             setCustomProjects(updated);
             saveCustomProjects(updated);
             setActiveProjectId(newProj.id);
@@ -520,6 +581,7 @@ export function useProjectState({
           ? { ...p, data, updatedAt: new Date().toISOString() }
           : p
       );
+      customProjectsRef.current = updated;
       saveCustomProjects(updated);
       return updated;
     });

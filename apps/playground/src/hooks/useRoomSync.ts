@@ -13,7 +13,7 @@ import {
 } from "@jantt/core";
 import type { SavedProject, ActiveView } from "../types";
 import { saveCustomProjects } from "../utils";
-import { STORAGE_KEYS } from "../constants";
+import { STORAGE_KEYS, DEFAULT_TEMPLATE } from "../constants";
 import {
   getStoredRoomSecret,
   storeRoomSecret
@@ -123,18 +123,16 @@ export function useRoomSync({
 
   // Auto-update base data map when switching projects
   useEffect(() => {
-    if (activeProj?.source === "room" && activeProj.roomId) {
-      if (!baseDataMapRef.current.has(activeProj.roomId)) {
-        baseDataMapRef.current.set(activeProj.roomId, activeProj.data);
-      }
-      if (activeProj.etag && !etagMapRef.current.has(activeProj.roomId)) {
+    if (activeProj?.source === "room" && activeProj.roomId && activeProj.data) {
+      baseDataMapRef.current.set(activeProj.roomId, activeProj.data);
+      if (activeProj.etag) {
         etagMapRef.current.set(activeProj.roomId, activeProj.etag);
       }
-      if (activeProj.revision && !revisionMapRef.current.has(activeProj.roomId)) {
+      if (activeProj.revision) {
         revisionMapRef.current.set(activeProj.roomId, activeProj.revision);
       }
     }
-  }, [activeProj]);
+  }, [activeProj?.source, activeProj?.roomId, activeProj?.data, activeProj?.etag, activeProj?.revision]);
 
   // Live Presence Tracking for Active Cloud Room
   useEffect(() => {
@@ -174,6 +172,26 @@ export function useRoomSync({
         }
         window.history.replaceState(null, "", url.toString());
       } catch {}
+    } else {
+      try {
+        const url = new URL(window.location.href);
+        let changed = false;
+        if (url.searchParams.has("room")) {
+          url.searchParams.delete("room");
+          changed = true;
+        }
+        if (url.searchParams.has("cloud")) {
+          url.searchParams.delete("cloud");
+          changed = true;
+        }
+        if (window.location.hash.includes("key=") || window.location.hash.includes("edit=")) {
+          url.hash = "";
+          changed = true;
+        }
+        if (changed) {
+          window.history.replaceState(null, "", url.toString());
+        }
+      } catch {}
     }
   }, [activeProj?.source, activeProj?.roomId, activeSecretKey, activeView, selectedThemeId]);
 
@@ -209,12 +227,20 @@ export function useRoomSync({
           };
 
           const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+          customProjectsRef.current = updated;
+          activeProjectIdRef.current = newProj.id;
           setCustomProjects(updated);
           saveCustomProjects(updated);
           setActiveProjectId(newProj.id);
           try {
             localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
           } catch {}
+
+          setParsedData(parsedData);
+          setJsonText(JSON.stringify(parsedData, null, 2));
+          setPeople(parsedData.people || []);
+          setTeams(parsedData.teams || []);
+          setValidationResult(validate(parsedData));
 
           setSyncStatus("in-sync");
           setSyncMessage("Live Room Active");
@@ -246,12 +272,20 @@ export function useRoomSync({
         };
 
         const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+        customProjectsRef.current = updated;
+        activeProjectIdRef.current = newProj.id;
         setCustomProjects(updated);
         saveCustomProjects(updated);
         setActiveProjectId(newProj.id);
         try {
           localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
         } catch {}
+
+        setParsedData(parsedData);
+        setJsonText(JSON.stringify(parsedData, null, 2));
+        setPeople(parsedData.people || []);
+        setTeams(parsedData.teams || []);
+        setValidationResult(validate(parsedData));
 
         setSyncStatus("in-sync");
         setSyncMessage("Live Room Active");
@@ -263,7 +297,18 @@ export function useRoomSync({
         setIsProcessing(false);
       }
     },
-    [parsedData, setActiveProjectId, setCustomProjects, showToast, userProfile]
+    [
+      parsedData,
+      setActiveProjectId,
+      setCustomProjects,
+      setParsedData,
+      setJsonText,
+      setPeople,
+      setTeams,
+      setValidationResult,
+      showToast,
+      userProfile
+    ]
   );
 
   // 2. Action: Join an existing Cloud Room
@@ -299,6 +344,8 @@ export function useRoomSync({
           };
 
           const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+          customProjectsRef.current = updated;
+          activeProjectIdRef.current = newProj.id;
           setCustomProjects(updated);
           saveCustomProjects(updated);
           setActiveProjectId(newProj.id);
@@ -346,6 +393,8 @@ export function useRoomSync({
         };
 
         const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+        customProjectsRef.current = updated;
+        activeProjectIdRef.current = newProj.id;
         setCustomProjects(updated);
         saveCustomProjects(updated);
         setActiveProjectId(newProj.id);
@@ -617,10 +666,18 @@ export function useRoomSync({
     if (!activeRoomId || typeof window === "undefined") return;
 
     const unsubscribe = listenToRoom(activeRoomId, (incomingRoom) => {
+      // Critical Guard: Only process if this room is STILL the active project!
+      // Prevents background/in-flight room packets from reverting user's new local plans or another room to default!
+      const currentActive = customProjectsRef.current.find((p) => p.id === activeProjectIdRef.current);
+      if (!currentActive || currentActive.source !== "room" || currentActive.roomId !== activeRoomId) {
+        return;
+      }
+
       // Case 0: Room was deleted by owner -> Instant zero-refresh fallback to default
       if (incomingRoom === null) {
         showToast("This cloud room was deleted by its owner.", true);
         const updated = customProjectsRef.current.filter((p) => p.roomId !== activeRoomId);
+        customProjectsRef.current = updated;
         setCustomProjects(updated);
         saveCustomProjects(updated);
         setActiveProjectId("default");
@@ -629,9 +686,15 @@ export function useRoomSync({
           const url = new URL(window.location.href);
           url.searchParams.delete("room");
           url.searchParams.delete("cloud");
+          url.searchParams.delete("plan");
           url.hash = "";
           window.history.replaceState(null, "", url.toString());
         } catch {}
+        setParsedData(DEFAULT_TEMPLATE.data);
+        setJsonText(JSON.stringify(DEFAULT_TEMPLATE.data, null, 2));
+        setPeople(DEFAULT_TEMPLATE.data.people || []);
+        setTeams(DEFAULT_TEMPLATE.data.teams || []);
+        setValidationResult(validate(DEFAULT_TEMPLATE.data));
         return;
       }
 
@@ -652,12 +715,14 @@ export function useRoomSync({
             }
             return p;
           });
+          customProjectsRef.current = updated;
           setCustomProjects(updated);
           saveCustomProjects(updated);
           try {
             const url = new URL(window.location.href);
             url.searchParams.delete("room");
             url.searchParams.delete("cloud");
+            url.searchParams.delete("plan");
             url.hash = "";
             window.history.replaceState(null, "", url.toString());
           } catch {}
@@ -680,6 +745,11 @@ export function useRoomSync({
       const baseHash = calculatePlanHash(baseData);
 
       const incomingRev = incomingRoom.meta?.revision || 1;
+
+      // Ensure user hasn't switched away while processing
+      if (activeProjectIdRef.current !== `room-${activeRoomId}`) {
+        return;
+      }
 
       // Case A: Local made no edits -> Adopt incoming state directly!
       if (localHash === baseHash) {
@@ -732,30 +802,51 @@ export function useRoomSync({
     showToast
   ]);
 
+  const handleJoinRoomRef = useRef(handleJoinRoom);
+  handleJoinRoomRef.current = handleJoinRoom;
+  const handleUnlockCollaboratorRef = useRef(handleUnlockCollaborator);
+  handleUnlockCollaboratorRef.current = handleUnlockCollaborator;
+  const hasProcessedUrlMountRef = useRef(false);
+
   // 6. URL Mount Check: Auto-connect to Room when URL contains ?room= or ?cloud=
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomParam = urlParams.get("room") || urlParams.get("cloud");
-    if (!roomParam) return;
+    const checkAndConnectUrlRoom = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomParam = urlParams.get("room") || urlParams.get("cloud");
+      if (!roomParam) return;
 
-    const hash = window.location.hash.replace(/^#/, "");
-    const hp = new URLSearchParams(hash);
-    const secretFromHash = hp.get("key") || hp.get("edit") || undefined;
+      const hash = window.location.hash.replace(/^#/, "");
+      const hp = new URLSearchParams(hash);
+      const secretFromHash = hp.get("key") || hp.get("edit") || undefined;
 
-    // Check if already active
-    const activeCurrent = customProjectsRef.current.find((p) => p.id === activeProjectIdRef.current);
-    if (activeCurrent?.source === "room" && activeCurrent.roomId === roomParam) {
-      if (secretFromHash && !activeCurrent.secretKey) {
-        handleUnlockCollaborator(secretFromHash);
+      // Check if already active
+      const activeCurrent = customProjectsRef.current.find((p) => p.id === activeProjectIdRef.current);
+      if (activeCurrent?.source === "room" && activeCurrent.roomId === roomParam) {
+        if (secretFromHash && !activeCurrent.secretKey) {
+          handleUnlockCollaboratorRef.current(secretFromHash);
+        }
+        return;
       }
-      return;
+
+      // Join room from URL
+      handleJoinRoomRef.current(roomParam, secretFromHash);
+    };
+
+    if (!hasProcessedUrlMountRef.current) {
+      hasProcessedUrlMountRef.current = true;
+      checkAndConnectUrlRoom();
     }
 
-    // Join room from URL
-    handleJoinRoom(roomParam, secretFromHash);
-  }, [handleJoinRoom, handleUnlockCollaborator]);
+    const onPopState = () => {
+      checkAndConnectUrlRoom();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
 
   // Action: Create Cloud Room from Active Plan directly (1-Click Flow)
   const createRoomFromActive = useCallback(
@@ -768,32 +859,76 @@ export function useRoomSync({
       const roomTitle = title || activeProj?.name || "Shared Jantt Plan";
       setIsProcessing(true);
       try {
-        if (!userProfile) {
-          showToast("Please sign in with GitHub to create a live cloud room.", true);
-          return null;
+        if (userProfile) {
+          if (!userProfile.githubVerified) {
+            onRequireVerification?.();
+            showToast("Please verify GitHub stars & follow creator to create cloud rooms.", true);
+            return null;
+          }
+          const roomPayload = await createRoom(userProfile, roomTitle, dataToUse);
+          baseDataMapRef.current.set(roomPayload.meta.roomId, dataToUse);
+          revisionMapRef.current.set(roomPayload.meta.roomId, roomPayload.meta.revision);
+
+          const newProj: SavedProject = {
+            id: `room-${roomPayload.meta.roomId}`,
+            name: roomPayload.meta.title,
+            updatedAt: roomPayload.meta.updatedAt,
+            data: dataToUse,
+            source: "room",
+            roomId: roomPayload.meta.roomId,
+            role: "collaborator",
+            revision: roomPayload.meta.revision,
+            lastSyncedAt: new Date().toISOString()
+          };
+
+          const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+          customProjectsRef.current = updated;
+          activeProjectIdRef.current = newProj.id;
+          setCustomProjects(updated);
+          saveCustomProjects(updated);
+          setActiveProjectId(newProj.id);
+          try {
+            localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+          } catch {}
+
+          // Immediately update editor state so GUI chart & JSON show the new plan!
+          setParsedData(dataToUse);
+          setJsonText(JSON.stringify(dataToUse, null, 2));
+          setPeople(dataToUse.people || []);
+          setTeams(dataToUse.teams || []);
+          setValidationResult(validate(dataToUse));
+
+          setSyncStatus("in-sync");
+          setSyncMessage("Live Room Active");
+          setLastSyncTime(new Date());
+          showToast(`Cloud Room "${roomPayload.meta.title}" is live! Add teammates now.`);
+          return roomPayload.meta.roomId;
         }
-        if (!userProfile.githubVerified) {
-          onRequireVerification?.();
-          showToast("Please verify GitHub stars & follow creator to create cloud rooms.", true);
-          return null;
-        }
-        const roomPayload = await createRoom(userProfile, roomTitle, dataToUse);
-        baseDataMapRef.current.set(roomPayload.meta.roomId, dataToUse);
-        revisionMapRef.current.set(roomPayload.meta.roomId, roomPayload.meta.revision);
+
+        // Serverless fallback
+        const res = await createCloudRoom(dataToUse, { title: roomTitle });
+        storeRoomSecret(res.roomId, res.secretKey);
+        baseDataMapRef.current.set(res.roomId, dataToUse);
+        etagMapRef.current.set(res.roomId, res.etag);
+        revisionMapRef.current.set(res.roomId, res.revision);
 
         const newProj: SavedProject = {
-          id: `room-${roomPayload.meta.roomId}`,
-          name: roomPayload.meta.title,
-          updatedAt: roomPayload.meta.updatedAt,
+          id: `room-${res.roomId}`,
+          name: res.title,
+          updatedAt: new Date().toISOString(),
           data: dataToUse,
           source: "room",
-          roomId: roomPayload.meta.roomId,
+          roomId: res.roomId,
+          secretKey: res.secretKey,
           role: "collaborator",
-          revision: roomPayload.meta.revision,
+          etag: res.etag,
+          revision: res.revision,
           lastSyncedAt: new Date().toISOString()
         };
 
         const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+        customProjectsRef.current = updated;
+        activeProjectIdRef.current = newProj.id;
         setCustomProjects(updated);
         saveCustomProjects(updated);
         setActiveProjectId(newProj.id);
@@ -801,11 +936,18 @@ export function useRoomSync({
           localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
         } catch {}
 
+        // Immediately update editor state
+        setParsedData(dataToUse);
+        setJsonText(JSON.stringify(dataToUse, null, 2));
+        setPeople(dataToUse.people || []);
+        setTeams(dataToUse.teams || []);
+        setValidationResult(validate(dataToUse));
+
         setSyncStatus("in-sync");
         setSyncMessage("Live Room Active");
         setLastSyncTime(new Date());
-        showToast(`Cloud Room "${roomPayload.meta.title}" is live! Add teammates now.`);
-        return roomPayload.meta.roomId;
+        showToast(`Cloud Room "${res.title}" is live!`);
+        return res.roomId;
       } catch (err: any) {
         showToast(`Failed to create room: ${err.message}`, true);
         return null;
@@ -813,7 +955,20 @@ export function useRoomSync({
         setIsProcessing(false);
       }
     },
-    [parsedData, activeProj?.name, userProfile, onRequireVerification, setCustomProjects, setActiveProjectId, showToast]
+    [
+      parsedData,
+      activeProj?.name,
+      userProfile,
+      onRequireVerification,
+      setCustomProjects,
+      setActiveProjectId,
+      setParsedData,
+      setJsonText,
+      setPeople,
+      setTeams,
+      setValidationResult,
+      showToast
+    ]
   );
 
   return {
