@@ -546,8 +546,6 @@ export function App() {
         setShowPromptModal={setShowPromptModal}
         currentUser={auth.currentUser}
         userProfile={auth.userProfile}
-        isSigningIn={auth.isSigningIn}
-        onLogin={auth.loginWithGitHub}
         onOpenUserHub={() => setShowUserHubModal(true)}
         isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
         onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
