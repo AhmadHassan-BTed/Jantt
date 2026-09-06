@@ -6,7 +6,7 @@
     "end": "2027-02-28",
     "defaultGapDays": 2,
     "scale": "week",
-    "showCriticalPath": true,
+    "showCriticalPath": false,
     "showBaselines": true
   },
   "categories": {

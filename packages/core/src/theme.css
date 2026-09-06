@@ -947,7 +947,7 @@
 .jantt-label-header {
   position: sticky;
   top: 0;
-  z-index: 26;
+  z-index: 45;
   flex-shrink: 0;
   border-bottom: 1px solid var(--jantt-border);
   display: grid;
@@ -1109,7 +1109,7 @@
   bottom: 0;
   width: 6px;
   cursor: col-resize;
-  z-index: 26;
+  z-index: 42;
   background: transparent;
   transition: background 0.15s ease;
 }
@@ -1134,7 +1134,7 @@
 .jantt-timeline-header {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 40;
   flex-shrink: 0;
   background: var(--jantt-surface);
   backdrop-filter: blur(16px);

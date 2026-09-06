@@ -33,7 +33,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
     "defaultGapDays": 2,
     "scale": "day" | "week" | "month" | "quarter" | "year",
     "linkRouting": "orthogonal" | "curved" | "direct",
-    "showCriticalPath": true,
+    "showCriticalPath": false,
     "showBaselines": true,
     "currency": "USD",
     "budget": 385000,

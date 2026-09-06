@@ -69,7 +69,6 @@ import type { UserRoomPointer, FullRoomPayload } from "./firebase";
 import {
   Navbar,
   Subheader,
-  CloudBar,
   EditorPane,
   DateFilterBar,
   KanbanView,
@@ -85,7 +84,6 @@ import {
   AutoSaveModal,
   VersionHistoryModal,
   UsernameOnboardingModal,
-  UserHubModal,
   ShareRoomModal,
   GitHubVerificationModal,
   Toast,
@@ -104,7 +102,6 @@ export function App() {
   const auth = useAuth();
   const [ownedRooms, setOwnedRooms] = useState<UserRoomPointer[]>([]);
   const [sharedRooms, setSharedRooms] = useState<UserRoomPointer[]>([]);
-  const [showUserHubModal, setShowUserHubModal] = useState(false);
   const [shareModalRoomId, setShareModalRoomId] = useState<string | null>(null);
   const [showShareRoomModal, setShowShareRoomModal] = useState(false);
 
@@ -310,7 +307,7 @@ export function App() {
         people.setTeams(roomPayload.data.teams || []);
         editor.setValidationResult(validate(roomPayload.data));
 
-        setShowUserHubModal(false);
+        setShowPlanManagerModal(false);
         toast.showToast(`Opened room "${roomPayload.meta.title}"!`);
       } catch (err: any) {
         toast.showToast(`Failed to load room: ${err.message}`, true);
@@ -613,7 +610,7 @@ export function App() {
         setShowPromptModal={setShowPromptModal}
         currentUser={auth.currentUser}
         userProfile={auth.userProfile}
-        onOpenUserHub={() => setShowUserHubModal(true)}
+        onOpenUserHub={() => setShowPlanManagerModal(true)}
         isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
         onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
       />
@@ -631,13 +628,6 @@ export function App() {
         ownedRooms={ownedRooms}
         sharedRooms={sharedRooms}
         onOpenPlanManager={() => setShowPlanManagerModal(true)}
-        onImportJson={() => project.fileInputRef.current?.click()}
-        onExportJson={editor.handleDownloadJson}
-        onExportCsv={editor.handleExportCsv}
-      />
-
-      {/* Dedicated Real-Time Cloud Collaboration Bar */}
-      <CloudBar
         activeRoomId={roomSync.activeRoomId}
         activeRoomRole={roomSync.activeRoomRole}
         activeRoomTitle={
@@ -647,32 +637,8 @@ export function App() {
           "Project Room"
         }
         onlineUsers={roomSync.onlineUsers}
-        syncStatus={roomSync.syncStatus}
-        syncMessage={roomSync.syncMessage}
-        isProcessing={roomSync.isProcessing}
-        onStartCloudRoom={async () => {
-          if (!auth.currentUser) {
-            auth.loginWithGitHub();
-            return;
-          }
-          if (!auth.userProfile?.githubVerified) {
-            auth.setShowVerificationModal(true);
-            return;
-          }
-          const newRoomId = await roomSync.createRoomFromActive(project.currentProjectName);
-          if (newRoomId) {
-            handleOpenShareRoom(newRoomId);
-          }
-        }}
         onOpenShareRoom={handleOpenShareRoom}
-        onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
-        onOpenUserHub={() => {
-          if (!auth.currentUser) {
-            auth.loginWithGitHub();
-          } else {
-            setShowUserHubModal(true);
-          }
-        }}
+        onLeaveCloudRoom={handleLeaveCloudRoom}
       />
 
       <main className="workspace-main">
@@ -909,6 +875,12 @@ export function App() {
         onLeaveCloudRoom={handleLeaveCloudRoom}
         onOpenShareRoom={handleOpenShareRoom}
         onOpenAddPlanModal={project.handleOpenAddPlanModal}
+        onCreateNewRoom={() => roomSync.setShowRoomModal(true)}
+        onSignOut={async () => {
+          await auth.logout();
+          setShowPlanManagerModal(false);
+          toast.showToast("Signed out.");
+        }}
         onImportJsonFile={project.handleImportJsonFile}
         showToast={toast.showToast}
       />
@@ -1021,28 +993,6 @@ export function App() {
         }}
       />
 
-      {/* User Personal Room Directory & Hub */}
-      <UserHubModal
-        show={showUserHubModal}
-        setShow={setShowUserHubModal}
-        userProfile={auth.userProfile}
-        ownedRooms={ownedRooms}
-        sharedRooms={sharedRooms}
-        activeRoomId={roomSync.activeRoomId}
-        onSelectRoom={handleSelectCloudRoom}
-        onCreateNewRoom={() => {
-          setShowUserHubModal(false);
-          roomSync.setShowRoomModal(true);
-        }}
-        onOpenShareRoom={handleOpenShareRoom}
-        onDeleteRoom={handleDeleteCloudRoom}
-        onLeaveRoom={handleLeaveCloudRoom}
-        onSignOut={async () => {
-          await auth.logout();
-          setShowUserHubModal(false);
-          toast.showToast("Signed out.");
-        }}
-      />
 
       {/* Teammate Autocomplete & Room Sharing Modal */}
       <ShareRoomModal

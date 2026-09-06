@@ -10,7 +10,7 @@
     "defaultGapDays": 2,
     "scale": "week",
     "linkRouting": "orthogonal",
-    "showCriticalPath": true,
+    "showCriticalPath": false,
     "showBaselines": true,
     "currency": "USD",
     "budget": 385000,

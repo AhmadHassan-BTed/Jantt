@@ -152,8 +152,8 @@ export function useProjectState({
           setPeople(parsed.people || []);
           setTeams(parsed.teams || []);
           if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
-          if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
           if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
+          setShowCriticalPath(false);
         } else {
           setParsedData(null);
         }
@@ -301,6 +301,7 @@ export function useProjectState({
     setJsonText(JSON.stringify(forkedData, null, 2));
     setParsedData(forkedData);
     setValidationResult(validate(forkedData));
+    setShowCriticalPath(false);
     showToast(`Created independent local copy: "${newProj.name}"`);
   }, [
     customProjects,
@@ -309,6 +310,7 @@ export function useProjectState({
     setJsonText,
     setParsedData,
     setValidationResult,
+    setShowCriticalPath,
     showToast
   ]);
 
@@ -346,6 +348,7 @@ export function useProjectState({
       setPeople(copyData.people || []);
       setTeams(copyData.teams || []);
       setValidationResult(validate(copyData));
+      setShowCriticalPath(false);
       showToast(`Saved local offline copy: "${copyTitle}"`);
     },
     [
@@ -355,6 +358,7 @@ export function useProjectState({
       setPeople,
       setTeams,
       setValidationResult,
+      setShowCriticalPath,
       showToast
     ]
   );
@@ -515,6 +519,7 @@ export function useProjectState({
             setPeople(parsed.people || []);
             setTeams(parsed.teams || []);
             setValidationResult(val);
+            setShowCriticalPath(false);
             showToast(`Imported "${newProj.name}"`);
           } else {
             alert(
@@ -536,6 +541,7 @@ export function useProjectState({
       setPeople,
       setTeams,
       setValidationResult,
+      setShowCriticalPath,
       showToast
     ]
   );
@@ -557,8 +563,8 @@ export function useProjectState({
         setPeople(parsed.people || []);
         setTeams(parsed.teams || []);
         if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
-        if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
         if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
+        setShowCriticalPath(false);
       }
     } catch {}
   }, [
