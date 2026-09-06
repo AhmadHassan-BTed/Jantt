@@ -3,6 +3,8 @@ import {
   generateSecureToken,
   generateRoomId,
   sanitizeRoomId,
+  normalizeUsername,
+  generateRoomSlug,
   getFirebaseUrl,
   createCloudRoom,
   fetchCloudRoom,
@@ -46,6 +48,23 @@ describe("firebase-sync", () => {
       expect(sanitizeRoomId("  My Room #123! ")).toBe("my-room-123");
       expect(sanitizeRoomId("TEAM_Alpha__Sprint")).toBe("team-alpha-sprint");
       expect(sanitizeRoomId("---room---")).toBe("room");
+    });
+
+    it("normalizes usernames to lowercase alphanumeric and underscores", () => {
+      expect(normalizeUsername("@Ahmad_Hassan")).toBe("ahmad_hassan");
+      expect(normalizeUsername("  @@lead.dev#123! ")).toBe("leaddev123");
+      expect(normalizeUsername("Dev_Ops-2026")).toBe("dev_ops2026");
+      expect(normalizeUsername("")).toBe("");
+    });
+
+    it("generates distinct room slugs with custom prefix", () => {
+      const slug1 = generateRoomSlug();
+      const slug2 = generateRoomSlug();
+      expect(slug1).not.toBe(slug2);
+      expect(slug1.startsWith("room_")).toBe(true);
+
+      const customSlug = generateRoomSlug("project");
+      expect(customSlug.startsWith("project_")).toBe(true);
     });
 
     it("normalizes Firebase database URLs without trailing slash", () => {

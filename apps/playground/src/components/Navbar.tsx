@@ -19,6 +19,8 @@ import {
   Users,
   Lock
 } from "lucide-react";
+import type { User as FirebaseUser } from "firebase/auth";
+import type { UserProfile } from "../firebase/types";
 import { JanttLogo } from "./JanttLogo";
 import type { ActiveView } from "../types";
 import { AVAILABLE_THEMES } from "../constants";
@@ -50,6 +52,12 @@ interface NavbarProps {
   activeRoomId?: string | null;
   activeRoomRole?: "collaborator" | "viewer" | "none";
   onOpenRoomModal?: () => void;
+  currentUser?: FirebaseUser | null;
+  userProfile?: UserProfile | null;
+  isSigningIn?: boolean;
+  onLogin?: () => void;
+  onOpenUserHub?: () => void;
+  onOpenShareRoom?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -77,7 +85,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   setShowPromptModal,
   activeRoomId,
   activeRoomRole,
-  onOpenRoomModal
+  onOpenRoomModal,
+  currentUser,
+  userProfile,
+  isSigningIn = false,
+  onLogin,
+  onOpenUserHub,
+  onOpenShareRoom
 }) => {
   const isGdrive = isGoogleDrive || cloudProvider === "google-drive";
 
@@ -125,11 +139,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         {activeRoomId && (
           <div
             className={`btn-cloud-source-badge ${activeRoomRole === "collaborator" ? "is-room-collaborator" : "is-room-viewer"}`}
-            onClick={onOpenRoomModal}
+            onClick={onOpenShareRoom || onOpenRoomModal}
             title={
               activeRoomRole === "collaborator"
-                ? `Active Cloud Room: "${activeRoomId}" • Live Two-Way Auto-Sync Active • Click to share or manage room`
-                : `Active Cloud Room: "${activeRoomId}" • View-Only Mode • Click to enter edit key`
+                ? `Active Cloud Room: "${activeRoomId}" • Live Two-Way Auto-Sync Active • Click to share with teammates`
+                : `Active Cloud Room: "${activeRoomId}" • View-Only Mode`
             }
           >
             {activeRoomRole === "collaborator" ? (
@@ -334,6 +348,113 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Sparkles size={14} />
           <span>AI Prompt</span>
         </button>
+
+        {/* Google Authentication & User Profile Hub */}
+        {currentUser && userProfile ? (
+          <button
+            type="button"
+            className="btn-user-profile-chip"
+            onClick={onOpenUserHub}
+            title={`Logged in as ${userProfile.displayName || "User"} (@${userProfile.username}). Click to open your Personal Hub & Rooms.`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "7px",
+              background: "rgba(56, 189, 248, 0.12)",
+              border: "1px solid rgba(56, 189, 248, 0.35)",
+              borderRadius: "20px",
+              padding: "3px 10px 3px 4px",
+              cursor: "pointer",
+              transition: "all 0.18s ease"
+            }}
+          >
+            {userProfile.photoURL ? (
+              <img
+                src={userProfile.photoURL}
+                alt={userProfile.displayName || "Avatar"}
+                style={{
+                  width: "22px",
+                  height: "22px",
+                  borderRadius: "50%",
+                  objectFit: "cover"
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: "22px",
+                  height: "22px",
+                  borderRadius: "50%",
+                  background: "var(--jantt-accent, #38BDF8)",
+                  color: "#000",
+                  fontWeight: 700,
+                  fontSize: "10px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                {(userProfile.displayName?.[0] || userProfile.username?.[0] || "U").toUpperCase()}
+              </div>
+            )}
+            <span
+              style={{
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                color: "var(--jantt-accent, #38BDF8)",
+                letterSpacing: "0.01em"
+              }}
+            >
+              @{userProfile.username}
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn-google-signin"
+            onClick={onLogin}
+            disabled={isSigningIn}
+            title="Sign in with Google to use real-time collaboration rooms and unique usernames"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "7px",
+              background: "rgba(255, 255, 255, 0.08)",
+              color: "var(--jantt-text)",
+              border: "1px solid var(--jantt-border)",
+              borderRadius: "8px",
+              padding: "5px 12px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: isSigningIn ? "wait" : "pointer",
+              transition: "all 0.18s ease"
+            }}
+          >
+            {isSigningIn ? (
+              <RefreshCw size={13} className="spin-sync-icon" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                />
+              </svg>
+            )}
+            <span>{isSigningIn ? "Signing in..." : "Google Sign-In"}</span>
+          </button>
+        )}
       </div>
     </header>
   );

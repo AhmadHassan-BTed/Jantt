@@ -55,6 +55,15 @@ import { useSharing } from "./hooks/useSharing";
 import { useSnapshotVault } from "./hooks/useSnapshotVault";
 import { useDynamicSync } from "./hooks/useDynamicSync";
 import { useRoomSync } from "./hooks/useRoomSync";
+import { useAuth } from "./hooks/useAuth";
+import {
+  listenToUserRooms,
+  joinRoomViaInvite,
+  deleteRoom,
+  leaveRoom,
+  getRoom
+} from "./firebase/roomService";
+import type { UserRoomPointer, FullRoomPayload } from "./firebase/types";
 
 // View & Modal Components
 import { Navbar } from "./components/Navbar";
@@ -73,6 +82,9 @@ import { CloudRoomModal } from "./components/CloudRoomModal";
 import { ShareModal } from "./components/ShareModal";
 import { AutoSaveModal } from "./components/AutoSaveModal";
 import { VersionHistoryModal } from "./components/VersionHistoryModal";
+import { UsernameOnboardingModal } from "./components/UsernameOnboardingModal";
+import { UserHubModal } from "./components/UserHubModal";
+import { ShareRoomModal } from "./components/ShareRoomModal";
 import { Toast } from "./components/Toast";
 import { EmptyChartState } from "./components/EmptyChartState";
 
@@ -82,6 +94,30 @@ export function App() {
   // UI Modals & Notifications
   const toast = useToast();
   const [showPromptModal, setShowPromptModal] = useState(false);
+
+  // Firebase Authentication & Cloud User Identity
+  const auth = useAuth();
+  const [ownedRooms, setOwnedRooms] = useState<UserRoomPointer[]>([]);
+  const [sharedRooms, setSharedRooms] = useState<UserRoomPointer[]>([]);
+  const [showUserHubModal, setShowUserHubModal] = useState(false);
+  const [shareModalRoomId, setShareModalRoomId] = useState<string | null>(null);
+  const [showShareRoomModal, setShowShareRoomModal] = useState(false);
+
+  // Real-time synchronization of user's personal hub (owned & shared rooms)
+  useEffect(() => {
+    if (!auth.userProfile?.uid) {
+      setOwnedRooms([]);
+      setSharedRooms([]);
+      return;
+    }
+
+    const unsubscribe = listenToUserRooms(auth.userProfile.uid, (owned, shared) => {
+      setOwnedRooms(owned);
+      setSharedRooms(shared);
+    });
+
+    return () => unsubscribe();
+  }, [auth.userProfile?.uid]);
 
   // Cross-hook sync refs
   const onPeopleChangeRef = useRef<((p: Person[]) => void) | undefined>();
@@ -220,8 +256,127 @@ export function App() {
     showToast: toast.showToast,
     captureSnapshot: vault.captureSnapshot,
     activeView: viewport.activeView,
-    selectedThemeId: viewport.selectedThemeId
+    selectedThemeId: viewport.selectedThemeId,
+    userProfile: auth.userProfile
   });
+
+  // Handlers for Cloud Rooms & User Hub
+  const handleSelectCloudRoom = useCallback(
+    async (roomId: string) => {
+      try {
+        let roomPayload: FullRoomPayload | null = null;
+        if (auth.userProfile) {
+          roomPayload = await joinRoomViaInvite(roomId, auth.userProfile);
+        } else {
+          roomPayload = await getRoom(roomId);
+        }
+
+        if (!roomPayload) {
+          toast.showToast(`Room "${roomId}" not found or has been deleted`, true);
+          return;
+        }
+
+        const isOwner = auth.userProfile && roomPayload.meta.ownerUid === auth.userProfile.uid;
+        const memberRecord = auth.userProfile ? roomPayload.members?.[auth.userProfile.uid] : null;
+        const isEditor = isOwner || memberRecord?.role === "editor";
+        const role: "collaborator" | "viewer" = isEditor ? "collaborator" : "viewer";
+
+        const newProj: SavedProject = {
+          id: `room-${roomId}`,
+          name: roomPayload.meta.title,
+          updatedAt: roomPayload.meta.updatedAt,
+          data: roomPayload.data,
+          source: "room",
+          roomId: roomPayload.meta.roomId,
+          role,
+          revision: roomPayload.meta.revision,
+          lastSyncedAt: new Date().toISOString()
+        };
+
+        const updated = [newProj, ...project.customProjects.filter((p) => p.id !== newProj.id)];
+        project.setCustomProjects(updated);
+        saveCustomProjects(updated);
+        project.setActiveProjectId(newProj.id);
+        try {
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+        } catch {}
+
+        editor.setParsedData(roomPayload.data);
+        editor.setJsonText(JSON.stringify(roomPayload.data, null, 2));
+        people.setPeople(roomPayload.data.people || []);
+        people.setTeams(roomPayload.data.teams || []);
+        editor.setValidationResult(validate(roomPayload.data));
+
+        setShowUserHubModal(false);
+        toast.showToast(`Opened room "${roomPayload.meta.title}"!`);
+      } catch (err: any) {
+        toast.showToast(`Failed to load room: ${err.message}`, true);
+      }
+    },
+    [auth.userProfile, editor, people, project, toast]
+  );
+
+  const handleSelectProjectOrRoom = useCallback(
+    async (projectId: string) => {
+      if (projectId.startsWith("room-")) {
+        const roomId = projectId.replace(/^room-/, "");
+        const existing = project.customProjects.find((p) => p.id === projectId);
+        if (existing) {
+          project.handleSelectProject(projectId);
+        } else {
+          await handleSelectCloudRoom(roomId);
+        }
+        return;
+      }
+      project.handleSelectProject(projectId);
+    },
+    [project, handleSelectCloudRoom]
+  );
+
+  const handleDeleteCloudRoom = useCallback(
+    async (roomId: string) => {
+      if (!auth.userProfile) return;
+      try {
+        await deleteRoom(roomId, auth.userProfile.uid);
+        const projId = `room-${roomId}`;
+        const updated = project.customProjects.filter((p) => p.id !== projId);
+        project.setCustomProjects(updated);
+        saveCustomProjects(updated);
+        if (project.activeProjectId === projId) {
+          project.handleSelectProject("default");
+        }
+        toast.showToast("Room permanently deleted and removed from all collaborators.");
+      } catch (err: any) {
+        toast.showToast(`Failed to delete room: ${err.message}`, true);
+      }
+    },
+    [auth.userProfile, project, toast]
+  );
+
+  const handleLeaveCloudRoom = useCallback(
+    async (roomId: string) => {
+      if (!auth.userProfile) return;
+      try {
+        await leaveRoom(roomId, auth.userProfile.uid);
+        const projId = `room-${roomId}`;
+        const updated = project.customProjects.filter((p) => p.id !== projId);
+        project.setCustomProjects(updated);
+        saveCustomProjects(updated);
+        if (project.activeProjectId === projId) {
+          project.handleSelectProject("default");
+        }
+        toast.showToast("Left room successfully.");
+      } catch (err: any) {
+        toast.showToast(`Failed to leave room: ${err.message}`, true);
+      }
+    },
+    [auth.userProfile, project, toast]
+  );
+
+  const handleOpenShareRoom = useCallback((roomId: string) => {
+    setShareModalRoomId(roomId);
+    setShowShareRoomModal(true);
+  }, []);
 
   // 1-Click Snapshot Restoration with Audit Trail
   const handleRestoreSnapshot = useCallback(
@@ -411,12 +566,18 @@ export function App() {
         activeRoomId={roomSync.activeRoomId}
         activeRoomRole={roomSync.activeRoomRole}
         onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
+        currentUser={auth.currentUser}
+        userProfile={auth.userProfile}
+        isSigningIn={auth.isSigningIn}
+        onLogin={auth.loginWithGoogle}
+        onOpenUserHub={() => setShowUserHubModal(true)}
+        onOpenShareRoom={() => roomSync.activeRoomId && handleOpenShareRoom(roomSync.activeRoomId)}
       />
 
       <Subheader
         activeProjectId={project.activeProjectId}
         customProjects={project.customProjects}
-        handleSelectProject={project.handleSelectProject}
+        handleSelectProject={handleSelectProjectOrRoom}
         handleOpenAddPlanModal={project.handleOpenAddPlanModal}
         handleOpenLinkCloudModal={cloud.handleOpenLinkCloudModal}
         isSyncingProject={cloud.isSyncingProject}
@@ -430,6 +591,16 @@ export function App() {
         onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
         activeRoomId={roomSync.activeRoomId}
         activeRoomRole={roomSync.activeRoomRole}
+        ownedRooms={ownedRooms}
+        sharedRooms={sharedRooms}
+        onOpenShareRoom={handleOpenShareRoom}
+        onOpenUserHub={() => {
+          if (!auth.currentUser) {
+            auth.loginWithGoogle();
+          } else {
+            setShowUserHubModal(true);
+          }
+        }}
       />
 
       <main className="workspace-main">
@@ -739,6 +910,54 @@ export function App() {
         currentProjectName={project.currentProjectName}
         onRestoreSnapshot={handleRestoreSnapshot}
         onClearHistory={() => vault.clearSnapshots(project.activeProjectId)}
+      />
+
+      {/* Username Onboarding Modal */}
+      <UsernameOnboardingModal
+        show={auth.needsUsernameOnboarding}
+        currentUser={auth.currentUser}
+        onClaimUsername={async (username) => {
+          await auth.completeUsernameOnboarding(username);
+          toast.showToast(`Username @${username} claimed! Welcome to Jantt Cloud.`);
+        }}
+      />
+
+      {/* User Personal Room Directory & Hub */}
+      <UserHubModal
+        show={showUserHubModal}
+        setShow={setShowUserHubModal}
+        userProfile={auth.userProfile}
+        ownedRooms={ownedRooms}
+        sharedRooms={sharedRooms}
+        activeRoomId={roomSync.activeRoomId}
+        onSelectRoom={handleSelectCloudRoom}
+        onCreateNewRoom={() => {
+          setShowUserHubModal(false);
+          roomSync.setShowRoomModal(true);
+        }}
+        onOpenShareRoom={handleOpenShareRoom}
+        onDeleteRoom={handleDeleteCloudRoom}
+        onLeaveRoom={handleLeaveCloudRoom}
+        onSignOut={async () => {
+          await auth.logout();
+          setShowUserHubModal(false);
+          toast.showToast("Signed out.");
+        }}
+      />
+
+      {/* Teammate Autocomplete & Room Sharing Modal */}
+      <ShareRoomModal
+        show={showShareRoomModal}
+        setShow={setShowShareRoomModal}
+        roomId={shareModalRoomId}
+        roomTitle={
+          ownedRooms.find((r) => r.roomId === shareModalRoomId)?.title ||
+          sharedRooms.find((r) => r.roomId === shareModalRoomId)?.title ||
+          project.customProjects.find((p) => p.roomId === shareModalRoomId)?.name ||
+          "Project Room"
+        }
+        currentUserProfile={auth.userProfile}
+        showToast={toast.showToast}
       />
 
       <Toast

@@ -11,6 +11,7 @@ import {
   Radio
 } from "lucide-react";
 import type { SavedProject, EffectivePerson } from "../types";
+import type { UserRoomPointer } from "../firebase/types";
 import { DEFAULT_TEMPLATE } from "../constants";
 import { formatRelativeTime } from "../utils";
 
@@ -31,6 +32,10 @@ export interface SubheaderProps {
   onOpenRoomModal?: () => void;
   activeRoomId?: string | null;
   activeRoomRole?: "collaborator" | "viewer" | "none";
+  ownedRooms?: UserRoomPointer[];
+  sharedRooms?: UserRoomPointer[];
+  onOpenShareRoom?: (roomId: string) => void;
+  onOpenUserHub?: () => void;
 }
 
 export const Subheader: React.FC<SubheaderProps> = ({
@@ -49,7 +54,11 @@ export const Subheader: React.FC<SubheaderProps> = ({
   effectivePeople,
   onOpenRoomModal,
   activeRoomId,
-  activeRoomRole
+  activeRoomRole,
+  ownedRooms = [],
+  sharedRooms = [],
+  onOpenShareRoom,
+  onOpenUserHub
 }) => {
   const activeProject = customProjects.find((p) => p.id === activeProjectId);
   const isLinked = activeProject?.source === "linked";
@@ -75,10 +84,38 @@ export const Subheader: React.FC<SubheaderProps> = ({
               <optgroup label="Templates">
                 <option value="default">{DEFAULT_TEMPLATE.name}</option>
               </optgroup>
-              {customProjects.filter((p) => p.source === "room").length > 0 && (
-                <optgroup label={`Live Cloud Rooms (${customProjects.filter((p) => p.source === "room").length})`}>
+              {ownedRooms.length > 0 && (
+                <optgroup label={`👑 My Rooms (${ownedRooms.length})`}>
+                  {ownedRooms.map((r) => (
+                    <option key={`room-${r.roomId}`} value={`room-${r.roomId}`}>
+                      {r.title} (Owner • {r.roomId})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {sharedRooms.length > 0 && (
+                <optgroup label={`👥 Shared With Me (${sharedRooms.length})`}>
+                  {sharedRooms.map((r) => (
+                    <option key={`room-${r.roomId}`} value={`room-${r.roomId}`}>
+                      {r.title} (@{r.ownerUsername} • {r.role === "editor" ? "Editor" : "Viewer"})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {customProjects.filter(
+                (p) =>
+                  p.source === "room" &&
+                  !ownedRooms.some((o) => `room-${o.roomId}` === p.id) &&
+                  !sharedRooms.some((s) => `room-${s.roomId}` === p.id)
+              ).length > 0 && (
+                <optgroup label="Other Cloud Rooms">
                   {customProjects
-                    .filter((p) => p.source === "room")
+                    .filter(
+                      (p) =>
+                        p.source === "room" &&
+                        !ownedRooms.some((o) => `room-${o.roomId}` === p.id) &&
+                        !sharedRooms.some((s) => `room-${s.roomId}` === p.id)
+                    )
                     .map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} (Room: {p.roomId} • {p.role === "collaborator" ? "Collaborator" : "Viewer"} • {p.data?.tasks?.length || 0} tasks)
@@ -124,20 +161,20 @@ export const Subheader: React.FC<SubheaderProps> = ({
             </button>
 
             {/* Cloud Room Button (Primary Collaboration Hub) */}
-            {onOpenRoomModal && (
+            {(onOpenUserHub || onOpenRoomModal) && (
               <button
                 type="button"
                 className="btn-plan-action is-cloud"
-                onClick={onOpenRoomModal}
+                onClick={onOpenUserHub || onOpenRoomModal}
                 title={
                   isRoom
-                    ? `Live Cloud Room: "${activeRoomId}" (${activeRoomRole === "collaborator" ? "Collaborator" : "Viewer"}). Click to share or manage.`
-                    : "Create or join real-time multi-user collaboration rooms powered by Firebase"
+                    ? `Live Cloud Room: "${activeRoomId || activeProject?.roomId}" (${activeRoomRole === "collaborator" ? "Collaborator" : "Viewer"}). Click to open Room Hub.`
+                    : "Create or join real-time multi-user collaboration rooms"
                 }
                 style={isRoom ? { borderColor: "var(--jantt-accent)", background: "rgba(56, 189, 248, 0.15)" } : {}}
               >
                 <Radio size={13} style={{ color: "var(--jantt-accent)" }} className={isRoom ? "spin-slow" : ""} />
-                <span>{isRoom ? "Room Settings" : "Cloud Room"}</span>
+                <span>{isRoom ? "Room Hub" : "Cloud Rooms"}</span>
               </button>
             )}
 
@@ -182,10 +219,18 @@ export const Subheader: React.FC<SubheaderProps> = ({
               type="button"
               className="btn-plan-action is-share"
               onClick={() => {
-                setShowShareModal(true);
-                setCopiedShareLink(false);
+                if (isRoom && onOpenShareRoom && (activeRoomId || activeProject?.roomId)) {
+                  onOpenShareRoom(activeRoomId || activeProject!.roomId!);
+                } else {
+                  setShowShareModal(true);
+                  setCopiedShareLink(false);
+                }
               }}
-              title="Share this project plan via link or open source"
+              title={
+                isRoom
+                  ? "Share this Cloud Room with teammates by username or invite link"
+                  : "Share this project plan via link or open source"
+              }
             >
               <Share2 size={12} />
               <span>Share</span>
