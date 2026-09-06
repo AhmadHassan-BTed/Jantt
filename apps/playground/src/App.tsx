@@ -836,6 +836,7 @@ export function App() {
         newPersonTeamId={people.newPersonTeamId}
         setNewPersonTeamId={people.setNewPersonTeamId}
         handleAddPerson={people.handleAddPerson}
+        onAddRealTeammate={people.handleAddRealTeammate}
         handlePersistAllPeople={people.handlePersistAllPeople}
         handlePersistPerson={people.handlePersistPerson}
         handleRemovePerson={people.handleRemovePerson}

@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
+import { getAuth, GithubAuthProvider } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 
 const metaEnv = typeof import.meta !== "undefined" ? (import.meta as any).env || {} : {};
@@ -17,9 +17,6 @@ export const defaultFirebaseConfig = {
 const app = !getApps().length ? initializeApp(defaultFirebaseConfig) : getApp();
 
 export const auth = getAuth(app);
-
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export const githubProvider = new GithubAuthProvider();
 githubProvider.addScope("read:user");

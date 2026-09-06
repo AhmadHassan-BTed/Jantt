@@ -408,7 +408,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
           {activeTab === "link" && (
             <div>
               <p style={{ margin: "0 0 14px 0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
-                Share this direct invite link with anyone. When they open it, they will be prompted to log in with Google to join.
+                Share this direct invite link with anyone. When they open it, they will be prompted to sign in with GitHub to join.
               </p>
 
               <div

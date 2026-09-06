@@ -7,7 +7,7 @@ import {
   type Unsubscribe
 } from "firebase/database";
 import type { JanttData } from "@jantt/core";
-import { calculatePlanHash, validate, reconcilePlans } from "@jantt/core";
+import { calculatePlanHash, validate, reconcilePlans, sanitizePlanForJson } from "@jantt/core";
 import { rtdb } from "./firebaseConfig";
 import type {
   UserProfile,
@@ -79,10 +79,12 @@ export async function createRoom(
     updatedAt: now
   };
 
+  const sanitizedData = sanitizePlanForJson(initialData);
+
   const updates: Record<string, any> = {};
   updates[`rooms/${roomId}/meta`] = meta;
   updates[`rooms/${roomId}/members/${user.uid}`] = ownerMember;
-  updates[`rooms/${roomId}/data`] = initialData;
+  updates[`rooms/${roomId}/data`] = sanitizedData;
   updates[`user_rooms/${user.uid}/owned/${roomId}`] = userPointer;
 
   await update(ref(rtdb), updates);
@@ -90,7 +92,7 @@ export async function createRoom(
   return {
     meta,
     members: { [user.uid]: ownerMember },
-    data: initialData
+    data: sanitizedData
   };
 }
 
@@ -271,31 +273,38 @@ export async function saveRoomDataAtomic(
   const dataRef = ref(rtdb, `rooms/${roomId}/data`);
   const metaRef = ref(rtdb, `rooms/${roomId}/meta`);
 
-  let finalMergedData = updatedData;
+  const sanitizedIncoming = sanitizePlanForJson(updatedData);
+  let finalMergedData = sanitizedIncoming;
   let finalRevision = 1;
+
+  const mentionClient = user.username
+    ? `@${user.username}`
+    : user.displayUsername
+    ? `@${user.displayUsername}`
+    : "collaborator";
 
   await runTransaction(dataRef, (currentRemoteData: JanttData | null) => {
     if (!currentRemoteData) {
-      return updatedData;
+      return sanitizedIncoming;
     }
 
     const currentHash = calculatePlanHash(currentRemoteData);
-    const incomingHash = calculatePlanHash(updatedData);
+    const incomingHash = calculatePlanHash(sanitizedIncoming);
 
     if (currentHash === incomingHash) {
-      return updatedData;
+      return sanitizedIncoming;
     }
 
     // 3-Way CRDT Reconcile if remote has diverged from what caller based their edits on
     if (baseData) {
-      const reconcile = reconcilePlans(baseData, updatedData, currentRemoteData, {
-        clientId: user.uid
+      const reconcile = reconcilePlans(baseData, sanitizedIncoming, currentRemoteData, {
+        clientId: mentionClient
       });
-      finalMergedData = reconcile.mergedData;
+      finalMergedData = sanitizePlanForJson(reconcile.mergedData);
       return finalMergedData;
     }
 
-    return updatedData;
+    return sanitizedIncoming;
   });
 
   // Update room metadata (revision, contentHash, updatedAt)

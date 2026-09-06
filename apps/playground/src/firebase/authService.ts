@@ -15,7 +15,7 @@ import {
   endAt,
   limitToFirst
 } from "firebase/database";
-import { auth, googleProvider, githubProvider, rtdb } from "./firebaseConfig";
+import { auth, githubProvider, rtdb } from "./firebaseConfig";
 import type { UserProfile } from "./types";
 import { isCreatorAccount } from "./githubVerificationService";
 
@@ -129,14 +129,6 @@ export async function signInWithGitHub(): Promise<{
   }
 
   return { user, profile, githubToken };
-}
-
-/**
- * Initiates Google OAuth popup sign-in.
- */
-export async function signInWithGoogle(): Promise<FirebaseUser> {
-  const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
 }
 
 /**

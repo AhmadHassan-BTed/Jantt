@@ -3,7 +3,6 @@ import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import { auth } from "../firebase/firebaseConfig";
 import {
   signInWithGitHub,
-  signInWithGoogle,
   signOutUser,
   getUserProfile,
   claimUsername,
@@ -31,7 +30,6 @@ export interface UseAuthReturn {
   showVerificationModal: boolean;
   setShowVerificationModal: (show: boolean) => void;
   loginWithGitHub: () => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   completeUsernameOnboarding: (rawUsername: string) => Promise<UserProfile>;
   refreshProfile: () => Promise<void>;
@@ -155,16 +153,6 @@ export function useAuth(): UseAuthReturn {
     }
   }, []);
 
-  const loginWithGoogleHandler = useCallback(async () => {
-    setIsSigningIn(true);
-    try {
-      const user = await signInWithGoogle();
-      await fetchProfile(user);
-    } finally {
-      setIsSigningIn(false);
-    }
-  }, [fetchProfile]);
-
   const logoutHandler = useCallback(async () => {
     clearStoredGitHubToken();
     setGithubToken(null);
@@ -251,7 +239,6 @@ export function useAuth(): UseAuthReturn {
     showVerificationModal,
     setShowVerificationModal,
     loginWithGitHub: loginWithGitHubHandler,
-    loginWithGoogle: loginWithGoogleHandler,
     logout: logoutHandler,
     completeUsernameOnboarding,
     refreshProfile,

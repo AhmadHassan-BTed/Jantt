@@ -42,7 +42,7 @@ import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./expor
 import { themeManager } from "./themes";
 import { parseCloudUrl, fetchRemotePlan, isMatchingCloudUrl } from "./remote-sync";
 import { calculatePlanHash, reconcilePlans, mergePlansCommutative, purgeTombstones, maintainPlanData } from "./reconciler";
-import { compressPlanToUrlPayload, decompressPlanFromUrlPayload, cleanPlanForSharing } from "./share-coder";
+import { compressPlanToUrlPayload, decompressPlanFromUrlPayload, cleanPlanForSharing, sanitizePlanForJson } from "./share-coder";
 import {
   createCloudRoom,
   fetchCloudRoom,
@@ -82,6 +82,7 @@ export const Jantt = {
   purgeTombstones,
   maintainPlanData,
   cleanPlanForSharing,
+  sanitizePlanForJson,
   compressPlanToUrlPayload,
   decompressPlanFromUrlPayload,
   createCloudRoom,
