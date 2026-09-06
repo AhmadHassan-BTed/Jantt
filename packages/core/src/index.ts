@@ -43,7 +43,15 @@ import { themeManager } from "./themes";
 import { parseCloudUrl, fetchRemotePlan, isMatchingCloudUrl } from "./remote-sync";
 import { calculatePlanHash, reconcilePlans, mergePlansCommutative, purgeTombstones, maintainPlanData } from "./reconciler";
 import { compressPlanToUrlPayload, decompressPlanFromUrlPayload, cleanPlanForSharing } from "./share-coder";
-import { createCloudRoom, fetchCloudRoom, saveCloudRoom, subscribeToCloudRoom } from "./firebase-sync";
+import {
+  createCloudRoom,
+  fetchCloudRoom,
+  saveCloudRoom,
+  subscribeToCloudRoom,
+  normalizeUsername,
+  generateRoomSlug,
+  sanitizeRoomId
+} from "./firebase-sync";
 
 export const Jantt = {
   mount: renderJantt,
@@ -80,6 +88,9 @@ export const Jantt = {
   fetchCloudRoom,
   saveCloudRoom,
   subscribeToCloudRoom,
+  normalizeUsername,
+  generateRoomSlug,
+  sanitizeRoomId,
   version: "1.3.0"
 };
 

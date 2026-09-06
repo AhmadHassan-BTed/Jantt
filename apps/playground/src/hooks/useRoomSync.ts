@@ -7,7 +7,6 @@ import {
   createCloudRoom,
   fetchCloudRoom,
   saveCloudRoom,
-  subscribeToCloudRoom,
   reconcilePlans,
   calculatePlanHash,
   validate
@@ -19,6 +18,13 @@ import {
   getStoredRoomSecret,
   storeRoomSecret
 } from "../room-storage";
+import type { UserProfile } from "../firebase/types";
+import {
+  createRoom,
+  joinRoomViaInvite,
+  saveRoomDataAtomic,
+  listenToRoom
+} from "../firebase/roomService";
 
 export type RoomSyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict" | "error";
 
@@ -37,6 +43,7 @@ interface UseRoomSyncOptions {
   captureSnapshot: (projectId: string, data: JanttData, reason: string) => void;
   activeView: ActiveView;
   selectedThemeId: string;
+  userProfile?: UserProfile | null;
 }
 
 function getCollaboratorId(): string {
@@ -67,7 +74,8 @@ export function useRoomSync({
   showToast,
   captureSnapshot,
   activeView,
-  selectedThemeId
+  selectedThemeId,
+  userProfile
 }: UseRoomSyncOptions) {
   const [showRoomModal, setShowRoomModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -86,7 +94,9 @@ export function useRoomSync({
       : null;
   const activeRoomRole: "collaborator" | "viewer" | "none" =
     activeProj?.source === "room"
-      ? activeSecretKey
+      ? activeProj.role === "viewer"
+        ? "viewer"
+        : userProfile || activeSecretKey || activeProj.role === "collaborator"
         ? "collaborator"
         : "viewer"
       : "none";
@@ -151,6 +161,38 @@ export function useRoomSync({
       }
       setIsProcessing(true);
       try {
+        if (userProfile) {
+          const roomPayload = await createRoom(userProfile, options.title, parsedData);
+          baseDataMapRef.current.set(roomPayload.meta.roomId, parsedData);
+          revisionMapRef.current.set(roomPayload.meta.roomId, roomPayload.meta.revision);
+
+          const newProj: SavedProject = {
+            id: `room-${roomPayload.meta.roomId}`,
+            name: roomPayload.meta.title,
+            updatedAt: roomPayload.meta.updatedAt,
+            data: parsedData,
+            source: "room",
+            roomId: roomPayload.meta.roomId,
+            role: "collaborator",
+            revision: roomPayload.meta.revision,
+            lastSyncedAt: new Date().toISOString()
+          };
+
+          const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+          setCustomProjects(updated);
+          saveCustomProjects(updated);
+          setActiveProjectId(newProj.id);
+          try {
+            localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+          } catch {}
+
+          setSyncStatus("in-sync");
+          setSyncMessage("Live Room Active");
+          setLastSyncTime(new Date());
+          showToast(`Cloud Room "${roomPayload.meta.title}" is live!`);
+          return;
+        }
+
         const res = await createCloudRoom(parsedData, options);
 
         // Store secret key securely
@@ -191,7 +233,7 @@ export function useRoomSync({
         setIsProcessing(false);
       }
     },
-    [parsedData, setActiveProjectId, setCustomProjects, showToast]
+    [parsedData, setActiveProjectId, setCustomProjects, showToast, userProfile]
   );
 
   // 2. Action: Join an existing Cloud Room
@@ -199,6 +241,49 @@ export function useRoomSync({
     async (roomId: string, secretKey?: string) => {
       setIsProcessing(true);
       try {
+        if (userProfile) {
+          const roomPayload = await joinRoomViaInvite(roomId, userProfile);
+          const isOwner = roomPayload.meta.ownerUid === userProfile.uid;
+          const memberRecord = roomPayload.members?.[userProfile.uid];
+          const isEditor = isOwner || memberRecord?.role === "editor";
+          const role: "collaborator" | "viewer" = isEditor ? "collaborator" : "viewer";
+
+          baseDataMapRef.current.set(roomPayload.meta.roomId, roomPayload.data);
+          revisionMapRef.current.set(roomPayload.meta.roomId, roomPayload.meta.revision);
+
+          const newProj: SavedProject = {
+            id: `room-${roomPayload.meta.roomId}`,
+            name: roomPayload.meta.title,
+            updatedAt: roomPayload.meta.updatedAt,
+            data: roomPayload.data,
+            source: "room",
+            roomId: roomPayload.meta.roomId,
+            role,
+            revision: roomPayload.meta.revision,
+            lastSyncedAt: new Date().toISOString()
+          };
+
+          const updated = [newProj, ...customProjectsRef.current.filter((p) => p.id !== newProj.id)];
+          setCustomProjects(updated);
+          saveCustomProjects(updated);
+          setActiveProjectId(newProj.id);
+          try {
+            localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
+          } catch {}
+
+          setParsedData(roomPayload.data);
+          setJsonText(JSON.stringify(roomPayload.data, null, 2));
+          setPeople(roomPayload.data.people || []);
+          setTeams(roomPayload.data.teams || []);
+          setValidationResult(validate(roomPayload.data));
+
+          setSyncStatus("in-sync");
+          setSyncMessage(role === "collaborator" ? "Collaborator (Live Sync)" : "Viewer (Read-Only)");
+          setLastSyncTime(new Date());
+          showToast(`Connected to room "${roomPayload.meta.title}" as ${role}!`);
+          return;
+        }
+
         const res = await fetchCloudRoom(roomId);
         const resolvedSecret = secretKey || getStoredRoomSecret(res.roomId) || undefined;
         if (resolvedSecret) {
@@ -257,7 +342,8 @@ export function useRoomSync({
       setPeople,
       setTeams,
       setValidationResult,
-      showToast
+      showToast,
+      userProfile
     ]
   );
 
@@ -298,9 +384,12 @@ export function useRoomSync({
       if (
         !activeRoomId ||
         activeRoomRole !== "collaborator" ||
-        !activeSecretKey ||
         isSavingRef.current
       ) {
+        return;
+      }
+
+      if (!userProfile && !activeSecretKey) {
         return;
       }
 
@@ -308,13 +397,43 @@ export function useRoomSync({
       setSyncStatus("syncing");
       setSyncMessage("Saving to cloud room...");
 
-      const currentEtag = etagMapRef.current.get(activeRoomId) || null;
-      const currentRev = revisionMapRef.current.get(activeRoomId) || 1;
-
       try {
+        if (userProfile) {
+          const baseData = baseDataMapRef.current.get(activeRoomId) || currentData;
+          const result = await saveRoomDataAtomic(activeRoomId, currentData, userProfile, baseData);
+          if (result.success) {
+            baseDataMapRef.current.set(activeRoomId, result.data);
+            revisionMapRef.current.set(activeRoomId, result.revision);
+
+            const now = new Date().toISOString();
+            const updated = customProjectsRef.current.map((p) =>
+              p.roomId === activeRoomId
+                ? {
+                    ...p,
+                    data: result.data,
+                    updatedAt: now,
+                    lastSyncedAt: now,
+                    revision: result.revision,
+                    syncError: undefined
+                  }
+                : p
+            );
+            setCustomProjects(updated);
+            saveCustomProjects(updated);
+
+            setSyncStatus("in-sync");
+            setSyncMessage("All edits saved to room");
+            setLastSyncTime(new Date());
+          }
+          return;
+        }
+
+        const currentEtag = etagMapRef.current.get(activeRoomId) || null;
+        const currentRev = revisionMapRef.current.get(activeRoomId) || 1;
+
         const result = await saveCloudRoom({
           roomId: activeRoomId,
-          secretKey: activeSecretKey,
+          secretKey: activeSecretKey!,
           data: currentData,
           baseRevision: currentRev,
           etag: currentEtag
@@ -368,7 +487,7 @@ export function useRoomSync({
           // Save the merged version back to cloud with new ETag!
           const retrySave = await saveCloudRoom({
             roomId: activeRoomId,
-            secretKey: activeSecretKey,
+            secretKey: activeSecretKey!,
             data: merged,
             baseRevision: result.revision,
             etag: result.etag
@@ -422,7 +541,8 @@ export function useRoomSync({
       setPeople,
       setTeams,
       setValidationResult,
-      showToast
+      showToast,
+      userProfile
     ]
   );
 
@@ -450,68 +570,65 @@ export function useRoomSync({
     };
   }, [parsedData, activeRoomId, activeRoomRole, triggerCloudSave]);
 
-  // 5. Live Inbound Server-Sent Events (SSE) Stream
-  // Instant <100ms updates when any other collaborator saves
+  // 5. Live Inbound WebSocket / Realtime Stream
+  // Instant <80ms updates when any other collaborator saves
   useEffect(() => {
     if (!activeRoomId || typeof window === "undefined") return;
 
-    const unsubscribe = subscribeToCloudRoom(
-      activeRoomId,
-      (incomingRoom) => {
-        if (!incomingRoom?.data) return;
+    const unsubscribe = listenToRoom(activeRoomId, (incomingRoom) => {
+      if (!incomingRoom?.data) return;
 
-        const currentLocal = parsedDataRef.current;
-        if (!currentLocal) return;
+      const currentLocal = parsedDataRef.current;
+      if (!currentLocal) return;
 
-        const incomingHash = incomingRoom.contentHash || calculatePlanHash(incomingRoom.data);
-        const localHash = calculatePlanHash(currentLocal);
+      const incomingHash =
+        incomingRoom.meta?.contentHash || calculatePlanHash(incomingRoom.data);
+      const localHash = calculatePlanHash(currentLocal);
 
-        if (incomingHash === localHash) return; // Already matching
+      if (incomingHash === localHash) return; // Already matching
 
-        const baseData = baseDataMapRef.current.get(activeRoomId) || currentLocal;
-        const baseHash = calculatePlanHash(baseData);
+      const baseData = baseDataMapRef.current.get(activeRoomId) || currentLocal;
+      const baseHash = calculatePlanHash(baseData);
 
-        // Case A: Local made no edits -> Adopt incoming state directly!
-        if (localHash === baseHash) {
-          baseDataMapRef.current.set(activeRoomId, incomingRoom.data);
-          revisionMapRef.current.set(activeRoomId, incomingRoom.revision);
+      const incomingRev = incomingRoom.meta?.revision || 1;
 
-          setParsedData(incomingRoom.data);
-          setJsonText(JSON.stringify(incomingRoom.data, null, 2));
-          setPeople(incomingRoom.data.people || []);
-          setTeams(incomingRoom.data.teams || []);
-          setValidationResult(validate(incomingRoom.data));
-
-          setSyncStatus("in-sync");
-          setSyncMessage("Live update from teammate");
-          setLastSyncTime(new Date());
-          showToast("Received live updates from teammate!");
-          return;
-        }
-
-        // Case B: Local also has unsaved changes -> Run 3-Way Reconciler!
-        const reconcileResult = reconcilePlans(baseData, currentLocal, incomingRoom.data, {
-          clientId: clientIdRef.current
-        });
-        const merged = reconcileResult.mergedData;
+      // Case A: Local made no edits -> Adopt incoming state directly!
+      if (localHash === baseHash) {
         baseDataMapRef.current.set(activeRoomId, incomingRoom.data);
-        revisionMapRef.current.set(activeRoomId, incomingRoom.revision);
+        revisionMapRef.current.set(activeRoomId, incomingRev);
 
-        setParsedData(merged);
-        setJsonText(JSON.stringify(merged, null, 2));
-        setPeople(merged.people || []);
-        setTeams(merged.teams || []);
-        setValidationResult(validate(merged));
+        setParsedData(incomingRoom.data);
+        setJsonText(JSON.stringify(incomingRoom.data, null, 2));
+        setPeople(incomingRoom.data.people || []);
+        setTeams(incomingRoom.data.teams || []);
+        setValidationResult(validate(incomingRoom.data));
 
-        setSyncStatus("merged");
-        setSyncMessage("Merged updates from teammate");
+        setSyncStatus("in-sync");
+        setSyncMessage("Live update from teammate");
         setLastSyncTime(new Date());
-        showToast("Merged live updates from collaborator!");
-      },
-      () => {
-        // SSE network hiccups automatically reconnect
+        showToast("Received live updates from teammate!");
+        return;
       }
-    );
+
+      // Case B: Local also has unsaved changes -> Run 3-Way Reconciler!
+      const reconcileResult = reconcilePlans(baseData, currentLocal, incomingRoom.data, {
+        clientId: clientIdRef.current
+      });
+      const merged = reconcileResult.mergedData;
+      baseDataMapRef.current.set(activeRoomId, incomingRoom.data);
+      revisionMapRef.current.set(activeRoomId, incomingRev);
+
+      setParsedData(merged);
+      setJsonText(JSON.stringify(merged, null, 2));
+      setPeople(merged.people || []);
+      setTeams(merged.teams || []);
+      setValidationResult(validate(merged));
+
+      setSyncStatus("merged");
+      setSyncMessage("Merged updates from teammate");
+      setLastSyncTime(new Date());
+      showToast("Merged live updates from collaborator!");
+    });
 
     return () => {
       unsubscribe();

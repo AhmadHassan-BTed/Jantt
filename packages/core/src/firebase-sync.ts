@@ -113,6 +113,30 @@ export function sanitizeRoomId(input: string): string {
 }
 
 /**
+ * Normalizes username to lowercase alphanumeric and underscores only.
+ */
+export function normalizeUsername(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/[^a-z0-9_]/g, "");
+}
+
+/**
+ * Generates clean, readable unique room identifier slug.
+ */
+export function generateRoomSlug(prefix = "room"): string {
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const bytes = new Uint8Array(5);
+    crypto.getRandomValues(bytes);
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${prefix}_${hex}`;
+  }
+  return `${prefix}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
  * Creates a brand new Cloud Room on Firebase Realtime Database.
  */
 export async function createCloudRoom(
