@@ -11,6 +11,29 @@ export interface UserProfile {
   displayUsername: string; // e.g. "Ahmad"
   createdAt: string;
   updatedAt: string;
+  githubUsername?: string;
+  githubVerified?: boolean;
+  isFollowingCreator?: boolean;
+  missingReposCount?: number;
+  lastVerifiedAt?: string;
+  isDevBypass?: boolean;
+}
+
+export interface RepoItem {
+  fullName: string;
+  name: string;
+  url: string;
+  isStarred?: boolean;
+}
+
+export interface VerificationStatus {
+  isVerified: boolean;
+  isFollowingCreator: boolean;
+  starredRepos: string[];
+  missingRepos: RepoItem[];
+  totalRepos: number;
+  isDevBypass: boolean;
+  error?: string;
 }
 
 export interface RoomMember {
