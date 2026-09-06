@@ -6,12 +6,12 @@ import {
   Trash2,
   Users,
   Layers,
-  Upload,
-  Download,
-  FileSpreadsheet
+  Radio,
+  UserPlus,
+  LogOut
 } from "lucide-react";
 import type { SavedProject, EffectivePerson } from "../../types";
-import type { UserRoomPointer } from "../../firebase/types";
+import type { UserRoomPointer, RoomPresence } from "../../firebase/types";
 import { DEFAULT_TEMPLATE } from "../../constants";
 
 export interface SubheaderProps {
@@ -27,9 +27,12 @@ export interface SubheaderProps {
   ownedRooms?: UserRoomPointer[];
   sharedRooms?: UserRoomPointer[];
   onOpenPlanManager?: () => void;
-  onImportJson?: () => void;
-  onExportJson?: () => void;
-  onExportCsv?: () => void;
+  activeRoomId?: string | null;
+  activeRoomRole?: "collaborator" | "viewer" | "none";
+  activeRoomTitle?: string;
+  onlineUsers?: RoomPresence[];
+  onOpenShareRoom?: (roomId: string) => void;
+  onLeaveCloudRoom?: (roomId: string) => void;
 }
 
 export const Subheader: React.FC<SubheaderProps> = ({
@@ -45,13 +48,18 @@ export const Subheader: React.FC<SubheaderProps> = ({
   ownedRooms = [],
   sharedRooms = [],
   onOpenPlanManager,
-  onImportJson,
-  onExportJson,
-  onExportCsv
+  activeRoomId,
+  activeRoomRole = "none",
+  activeRoomTitle,
+  onlineUsers = [],
+  onOpenShareRoom,
+  onLeaveCloudRoom
 }) => {
+  const isRoomActive = Boolean(activeRoomId);
+
   return (
     <div className="subheader-bar">
-      {/* Left: Expanded Plan Management Section */}
+      {/* Left: Clean Plan Selector & Quick Management */}
       <div className="subheader-plan-section">
         <div className="subheader-plan-group">
           <div className="subheader-plan-select-wrap">
@@ -143,7 +151,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 type="button"
                 className="btn-plan-action is-manage"
                 onClick={onOpenPlanManager}
-                title="Open Plan Manager to organize all local & cloud plans"
+                title="Open Plan Manager: View all 3 lists (Local, Owned, Shared), drag & drop, and organize"
               >
                 <Layers size={13} />
                 <span>Manage Plans</span>
@@ -155,63 +163,10 @@ export const Subheader: React.FC<SubheaderProps> = ({
               type="button"
               className="btn-plan-action is-add"
               onClick={handleOpenAddPlanModal}
-              title="Create a new blank plan, clone existing, or use a template"
+              title="Create a new blank plan, clone existing, or create cloud room"
             >
               <Plus size={13} />
               <span>New Plan</span>
-            </button>
-
-            {/* Quick Import Plan Button */}
-            {onImportJson && (
-              <button
-                type="button"
-                className="btn-plan-action is-import"
-                onClick={onImportJson}
-                title="Import a Jantt JSON file"
-              >
-                <Upload size={12} />
-                <span>Import</span>
-              </button>
-            )}
-
-            {/* Quick Export JSON */}
-            {onExportJson && (
-              <button
-                type="button"
-                className="btn-plan-action is-export"
-                onClick={onExportJson}
-                title="Download active plan as JSON"
-              >
-                <Download size={12} />
-                <span>JSON</span>
-              </button>
-            )}
-
-            {/* Quick Export CSV */}
-            {onExportCsv && (
-              <button
-                type="button"
-                className="btn-plan-action is-export"
-                onClick={onExportCsv}
-                title="Export active plan as CSV"
-              >
-                <FileSpreadsheet size={12} />
-                <span>CSV</span>
-              </button>
-            )}
-
-            {/* Export / Share Active Plan Button */}
-            <button
-              type="button"
-              className="btn-plan-action is-share"
-              onClick={() => {
-                setShowShareModal(true);
-                setCopiedShareLink(false);
-              }}
-              title="Export or share this project plan via compressed link, WhatsApp, or JSON file"
-            >
-              <Share2 size={12} />
-              <span>Share</span>
             </button>
 
             {/* Delete Active Plan Button */}
@@ -221,17 +176,134 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 className="btn-plan-action is-delete"
                 style={{ color: "#EF4444" }}
                 onClick={() => handleDeleteProject(activeProjectId)}
-                title="Delete this custom plan from browser memory"
+                title="Delete this plan"
               >
                 <Trash2 size={12} />
               </button>
             )}
           </div>
         </div>
+
+        {/* Center Live Room Badge (when inside a Cloud Room) */}
+        {isRoomActive && (
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              marginLeft: "12px",
+              padding: "4px 10px",
+              background: "rgba(34, 197, 94, 0.12)",
+              border: "1px solid rgba(34, 197, 94, 0.35)",
+              borderRadius: "20px",
+              fontSize: "12px"
+            }}
+          >
+            <span
+              style={{
+                width: "7px",
+                height: "7px",
+                borderRadius: "50%",
+                background: "#22C55E",
+                boxShadow: "0 0 6px #22C55E",
+                display: "inline-block"
+              }}
+            />
+            <Radio size={12} color="#22C55E" />
+            <span style={{ fontWeight: 600, color: "var(--jantt-text, #F8FAFC)" }}>
+              {activeRoomTitle || activeRoomId}
+            </span>
+            <span
+              style={{
+                fontSize: "10.5px",
+                fontWeight: 700,
+                padding: "1px 6px",
+                borderRadius: "10px",
+                background: activeRoomRole === "collaborator" ? "rgba(56, 189, 248, 0.2)" : "rgba(148, 163, 184, 0.2)",
+                color: activeRoomRole === "collaborator" ? "#38BDF8" : "#94A3B8"
+              }}
+            >
+              {activeRoomRole === "collaborator" ? "Editor" : "Viewer"}
+            </span>
+
+            {onlineUsers.length > 0 && (
+              <span style={{ fontSize: "11px", color: "var(--jantt-text-muted, #94A3B8)" }}>
+                {onlineUsers.length} online
+              </span>
+            )}
+
+            {activeRoomId && onOpenShareRoom && (
+              <button
+                type="button"
+                className="btn-plan-action"
+                style={{
+                  height: "22px",
+                  padding: "0 7px",
+                  fontSize: "11px",
+                  background: "rgba(34, 197, 94, 0.2)",
+                  color: "#22C55E",
+                  border: "1px solid rgba(34, 197, 94, 0.4)",
+                  borderRadius: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}
+                onClick={() => onOpenShareRoom(activeRoomId)}
+                title="Invite collaborators & teams to this room"
+              >
+                <UserPlus size={11} />
+                <span>Invite</span>
+              </button>
+            )}
+
+            {activeRoomId && onLeaveCloudRoom && (
+              <button
+                type="button"
+                className="btn-plan-action"
+                style={{
+                  height: "22px",
+                  padding: "0 6px",
+                  fontSize: "11px",
+                  color: "#EF4444",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "3px"
+                }}
+                onClick={() => onLeaveCloudRoom(activeRoomId)}
+                title="Leave this cloud room"
+              >
+                <LogOut size={11} />
+                <span>Leave</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Right: People & Team Collaborators Section */}
-      <div className="subheader-people-section">
+      {/* Right: Quick Share & People / Teams */}
+      <div className="subheader-people-section" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* Share Active Plan Button */}
+        <button
+          type="button"
+          className="btn-plan-action is-share"
+          onClick={() => {
+            setShowShareModal(true);
+            setCopiedShareLink(false);
+          }}
+          title="Share plan via link, WhatsApp, or JSON"
+          style={{
+            height: "30px",
+            padding: "0 10px",
+            background: "var(--jantt-surface-solid, rgba(21, 34, 56, 0.9))",
+            border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.12))",
+            borderRadius: "7px",
+            color: "var(--jantt-text, #F8FAFC)"
+          }}
+        >
+          <Share2 size={13} style={{ color: "var(--jantt-accent, #38BDF8)" }} />
+          <span>Share</span>
+        </button>
+
         {/* People & Teams Modal Trigger Button */}
         <button
           type="button"
@@ -282,3 +354,4 @@ export const Subheader: React.FC<SubheaderProps> = ({
     </div>
   );
 };
+

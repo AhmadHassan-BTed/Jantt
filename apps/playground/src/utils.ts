@@ -45,7 +45,7 @@ export function createBlankPlan(title: string): JanttData {
     meta: {
       title: title || "New Project Plan",
       scale: "week",
-      showCriticalPath: true,
+      showCriticalPath: false,
       showBaselines: true
     },
     categories: {
@@ -209,11 +209,8 @@ export function loadInitialState() {
     if (savedHeight) initialRowHeight = parseInt(savedHeight, 10) || 48;
   } catch {}
 
-  let initialCritical = true;
-  try {
-    const savedCrit = localStorage.getItem(STORAGE_KEYS.CRITICAL);
-    if (savedCrit !== null) initialCritical = savedCrit === "true";
-  } catch {}
+  // Critical path must be off by default
+  const initialCritical = false;
 
   let initialBaselines = true;
   try {

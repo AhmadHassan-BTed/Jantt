@@ -4423,3 +4423,144 @@ path.jantt-dep-path.jantt-task-dimmed {
 .editor-popup-item:active {
   transform: scale(0.98);
 }
+
+/* ==========================================================================
+   Plan Manager: 3-List Board & Drag-and-Drop Styles
+   ========================================================================== */
+.plan-board-container {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(290px, 1fr));
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px;
+  overflow-x: auto;
+}
+
+@media (max-width: 960px) {
+  .plan-board-container {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+.plan-board-column {
+  display: flex;
+  flex-direction: column;
+  background: var(--jantt-surface, #0f172a);
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  min-height: 0;
+  max-height: 100%;
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.plan-board-column.is-drag-over {
+  border: 2px dashed var(--jantt-accent, #38bdf8) !important;
+  background: rgba(56, 189, 248, 0.07) !important;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+}
+
+.plan-board-column.is-drag-over-emerald {
+  border: 2px dashed #10b981 !important;
+  background: rgba(16, 185, 129, 0.07) !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+}
+
+.plan-board-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+}
+
+.plan-board-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 120px;
+}
+
+.plan-card {
+  background: var(--jantt-surface-elevated, #1e293b);
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: grab;
+  transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  user-select: none;
+}
+
+.plan-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.35);
+}
+
+.plan-card:active {
+  cursor: grabbing;
+}
+
+.plan-card.is-active-plan {
+  border-color: var(--jantt-accent, #38bdf8);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(30, 41, 59, 0.95));
+  box-shadow: 0 0 16px var(--jantt-accent-glow, rgba(56, 189, 248, 0.25));
+}
+
+.plan-card.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+  border-style: dashed;
+}
+
+.plan-card-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plan-card-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--jantt-text-muted, #94a3b8);
+}
+
+.plan-card-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.05));
+}
+
+.plan-board-empty-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 16px;
+  text-align: center;
+  border: 1.5px dashed var(--jantt-border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  color: var(--jantt-text-muted, #64748b);
+  font-size: 12px;
+  gap: 8px;
+  margin: auto 0;
+}
+
