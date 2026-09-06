@@ -29,25 +29,29 @@ export function storeRoomSecret(roomId: string, secretKey: string): void {
 }
 
 /**
- * Builds the canonical shareable Viewer Link (Read-Only) for a room.
+ * Builds the canonical shareable Pure Viewer Link (Read-Only) for a room.
+ * Recipients can view the live roadmap but cannot modify tasks or sync edits.
  */
 export function buildRoomViewerUrl(roomId: string, view = "gantt", theme = "modern-indigo"): string {
   if (typeof window === "undefined") return "";
   const origin = window.location.origin + window.location.pathname;
-  return `${origin}?room=${encodeURIComponent(roomId.trim())}&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}`;
+  return `${origin}?room=${encodeURIComponent(roomId.trim())}&role=viewer&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}`;
 }
 
 /**
- * Builds the canonical shareable Collaborator Link (Edit + Live Sync) for a room.
- * Key is placed in the URL hash `#key=...` so it remains private to the collaborator's browser.
+ * Builds the canonical shareable Collaborator Link (Edit Mode + Live Sync) for a room.
+ * For authenticated users, your account handle is verified on join.
+ * For legacy rooms, the key is placed in the URL hash `#key=...` for browser storage.
  */
 export function buildRoomCollaboratorUrl(
   roomId: string,
-  secretKey: string,
+  secretKey?: string | null,
   view = "gantt",
   theme = "modern-indigo"
 ): string {
   if (typeof window === "undefined") return "";
   const origin = window.location.origin + window.location.pathname;
-  return `${origin}?room=${encodeURIComponent(roomId.trim())}&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}#key=${encodeURIComponent(secretKey.trim())}`;
+  const hashKey = secretKey ? `#key=${encodeURIComponent(secretKey.trim())}` : "";
+  return `${origin}?room=${encodeURIComponent(roomId.trim())}&role=editor&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}${hashKey}`;
 }
+
