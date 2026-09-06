@@ -158,3 +158,69 @@ export function decompressPlanFromUrlPayload(payload: string): JanttData | null 
     return null;
   }
 }
+
+/**
+ * Recursively sanitizes a plan to guarantee NO internal database IDs (like Firebase UIDs,
+ * room secrets, auth tokens) are ever exposed in the JSON payload.
+ * Mentions (starting with @, e.g. @username) and standard plan IDs (task id, note id, team id)
+ * are the single canonical exception.
+ */
+export function sanitizePlanForJson(data: JanttData): JanttData {
+  if (!data || typeof data !== "object") return data;
+  const clone: JanttData = JSON.parse(JSON.stringify(data));
+
+  const DISALLOWED_INTERNAL_KEYS = new Set([
+    "uid",
+    "ownerUid",
+    "firebaseUid",
+    "secretKey",
+    "authId",
+    "authToken",
+    "accessToken",
+    "clientUid",
+    "peerId"
+  ]);
+
+  function sanitizeRecursive(obj: any): any {
+    if (!obj || typeof obj !== "object") return obj;
+
+    if (Array.isArray(obj)) {
+      return obj.map((item) => sanitizeRecursive(item));
+    }
+
+    const cleanObj: Record<string, any> = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (DISALLOWED_INTERNAL_KEYS.has(key)) {
+        continue;
+      }
+
+      if (key === "clientId" || key === "updatedBy") {
+        if (typeof val === "string") {
+          cleanObj[key] = val.startsWith("@") ? val : `@${val.replace(/^@+/, "")}`;
+        }
+        continue;
+      }
+
+      cleanObj[key] = sanitizeRecursive(val);
+    }
+    return cleanObj;
+  }
+
+  const result = sanitizeRecursive(clone);
+
+  // Ensure people entries only have @username or clean ID
+  if (Array.isArray(result.people)) {
+    result.people = result.people.map((p: any) => {
+      const copy = { ...p };
+      delete copy.uid;
+      delete copy.ownerUid;
+      if (copy.username && !copy.username.startsWith("@")) {
+        copy.username = `@${copy.username}`;
+      }
+      return copy;
+    });
+  }
+
+  return result as JanttData;
+}
+

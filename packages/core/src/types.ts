@@ -119,6 +119,7 @@ export interface Team {
 export interface Person {
   id: string;
   name: string;
+  username?: string; // Real GitHub username mention e.g. "@ahmad"
   teamId?: string; // References Team.id
   role?: string;
   avatar?: string; // URL or initials fallback

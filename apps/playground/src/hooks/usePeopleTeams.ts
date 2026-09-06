@@ -61,12 +61,42 @@ export function usePeopleTeams({
     setNewPersonTeamId("");
   }, [newPersonName, newPersonRole, newPersonTeamId, parsedData, people, effectivePeople.length, handleChartCommit]);
 
+  const handleAddRealTeammate = useCallback(
+    (targetUser: { username: string; displayName?: string; photoURL?: string }) => {
+      if (!parsedData || !targetUser.username) return;
+      const mentionHandle = `@${targetUser.username.replace(/^@+/, "")}`;
+
+      if (people.some((p) => p.username === mentionHandle || p.id === mentionHandle)) {
+        showToast(`${mentionHandle} is already in the project.`, true);
+        return;
+      }
+
+      const realPerson: Person = {
+        id: mentionHandle,
+        name: targetUser.displayName || mentionHandle,
+        username: mentionHandle,
+        avatar: targetUser.photoURL,
+        role: "Collaborator",
+        color: PERSON_COLORS[effectivePeople.length % PERSON_COLORS.length]
+      };
+
+      const updated = [...people, realPerson];
+      setPeople(updated);
+      const updatedData = { ...parsedData, people: updated };
+      handleChartCommit(updatedData);
+      showToast(`Added ${mentionHandle} to project!`);
+    },
+    [parsedData, people, effectivePeople.length, handleChartCommit, showToast]
+  );
+
   const handlePersistPerson = useCallback(
     (personToPersist: Person) => {
       if (!parsedData) return;
       const cleanPerson: Person = {
         id: personToPersist.id,
         name: personToPersist.name,
+        username: personToPersist.username,
+        avatar: personToPersist.avatar,
         role: personToPersist.role,
         teamId: personToPersist.teamId,
         color: personToPersist.color || PERSON_COLORS[people.length % PERSON_COLORS.length]
@@ -85,6 +115,8 @@ export function usePeopleTeams({
     const cleanPeople: Person[] = effectivePeople.map((p) => ({
       id: p.id,
       name: p.name,
+      username: p.username,
+      avatar: p.avatar,
       role: p.role,
       teamId: p.teamId,
       color: p.color
@@ -160,6 +192,7 @@ export function usePeopleTeams({
     newTeamDesc,
     setNewTeamDesc,
     handleAddPerson,
+    handleAddRealTeammate,
     handlePersistPerson,
     handlePersistAllPeople,
     handleRemovePerson,
