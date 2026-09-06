@@ -14,6 +14,8 @@ import {
   validateRoomMember,
   validateRoomTeam,
   validateUserProfile,
+  encodePlanForRtdb,
+  decodePlanFromRtdb,
   type UserProfile,
   type RoomMember,
   type RoomMetadata,
@@ -104,7 +106,7 @@ export async function createRoom(
   const updates: Record<string, any> = {};
   updates[`rooms/${roomId}/meta`] = meta;
   updates[`rooms/${roomId}/members/${user.uid}`] = ownerMember;
-  updates[`rooms/${roomId}/data`] = sanitizedData;
+  updates[`rooms/${roomId}/data`] = encodePlanForRtdb(sanitizedData);
   updates[`user_rooms/${user.uid}/owned/${roomId}`] = userPointer;
 
   await update(ref(rtdb), updates);
@@ -380,6 +382,10 @@ export async function joinRoomViaInvite(
     room.members[user.uid] = newMember;
   }
 
+  if (room.data) {
+    room.data = decodePlanFromRtdb(room.data);
+  }
+
   return room;
 }
 
@@ -389,7 +395,11 @@ export async function joinRoomViaInvite(
 export async function getRoom(roomId: string): Promise<FullRoomPayload | null> {
   const snap = await get(ref(rtdb, `rooms/${roomId}`));
   if (!snap.exists()) return null;
-  return snap.val() as FullRoomPayload;
+  const room = snap.val() as FullRoomPayload;
+  if (room && room.data) {
+    room.data = decodePlanFromRtdb(room.data);
+  }
+  return room;
 }
 
 /**
@@ -432,7 +442,8 @@ export async function saveRoomDataAtomic(
       return; // abort transaction
     }
 
-    const currentRemoteData = currentRoom.data;
+    const rawRemoteData = currentRoom.data;
+    const currentRemoteData = rawRemoteData ? decodePlanFromRtdb(rawRemoteData) : null;
     let nextData = sanitizedIncoming;
 
     if (currentRemoteData) {
@@ -456,7 +467,7 @@ export async function saveRoomDataAtomic(
     const taskCount = finalMergedData.tasks?.length || 0;
     finalRevision = (currentRoom.meta?.revision || 1) + 1;
 
-    currentRoom.data = finalMergedData;
+    currentRoom.data = encodePlanForRtdb(finalMergedData);
     currentRoom.meta = {
       ...currentRoom.meta,
       revision: finalRevision,
@@ -477,11 +488,12 @@ export async function saveRoomDataAtomic(
   }
 
   const committedRoom = result.snapshot.val() as FullRoomPayload;
+  const committedData = committedRoom?.data ? decodePlanFromRtdb(committedRoom.data) : finalMergedData;
 
   return {
     success: true,
     revision: committedRoom?.meta?.revision || finalRevision,
-    data: committedRoom?.data || finalMergedData
+    data: committedData
   };
 }
 
@@ -530,6 +542,9 @@ export function listenToRoom(
       return;
     }
     const val = snapshot.val() as FullRoomPayload;
+    if (val && val.data) {
+      val.data = decodePlanFromRtdb(val.data);
+    }
     callback(val);
   });
 }
