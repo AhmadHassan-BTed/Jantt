@@ -98,14 +98,24 @@ A dictionary mapping unique category keys to their color presentation:
 
 ## 4. People & Teams (`people[]`, `teams[]`)
 
+Jantt defines a single source of truth for all human assignees and squads, cleanly separating real registered GitHub accounts from offline / non-account personas:
+
 ```json
 "people": [
   {
-    "id": "ahmad-hassan",
+    "id": "@ahmadhassan",
     "name": "Ahmad Hassan",
-    "role": "Project Lead / Owner",
+    "username": "@ahmadhassan",
+    "role": "Project Lead / Principal Investigator",
     "teamId": "research",
     "color": "#38BDF8"
+  },
+  {
+    "id": "person-contractor",
+    "name": "Sarah Miller",
+    "role": "External Specialist",
+    "teamId": "research",
+    "color": "#10B981"
   }
 ],
 "teams": [
@@ -119,11 +129,17 @@ A dictionary mapping unique category keys to their color presentation:
 
 | Field (`people[]`) | Type | Required | Description |
 |---|---|---|---|
-| `id` | `string` | **Yes** | Unique identifier (slug or code) |
-| `name` | `string` | **Yes** | Full display name |
-| `role` | `string` | Optional | Job title, role, or position |
-| `teamId` | `string` | Optional | Identifier referencing an entry in `teams[]` |
-| `color` | `string` | Optional | Hex/RGB avatar accent color |
+| `id` | `string` | **Yes** | Unique identifier: canonical mention `@username` for real accounts, or standard slug `person-xxx` for offline personas. |
+| `name` | `string` | **Yes** | Full display name. |
+| `username` | `string` | Optional | Canonical GitHub username mention (e.g. `@username`). Stored when the user is a registered account. |
+| `role` | `string` | Optional | Job title, role, or position. |
+| `teamId` | `string` | Optional | Identifier referencing an entry in `teams[]`. |
+| `avatar` | `string` | Optional | Avatar image URL or fallback initial indicator. |
+| `color` | `string` | Optional | Hex/RGB avatar accent color. |
+| `email` | `string` | Optional | Email address of the team member. |
+
+> **Single Source of Truth & Zero Internal Database IDs in JSON**:  
+> Internal database UIDs, owner UIDs, or private tokens are strictly forbidden from appearing in the plan JSON document. Tasks assigned to registered accounts reference the exact mention handle (`assignee: "@username"`). For offline dummy personas, tasks reference `assignee: "person-xxx"` or `name`. This ensures 100% coherence between the database and the JSON model.
 
 ---
 

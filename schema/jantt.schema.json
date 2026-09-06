@@ -158,6 +158,10 @@
             "type": "string",
             "description": "Hex color used for visual avatar badge (e.g. '#4FAE93')."
           },
+          "username": {
+            "type": "string",
+            "description": "Canonical GitHub username mention handle (e.g. '@username') for verified account teammates."
+          },
           "email": {
             "type": "string",
             "format": "email",

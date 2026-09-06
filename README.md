@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-268%2F268%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![Tests Passing](https://img.shields.io/badge/Tests-306%2F306%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
 [![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
@@ -102,12 +102,20 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
   },
   "people": [
     {
-      "id": "person-id",
+      "id": "@alex",
       "name": "Alex Mercer",
+      "username": "@alex",
       "role": "Lead Architect",
       "email": "alex@org.com",
       "teamId": "core-team",
       "color": "#3B82F6"
+    },
+    {
+      "id": "person-contractor",
+      "name": "Sarah Miller",
+      "role": "External Specialist",
+      "teamId": "core-team",
+      "color": "#10B981"
     }
   ],
   "teams": [
@@ -149,7 +157,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "category": "<matching_category_id>",
       "start": "YYYY-MM-DD",
       "end": "YYYY-MM-DD",
-      "assignee": "Team Member Name",
+      "assignee": "@alex",
       "phase": "Phase 1: Foundation",
       "priority": "low" | "medium" | "high" | "urgent",
       "estimatedCost": 28000,
@@ -188,6 +196,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 5. PROGRESS: Must be a decimal float from 0.0 (0%) to 1.0 (100%).
 6. BASELINES: Optional planned timeframe object { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } for baseline variance tracking.
 7. LOCKED: Set "locked": true on fixed gates or hard-deadline milestones to prevent accidental drag shifts.
+8. SINGLE SOURCE OF TRUTH & ZERO DATABASE IDS IN JSON:
+   - Real registered teammates use canonical "@username" for both "id" and "username".
+   - Non-account individuals are defined as offline personas (e.g. "id": "person-contractor", without "username").
+   - Tasks assigned to real accounts reference the handle in "assignee": "@username".
+   - NO INTERNAL DATABASE IDS OR UIDs IN JSON: Private database keys, Firebase UIDs, auth tokens, and secret keys are strictly stripped from JSON. The ONLY exception is public "@username" mentions.
 ```
 
 ---
@@ -640,6 +653,34 @@ Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/
 
 ---
 
+## Real-Time Cloud Collaboration & Architecture
+
+Jantt features a dedicated, enterprise-grade multi-user collaboration engine backed by Firebase Realtime Database and Cloudflare Workers:
+
+### 1. GitHub-Only Authentication (Zero Google Auth)
+- **Strict Single Provider**: Google login and generic password forms are completely removed. Authentication is restricted to **GitHub OAuth 2.0** (`read:user`, `user:follow`, `public_repo`).
+- **Zero Manual Username Typing**: Jantt automatically claims the user's verified GitHub handle (`@username`) directly into `/usernames/{username}` upon first sign-in.
+- **Creator Follow & Star Gate**: Collaborators unlock free cloud collaboration rooms by supporting the project — following [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed) and starring developer repositories. Creator `@AhmadHassan-BTed` is automatically verified across all checks.
+
+### 2. Single Source of Truth & Zero Internal Database IDs in JSON
+- **No Database Leakage**: Private database UIDs, owner UIDs, internal room secrets, and authentication tokens are strictly stripped and **never exposed in JSON**.
+- **Canonical Mentions**: The only user identity representation in JSON is canonical user mentions (`@username`).
+- **Plan Sanitizer Engine (`sanitizePlanForJson`)**: Every plan document is recursively scrubbed before write or export.
+
+### 3. Dual-Mode People & Assignee Management
+- **Search Real Accounts**: Live search modal queries `/users` by username prefix (`searchUsersByUsername`) with avatar, display name, and `@username`.
+- **Offline / Dummy Personas**: Add contractors or external stakeholders without an account (`id: "person-xxx"`, without `username`).
+- **Coherent Task Assignments**: Tasks assigned to real accounts reference `"assignee": "@username"`, keeping tasks, people, and mentions 100% synchronized.
+
+### 4. Realtime Database Security Rules (`database.rules.json`)
+The complete ruleset governs authorization across all paths:
+- `/users`: Indexed on `username` (`.indexOn: ["username"]`) for prefix searches; users can only write to their own record.
+- `/usernames`: Atomic handle registration preventing username collisions.
+- `/user_rooms`: Fast dashboard listings of owned and shared rooms.
+- `/rooms`: ACID transactions via `runTransaction` with 3-way CRDT reconciler, ensuring only room owners and editors can mutate plan data.
+
+---
+
 ## AI Prompting Specification
 
 Use this system prompt with ChatGPT, Claude, Gemini, or local LLMs to generate valid Jantt timelines:
@@ -700,7 +741,7 @@ cd Jantt
 # Install dependencies
 npm install
 
-# Run verification test suite (22/22 passing)
+# Run verification test suite (306/306 passing across 16 test suites)
 npm test
 
 # Typecheck all packages
