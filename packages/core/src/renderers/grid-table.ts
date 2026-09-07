@@ -77,17 +77,28 @@ export function renderGridTable(props: GridTableProps): {
       <div class="jantt-col-progress-pill">${progressPct}</div>
     `;
 
-    row.addEventListener("click", () => props.onTaskClick(item.task));
+    row.setAttribute("tabindex", "0");
+    row.setAttribute("role", "row");
+    row.setAttribute("aria-label", `Task row: ${item.displayLabel}`);
 
-    // Synchronized row hover
+    row.addEventListener("click", () => props.onTaskClick(item.task));
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        props.onTaskClick(item.task);
+      }
+    });
+
+    // Synchronized row hover with escaped selector query
+    const escapedTaskId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(item.task.id) : item.task.id.replace(/"/g, '\\"');
     row.addEventListener("mouseenter", () => {
       row.classList.add("is-row-highlighted");
-      const matchingGridRow = props.gridContainer.querySelector(`[data-grid-row-id="${item.task.id}"]`);
+      const matchingGridRow = props.gridContainer.querySelector(`[data-grid-row-id="${escapedTaskId}"]`);
       matchingGridRow?.classList.add("is-row-highlighted");
     });
     row.addEventListener("mouseleave", () => {
       row.classList.remove("is-row-highlighted");
-      const matchingGridRow = props.gridContainer.querySelector(`[data-grid-row-id="${item.task.id}"]`);
+      const matchingGridRow = props.gridContainer.querySelector(`[data-grid-row-id="${escapedTaskId}"]`);
       matchingGridRow?.classList.remove("is-row-highlighted");
     });
 

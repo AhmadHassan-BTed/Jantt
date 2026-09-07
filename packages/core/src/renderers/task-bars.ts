@@ -22,6 +22,52 @@ export interface TaskBarsProps {
  * Renders task bars, milestone diamonds, baseline ghost bars, progress indicators, and link ports.
  */
 export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): void {
+  // Pre-index dependency lines by connected task IDs for O(1) hover lookups
+  const taskDepMap = new Map<string, DependencyLine[]>();
+  props.dependencies.forEach((dep) => {
+    let fromList = taskDepMap.get(dep.fromTaskId);
+    if (!fromList) {
+      fromList = [];
+      taskDepMap.set(dep.fromTaskId, fromList);
+    }
+    fromList.push(dep);
+
+    let toList = taskDepMap.get(dep.toTaskId);
+    if (!toList) {
+      toList = [];
+      taskDepMap.set(dep.toTaskId, toList);
+    }
+    toList.push(dep);
+  });
+
+  const activateDeps = (taskId: string) => {
+    const connected = taskDepMap.get(taskId);
+    if (!connected) return;
+    connected.forEach((dep) => {
+      const el = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
+      if (el) {
+        el.classList.add("is-active");
+        el.setAttribute("marker-end", el.dataset.activeMarker || "url(#jantt-arrow-active)");
+      }
+    });
+  };
+
+  const deactivateDeps = (taskId: string) => {
+    const connected = taskDepMap.get(taskId);
+    if (!connected) return;
+    connected.forEach((dep) => {
+      const el = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
+      if (el) {
+        el.classList.remove("is-active");
+        const isCrit = props.showCritical && dep.isCritical;
+        el.setAttribute(
+          "marker-end",
+          el.dataset.normalMarker || (isCrit ? "url(#jantt-arrow-critical)" : "url(#jantt-arrow)")
+        );
+      }
+    });
+  };
+
   props.taskLayouts.forEach((item) => {
     // 1. Baseline Ghost Bar
     if (item.baselineLayout && props.showBaselines) {
@@ -56,8 +102,14 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       mStone.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "move", mStone);
       });
-      mStone.addEventListener("mouseenter", (e) => props.tooltip.show(item.task, item.category, e, item.scheduleMetrics));
-      mStone.addEventListener("mouseleave", props.tooltip.hide);
+      mStone.addEventListener("mouseenter", (e) => {
+        props.tooltip.show(item.task, item.category, e, item.scheduleMetrics);
+        activateDeps(item.task.id);
+      });
+      mStone.addEventListener("mouseleave", () => {
+        props.tooltip.hide();
+        deactivateDeps(item.task.id);
+      });
 
       // Milestone Link Port
       if (!item.task.locked && !props.readOnly) {
@@ -223,29 +275,12 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     // Hover Tooltip & Dependency Highlight Wire Sync
     bar.addEventListener("mouseenter", (e) => {
       props.tooltip.show(item.task, item.category, e, item.scheduleMetrics);
-      props.dependencies.forEach((dep) => {
-        if (dep.fromTaskId === item.task.id || dep.toTaskId === item.task.id) {
-          const el = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
-          if (el) {
-            el.classList.add("is-active");
-            el.setAttribute("marker-end", "url(#jantt-arrow-active)");
-          }
-        }
-      });
+      activateDeps(item.task.id);
     });
 
     bar.addEventListener("mouseleave", () => {
       props.tooltip.hide();
-      props.dependencies.forEach((dep) => {
-        if (dep.fromTaskId === item.task.id || dep.toTaskId === item.task.id) {
-          const el = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
-          if (el) {
-            el.classList.remove("is-active");
-            const isCrit = props.showCritical && dep.isCritical;
-            el.setAttribute("marker-end", isCrit ? "url(#jantt-arrow-critical)" : "url(#jantt-arrow)");
-          }
-        }
-      });
+      deactivateDeps(item.task.id);
     });
 
     container.appendChild(bar);

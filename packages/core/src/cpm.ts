@@ -26,14 +26,10 @@ export function getTaskDependencies(task: Task | { dependsOn?: string | string[]
       .filter((id) => id.length > 0);
   }
   if (typeof task.dependsOn === "string") {
-    if (task.dependsOn.includes(",")) {
-      return task.dependsOn
-        .split(",")
-        .map((s) => s.trim())
-        .filter((id) => id.length > 0);
-    }
-    const trimmed = task.dependsOn.trim();
-    return trimmed.length > 0 ? [trimmed] : [];
+    return task.dependsOn
+      .split(/[;,]/)
+      .map((s) => s.trim())
+      .filter((id) => id.length > 0);
   }
   return [];
 }
@@ -84,7 +80,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   });
 
   // Build clean graph edges
-  tasks.forEach((t) => {
+  liveTasks.forEach((t) => {
     const rawDeps = getTaskDependencies(t);
     const validDeps = rawDeps.filter((depId) => byId.has(depId) && depId !== t.id);
     predMap.set(t.id, validDeps);
@@ -119,9 +115,9 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   }
 
   // Graceful cycle recovery: if cycles exist, append remaining nodes to prevent crashes
-  if (topologicalOrder.length < tasks.length) {
+  if (topologicalOrder.length < liveTasks.length) {
     const visited = new Set(topologicalOrder);
-    for (const t of tasks) {
+    for (const t of liveTasks) {
       if (!visited.has(t.id)) {
         topologicalOrder.push(t.id);
       }
@@ -174,8 +170,8 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   }
 
   // Determine Project Early Finish (T_E)
-  let projectEarlyFinish = tasks[0].end;
-  tasks.forEach((t) => {
+  let projectEarlyFinish = liveTasks[0].end;
+  liveTasks.forEach((t) => {
     const ef = earlyFinishMap.get(t.id) || t.end;
     if (diffDays(projectEarlyFinish, ef) > 0) {
       projectEarlyFinish = ef;

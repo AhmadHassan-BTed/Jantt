@@ -72,6 +72,7 @@ export function useDynamicSync({
     ch.onmessage = (evt) => {
       const msg = evt.data;
       if (!msg || msg.type !== "PLAN_MUTATED") return;
+      if (msg.senderId === clientIdRef.current) return; // Ignore own broadcasts to prevent echo loops
       if (msg.projectId !== activeProjectIdRef.current) return;
 
       // Update in-memory state cleanly from sister tab
@@ -103,6 +104,7 @@ export function useDynamicSync({
     try {
       channelRef.current.postMessage({
         type: "PLAN_MUTATED",
+        senderId: clientIdRef.current,
         projectId,
         contentHash: calculatePlanHash(data),
         timestamp: new Date().toISOString(),

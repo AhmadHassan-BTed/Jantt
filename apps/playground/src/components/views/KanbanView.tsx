@@ -280,6 +280,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                           <option value="not-started">Move to: To Do</option>
                           <option value="in-progress">Move to: In Progress</option>
                           <option value="submitted">Move to: In Review</option>
+                          <option value="blocked">Move to: Blocked</option>
                           <option value="completed">Move to: Completed</option>
                         </select>
                       </div>

@@ -34,6 +34,7 @@ export interface JanttProps {
   onImportJson?: () => void;
   onExportJson?: () => void;
   onExportCsv?: () => void;
+  onError?: (error: Error) => void;
 }
 
 export const Jantt: React.FC<JanttProps> = ({
@@ -61,7 +62,8 @@ export const Jantt: React.FC<JanttProps> = ({
   onOpenAutoSave,
   onImportJson,
   onExportJson,
-  onExportCsv
+  onExportCsv,
+  onError
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<JanttInstance | null>(null);
@@ -81,7 +83,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onOpenAutoSave,
     onImportJson,
     onExportJson,
-    onExportCsv
+    onExportCsv,
+    onError
   });
 
   callbacksRef.current = {
@@ -98,7 +101,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onOpenAutoSave,
     onImportJson,
     onExportJson,
-    onExportCsv
+    onExportCsv,
+    onError
   };
 
   const getForwardingOptions = (): JanttOptions => ({
@@ -126,7 +130,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onOpenAutoSave: () => callbacksRef.current.onOpenAutoSave?.(),
     onImportJson: () => callbacksRef.current.onImportJson?.(),
     onExportJson: () => callbacksRef.current.onExportJson?.(),
-    onExportCsv: () => callbacksRef.current.onExportCsv?.()
+    onExportCsv: () => callbacksRef.current.onExportCsv?.(),
+    onError: (error: Error) => callbacksRef.current.onError?.(error)
   });
 
   // Mount/unmount lifecycle
@@ -140,6 +145,8 @@ export const Jantt: React.FC<JanttProps> = ({
       instanceRef.current = null;
     };
   }, []);
+
+  const serializedTheme = theme ? JSON.stringify(theme) : "";
 
   // Update on data or configuration changes
   useEffect(() => {
@@ -160,7 +167,7 @@ export const Jantt: React.FC<JanttProps> = ({
     viewport?.showDateFilterBadge,
     viewport?.filterTasksByDate,
     viewport?.labelWidth,
-    theme,
+    serializedTheme,
     themeClassName,
     className,
     readOnly,

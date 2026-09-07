@@ -1,6 +1,6 @@
 import { JanttData, Task, JanttOptions, TaskLayout } from "./types";
 import { addDays, diffDays } from "./date-math";
-import { resolveSchedule, getTaskDependencies } from "./resolver";
+import { resolveSchedule, getTaskDependencies, hasDependencyCycle } from "./resolver";
 import { getEffectiveGap, syncTaskProgressAndStatus } from "./utils";
 import { DEFAULT_GAP_DAYS } from "./constants";
 
@@ -39,6 +39,7 @@ export class InteractionController {
   private openModalHandler: (task: Task) => void;
   private onLiveLinkUpdate?: (wireData: { fromX: number; fromY: number; toX: number; toY: number } | null) => void;
   private onSplitResize?: (newWidth: number) => void;
+  private container?: HTMLElement;
   private renderRafId: number | null = null;
 
   private scheduleRender() {
@@ -56,7 +57,8 @@ export class InteractionController {
     onRenderRequest: () => void,
     openModalHandler: (task: Task) => void,
     onLiveLinkUpdate?: (wireData: { fromX: number; fromY: number; toX: number; toY: number } | null) => void,
-    onSplitResize?: (newWidth: number) => void
+    onSplitResize?: (newWidth: number) => void,
+    container?: HTMLElement
   ) {
     this.data = data;
     this.options = options;
@@ -67,14 +69,16 @@ export class InteractionController {
     this.openModalHandler = openModalHandler;
     this.onLiveLinkUpdate = onLiveLinkUpdate;
     this.onSplitResize = onSplitResize;
+    this.container = container;
 
     this.onPointerMove = this.onPointerMove.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
   }
 
-  public updateData(newData: JanttData, dayWidth?: number, newOptions?: JanttOptions) {
+  public updateData(newData: JanttData, dayWidth?: number, newOptions?: JanttOptions, container?: HTMLElement) {
     this.data = newData;
     if (dayWidth) this.dayWidth = dayWidth;
+    if (container) this.container = container;
     if (newOptions) {
       this.options = newOptions;
       if (newOptions.viewport?.autoCascade !== undefined) {
@@ -84,6 +88,21 @@ export class InteractionController {
       }
     }
     this.defaultGapDays = newData.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS;
+  }
+
+  public destroy() {
+    if (this.renderRafId !== null) {
+      window.cancelAnimationFrame(this.renderRafId);
+      this.renderRafId = null;
+    }
+    if (this.dragState?.selectionBoxEl?.parentNode) {
+      this.dragState.selectionBoxEl.parentNode.removeChild(this.dragState.selectionBoxEl);
+    }
+    window.removeEventListener("pointermove", this.onPointerMove);
+    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("pointercancel", this.onPointerUp);
+    this.dragState = null;
+    this.selectedTaskIds.clear();
   }
 
   public getSelectedTaskIds(): Set<string> {
@@ -401,13 +420,22 @@ export class InteractionController {
     }
 
     // Auto-scroll when dragging near or past viewport boundaries
-    const bodyWrap = document.querySelector<HTMLElement>(".jantt-body-wrap");
+    const bodyWrap =
+      this.container?.querySelector<HTMLElement>(".jantt-body-wrap") ||
+      this.dragState?.element?.closest<HTMLElement>(".jantt-body-wrap") ||
+      this.dragState?.canvasEl?.closest<HTMLElement>(".jantt-body-wrap") ||
+      document.querySelector<HTMLElement>(".jantt-body-wrap");
     if (bodyWrap) {
       const rect = bodyWrap.getBoundingClientRect();
       if (e.clientX > rect.right - 50) {
         bodyWrap.scrollLeft += 15;
       } else if (e.clientX < rect.left + 50) {
         bodyWrap.scrollLeft -= 15;
+      }
+      if (e.clientY > rect.bottom - 50) {
+        bodyWrap.scrollTop += 15;
+      } else if (e.clientY < rect.top + 50) {
+        bodyWrap.scrollTop -= 15;
       }
     }
 
@@ -457,11 +485,18 @@ export class InteractionController {
         if (targetTask) {
           const existing = getTaskDependencies(targetTask);
           if (!existing.includes(linkFromTaskId)) {
-            if (existing.length === 0) {
-              targetTask.dependsOn = linkFromTaskId;
-            } else {
-              targetTask.dependsOn = [...existing, linkFromTaskId];
+            const nextDeps = existing.length === 0 ? linkFromTaskId : [...existing, linkFromTaskId];
+            // Test if adding this link creates a circular dependency
+            const candidateTasks = this.data.tasks.map((t) =>
+              t.id === targetTaskId ? { ...t, dependsOn: nextDeps } : t
+            );
+            if (hasDependencyCycle(candidateTasks)) {
+              this.options.onError?.(
+                new Error(`Adding dependency from ${linkFromTaskId} to ${targetTaskId} would create a circular dependency cycle.`)
+              );
+              return;
             }
+            targetTask.dependsOn = nextDeps;
           }
           const resolvedTasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
           this.data = { ...this.data, tasks: resolvedTasks };
@@ -516,6 +551,24 @@ export class InteractionController {
       return;
     }
 
+    if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      const taskIdToDelete = task.id;
+      const nextTasks = this.data.tasks.filter((t) => t.id !== taskIdToDelete);
+      nextTasks.forEach((t) => {
+        const remaining = getTaskDependencies(t).filter((id) => id !== taskIdToDelete);
+        t.dependsOn = remaining.length === 0 ? null : remaining.length === 1 ? remaining[0] : remaining;
+      });
+      this.selectedTaskIds.delete(taskIdToDelete);
+      const resolved = this.autoCascade ? resolveSchedule(nextTasks, this.defaultGapDays) : nextTasks;
+      this.data = { ...this.data, tasks: resolved };
+      this.onRenderRequest();
+      this.options.onTaskDelete?.(taskIdToDelete);
+      this.options.onChange?.(this.data);
+      this.options.onCommit?.(this.data);
+      return;
+    }
+
     const origDuration = Math.max(diffDays(task.start, task.end), 0);
     let modified = false;
 
@@ -537,6 +590,9 @@ export class InteractionController {
       const step = e.altKey ? this.defaultGapDays : 1;
       if (e.shiftKey) {
         task.end = addDays(task.end, 1);
+        if (task.milestone && diffDays(task.start, task.end) > 0) {
+          task.milestone = false;
+        }
         modified = true;
       } else {
         task.start = addDays(task.start, step);

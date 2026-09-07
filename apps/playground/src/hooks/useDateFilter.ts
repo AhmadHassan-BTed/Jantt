@@ -6,7 +6,8 @@ import {
   type TimeScale,
   getTodayISODate,
   isTaskOnDate,
-  isTaskDone
+  isTaskDone,
+  addDays
 } from "@jantt/core";
 import type { DateFilterMode, CompletedFilterMode, ActiveView, EffectivePerson } from "../types";
 import { STORAGE_KEYS } from "../constants";
@@ -102,8 +103,8 @@ export function useDateFilter({
       }
       if (dateFilterMode === "range") {
         if (!dateFilterRangeStart && !dateFilterRangeEnd) return true;
-        const start = dateFilterRangeStart || "0000-01-01";
-        const end = dateFilterRangeEnd || "9999-12-31";
+        const start = dateFilterRangeStart || (dateFilterRangeEnd ? addDays(dateFilterRangeEnd, -30) : "0000-01-01");
+        const end = dateFilterRangeEnd || (dateFilterRangeStart ? addDays(dateFilterRangeStart, 30) : "9999-12-31");
         return task.start <= end && task.end >= start;
       }
       return true;

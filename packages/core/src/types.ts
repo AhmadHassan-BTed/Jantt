@@ -194,6 +194,8 @@ export interface ValidationError {
     | "UNKNOWN_CATEGORY"
     | "INVALID_DATE_FORMAT"
     | "INVALID_DATE_RANGE"
+    | "INVALID_BASELINE_DATE"
+    | "INVALID_BASELINE_RANGE"
     | "DANGLING_DEPENDENCY"
     | "CIRCULAR_DEPENDENCY"
     | "DEP_TIMING_CONFLICT"
@@ -371,6 +373,9 @@ export interface TaskLayout {
     y: number;
     width: number;
     height: number;
+    start?: string;
+    end?: string;
+    varianceDays?: number;
   };
 }
 
@@ -483,4 +488,5 @@ export interface JanttOptions {
   onImportJson?: () => void;
   onExportJson?: () => void;
   onExportCsv?: () => void;
+  onError?: (error: Error) => void;
 }

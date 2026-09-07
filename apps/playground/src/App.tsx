@@ -614,6 +614,7 @@ export function App() {
         isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
         onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
         onLogin={auth.loginWithGitHub}
+        onLogout={auth.logout}
       />
 
       <Subheader
@@ -702,6 +703,8 @@ export function App() {
                   <Jantt
                     data={ganttDisplayData}
                     onCommit={handleGanttCommit}
+                    onTaskClick={(task) => taskDetail.openTaskDetailSidebar(task)}
+                    onTaskAdd={() => tasks.handleAddNewTask()}
                     showDateFilterBadge={false}
                     filterTasksByDate={false}
                     selectedDate={dateFilter.dateFilterActiveDate}
@@ -876,7 +879,7 @@ export function App() {
         onLeaveCloudRoom={handleLeaveCloudRoom}
         onOpenShareRoom={handleOpenShareRoom}
         onOpenAddPlanModal={project.handleOpenAddPlanModal}
-        onCreateNewRoom={() => roomSync.setShowRoomModal(true)}
+        onCreateNewRoom={project.handleOpenAddPlanModal}
         onSignOut={async () => {
           await auth.logout();
           setShowPlanManagerModal(false);
@@ -950,7 +953,7 @@ export function App() {
         onOpenCloudRooms={() =>
           roomSync.activeRoomId
             ? handleOpenShareRoom(roomSync.activeRoomId)
-            : roomSync.setShowRoomModal(true)
+            : setShowPlanManagerModal(true)
         }
         setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
         handleDownloadJson={editor.handleDownloadJson}

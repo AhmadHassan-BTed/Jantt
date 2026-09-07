@@ -88,7 +88,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
     </button>
-    <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.5" value="${props.dayWidth}" />
+    <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" />
     <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <line x1="12" y1="5" x2="12" y2="19"></line>

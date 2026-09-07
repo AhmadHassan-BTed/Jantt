@@ -7,6 +7,57 @@ import { getTaskDependencies } from "./cpm";
 export { getTaskDependencies, calculateCriticalPath } from "./cpm";
 
 /**
+ * Detects whether a set of tasks contains circular dependencies using Kahn's topological sort.
+ */
+export function hasDependencyCycle(tasks: Task[]): boolean {
+  const liveTasks = (tasks || []).filter((t) => !t._deleted);
+  const byId = new Set(liveTasks.map((t) => t.id));
+  const inDegree = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+
+  // Check for self-dependencies (1-node cycle)
+  for (const t of liveTasks) {
+    if (getTaskDependencies(t).includes(t.id)) {
+      return true;
+    }
+  }
+
+  liveTasks.forEach((t) => {
+    inDegree.set(t.id, 0);
+    adj.set(t.id, []);
+  });
+
+  liveTasks.forEach((t) => {
+    const deps = getTaskDependencies(t).filter((d) => byId.has(d));
+    inDegree.set(t.id, deps.length);
+    deps.forEach((d) => {
+      adj.get(d)?.push(t.id);
+    });
+  });
+
+  const queue: string[] = [];
+  inDegree.forEach((deg, id) => {
+    if (deg === 0) queue.push(id);
+  });
+
+  let visited = 0;
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    visited++;
+    const successors = adj.get(curr) || [];
+    for (const s of successors) {
+      const newDeg = (inDegree.get(s) || 1) - 1;
+      inDegree.set(s, newDeg);
+      if (newDeg === 0) {
+        queue.push(s);
+      }
+    }
+  }
+
+  return visited < liveTasks.length;
+}
+
+/**
  * Resolves the scheduling cascade for a list of tasks.
  *
  * Implements coordinated multi-predecessor pacing:
@@ -50,7 +101,8 @@ export function resolveSchedule(tasks: Task[], defaultGapDays = DEFAULT_GAP_DAYS
     for (const t of Object.values(byId)) {
       if (t.locked) continue;
 
-      const explicitDeps = getTaskDependencies(t);
+      // Filter self-dependencies (depId !== t.id) and clean dangling links
+      const explicitDeps = getTaskDependencies(t).filter((depId) => depId !== t.id && Boolean(byId[depId]));
       let calculatedMinStart: string | null = null;
 
       if (explicitDeps.length > 0) {

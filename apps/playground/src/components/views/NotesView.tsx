@@ -147,8 +147,11 @@ function populateEditorWithContent(
               <circle cx="12" cy="12" r="4"></circle>
               <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
             </svg>
-            <span class="note-pill-text">@${person.name}</span>
           `;
+          const textSpan = document.createElement("span");
+          textSpan.className = "note-pill-text";
+          textSpan.textContent = `@${person.name}`;
+          pill.appendChild(textSpan);
           div.appendChild(pill);
           return;
         }
@@ -168,8 +171,11 @@ function populateEditorWithContent(
               <polyline points="9 11 12 14 22 4"></polyline>
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
             </svg>
-            <span class="note-pill-text">${task.id}: ${taskLabel}</span>
           `;
+          const textSpan = document.createElement("span");
+          textSpan.className = "note-pill-text";
+          textSpan.textContent = `${task.id}: ${taskLabel}`;
+          pill.appendChild(textSpan);
           div.appendChild(pill);
           return;
         }
@@ -204,16 +210,22 @@ function insertPillAtRange(
         <circle cx="12" cy="12" r="4"></circle>
         <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
       </svg>
-      <span class="note-pill-text">@${pillData.label}</span>
     `;
+    const textSpan = document.createElement("span");
+    textSpan.className = "note-pill-text";
+    textSpan.textContent = `@${pillData.label}`;
+    pill.appendChild(textSpan);
   } else {
     pill.innerHTML = `
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="9 11 12 14 22 4"></polyline>
         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
       </svg>
-      <span class="note-pill-text">${pillData.id}: ${pillData.label}</span>
     `;
+    const textSpan = document.createElement("span");
+    textSpan.className = "note-pill-text";
+    textSpan.textContent = `${pillData.id}: ${pillData.label}`;
+    pill.appendChild(textSpan);
   }
 
   const trailingSpace = document.createTextNode("\u00A0");

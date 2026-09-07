@@ -347,10 +347,11 @@ export function renderJantt(
         (newW) => {
           labelWidth = newW;
           render();
-        }
+        },
+        root
       );
     } else {
-      controller.updateData(currentData, viewport.dayWidth, currentOptions);
+      controller.updateData(currentData, viewport.dayWidth, currentOptions, root);
     }
 
     // 6. Render or Update Toolbar Subsystem in-place
@@ -700,6 +701,7 @@ export function renderJantt(
       if (todayTimer) clearInterval(todayTimer);
       resizeObserver?.disconnect();
       tooltip.hide();
+      controller?.destroy();
       activeSidebarInstance?.close();
       container.innerHTML = "";
     },

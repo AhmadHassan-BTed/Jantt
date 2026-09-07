@@ -26,7 +26,7 @@ import {
   FileSpreadsheet
 } from "lucide-react";
 import type { SavedProject } from "../../types";
-import type { UserRoomPointer, UserProfile } from "../../firebase";
+import { getRoom, type UserRoomPointer, type UserProfile } from "../../firebase";
 import { DEFAULT_TEMPLATE } from "../../constants";
 import { formatRelativeTime } from "../../utils";
 import { downloadCsv, type JanttData } from "@jantt/core";
@@ -252,21 +252,75 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
       case "publish_cloud":
         if (item.data) await handlePublishLocalToCloud(item.name, item.data);
         break;
-      case "copy_local":
-        if (item.data) onCreateLocalCopy(item.name, item.data);
+      case "copy_local": {
+        let data = item.data;
+        if (!data && item.roomId) {
+          showToast("Fetching room data from cloud...");
+          try {
+            const roomPayload = await getRoom(item.roomId);
+            if (roomPayload?.data) {
+              data = roomPayload.data;
+            }
+          } catch (err: any) {
+            showToast(err.message || "Failed to load cloud room data.", true);
+            return;
+          }
+        }
+        if (data) {
+          onCreateLocalCopy(item.name, data);
+        } else {
+          showToast("Could not retrieve plan data for local copy.", true);
+        }
         break;
+      }
       case "rename":
         handleStartRename(item.id, item.name);
         break;
       case "duplicate":
         onDuplicateProject(item.id);
         break;
-      case "export_json":
-        handleDownloadPlanJson(item.name, item.data);
+      case "export_json": {
+        let data = item.data;
+        if (!data && item.roomId) {
+          showToast("Fetching room data for export...");
+          try {
+            const roomPayload = await getRoom(item.roomId);
+            if (roomPayload?.data) {
+              data = roomPayload.data;
+            }
+          } catch (err: any) {
+            showToast(err.message || "Failed to load cloud room data.", true);
+            return;
+          }
+        }
+        if (data) {
+          handleDownloadPlanJson(item.name, data);
+        } else {
+          showToast("No data available to export.", true);
+        }
         break;
-      case "export_csv":
-        handleDownloadPlanCsv(item.name, item.data);
+      }
+      case "export_csv": {
+        let data = item.data;
+        if (!data && item.roomId) {
+          showToast("Fetching room data for export...");
+          try {
+            const roomPayload = await getRoom(item.roomId);
+            if (roomPayload?.data) {
+              data = roomPayload.data;
+            }
+          } catch (err: any) {
+            showToast(err.message || "Failed to load cloud room data.", true);
+            return;
+          }
+        }
+        if (data) {
+          handleDownloadPlanCsv(item.name, data);
+        } else {
+          showToast("No data available to export.", true);
+        }
         break;
+      }
       case "share":
         if (item.roomId && onOpenShareRoom) onOpenShareRoom(item.roomId);
         break;
@@ -317,8 +371,22 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
     if (!draggedPlan) return;
 
     if (draggedPlan.type === "owned_room" || draggedPlan.type === "shared_room") {
-      if (draggedPlan.data) {
-        onCreateLocalCopy(draggedPlan.name, draggedPlan.data);
+      let data = draggedPlan.data;
+      if (!data && draggedPlan.roomId) {
+        showToast("Fetching room data from cloud...");
+        try {
+          const roomPayload = await getRoom(draggedPlan.roomId);
+          if (roomPayload?.data) {
+            data = roomPayload.data;
+          }
+        } catch (err: any) {
+          showToast(err.message || "Failed to load cloud room data.", true);
+          return;
+        }
+      }
+
+      if (data) {
+        onCreateLocalCopy(draggedPlan.name, data);
 
         if (dragMode === "move") {
           if (draggedPlan.type === "owned_room" && draggedPlan.roomId && onDeleteCloudRoom) {
@@ -330,7 +398,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
           }
         }
       } else {
-        showToast("Open this room first to load its full data before saving offline copy.", true);
+        showToast("Could not retrieve plan data for offline copy.", true);
       }
     }
   };
@@ -349,7 +417,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
       <div
         key={item.id}
         className={`plan-card ${item.isActive ? "is-active-plan" : ""} ${isCurrentlyDragged ? "is-dragging" : ""}`}
-        draggable={!isTemplate && Boolean(item.data)}
+        draggable={!isTemplate}
         onDragStart={(e) => {
           setDraggedPlan(item);
           e.dataTransfer.setData("text/plain", item.id);
@@ -541,10 +609,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               type="button"
               className="btn-nav"
               style={{ padding: "4px 7px", fontSize: "11px" }}
-              onClick={() => {
-                if (item.data) onCreateLocalCopy(item.name, item.data);
-                else showToast("Open room to load data first", true);
-              }}
+              onClick={() => handleCardAction("copy_local", item)}
               title="Save an offline local copy"
             >
               <Copy size={12} style={{ color: "#10B981" }} />

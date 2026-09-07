@@ -108,6 +108,8 @@ function renderDefaultModalContent(
 
   const duration = diffDays(task.start, task.end);
 
+  const catKeys = Object.keys(categories);
+
   container.innerHTML = `
     <div class="jantt-modal-header">
       <div>
@@ -125,21 +127,36 @@ function renderDefaultModalContent(
         <div style="font-size: 12px; color: var(--jantt-text-muted); margin-top: 2px; font-family: var(--jantt-font-mono);">
           ID: ${escapeHtml(task.id)}
         </div>
+      </div>
       <button class="jantt-modal-close-btn" style="background: transparent; border: none; color: var(--jantt-text-muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; justify-content: center;" title="Close Modal (Esc)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
 
     <div class="jantt-modal-body">
+      <!-- Task Label & Category -->
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+        <div>
+          <label style="font-size: 11px; color: var(--jantt-text-dim); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 2px;">Task Label</label>
+          <input type="text" id="jantt-edit-label" value="${escapeHtml(task.label || task.name || task.id)}" style="width: 100%; box-sizing: border-box; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 5px 8px; font-size: 13px;" />
+        </div>
+        <div>
+          <label style="font-size: 11px; color: var(--jantt-text-dim); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 2px;">Category</label>
+          <select id="jantt-edit-category" style="width: 100%; box-sizing: border-box; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 5px 8px; font-size: 13px;">
+            ${catKeys.map((k) => `<option value="${escapeHtml(k)}" ${k === task.category ? "selected" : ""}>${escapeHtml(categories[k]?.label || k)}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+
       <!-- Dates & Duration Block -->
       <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; background: var(--jantt-bg); padding: 12px; border-radius: 8px; border: 1px solid var(--jantt-border-subtle);">
         <div>
           <label style="font-size: 11px; color: var(--jantt-text-dim); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 2px;">Start Date</label>
-          <input type="date" id="jantt-edit-start" value="${task.start}" ${task.locked ? "disabled" : ""} style="width: 100%; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 4px 8px; font-size: 12px;" />
+          <input type="date" id="jantt-edit-start" value="${task.start}" ${task.locked ? "disabled" : ""} style="width: 100%; box-sizing: border-box; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 4px 8px; font-size: 12px;" />
         </div>
         <div>
           <label style="font-size: 11px; color: var(--jantt-text-dim); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 2px;">End Date</label>
-          <input type="date" id="jantt-edit-end" value="${task.end}" ${task.locked ? "disabled" : ""} style="width: 100%; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 4px 8px; font-size: 12px;" />
+          <input type="date" id="jantt-edit-end" value="${task.end}" ${task.locked ? "disabled" : ""} style="width: 100%; box-sizing: border-box; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 4px 8px; font-size: 12px;" />
         </div>
         <div>
           <label style="font-size: 11px; color: var(--jantt-text-dim); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 2px;">Duration</label>
@@ -151,7 +168,7 @@ function renderDefaultModalContent(
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div>
           <label style="font-size: 12px; font-weight: 600; color: var(--jantt-text-muted); display: block; margin-bottom: 4px;">Status</label>
-          <select id="jantt-edit-status" style="width: 100%; background: var(--jantt-bg); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 6px 10px; font-size: 13px;">
+          <select id="jantt-edit-status" style="width: 100%; box-sizing: border-box; background: var(--jantt-bg); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 6px 10px; font-size: 13px;">
             <option value="not-started" ${task.status === "not-started" ? "selected" : ""}>Not Started</option>
             <option value="in-progress" ${task.status === "in-progress" ? "selected" : ""}>In Progress</option>
             <option value="submitted" ${task.status === "submitted" ? "selected" : ""}>Submitted</option>
@@ -164,6 +181,24 @@ function renderDefaultModalContent(
             Progress (<span id="jantt-progress-val">${Math.round((task.progress || 0) * 100)}%</span>)
           </label>
           <input type="range" id="jantt-edit-progress" min="0" max="100" value="${Math.round((task.progress || 0) * 100)}" style="width: 100%; accent-color: var(--jantt-accent); margin-top: 6px;" />
+        </div>
+      </div>
+
+      <!-- Priority & Estimated Cost -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: var(--jantt-text-muted); display: block; margin-bottom: 4px;">Priority</label>
+          <select id="jantt-edit-priority" style="width: 100%; box-sizing: border-box; background: var(--jantt-bg); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 6px 10px; font-size: 13px;">
+            <option value="" ${!task.priority ? "selected" : ""}>None</option>
+            <option value="low" ${task.priority === "low" ? "selected" : ""}>Low</option>
+            <option value="medium" ${task.priority === "medium" ? "selected" : ""}>Medium</option>
+            <option value="high" ${task.priority === "high" ? "selected" : ""}>High</option>
+            <option value="urgent" ${task.priority === "urgent" ? "selected" : ""}>Urgent</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: var(--jantt-text-muted); display: block; margin-bottom: 4px;">Estimated Cost ($)</label>
+          <input type="number" id="jantt-edit-cost" value="${task.estimatedCost !== undefined ? task.estimatedCost : ""}" placeholder="0" style="width: 100%; box-sizing: border-box; background: var(--jantt-bg); border: 1px solid var(--jantt-border); border-radius: 6px; color: var(--jantt-text); padding: 6px 10px; font-size: 13px;" />
         </div>
       </div>
 
@@ -290,20 +325,34 @@ function renderDefaultModalContent(
 
   const saveBtn = container.querySelector("#jantt-modal-save");
   saveBtn?.addEventListener("click", () => {
+    const label = (container.querySelector("#jantt-edit-label") as HTMLInputElement)?.value.trim() || task.label || task.name || task.id;
+    const category = (container.querySelector("#jantt-edit-category") as HTMLSelectElement)?.value || task.category;
     const start = (container.querySelector("#jantt-edit-start") as HTMLInputElement)?.value || task.start;
     const end = (container.querySelector("#jantt-edit-end") as HTMLInputElement)?.value || task.end;
     const status = (container.querySelector("#jantt-edit-status") as HTMLSelectElement)?.value || task.status;
+    const priority = ((container.querySelector("#jantt-edit-priority") as HTMLSelectElement)?.value || undefined) as any;
+    const costVal = (container.querySelector("#jantt-edit-cost") as HTMLInputElement)?.value;
+    const estimatedCost = costVal && !isNaN(Number(costVal)) ? Number(costVal) : task.estimatedCost;
     const progressNum = progressInput ? parseInt(progressInput.value, 10) / 100 : task.progress;
     const notes = (container.querySelector("#jantt-edit-notes") as HTMLTextAreaElement)?.value || "";
+
+    if (diffDays(start, end) < (task.milestone ? 0 : 0)) {
+      alert("End date cannot precede start date.");
+      return;
+    }
 
     // Collect custom fields
     const updatedFields: Record<string, unknown> = { ...currentFields };
 
     const updatedTask: Task = {
       ...task,
+      label,
+      category,
       start,
       end,
       status,
+      priority,
+      estimatedCost,
       progress: progressNum,
       notes,
       fields: Object.keys(updatedFields).length > 0 ? updatedFields : undefined

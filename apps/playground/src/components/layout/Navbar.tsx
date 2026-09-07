@@ -12,7 +12,8 @@ import {
   StickyNote,
   History,
   Star,
-  Cloud
+  Cloud,
+  LogOut
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
@@ -44,6 +45,7 @@ interface NavbarProps {
   isGitHubVerified?: boolean;
   onOpenVerificationModal?: () => void;
   onLogin?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -69,7 +71,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenUserHub,
   isGitHubVerified = false,
   onOpenVerificationModal,
-  onLogin
+  onLogin,
+  onLogout
 }) => {
   return (
     <header className="navbar">
@@ -332,6 +335,32 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <Star size={11} />
                 )}
                 <span>{isGitHubVerified ? "Cloud Active" : "Verify Cloud"}</span>
+              </button>
+            )}
+
+            {/* Direct Sign Out Action */}
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                title="Sign Out: Disconnect from GitHub and clear session"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  background: "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  color: "#ef4444",
+                  borderRadius: "14px",
+                  padding: "3px 8px",
+                  fontSize: "0.74rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.18s ease"
+                }}
+              >
+                <LogOut size={11} />
+                <span>Sign Out</span>
               </button>
             )}
           </div>

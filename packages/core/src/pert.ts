@@ -89,10 +89,14 @@ export function calculatePertRisk(
   const byId = new Map<string, Task>();
   tasks.forEach((t) => byId.set(t.id, t));
 
-  // Identify the primary critical path
+  // Identify the primary critical path (chronologically sorted fallback)
   const primaryPath = criticalResult.criticalPaths.length > 0
     ? criticalResult.criticalPaths[0]
-    : Array.from(criticalResult.criticalTaskIds);
+    : Array.from(criticalResult.criticalTaskIds).sort((a, b) => {
+        const tA = byId.get(a);
+        const tB = byId.get(b);
+        return (tA?.start || "").localeCompare(tB?.start || "");
+      });
 
   let totalExpectedDuration = 0;
   let totalVariance = 0;
@@ -100,6 +104,8 @@ export function calculatePertRisk(
   primaryPath.forEach((taskId) => {
     const t = byId.get(taskId);
     if (!t) return;
+    const isMilestone = Boolean(t.milestone || diffDays(t.start, t.end) === 0);
+    if (isMilestone) return; // Milestones have 0 duration and 0 variance
     const dur = Math.max(1, diffDays(t.start, t.end));
 
     // Look for explicit 3-point estimates in fields or default to standard PM heuristic

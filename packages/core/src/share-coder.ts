@@ -31,7 +31,10 @@ export function cleanPlanForSharing(data: JanttData): JanttData {
 
         // Prune empty or default properties to save bytes
         if (copy.progress === 0) delete copy.progress;
-        if (copy.status === "todo") delete copy.status;
+        if (copy.status === "not-started" || copy.status === "todo") delete copy.status;
+        if (Array.isArray(copy.dependsOn) && copy.dependsOn.length === 0) {
+          delete copy.dependsOn;
+        }
         if (Array.isArray(copy.dependencies) && copy.dependencies.length === 0) {
           delete copy.dependencies;
         }

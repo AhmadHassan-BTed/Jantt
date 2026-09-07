@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveSchedule, calculateCriticalPath } from "../src/resolver";
+import { resolveSchedule, calculateCriticalPath, hasDependencyCycle } from "../src/resolver";
 import { Task } from "../src/types";
 import constructionJson from "../../../examples/construction-enterprise.json";
 
@@ -322,5 +322,51 @@ describe("Critical Path Calculator", () => {
     expect(res.criticalTaskIds.has("crit-chain")).toBe(true);
     expect(res.nearCriticalTaskIds.has("near-chain")).toBe(true);
     expect(res.metrics.get("near-chain")!.isNearCritical).toBe(true);
+  });
+
+  describe("hasDependencyCycle (Kahn's algorithm)", () => {
+    it("returns false for empty task list or independent tasks", () => {
+      expect(hasDependencyCycle([])).toBe(false);
+      expect(
+        hasDependencyCycle([
+          { id: "A", category: "c", start: "2026-01-01", end: "2026-01-05" },
+          { id: "B", category: "c", start: "2026-01-01", end: "2026-01-05" }
+        ])
+      ).toBe(false);
+    });
+
+    it("returns false for valid linear and branching DAGs", () => {
+      const tasks: Task[] = [
+        { id: "A", category: "c", start: "2026-01-01", end: "2026-01-05" },
+        { id: "B", category: "c", start: "2026-01-06", end: "2026-01-10", dependsOn: "A" },
+        { id: "C", category: "c", start: "2026-01-06", end: "2026-01-10", dependsOn: "A" },
+        { id: "D", category: "c", start: "2026-01-11", end: "2026-01-15", dependsOn: ["B", "C"] }
+      ];
+      expect(hasDependencyCycle(tasks)).toBe(false);
+    });
+
+    it("detects direct self-dependency as a cycle", () => {
+      const tasks: Task[] = [
+        { id: "A", category: "c", start: "2026-01-01", end: "2026-01-05", dependsOn: "A" }
+      ];
+      expect(hasDependencyCycle(tasks)).toBe(true);
+    });
+
+    it("detects 2-task circular dependency (A -> B -> A)", () => {
+      const tasks: Task[] = [
+        { id: "A", category: "c", start: "2026-01-01", end: "2026-01-05", dependsOn: "B" },
+        { id: "B", category: "c", start: "2026-01-06", end: "2026-01-10", dependsOn: "A" }
+      ];
+      expect(hasDependencyCycle(tasks)).toBe(true);
+    });
+
+    it("detects multi-task indirect circular loop (A -> B -> C -> A)", () => {
+      const tasks: Task[] = [
+        { id: "A", category: "c", start: "2026-01-01", end: "2026-01-05", dependsOn: "C" },
+        { id: "B", category: "c", start: "2026-01-06", end: "2026-01-10", dependsOn: "A" },
+        { id: "C", category: "c", start: "2026-01-11", end: "2026-01-15", dependsOn: "B" }
+      ];
+      expect(hasDependencyCycle(tasks)).toBe(true);
+    });
   });
 });

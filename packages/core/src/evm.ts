@@ -181,6 +181,8 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
   const vac = Math.round(bac - eac);
   const tcpi = (bac - ac) > 0
     ? Math.round(((bac - ev) / (bac - ac)) * 1000) / 1000
+    : (eac - ac) > 0
+    ? Math.round(((bac - ev) / (eac - ac)) * 1000) / 1000
     : 1.0;
 
   // 4. Intuitive Executive Summaries

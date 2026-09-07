@@ -19,7 +19,9 @@ import { isTaskDone } from "./utils";
 export function auditScheduleIntegrity(tasks: Task[], criticalResult: CriticalPathResult): ScheduleHealthResult {
   const issues: ScheduleHealthIssue[] = [];
 
-  if (!tasks || tasks.length === 0) {
+  const liveTasks = (tasks || []).filter((t) => !t._deleted);
+
+  if (liveTasks.length === 0) {
     return {
       healthScore: 100,
       grade: "A",
@@ -33,12 +35,12 @@ export function auditScheduleIntegrity(tasks: Task[], criticalResult: CriticalPa
   }
 
   const byId = new Map<string, Task>();
-  tasks.forEach((t) => byId.set(t.id, t));
+  liveTasks.forEach((t) => byId.set(t.id, t));
 
   const succMap = new Map<string, string[]>();
-  tasks.forEach((t) => succMap.set(t.id, []));
+  liveTasks.forEach((t) => succMap.set(t.id, []));
 
-  tasks.forEach((t) => {
+  liveTasks.forEach((t) => {
     const deps = getTaskDependencies(t);
     deps.forEach((dId) => {
       if (succMap.has(dId)) {
@@ -52,7 +54,7 @@ export function auditScheduleIntegrity(tasks: Task[], criticalResult: CriticalPa
   let highFloatCount = 0;
   let outOfSequenceCount = 0;
 
-  tasks.forEach((t) => {
+  liveTasks.forEach((t) => {
     const preds = getTaskDependencies(t);
     const succs = succMap.get(t.id) || [];
     const metrics = criticalResult.metrics?.get(t.id);

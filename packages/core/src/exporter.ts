@@ -57,7 +57,8 @@ export function exportToCsv(data: JanttData): string {
  */
 export function downloadCsv(data: JanttData, filename = "jantt-schedule.csv"): void {
   const csvContent = exportToCsv(data);
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  // Prepend UTF-8 BOM (\uFEFF) so Microsoft Excel opens UTF-8 characters properly
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
   triggerDownload(blob, filename);
 }
 
@@ -81,10 +82,15 @@ export function exportSvgString(container: HTMLElement): string | null {
 }
 
 function escapeCsv(val: string): string {
-  if (val.includes(",") || val.includes('"') || val.includes("\n") || val.includes("\r")) {
-    return `"${val.replace(/"/g, '""')}"`;
+  let cleanVal = String(val ?? "");
+  // Neutralize CSV Formula Injection (CWE-1236)
+  if (/^[=+\-@\t\r]/.test(cleanVal)) {
+    cleanVal = `'${cleanVal}`;
   }
-  return val;
+  if (cleanVal.includes(",") || cleanVal.includes('"') || cleanVal.includes("\n") || cleanVal.includes("\r")) {
+    return `"${cleanVal.replace(/"/g, '""')}"`;
+  }
+  return cleanVal;
 }
 
 function triggerDownload(blob: Blob, filename: string): void {

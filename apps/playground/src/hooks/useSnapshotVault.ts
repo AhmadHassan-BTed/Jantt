@@ -8,6 +8,42 @@ function getStorageKey(projectId: string): string {
   return `jantt_snapshots_${projectId}`;
 }
 
+const memoryFallback = new Map<string, SnapshotEntry[]>();
+
+function safeSaveSnapshots(key: string, updated: SnapshotEntry[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch (err: any) {
+    // QuotaExceededError or security block
+    if (err?.name === "QuotaExceededError" || err?.code === 22 || err?.code === 1014) {
+      try {
+        // Step 1: Prune older snapshots in the current project by half
+        const prunedCurrent = updated.slice(0, Math.max(5, Math.floor(updated.length / 2)));
+        localStorage.setItem(key, JSON.stringify(prunedCurrent));
+        return;
+      } catch {
+        // Step 2: Prune other project snapshot keys
+        try {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith("jantt_snapshots_") && k !== key) {
+              localStorage.removeItem(k);
+              break;
+            }
+          }
+          localStorage.setItem(key, JSON.stringify(updated.slice(0, 10)));
+          return;
+        } catch {
+          // Store in memory fallback if all localStorage attempts fail
+          memoryFallback.set(key, updated);
+        }
+      }
+    } else {
+      memoryFallback.set(key, updated);
+    }
+  }
+}
+
 export function useSnapshotVault(activeProjectId: string) {
   const [snapshots, setSnapshots] = useState<SnapshotEntry[]>([]);
   const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false);
@@ -19,7 +55,8 @@ export function useSnapshotVault(activeProjectId: string) {
       return;
     }
     try {
-      const raw = localStorage.getItem(getStorageKey(activeProjectId));
+      const key = getStorageKey(activeProjectId);
+      const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -27,7 +64,17 @@ export function useSnapshotVault(activeProjectId: string) {
           return;
         }
       }
-    } catch {}
+      if (memoryFallback.has(key)) {
+        setSnapshots(memoryFallback.get(key) || []);
+        return;
+      }
+    } catch {
+      const key = getStorageKey(activeProjectId);
+      if (memoryFallback.has(key)) {
+        setSnapshots(memoryFallback.get(key) || []);
+        return;
+      }
+    }
     setSnapshots([]);
   }, [activeProjectId]);
 
@@ -36,8 +83,13 @@ export function useSnapshotVault(activeProjectId: string) {
       if (!projectId || !data) return null;
       try {
         const key = getStorageKey(projectId);
-        const raw = localStorage.getItem(key);
-        const existing: SnapshotEntry[] = raw ? JSON.parse(raw) : [];
+        let existing: SnapshotEntry[] = [];
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) existing = JSON.parse(raw);
+        } catch {
+          existing = memoryFallback.get(key) || [];
+        }
 
         const taskCount = Array.isArray(data.tasks) ? data.tasks.length : 0;
         const contentHash = calculatePlanHash(data);
@@ -58,7 +110,7 @@ export function useSnapshotVault(activeProjectId: string) {
         };
 
         const updated = [newEntry, ...existing].slice(0, MAX_SNAPSHOTS_PER_PROJECT);
-        localStorage.setItem(key, JSON.stringify(updated));
+        safeSaveSnapshots(key, updated);
 
         if (projectId === activeProjectId) {
           setSnapshots(updated);

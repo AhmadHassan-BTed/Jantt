@@ -932,10 +932,8 @@
 .jantt-label-column {
   position: sticky;
   left: 0;
-  z-index: 25;
-  background: var(--jantt-surface);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  z-index: 45;
+  background: var(--jantt-surface-solid);
   border-right: 1px solid var(--jantt-border);
   flex-shrink: 0;
   display: flex;
@@ -947,7 +945,7 @@
 .jantt-label-header {
   position: sticky;
   top: 0;
-  z-index: 45;
+  z-index: 50;
   flex-shrink: 0;
   border-bottom: 1px solid var(--jantt-border);
   display: grid;
@@ -960,9 +958,7 @@
   color: var(--jantt-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: var(--jantt-surface);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--jantt-surface-solid);
   box-sizing: border-box;
 }
 
@@ -1109,7 +1105,7 @@
   bottom: 0;
   width: 6px;
   cursor: col-resize;
-  z-index: 42;
+  z-index: 46;
   background: transparent;
   transition: background 0.15s ease;
 }
@@ -1136,9 +1132,7 @@
   top: 0;
   z-index: 40;
   flex-shrink: 0;
-  background: var(--jantt-surface);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--jantt-surface-solid);
   border-bottom: 1px solid var(--jantt-border);
   display: flex;
   flex-direction: column;
@@ -1171,6 +1165,7 @@
   display: flex;
   border-bottom: 1px solid var(--jantt-border-subtle);
   height: 29px;
+  background: var(--jantt-surface-solid);
   box-sizing: border-box;
   flex-shrink: 0;
 }
@@ -1192,6 +1187,7 @@
 .jantt-header-days {
   display: flex;
   height: 29px;
+  background: var(--jantt-surface-solid);
   box-sizing: border-box;
   flex-shrink: 0;
 }
@@ -1561,7 +1557,7 @@
 .jantt-task-bar.is-dragging {
   cursor: grabbing;
   opacity: 0.92;
-  z-index: 20;
+  z-index: 30;
   transform: scale(1.02);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
 }

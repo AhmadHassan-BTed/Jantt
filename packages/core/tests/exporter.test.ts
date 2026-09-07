@@ -180,4 +180,22 @@ describe("Exporter Engine", () => {
     const withoutCRLF = csv.replace(/\r\n/g, "");
     expect(withoutCRLF).not.toContain("\n");
   });
+
+  // ─── Security: CSV Formula Injection (CWE-1236) ──────────────────────
+
+  it("neutralizes potential formula injection characters (=, +, -, @, \\t, \\r)", () => {
+    const maliciousData: JanttData = {
+      tasks: [
+        { id: "M1", label: "=cmd|' /C calc'!A0", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+        { id: "M2", label: "+1+1", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+        { id: "M3", label: "-10", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+        { id: "M4", label: "@SUM(A1:B1)", category: "dev", start: "2026-09-01", end: "2026-09-05" }
+      ]
+    };
+    const csv = exportToCsv(maliciousData);
+    expect(csv).toContain("M1,,'=cmd|' /C calc'!A0,dev");
+    expect(csv).toContain("M2,,'+1+1,dev");
+    expect(csv).toContain("M3,,'-10,dev");
+    expect(csv).toContain("M4,,'@SUM(A1:B1),dev");
+  });
 });

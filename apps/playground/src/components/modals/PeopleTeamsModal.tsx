@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Users,
   X,
@@ -82,19 +82,25 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const searchSeqRef = useRef(0);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
       return;
     }
+    const currentSeq = ++searchSeqRef.current;
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
         const results = await searchUsersByUsername(searchQuery);
-        setSearchResults(results);
+        if (currentSeq === searchSeqRef.current) {
+          setSearchResults(results);
+        }
       } finally {
-        setIsSearching(false);
+        if (currentSeq === searchSeqRef.current) {
+          setIsSearching(false);
+        }
       }
     }, 250);
     return () => clearTimeout(timer);

@@ -61,23 +61,27 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   const [viewMode, setViewMode] = useState<"essential" | "advanced">("essential");
   const [quickFilter, setQuickFilter] = useState<"all" | "ready" | "blocked" | "bottleneck">("all");
 
-  // 1. Calculate Comprehensive Project Management Math
+  // 1. Calculate Comprehensive Project Management Math on the full project schedule
+  const allProjectTasks = useMemo(() => {
+    return (parsedData.tasks || []).filter((t) => !t._deleted);
+  }, [parsedData.tasks]);
+
   const cpm = useMemo(() => {
-    return calculateCriticalPath(summaryKpiTasks, {
+    return calculateCriticalPath(allProjectTasks, {
       targetDate: parsedData.meta?.targetDate as string | undefined,
       defaultGapDays: parsedData.meta?.defaultGapDays
     });
-  }, [summaryKpiTasks, parsedData.meta?.targetDate, parsedData.meta?.defaultGapDays]);
+  }, [allProjectTasks, parsedData.meta?.targetDate, parsedData.meta?.defaultGapDays]);
 
   const evm = useMemo(() => {
-    return calculateEVM(summaryKpiTasks, {
+    return calculateEVM(allProjectTasks, {
       defaultGapDays: parsedData.meta?.defaultGapDays
     });
-  }, [summaryKpiTasks, parsedData.meta?.defaultGapDays]);
+  }, [allProjectTasks, parsedData.meta?.defaultGapDays]);
 
   const audit = useMemo(() => {
-    return auditScheduleIntegrity(summaryKpiTasks, cpm);
-  }, [summaryKpiTasks, cpm]);
+    return auditScheduleIntegrity(allProjectTasks, cpm);
+  }, [allProjectTasks, cpm]);
 
   // Tasks ready to start (not done, and all prerequisites are 100% completed)
   const byId = useMemo(() => {

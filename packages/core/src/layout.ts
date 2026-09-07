@@ -198,10 +198,10 @@ export function layout(
   const layoutById = new Map<string, TaskLayout>();
 
   tasks.forEach((task, rowIndex) => {
-    const isMilestone = Boolean(task.milestone || task.start === task.end || diffDays(task.start, task.end) === 0);
-    const durationDays = diffDays(task.start, task.end) + (isMilestone ? 0 : 1);
+    const rawDiff = diffDays(task.start, task.end);
+    const isMilestone = Boolean(task.milestone || rawDiff === 0);
+    const durationDays = isMilestone ? 0 : Math.max(0, rawDiff) + 1;
 
-    const colStartX = diffDays(chartStart, task.start) * viewport.dayWidth;
     const centerY = rowIndex * viewport.rowHeight + viewport.rowHeight / 2;
 
     let x: number;
@@ -214,6 +214,7 @@ export function layout(
     let anchorOutY: number;
 
     if (isMilestone) {
+      const colStartX = diffDays(chartStart, task.start) * viewport.dayWidth;
       const centerX = colStartX + viewport.dayWidth / 2;
       const size = Math.max(14, Math.min(22, Math.round(barHeight * 0.62)));
       const radius = size * 0.7071;
@@ -226,7 +227,10 @@ export function layout(
       anchorOutX = Math.round(centerX + radius);
       anchorOutY = centerY;
     } else {
-      const colEndX = (diffDays(chartStart, task.end) + 1) * viewport.dayWidth;
+      const earlierDate = rawDiff < 0 ? task.end : task.start;
+      const laterDate = rawDiff < 0 ? task.start : task.end;
+      const colStartX = diffDays(chartStart, earlierDate) * viewport.dayWidth;
+      const colEndX = (diffDays(chartStart, laterDate) + 1) * viewport.dayWidth;
       x = colStartX;
       width = Math.max(colEndX - colStartX, 14);
       y = rowIndex * viewport.rowHeight + barYOffset;
@@ -244,14 +248,20 @@ export function layout(
 
     let baselineLayout: TaskLayout["baselineLayout"] | undefined;
     if (task.baseline && viewport.showBaselines) {
-      const bx = diffDays(chartStart, task.baseline.start) * viewport.dayWidth;
-      const bColEnd = (diffDays(chartStart, task.baseline.end) + 1) * viewport.dayWidth;
+      const bDiff = diffDays(task.baseline.start, task.baseline.end);
+      const bEarlier = bDiff < 0 ? task.baseline.end : task.baseline.start;
+      const bLater = bDiff < 0 ? task.baseline.start : task.baseline.end;
+      const bx = diffDays(chartStart, bEarlier) * viewport.dayWidth;
+      const bColEnd = (diffDays(chartStart, bLater) + 1) * viewport.dayWidth;
       const bWidth = Math.max(bColEnd - bx, 12);
       baselineLayout = {
         x: bx,
         y: y + barHeight + 2,
         width: bWidth,
-        height: 4
+        height: 4,
+        start: task.baseline.start,
+        end: task.baseline.end,
+        varianceDays: diffDays(task.baseline.end, task.end)
       };
     }
 
@@ -423,11 +433,13 @@ export function layout(
     }
   }
 
+  const gridTotalWidth = totalDays * viewport.dayWidth;
+
   if (currentYearKey !== -1) {
     years.push({
       label: String(currentYearKey),
       x: currentYearStartX,
-      width: canvasWidth - currentYearStartX
+      width: Math.max(gridTotalWidth - currentYearStartX, 0)
     });
   }
 
@@ -435,7 +447,7 @@ export function layout(
     months.push({
       label: currentMonthLabel,
       x: currentMonthStartX,
-      width: canvasWidth - currentMonthStartX
+      width: Math.max(gridTotalWidth - currentMonthStartX, 0)
     });
   }
 
@@ -443,7 +455,7 @@ export function layout(
     weeks.push({
       label: `Wk ${currentWeekNum}`,
       x: currentWeekStartX,
-      width: canvasWidth - currentWeekStartX
+      width: Math.max(gridTotalWidth - currentWeekStartX, 0)
     });
   }
 
@@ -496,9 +508,19 @@ export function computeDependencyPath(
   rowHeight = 46,
   style: LinkRoutingStyle = "orthogonal"
 ): string {
+  if (Math.abs(toX - fromX) < 2 && Math.abs(toY - fromY) < 2) {
+    return "";
+  }
+
   // 1. Same row connection
   if (fromY === toY) {
-    return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+    if (toX >= fromX) {
+      return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+    }
+    const dropY = fromY + Math.round(rowHeight * 0.45);
+    const stepOutX = fromX + 8;
+    const stepInX = toX - 8;
+    return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${dropY} L ${stepInX} ${dropY} L ${stepInX} ${toY} L ${toX} ${toY}`;
   }
 
   const dx = toX - fromX;

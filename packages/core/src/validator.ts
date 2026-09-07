@@ -164,6 +164,29 @@ export function validate(json: unknown): ValidationResult {
         });
       }
     }
+
+    // Baseline validation
+    if (task.baseline) {
+      const bStartValid = isValidISODate(task.baseline.start);
+      const bEndValid = isValidISODate(task.baseline.end);
+      if (!bStartValid || !bEndValid) {
+        errors.push({
+          path: `${path}.baseline`,
+          taskId,
+          code: "INVALID_BASELINE_DATE",
+          message: `Task '${taskId || `index ${index}`}' has invalid baseline dates (start: '${task.baseline.start}', end: '${task.baseline.end}').`,
+          suggestion: "Ensure baseline 'start' and 'end' are valid 'YYYY-MM-DD' calendar date strings."
+        });
+      } else if (diffDays(task.baseline.start, task.baseline.end) < 0) {
+        errors.push({
+          path: `${path}.baseline.end`,
+          taskId,
+          code: "INVALID_BASELINE_RANGE",
+          message: `Task '${taskId || `index ${index}`}' has baseline end date earlier than baseline start date.`,
+          suggestion: "Ensure baseline 'end' is on or after baseline 'start'."
+        });
+      }
+    }
   });
 
   // Second pass: Dependency resolution, dangling check, and cycle detection
@@ -172,6 +195,18 @@ export function validate(json: unknown): ValidationResult {
 
     const depIds = getTaskDependencies(task);
     depIds.forEach((depId) => {
+      // 0. Self-dependency check
+      if (depId === task.id) {
+        errors.push({
+          path: `tasks[${index}].dependsOn`,
+          taskId: task.id,
+          code: "CIRCULAR_DEPENDENCY",
+          message: `Task '${task.id}' cannot depend on itself.`,
+          suggestion: `Remove '${depId}' from '${task.id}.dependsOn'.`
+        });
+        return;
+      }
+
       // 1. Dangling dependency check
       if (!idToTaskMap.has(depId)) {
         errors.push({

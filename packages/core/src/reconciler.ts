@@ -75,6 +75,17 @@ export function calculatePlanHash(data: JanttData | null | undefined): string {
         .sort((a, b) => a.id.localeCompare(b.id))
     : [];
 
+  const normalizedTeams = Array.isArray(data.teams)
+    ? data.teams
+        .map((t) => ({
+          id: String(t.id || ""),
+          name: String(t.name || ""),
+          color: String(t.color || ""),
+          description: String(t.description || "")
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id))
+    : [];
+
   const normalizedMeta = {
     title: String(data.meta?.title || ""),
     start: String(data.meta?.start || data.meta?.chartStart || ""),
@@ -88,6 +99,7 @@ export function calculatePlanHash(data: JanttData | null | undefined): string {
     tasks: normalizedTasks,
     notes: normalizedNotes,
     people: normalizedPeople,
+    teams: normalizedTeams,
     categories: data.categories || {}
   });
 
@@ -123,7 +135,14 @@ function areTasksIdentical(t1: Task, t2: Task): boolean {
   if ((t1.notes || "") !== (t2.notes || "")) return false;
   if ((t1.gapDays ?? 0) !== (t2.gapDays ?? 0)) return false;
   if ((t1.color || "") !== (t2.color || "")) return false;
+  if (Boolean(t1.locked) !== Boolean(t2.locked)) return false;
+  if (Boolean(t1.milestone) !== Boolean(t2.milestone)) return false;
   if (Boolean(t1._deleted) !== Boolean(t2._deleted)) return false;
+  if ((t1.baseline?.start || "") !== (t2.baseline?.start || "")) return false;
+  if ((t1.baseline?.end || "") !== (t2.baseline?.end || "")) return false;
+  if ((t1.team || "") !== (t2.team || "")) return false;
+  if (Number(t1.estimatedCost || 0) !== Number(t2.estimatedCost || 0)) return false;
+  if (Number(t1.actualCost || 0) !== Number(t2.actualCost || 0)) return false;
   return true;
 }
 
