@@ -1,32 +1,26 @@
 import { JanttData, Task, JanttOptions, TaskLayout } from "./types";
 import { addDays, diffDays } from "./date-math";
-import { resolveSchedule, getTaskDependencies, hasDependencyCycle } from "./resolver";
-import { getEffectiveGap, syncTaskProgressAndStatus } from "./utils";
+import { resolveSchedule, getTaskDependencies } from "./resolver";
 import { DEFAULT_GAP_DAYS } from "./constants";
+import {
+  DragMode,
+  DragState,
+  GestureContext,
+  IGestureStrategy,
+  MoveGestureStrategy,
+  ResizeGestureStrategy,
+  ProgressGestureStrategy,
+  LinkGestureStrategy,
+  SplitterGestureStrategy,
+  MarqueeGestureStrategy
+} from "./controller/index";
 
-export type DragMode = "move" | "resize" | "progress" | "link" | "split" | "marquee";
+export type { DragMode, DragState, GestureContext, IGestureStrategy };
 
-export interface DragState {
-  taskId?: string;
-  mode: DragMode;
-  startX: number;
-  startY: number;
-  canvasStartX?: number;
-  canvasStartY?: number;
-  origStart?: string;
-  origEnd?: string;
-  origProgress?: number;
-  origLabelWidth?: number;
-  moved: boolean;
-  element?: HTMLElement;
-  pointerId?: number;
-  linkFromTaskId?: string;
-  multiTasks?: Map<string, { start: string; end: string }>;
-  selectionBoxEl?: HTMLElement;
-  canvasEl?: HTMLElement;
-  taskLayouts?: TaskLayout[];
-}
-
+/**
+ * Enterprise gesture and interaction controller for Jantt.
+ * Employs the Strategy Pattern to decouple gesture mechanics into isolated, testable strategies.
+ */
 export class InteractionController {
   private data: JanttData;
   private options: JanttOptions;
@@ -41,6 +35,15 @@ export class InteractionController {
   private onSplitResize?: (newWidth: number) => void;
   private container?: HTMLElement;
   private renderRafId: number | null = null;
+
+  private readonly strategies = new Map<DragMode, IGestureStrategy>([
+    ["move", new MoveGestureStrategy()],
+    ["resize", new ResizeGestureStrategy()],
+    ["progress", new ProgressGestureStrategy()],
+    ["link", new LinkGestureStrategy()],
+    ["split", new SplitterGestureStrategy()],
+    ["marquee", new MarqueeGestureStrategy()]
+  ] as Array<[DragMode, IGestureStrategy]>);
 
   private scheduleRender() {
     if (this.renderRafId !== null) return;
@@ -73,6 +76,35 @@ export class InteractionController {
 
     this.onPointerMove = this.onPointerMove.bind(this);
     this.onPointerUp = this.onPointerUp.bind(this);
+  }
+
+  private createGestureContext(): GestureContext {
+    return {
+      data: this.data,
+      options: this.options,
+      dayWidth: this.dayWidth,
+      defaultGapDays: this.defaultGapDays,
+      autoCascade: this.autoCascade,
+      selectedTaskIds: this.selectedTaskIds,
+      container: this.container,
+      openModalHandler: this.openModalHandler,
+      onLiveLinkUpdate: this.onLiveLinkUpdate,
+      onSplitResize: this.onSplitResize,
+      onRenderRequest: this.onRenderRequest,
+      scheduleRender: () => this.scheduleRender(),
+      selectTask: (taskId, toggle) => this.selectTask(taskId, toggle),
+      clearSelection: () => this.clearSelection(),
+      setTasks: (tasks, triggerCascade) => {
+        if (triggerCascade && this.autoCascade) {
+          this.data.tasks = resolveSchedule(tasks, this.defaultGapDays);
+        } else {
+          this.data.tasks = tasks;
+        }
+      },
+      commitData: () => {
+        this.options.onCommit?.(this.data);
+      }
+    };
   }
 
   public updateData(newData: JanttData, dayWidth?: number, newOptions?: JanttOptions, container?: HTMLElement) {
@@ -162,9 +194,6 @@ export class InteractionController {
     this.onRenderRequest();
   }
 
-  /**
-   * Starts Marquee / Rectangle Lasso selection when clicking or dragging on empty canvas area.
-   */
   public startMarqueeSelection(e: PointerEvent, canvasEl: HTMLElement, taskLayouts: TaskLayout[]) {
     if (this.options.readOnly) return;
     if (e.button !== 0 && e.button !== 2) return;
@@ -216,7 +245,6 @@ export class InteractionController {
     e.preventDefault();
     e.stopPropagation();
 
-    // Multi-task selection logic on click/drag
     if (mode === "move") {
       const isModifier = e.shiftKey || e.ctrlKey || e.metaKey;
       if (isModifier) {
@@ -230,11 +258,10 @@ export class InteractionController {
       try {
         el.setPointerCapture?.(e.pointerId);
       } catch {
-        // Ignore
+        // Ignore pointer capture errors
       }
     }
 
-    // Capture state for all currently selected tasks for synchronized multi-drag shift
     const multiTasks = new Map<string, { start: string; end: string }>();
     if (this.selectedTaskIds.has(task.id) && this.selectedTaskIds.size > 1) {
       this.selectedTaskIds.forEach((id) => {
@@ -297,156 +324,44 @@ export class InteractionController {
       this.dragState.moved = true;
     }
 
-    // Marquee Rectangle Selection Box
-    if (this.dragState.mode === "marquee" && this.dragState.selectionBoxEl && this.dragState.canvasEl) {
-      const canvasRect = this.dragState.canvasEl.getBoundingClientRect();
-      const curCanvasX = e.clientX - canvasRect.left + this.dragState.canvasEl.scrollLeft;
-      const curCanvasY = e.clientY - canvasRect.top + this.dragState.canvasEl.scrollTop;
-
-      const left = Math.min(this.dragState.canvasStartX!, curCanvasX);
-      const top = Math.min(this.dragState.canvasStartY!, curCanvasY);
-      const width = Math.abs(curCanvasX - this.dragState.canvasStartX!);
-      const height = Math.abs(curCanvasY - this.dragState.canvasStartY!);
-
-      this.dragState.selectionBoxEl.style.left = `${left}px`;
-      this.dragState.selectionBoxEl.style.top = `${top}px`;
-      this.dragState.selectionBoxEl.style.width = `${width}px`;
-      this.dragState.selectionBoxEl.style.height = `${height}px`;
-
-      // Calculate intersection with all task layouts
-      if (this.dragState.taskLayouts) {
-        this.dragState.taskLayouts.forEach((tl) => {
-          const taskRight = tl.x + tl.width;
-          const taskBottom = tl.y + tl.height;
-          const intersects =
-            tl.x < left + width && taskRight > left && tl.y < top + height && taskBottom > top;
-
-          if (intersects) {
-            this.selectedTaskIds.add(tl.task.id);
-          } else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-            this.selectedTaskIds.delete(tl.task.id);
-          }
-        });
-
-        // Visually update selected state on DOM task bars in real-time
-        this.dragState.canvasEl.querySelectorAll<HTMLElement>("[data-task-id]").forEach((bar) => {
-          const tId = bar.dataset.taskId!;
-          if (this.selectedTaskIds.has(tId)) {
-            bar.classList.add("is-selected");
-          } else {
-            bar.classList.remove("is-selected");
-          }
-        });
-      }
-      return;
+    const ctx = this.createGestureContext();
+    const strategy = this.strategies.get(this.dragState.mode);
+    if (strategy) {
+      strategy.onMove(e, this.dragState, ctx);
     }
 
-    if (this.dragState.mode === "split") {
-      const newWidth = Math.max(180, Math.min(600, (this.dragState.origLabelWidth || 320) + deltaX));
-      this.onSplitResize?.(newWidth);
-      return;
-    }
-
-    if (this.dragState.mode === "link") {
-      if (this.onLiveLinkUpdate && this.dragState.element) {
-        const rect = this.dragState.element.getBoundingClientRect();
-        this.onLiveLinkUpdate({
-          fromX: rect.right,
-          fromY: rect.top + rect.height / 2,
-          toX: e.clientX,
-          toY: e.clientY
-        });
-      }
-      return;
-    }
-
-    const deltaDays = Math.round(deltaX / this.dayWidth);
-    const task = this.data.tasks.find((t) => t.id === this.dragState!.taskId);
-    if (!task) return;
-
-    // Multi-task synchronized dragging shift
-    if (this.dragState.mode === "move") {
-      if (this.dragState.multiTasks && this.dragState.multiTasks.size > 1) {
-        this.dragState.multiTasks.forEach((orig, id) => {
-          const target = this.data.tasks.find((t) => t.id === id);
-          if (target) {
-            const origDur = Math.max(diffDays(orig.start, orig.end), 0);
-            const newStart = addDays(orig.start, deltaDays);
-            target.start = newStart;
-            target.end = addDays(newStart, origDur);
-          }
-        });
-      } else {
-        const origDuration = Math.max(diffDays(this.dragState.origStart!, this.dragState.origEnd!), 0);
-        let newStart = addDays(this.dragState.origStart!, deltaDays);
-
-        // If strict limit mode is active (!autoCascade), clamp start date to not violate prerequisite ends
-        if (!this.autoCascade) {
-          const deps = getTaskDependencies(task);
-          for (const depId of deps) {
-            const prereq = this.data.tasks.find((t) => t.id === depId);
-            if (prereq) {
-              const minAllowed = addDays(prereq.end, getEffectiveGap(task, this.defaultGapDays));
-              if (diffDays(minAllowed, newStart) < 0) {
-                newStart = minAllowed;
-              }
-            }
-          }
+    // Auto-scroll when dragging near or past viewport boundaries (for timeline interactions)
+    if (this.dragState.mode !== "split") {
+      const bodyWrap =
+        this.container?.querySelector<HTMLElement>(".jantt-body-wrap") ||
+        this.dragState.element?.closest<HTMLElement>(".jantt-body-wrap") ||
+        this.dragState.canvasEl?.closest<HTMLElement>(".jantt-body-wrap") ||
+        document.querySelector<HTMLElement>(".jantt-body-wrap");
+      if (bodyWrap) {
+        const rect = bodyWrap.getBoundingClientRect();
+        if (e.clientX > rect.right - 50) {
+          bodyWrap.scrollLeft += 15;
+        } else if (e.clientX < rect.left + 50) {
+          bodyWrap.scrollLeft -= 15;
         }
-
-        task.start = newStart;
-        task.end = addDays(newStart, origDuration);
-      }
-
-      // If auto-adjust cascade is active, automatically adjust downstream dependent tasks in real-time!
-      if (this.autoCascade) {
-        this.data.tasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
-      }
-    } else if (this.dragState.mode === "resize") {
-      const newEnd = addDays(this.dragState.origEnd!, deltaDays);
-      if (diffDays(this.dragState.origStart!, newEnd) >= (task.milestone ? 0 : 1)) {
-        task.end = newEnd;
-      }
-      if (this.autoCascade) {
-        this.data.tasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
-      }
-    } else if (this.dragState.mode === "progress") {
-      const barWidth = Math.max(diffDays(task.start, task.end) * this.dayWidth, 30);
-      const deltaRatio = deltaX / barWidth;
-      const newProgress = Math.max(0, Math.min(1, (this.dragState.origProgress || 0) + deltaRatio));
-      const roundedProg = Math.round(newProgress * 100) / 100;
-      const synced = syncTaskProgressAndStatus({ progress: roundedProg }, task);
-      Object.assign(task, synced);
-    }
-
-    // Auto-scroll when dragging near or past viewport boundaries
-    const bodyWrap =
-      this.container?.querySelector<HTMLElement>(".jantt-body-wrap") ||
-      this.dragState?.element?.closest<HTMLElement>(".jantt-body-wrap") ||
-      this.dragState?.canvasEl?.closest<HTMLElement>(".jantt-body-wrap") ||
-      document.querySelector<HTMLElement>(".jantt-body-wrap");
-    if (bodyWrap) {
-      const rect = bodyWrap.getBoundingClientRect();
-      if (e.clientX > rect.right - 50) {
-        bodyWrap.scrollLeft += 15;
-      } else if (e.clientX < rect.left + 50) {
-        bodyWrap.scrollLeft -= 15;
-      }
-      if (e.clientY > rect.bottom - 50) {
-        bodyWrap.scrollTop += 15;
-      } else if (e.clientY < rect.top + 50) {
-        bodyWrap.scrollTop -= 15;
+        if (e.clientY > rect.bottom - 50) {
+          bodyWrap.scrollTop += 15;
+        } else if (e.clientY < rect.top + 50) {
+          bodyWrap.scrollTop -= 15;
+        }
       }
     }
 
-    this.scheduleRender();
-    this.options.onChange?.(this.data);
+    if (this.dragState.mode !== "split" && this.dragState.mode !== "marquee" && this.dragState.mode !== "link") {
+      this.scheduleRender();
+      this.options.onChange?.(this.data);
+    }
   }
 
   private onPointerUp(e: PointerEvent) {
     if (!this.dragState) return;
 
-    const { element, taskId, mode, moved, pointerId, linkFromTaskId, selectionBoxEl } = this.dragState;
+    const { element, pointerId, selectionBoxEl } = this.dragState;
 
     if (selectionBoxEl && selectionBoxEl.parentNode) {
       selectionBoxEl.parentNode.removeChild(selectionBoxEl);
@@ -465,75 +380,18 @@ export class InteractionController {
     window.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("pointercancel", this.onPointerUp);
 
+    const activeState = this.dragState;
     this.dragState = null;
-
-    if (mode === "split" || mode === "marquee") {
-      if (mode === "marquee" && !moved) {
-        this.clearSelection();
-      }
-      return;
-    }
-
-    if (mode === "link") {
-      this.onLiveLinkUpdate?.(null);
-      const targetElement = document.elementFromPoint(e.clientX, e.clientY);
-      const targetBar = targetElement?.closest<HTMLElement>("[data-task-id]");
-      const targetTaskId = targetBar?.dataset.taskId;
-
-      if (linkFromTaskId && targetTaskId && targetTaskId !== linkFromTaskId) {
-        const targetTask = this.data.tasks.find((t) => t.id === targetTaskId);
-        if (targetTask) {
-          const existing = getTaskDependencies(targetTask);
-          if (!existing.includes(linkFromTaskId)) {
-            const nextDeps = existing.length === 0 ? linkFromTaskId : [...existing, linkFromTaskId];
-            // Test if adding this link creates a circular dependency
-            const candidateTasks = this.data.tasks.map((t) =>
-              t.id === targetTaskId ? { ...t, dependsOn: nextDeps } : t
-            );
-            if (hasDependencyCycle(candidateTasks)) {
-              this.options.onError?.(
-                new Error(`Adding dependency from ${linkFromTaskId} to ${targetTaskId} would create a circular dependency cycle.`)
-              );
-              return;
-            }
-            targetTask.dependsOn = nextDeps;
-          }
-          const resolvedTasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
-          this.data = { ...this.data, tasks: resolvedTasks };
-          this.onRenderRequest();
-          this.options.onLinkCreate?.(linkFromTaskId, targetTaskId);
-          this.options.onCommit?.(this.data);
-        }
-      }
-      return;
-    }
 
     if (this.renderRafId !== null) {
       window.cancelAnimationFrame(this.renderRafId);
       this.renderRafId = null;
     }
 
-    const task = this.data.tasks.find((t) => t.id === taskId);
-    if (!task) return;
-
-    if (mode === "progress") {
-      const synced = syncTaskProgressAndStatus({ progress: task.progress }, task);
-      Object.assign(task, synced);
-    }
-
-    if (!moved && (mode === "move" || mode === "resize")) {
-      this.options.onTaskClick?.(task);
-      this.openModalHandler(task);
-    } else {
-      if (this.autoCascade) {
-        const resolvedTasks = resolveSchedule(this.data.tasks, this.defaultGapDays);
-        this.data = {
-          ...this.data,
-          tasks: resolvedTasks
-        };
-      }
-      this.onRenderRequest();
-      this.options.onCommit?.(this.data);
+    const ctx = this.createGestureContext();
+    const strategy = this.strategies.get(activeState.mode);
+    if (strategy) {
+      strategy.onUp(e, activeState, ctx);
     }
   }
 

@@ -1,31 +1,24 @@
 import { STORAGE_KEYS } from "./constants";
+import { storageService } from "./services/storage";
 
 /**
- * Retrieves the stored cryptographic edit key for a room from browser localStorage.
+ * Retrieves the stored cryptographic edit key for a room from storage.
  */
 export function getStoredRoomSecret(roomId: string): string | null {
-  if (typeof window === "undefined" || !roomId) return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.ROOM_SECRET_KEYS);
-    if (!raw) return null;
-    const map = JSON.parse(raw);
-    return map[roomId.toLowerCase().trim()] || null;
-  } catch {
-    return null;
-  }
+  if (!roomId) return null;
+  const map = storageService.getItem<Record<string, string>>(STORAGE_KEYS.ROOM_SECRET_KEYS);
+  if (!map || typeof map !== "object") return null;
+  return map[roomId.toLowerCase().trim()] || null;
 }
 
 /**
- * Persists a room's cryptographic edit key into browser localStorage.
+ * Persists a room's cryptographic edit key into storage.
  */
 export function storeRoomSecret(roomId: string, secretKey: string): void {
-  if (typeof window === "undefined" || !roomId || !secretKey) return;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.ROOM_SECRET_KEYS);
-    const map = raw ? JSON.parse(raw) : {};
-    map[roomId.toLowerCase().trim()] = secretKey.trim();
-    localStorage.setItem(STORAGE_KEYS.ROOM_SECRET_KEYS, JSON.stringify(map));
-  } catch {}
+  if (!roomId || !secretKey) return;
+  const map = storageService.getItem<Record<string, string>>(STORAGE_KEYS.ROOM_SECRET_KEYS) || {};
+  map[roomId.toLowerCase().trim()] = secretKey.trim();
+  storageService.setItem(STORAGE_KEYS.ROOM_SECRET_KEYS, map);
 }
 
 /**
@@ -54,4 +47,3 @@ export function buildRoomCollaboratorUrl(
   const hashKey = secretKey ? `#key=${encodeURIComponent(secretKey.trim())}` : "";
   return `${origin}?room=${encodeURIComponent(roomId.trim())}&role=editor&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}${hashKey}`;
 }
-

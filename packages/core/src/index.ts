@@ -28,6 +28,7 @@ export * from "./remote-sync";
 export * from "./reconciler";
 export * from "./share-coder";
 export * from "./firebase-sync";
+export * from "./pipeline";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";

@@ -5,3 +5,4 @@ export * from "./VersionHistoryModal";
 export * from "./PeopleTeamsModal";
 export * from "./PromptModal";
 export * from "./PlanManagerModal";
+export * from "./ModalHost";

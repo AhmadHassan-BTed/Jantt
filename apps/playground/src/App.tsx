@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { Jantt } from "@jantt/react";
-import { getTodayISODate, validate, calculatePlanHash, type Person, type Team, type JanttData } from "@jantt/core";
+import { validate, calculatePlanHash, type JanttData } from "@jantt/core";
 
 // Re-export all types, constants, and utilities for external consumers
 export type {
@@ -64,30 +63,16 @@ import {
   saveRoomDataAtomic
 } from "./firebase/roomService";
 import type { UserRoomPointer, FullRoomPayload } from "./firebase";
+import { commandBus } from "./services";
 
 // View & Layout & Modal Components (Domain-Driven Architecture)
 import {
   Navbar,
   Subheader,
   EditorPane,
-  DateFilterBar,
-  KanbanView,
-  BudgetKpiView,
-  TasksView,
-  NotesView,
-  PromptModal,
-  AddPlanModal,
-  PlanManagerModal,
-  PeopleTeamsModal,
-  CloudRoomModal,
-  ShareModal,
-  AutoSaveModal,
-  VersionHistoryModal,
-  UsernameOnboardingModal,
-  ShareRoomModal,
-  GitHubVerificationModal,
-  Toast,
-  EmptyChartState
+  ViewRouter,
+  ModalHost,
+  Toast
 } from "./components";
 
 export function App() {
@@ -125,16 +110,12 @@ export function App() {
     return () => unsubscribe();
   }, [auth.userProfile?.uid]);
 
-  // Cross-hook sync refs
-  const onPeopleChangeRef = useRef<((p: Person[]) => void) | undefined>();
-  const onTeamsChangeRef = useRef<((t: Team[]) => void) | undefined>();
-
   // Editor State (JSON text, parsed AST, schema validation)
   const editor = useEditorState({
     initialJson: init.initialJson,
     initialParsed: init.initialParsed,
-    onPeopleChange: (p) => onPeopleChangeRef.current?.(p),
-    onTeamsChange: (t) => onTeamsChangeRef.current?.(t)
+    onPeopleChange: (p) => commandBus.emit("PEOPLE_CHANGED", p),
+    onTeamsChange: (t) => commandBus.emit("TEAMS_CHANGED", t)
   });
 
   // Gantt Viewport & Visual Themes
@@ -165,8 +146,16 @@ export function App() {
     handleChartCommit: editor.handleChartCommit,
     showToast: toast.showToast
   });
-  onPeopleChangeRef.current = people.setPeople;
-  onTeamsChangeRef.current = people.setTeams;
+
+  // Cross-hook event bus subscriptions (eliminates circular useRef dependencies)
+  useEffect(() => {
+    const unsubPeople = commandBus.on("PEOPLE_CHANGED", people.setPeople);
+    const unsubTeams = commandBus.on("TEAMS_CHANGED", people.setTeams);
+    return () => {
+      unsubPeople();
+      unsubTeams();
+    };
+  }, [people.setPeople, people.setTeams]);
 
   // Date & People Filter Engine & Visual Dimming
   const dateFilter = useDateFilter({
@@ -180,8 +169,6 @@ export function App() {
     effectivePeople: people.effectivePeople,
     teams: people.teams
   });
-
-  const flushPendingSaveRef = useRef<() => void>(() => {});
 
   // Project Management (Local & Template CRUD)
   const project = useProjectState({
@@ -197,7 +184,7 @@ export function App() {
     setShowCriticalPath: viewport.setShowCriticalPath,
     setShowBaselines: viewport.setShowBaselines,
     showToast: toast.showToast,
-    flushPendingSave: () => flushPendingSaveRef.current(),
+    flushPendingSave: () => commandBus.emit("FLUSH_SAVE", undefined),
     onCreateCloudRoom: (title, data) =>
       onCreateCloudRoomRef.current ? onCreateCloudRoomRef.current(title, data) : Promise.resolve(null),
     onUpdateExistingRoom: (roomId, data) =>
@@ -232,7 +219,11 @@ export function App() {
     captureSnapshot: vault.captureSnapshot,
     broadcastChange: dynamicSync.broadcastLocalChange
   });
-  flushPendingSaveRef.current = autoSave.flushSave;
+
+  useEffect(() => {
+    const unsubFlush = commandBus.on("FLUSH_SAVE", () => autoSave.flushSave());
+    return () => unsubFlush();
+  }, [autoSave.flushSave]);
 
   // High-Scale Firebase Realtime Room Sync (100+ Concurrent Collaborators)
   const roomSync = useRoomSync({
@@ -674,359 +665,52 @@ export function App() {
 
         <section className="chart-pane">
           <div className="chart-container-card">
-            {editor.parsedData ? (
-              <>
-                {viewport.activeView !== "notes" && (
-                  <DateFilterBar
-                    dateFilterMode={dateFilter.dateFilterMode}
-                    setDateFilterMode={dateFilter.setDateFilterMode}
-                    dateFilterValue={dateFilter.dateFilterValue}
-                    setDateFilterValue={dateFilter.setDateFilterValue}
-                    dateFilterRangeStart={dateFilter.dateFilterRangeStart}
-                    setDateFilterRangeStart={dateFilter.setDateFilterRangeStart}
-                    dateFilterRangeEnd={dateFilter.dateFilterRangeEnd}
-                    setDateFilterRangeEnd={dateFilter.setDateFilterRangeEnd}
-                    dateFilterActiveSummary={dateFilter.dateFilterActiveSummary}
-                    dateFilterBehavior={dateFilter.dateFilterBehavior}
-                    setDateFilterBehavior={dateFilter.setDateFilterBehavior}
-                    completedFilterMode={dateFilter.completedFilterMode}
-                    setCompletedFilterMode={dateFilter.setCompletedFilterMode}
-                    selectedPersonFilter={people.selectedPersonFilter}
-                    setSelectedPersonFilter={people.setSelectedPersonFilter}
-                    effectivePeople={people.effectivePeople}
-                    teams={people.teams}
-                    tasks={editor.parsedData.tasks}
-                  />
-                )}
-
-                {viewport.activeView === "gantt" && ganttDisplayData && (
-                  <Jantt
-                    data={ganttDisplayData}
-                    onCommit={handleGanttCommit}
-                    onTaskClick={(task) => taskDetail.openTaskDetailSidebar(task)}
-                    onTaskAdd={() => tasks.handleAddNewTask()}
-                    showDateFilterBadge={false}
-                    filterTasksByDate={false}
-                    selectedDate={dateFilter.dateFilterActiveDate}
-                    onDateClick={(clickedDate) => {
-                      if (clickedDate === getTodayISODate()) {
-                        dateFilter.setDateFilterMode((prev) => (prev === "today" ? "all" : "today"));
-                      } else {
-                        dateFilter.setDateFilterMode((prev) =>
-                          prev === "date" && dateFilter.dateFilterValue === clickedDate ? "all" : "date"
-                        );
-                        dateFilter.setDateFilterValue(clickedDate);
-                      }
-                    }}
-                    onClearDateFilter={() => {
-                      dateFilter.setDateFilterMode("all");
-                    }}
-                    onDayWidthChange={(dw) => {
-                      viewport.setCurrentDayWidth(dw);
-                    }}
-                    onViewportChange={(vp) => {
-                      if (vp.scale) viewport.setCurrentScale(vp.scale);
-                      if (vp.dayWidth !== undefined) viewport.setCurrentDayWidth(vp.dayWidth);
-                      if (vp.linkRouting) viewport.setLinkRouting(vp.linkRouting);
-                      if (vp.rowHeight !== undefined) viewport.setRowHeight(vp.rowHeight);
-                      if (vp.rowHeightMode !== undefined) viewport.setRowHeightMode(vp.rowHeightMode);
-                      if (vp.showCriticalPath !== undefined) viewport.setShowCriticalPath(vp.showCriticalPath);
-                      if (vp.showBaselines !== undefined) viewport.setShowBaselines(vp.showBaselines);
-                      if (vp.autoCascade !== undefined) viewport.setAutoCascade(vp.autoCascade);
-                      if (vp.selectedDate !== undefined) {
-                        if (vp.selectedDate === null) {
-                          dateFilter.setDateFilterMode("all");
-                        } else if (vp.selectedDate === getTodayISODate()) {
-                          dateFilter.setDateFilterMode("today");
-                        } else {
-                          dateFilter.setDateFilterMode("date");
-                          dateFilter.setDateFilterValue(vp.selectedDate);
-                        }
-                      }
-                    }}
-                    viewport={{
-                      scale: viewport.currentScale,
-                      dayWidth: viewport.currentDayWidth,
-                      linkRouting: viewport.linkRouting,
-                      rowHeight: viewport.rowHeight,
-                      rowHeightMode: viewport.rowHeightMode,
-                      showCriticalPath: viewport.showCriticalPath,
-                      showBaselines: viewport.showBaselines,
-                      autoCascade: viewport.autoCascade,
-                      selectedDate: dateFilter.dateFilterActiveDate,
-                      showDateFilterBadge: false,
-                      filterTasksByDate: false
-                    }}
-                    theme={viewport.activeTheme.vars}
-                    themeClassName={viewport.activeTheme.className}
-                    onOpenAutoSave={() => autoSave.setShowAutoSaveModal(true)}
-                    onImportJson={() => project.fileInputRef.current?.click()}
-                    onExportJson={editor.handleDownloadJson}
-                    onExportCsv={editor.handleExportCsv}
-                  />
-                )}
-
-                {viewport.activeView === "kanban" && (
-                  <KanbanView
-                    parsedData={editor.parsedData}
-                    kanbanSortRules={tasks.kanbanSortRules}
-                    setKanbanSortRules={tasks.setKanbanSortRules}
-                    kanbanMultiSort={tasks.kanbanMultiSort}
-                    dateFilterMode={dateFilter.dateFilterMode}
-                    dateFilterBehavior={dateFilter.dateFilterBehavior}
-                    completedFilterMode={dateFilter.completedFilterMode}
-                    isTaskMatchingDateFilter={dateFilter.isTaskMatchingDateFilter}
-                    effectivePeople={people.effectivePeople}
-                    teams={people.teams}
-                    selectedPersonFilter={people.selectedPersonFilter}
-                    openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
-                    handleChartCommit={editor.handleChartCommit}
-                  />
-                )}
-
-                {viewport.activeView === "tasks" && (
-                  <TasksView
-                    parsedData={editor.parsedData}
-                    dateFilterMode={dateFilter.dateFilterMode}
-                    dateFilterBehavior={dateFilter.dateFilterBehavior}
-                    completedFilterMode={dateFilter.completedFilterMode}
-                    isTaskMatchingDateFilter={dateFilter.isTaskMatchingDateFilter}
-                    tasksSearchQuery={tasks.tasksSearchQuery}
-                    setTasksSearchQuery={tasks.setTasksSearchQuery}
-                    tasksViewMode={tasks.tasksViewMode}
-                    setTasksViewMode={tasks.setTasksViewMode}
-                    selectedPersonFilter={people.selectedPersonFilter}
-                    setSelectedPersonFilter={people.setSelectedPersonFilter}
-                    teams={people.teams}
-                    effectivePeople={people.effectivePeople}
-                    handleAddNewTask={tasks.handleAddNewTask}
-                    setDateFilterMode={dateFilter.setDateFilterMode}
-                    openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
-                    handleChartCommit={editor.handleChartCommit}
-                  />
-                )}
-
-                {viewport.activeView === "summary" && (
-                  <BudgetKpiView
-                    parsedData={editor.parsedData}
-                    summaryKpiTasks={dateFilter.summaryKpiTasks}
-                    summarySortConfig={tasks.summarySortConfig}
-                    setSummarySortConfig={tasks.setSummarySortConfig}
-                    handleSummarySort={tasks.handleSummarySort}
-                    sortedSummaryTasks={tasks.sortedSummaryTasks}
-                    isTaskMatchingDateFilter={dateFilter.isTaskMatchingDateFilter}
-                    effectivePeople={people.effectivePeople}
-                    teams={people.teams}
-                    selectedPersonFilter={people.selectedPersonFilter}
-                    dateFilterBehavior={dateFilter.dateFilterBehavior}
-                    completedFilterMode={dateFilter.completedFilterMode}
-                  />
-                )}
-
-                {viewport.activeView === "notes" && (
-                  <NotesView
-                    parsedData={editor.parsedData}
-                    handleChartCommit={editor.handleChartCommit}
-                    effectivePeople={people.effectivePeople}
-                    teams={people.teams}
-                  />
-                )}
-              </>
-            ) : (
-              <EmptyChartState />
-            )}
+            <ViewRouter
+              activeView={viewport.activeView}
+              parsedData={editor.parsedData}
+              ganttDisplayData={ganttDisplayData}
+              handleGanttCommit={handleGanttCommit}
+              viewport={viewport}
+              dateFilter={dateFilter}
+              tasks={tasks}
+              people={people}
+              taskDetail={taskDetail}
+              editor={editor}
+              autoSave={autoSave}
+              project={project}
+            />
           </div>
         </section>
       </main>
 
       {/* Modals & Popups */}
-      <PromptModal
+      <ModalHost
         showPromptModal={showPromptModal}
         setShowPromptModal={setShowPromptModal}
-      />
-
-      <AddPlanModal
-        showAddPlanModal={project.showAddPlanModal}
-        setShowAddPlanModal={project.setShowAddPlanModal}
-        newPlanTitle={project.newPlanTitle}
-        setNewPlanTitle={project.setNewPlanTitle}
-        newPlanTemplateType={project.newPlanTemplateType}
-        setNewPlanTemplateType={project.setNewPlanTemplateType}
-        handleCreateNewPlan={project.handleCreateNewPlan}
+        project={project}
         ownedRooms={ownedRooms}
         sharedRooms={sharedRooms}
-        isLoggedIn={Boolean(auth.currentUser)}
-        isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
-        onLogin={auth.loginWithGitHub}
-        onRequireVerification={() => auth.setShowVerificationModal(true)}
-      />
-
-      <PlanManagerModal
-        show={showPlanManagerModal}
-        setShow={setShowPlanManagerModal}
-        activeProjectId={project.activeProjectId}
-        customProjects={project.customProjects}
-        ownedRooms={ownedRooms}
-        sharedRooms={sharedRooms}
-        userProfile={auth.userProfile}
-        onSelectProject={handleSelectProjectOrRoom}
-        onDeleteProject={project.handleDeleteProject}
-        onDuplicateProject={project.handleDuplicateProject}
-        onRenameProject={project.handleRenameProject}
-        onCreateLocalCopy={project.handleCreateLocalCopyFromData}
-        onPublishToCloud={handleCreateCloudRoomFromData}
-        onDeleteCloudRoom={handleDeleteCloudRoom}
-        onLeaveCloudRoom={handleLeaveCloudRoom}
-        onOpenShareRoom={handleOpenShareRoom}
-        onOpenAddPlanModal={project.handleOpenAddPlanModal}
-        onCreateNewRoom={project.handleOpenAddPlanModal}
-        onSignOut={async () => {
-          await auth.logout();
-          setShowPlanManagerModal(false);
-          toast.showToast("Signed out.");
-        }}
-        onImportJsonFile={project.handleImportJsonFile}
-        showToast={toast.showToast}
-      />
-
-      <PeopleTeamsModal
-        showPeopleModal={people.showPeopleModal}
-        setShowPeopleModal={people.setShowPeopleModal}
-        peopleModalTab={people.peopleModalTab}
-        setPeopleModalTab={people.setPeopleModalTab}
-        effectivePeople={people.effectivePeople}
-        people={people.people}
-        teams={people.teams}
-        parsedData={editor.parsedData}
-        newPersonName={people.newPersonName}
-        setNewPersonName={people.setNewPersonName}
-        newPersonRole={people.newPersonRole}
-        setNewPersonRole={people.setNewPersonRole}
-        newPersonTeamId={people.newPersonTeamId}
-        setNewPersonTeamId={people.setNewPersonTeamId}
-        handleAddPerson={people.handleAddPerson}
-        onAddRealTeammate={people.handleAddRealTeammate}
-        handlePersistAllPeople={people.handlePersistAllPeople}
-        handlePersistPerson={people.handlePersistPerson}
-        handleRemovePerson={people.handleRemovePerson}
-        newTeamName={people.newTeamName}
-        setNewTeamName={people.setNewTeamName}
-        newTeamColor={people.newTeamColor}
-        setNewTeamColor={people.setNewTeamColor}
-        newTeamDesc={people.newTeamDesc}
-        setNewTeamDesc={people.setNewTeamDesc}
-        handleAddTeam={people.handleAddTeam}
-        handleRemoveTeam={people.handleRemoveTeam}
-      />
-
-      <CloudRoomModal
-        showModal={roomSync.showRoomModal}
-        setShowModal={roomSync.setShowRoomModal}
-        activeProject={project.activeProject}
-        activeView={viewport.activeView}
-        selectedThemeId={viewport.selectedThemeId}
-        onCreateRoom={roomSync.handleCreateRoom}
-        onJoinRoom={roomSync.handleJoinRoom}
-        onUnlockCollaborator={roomSync.handleUnlockCollaborator}
-        isProcessing={roomSync.isProcessing}
-        activeRoomId={roomSync.activeRoomId}
-        activeRoomRole={roomSync.activeRoomRole}
-        activeSecretKey={roomSync.activeSecretKey}
-        currentUserProfile={auth.userProfile}
-      />
-
-      <ShareModal
-        showShareModal={sharing.showShareModal}
-        setShowShareModal={sharing.setShowShareModal}
-        currentProjectName={project.currentProjectName}
-        parsedData={editor.parsedData}
-        activeView={viewport.activeView}
-        activeTheme={viewport.activeTheme}
-        activeProject={project.activeProject}
-        activeProjectId={project.activeProjectId}
-        shareUrl={sharing.shareUrl}
-        handleCopyShareLink={sharing.handleCopyShareLink}
-        copiedShareLink={sharing.copiedShareLink}
-        handleNativeShare={sharing.handleNativeShare}
-        handleWhatsAppShare={sharing.handleWhatsAppShare}
-        isWhatsAppSafe={sharing.isWhatsAppSafe}
-        onOpenCloudRooms={() =>
-          roomSync.activeRoomId
-            ? handleOpenShareRoom(roomSync.activeRoomId)
-            : setShowPlanManagerModal(true)
-        }
-        setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
-        handleDownloadJson={editor.handleDownloadJson}
-        currentUserProfile={auth.userProfile}
-        onCreateRoomFromActive={roomSync.createRoomFromActive}
-        onOpenShareRoom={handleOpenShareRoom}
-        onLogin={auth.loginWithGitHub}
-        onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
-      />
-
-      <AutoSaveModal
-        showAutoSaveModal={autoSave.showAutoSaveModal}
-        setShowAutoSaveModal={autoSave.setShowAutoSaveModal}
-        saveStatus={autoSave.saveStatus}
-        lastSavedAt={autoSave.lastSavedAt}
-        handleManualSaveNow={autoSave.handleManualSaveNow}
-        autoSaveInterval={autoSave.autoSaveInterval}
-        setAutoSaveInterval={autoSave.setAutoSaveInterval}
-        storageSizeKb={autoSave.storageSizeKb}
-        onImportJson={() => project.fileInputRef.current?.click()}
-        onExportJson={editor.handleDownloadJson}
-        onExportCsv={editor.handleExportCsv}
-      />
-
-      <VersionHistoryModal
-        showModal={vault.showVersionHistoryModal}
-        setShowModal={vault.setShowVersionHistoryModal}
-        snapshots={vault.snapshots}
-        currentProjectName={project.currentProjectName}
-        onRestoreSnapshot={handleRestoreSnapshot}
-        onClearHistory={() => vault.clearSnapshots(project.activeProjectId)}
-      />
-
-      {/* Username Onboarding Modal */}
-      <UsernameOnboardingModal
-        show={auth.needsUsernameOnboarding}
-        currentUser={auth.currentUser}
-        onClaimUsername={async (username) => {
-          await auth.completeUsernameOnboarding(username);
-          toast.showToast(`Username @${username} claimed! Welcome to Jantt Cloud.`);
-        }}
-      />
-
-
-      {/* Teammate Autocomplete & Room Sharing Modal */}
-      <ShareRoomModal
-        show={showShareRoomModal}
-        setShow={setShowShareRoomModal}
-        roomId={shareModalRoomId}
-        roomTitle={
-          ownedRooms.find((r) => r.roomId === shareModalRoomId)?.title ||
-          sharedRooms.find((r) => r.roomId === shareModalRoomId)?.title ||
-          project.customProjects.find((p) => p.roomId === shareModalRoomId)?.name ||
-          "Project Room"
-        }
-        currentUserProfile={auth.userProfile}
-        showToast={toast.showToast}
-        planTeams={people.teams}
-        planPeople={people.people}
-      />
-
-      {/* GitHub Creator Follow & Repo Star Gate Modal */}
-      <GitHubVerificationModal
-        show={auth.showVerificationModal}
-        setShow={auth.setShowVerificationModal}
-        verificationStatus={auth.verificationStatus}
-        isVerifying={auth.isVerifying}
-        onVerify={auth.checkVerification}
-        onFollowCreator={auth.followCreatorHandler}
-        onStarRepo={auth.starRepoHandler}
-        onStarAll={auth.starAllHandler}
-        githubUsername={auth.userProfile?.githubUsername || auth.userProfile?.username}
-        hasGithubToken={Boolean(auth.githubToken)}
+        auth={auth}
+        showPlanManagerModal={showPlanManagerModal}
+        setShowPlanManagerModal={setShowPlanManagerModal}
+        handleSelectProjectOrRoom={handleSelectProjectOrRoom}
+        handleCreateCloudRoomFromData={handleCreateCloudRoomFromData}
+        handleDeleteCloudRoom={handleDeleteCloudRoom}
+        handleLeaveCloudRoom={handleLeaveCloudRoom}
+        handleOpenShareRoom={handleOpenShareRoom}
+        toast={toast}
+        people={people}
+        editor={editor}
+        roomSync={roomSync}
+        viewport={viewport}
+        sharing={sharing}
+        sidebar={sidebar}
+        autoSave={autoSave}
+        vault={vault}
+        handleRestoreSnapshot={handleRestoreSnapshot}
+        showShareRoomModal={showShareRoomModal}
+        setShowShareRoomModal={setShowShareRoomModal}
+        shareModalRoomId={shareModalRoomId}
       />
 
       <Toast

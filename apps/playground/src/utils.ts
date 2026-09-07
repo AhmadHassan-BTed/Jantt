@@ -24,6 +24,7 @@ import type {
   EffectivePerson
 } from "./types";
 import { DEFAULT_TEMPLATE, STORAGE_KEYS, PERSON_COLORS } from "./constants";
+import { storageService } from "./services/storage";
 
 export function formatRelativeTime(isoStr?: string): string {
   if (!isoStr) return "Never";
@@ -74,35 +75,32 @@ export function createBlankPlan(title: string): JanttData {
 
 export function loadSavedProjects(): SavedProject[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_PROJECTS);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        let changed = false;
-        const sanitized = parsed.map((p) => {
-          let updated = { ...p };
-          // If project was linked to Google Drive or legacy external feed, auto-migrate to local plan
-          if (
-            updated.source === "linked" ||
-            (updated.sourceUrl && (updated.sourceUrl.includes("drive.google.com") || updated.sourceUrl.includes("docs.google.com")))
-          ) {
-            delete updated.source;
-            delete updated.sourceUrl;
-            delete updated.lastSyncedAt;
-            delete updated.syncError;
-            if (updated.name) {
-              // Strip legacy "(Cloud Feed...)" or "(Cloud Feed + N tasks)" badges from title
-              updated.name = updated.name.replace(/\s*\((?:Cloud Feed|\d+\s*tasks)[^)]*\)/gi, "").trim();
-            }
-            changed = true;
+    const parsed = storageService.getItem<SavedProject[]>(STORAGE_KEYS.CUSTOM_PROJECTS);
+    if (parsed && Array.isArray(parsed)) {
+      let changed = false;
+      const sanitized = parsed.map((p) => {
+        let updated = { ...p };
+        // If project was linked to Google Drive or legacy external feed, auto-migrate to local plan
+        if (
+          updated.source === "linked" ||
+          (updated.sourceUrl && (updated.sourceUrl.includes("drive.google.com") || updated.sourceUrl.includes("docs.google.com")))
+        ) {
+          delete updated.source;
+          delete updated.sourceUrl;
+          delete updated.lastSyncedAt;
+          delete updated.syncError;
+          if (updated.name) {
+            // Strip legacy "(Cloud Feed...)" or "(Cloud Feed + N tasks)" badges from title
+            updated.name = updated.name.replace(/\s*\((?:Cloud Feed|\d+\s*tasks)[^)]*\)/gi, "").trim();
           }
-          return updated;
-        });
-        if (changed) {
-          saveCustomProjects(sanitized);
+          changed = true;
         }
-        return sanitized;
+        return updated;
+      });
+      if (changed) {
+        saveCustomProjects(sanitized);
       }
+      return sanitized;
     }
   } catch {}
   return [];
@@ -110,7 +108,7 @@ export function loadSavedProjects(): SavedProject[] {
 
 export function saveCustomProjects(projects: SavedProject[]) {
   try {
-    localStorage.setItem(STORAGE_KEYS.CUSTOM_PROJECTS, JSON.stringify(projects));
+    storageService.setItem(STORAGE_KEYS.CUSTOM_PROJECTS, projects);
   } catch {}
 }
 
@@ -147,7 +145,7 @@ export function loadInitialState() {
   const savedProjects = loadSavedProjects();
   let activeProjectId = "default";
   try {
-    const savedId = localStorage.getItem(STORAGE_KEYS.ACTIVE_PROJECT_ID);
+    const savedId = storageService.getItem<string>(STORAGE_KEYS.ACTIVE_PROJECT_ID);
     if (savedId && (savedId === "default" || savedProjects.some((p) => p.id === savedId))) {
       activeProjectId = savedId;
     }
@@ -162,12 +160,12 @@ export function loadInitialState() {
   let initialJson = JSON.stringify(initialParsed, null, 2);
 
   try {
-    const savedJson = localStorage.getItem(STORAGE_KEYS.ACTIVE_JSON);
+    const savedJson = storageService.getItem<any>(STORAGE_KEYS.ACTIVE_JSON);
     if (savedJson && activeProjectId === "default") {
-      const parsed = JSON.parse(savedJson);
+      const parsed = typeof savedJson === "string" ? JSON.parse(savedJson) : savedJson;
       const val = validate(parsed);
       if (val.valid) {
-        initialJson = savedJson;
+        initialJson = typeof savedJson === "string" ? savedJson : JSON.stringify(savedJson, null, 2);
         initialParsed = parsed;
       }
     }
@@ -175,13 +173,13 @@ export function loadInitialState() {
 
   let initialTheme = "swiss-light";
   try {
-    const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
+    const savedTheme = storageService.getItem<string>(STORAGE_KEYS.THEME);
     if (savedTheme && themeManager.getTheme(savedTheme)) initialTheme = savedTheme;
   } catch {}
 
   let initialScale: TimeScale = "week";
   try {
-    const savedScale = localStorage.getItem(STORAGE_KEYS.SCALE) as TimeScale;
+    const savedScale = storageService.getItem<TimeScale>(STORAGE_KEYS.SCALE);
     if (savedScale && ["day", "week", "month", "quarter", "year"].includes(savedScale)) {
       initialScale = savedScale;
     } else if (initialParsed?.meta?.scale) {
@@ -191,7 +189,7 @@ export function loadInitialState() {
 
   let initialRouting: LinkRoutingStyle = "orthogonal";
   try {
-    const savedRouting = localStorage.getItem(STORAGE_KEYS.ROUTING) as LinkRoutingStyle;
+    const savedRouting = storageService.getItem<LinkRoutingStyle>(STORAGE_KEYS.ROUTING);
     if (savedRouting && ["orthogonal", "curved", "direct"].includes(savedRouting)) {
       initialRouting = savedRouting;
     }
@@ -199,14 +197,14 @@ export function loadInitialState() {
 
   let initialRowHeightMode: RowHeightMode = "custom";
   try {
-    const savedMode = localStorage.getItem(STORAGE_KEYS.ROW_HEIGHT_MODE) as RowHeightMode;
+    const savedMode = storageService.getItem<RowHeightMode>(STORAGE_KEYS.ROW_HEIGHT_MODE);
     if (savedMode && ["fit", "custom"].includes(savedMode)) initialRowHeightMode = savedMode;
   } catch {}
 
   let initialRowHeight = 48;
   try {
-    const savedHeight = localStorage.getItem(STORAGE_KEYS.ROW_HEIGHT);
-    if (savedHeight) initialRowHeight = parseInt(savedHeight, 10) || 48;
+    const savedHeight = storageService.getItem<string | number>(STORAGE_KEYS.ROW_HEIGHT);
+    if (savedHeight) initialRowHeight = typeof savedHeight === "number" ? savedHeight : parseInt(savedHeight, 10) || 48;
   } catch {}
 
   // Critical path must be off by default
@@ -214,33 +212,33 @@ export function loadInitialState() {
 
   let initialBaselines = true;
   try {
-    const savedBase = localStorage.getItem(STORAGE_KEYS.BASELINES);
-    if (savedBase !== null) initialBaselines = savedBase === "true";
+    const savedBase = storageService.getItem<string | boolean>(STORAGE_KEYS.BASELINES);
+    if (savedBase !== null) initialBaselines = savedBase === true || savedBase === "true";
   } catch {}
 
   let initialAutoCascade = true;
   try {
-    const savedCascade = localStorage.getItem(STORAGE_KEYS.AUTO_CASCADE);
-    if (savedCascade !== null) initialAutoCascade = savedCascade === "true";
+    const savedCascade = storageService.getItem<string | boolean>(STORAGE_KEYS.AUTO_CASCADE);
+    if (savedCascade !== null) initialAutoCascade = savedCascade === true || savedCascade === "true";
   } catch {}
 
   let initialView: ActiveView = "gantt";
   try {
-    const savedView = localStorage.getItem(STORAGE_KEYS.VIEW) as any;
+    const savedView = storageService.getItem<any>(STORAGE_KEYS.VIEW);
     if (savedView === "today") initialView = "tasks";
     else if (savedView && ["gantt", "kanban", "summary", "tasks", "notes"].includes(savedView)) initialView = savedView;
   } catch {}
 
   let initialCollapsed = false;
   try {
-    const savedCol = localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED);
-    if (savedCol !== null) initialCollapsed = savedCol === "true";
+    const savedCol = storageService.getItem<string | boolean>(STORAGE_KEYS.SIDEBAR_COLLAPSED);
+    if (savedCol !== null) initialCollapsed = savedCol === true || savedCol === "true";
   } catch {}
 
   let initialWidth = 480;
   try {
-    const savedW = localStorage.getItem(STORAGE_KEYS.SIDEBAR_WIDTH);
-    if (savedW) initialWidth = parseInt(savedW, 10) || 480;
+    const savedW = storageService.getItem<string | number>(STORAGE_KEYS.SIDEBAR_WIDTH);
+    if (savedW) initialWidth = typeof savedW === "number" ? savedW : parseInt(savedW, 10) || 48;
   } catch {}
 
   // Restore kanban multi-sort rules
@@ -250,31 +248,30 @@ export function loadInitialState() {
   ];
   let initialKanbanSort: KanbanSortRule[] = DEFAULT_KANBAN_SORT;
   try {
-    const savedSort = localStorage.getItem(STORAGE_KEYS.KANBAN_SORT);
-    if (savedSort) {
-      const parsed = JSON.parse(savedSort);
-      if (Array.isArray(parsed) && parsed.length > 0) initialKanbanSort = parsed;
+    const savedSort = storageService.getItem<KanbanSortRule[]>(STORAGE_KEYS.KANBAN_SORT);
+    if (savedSort && Array.isArray(savedSort) && savedSort.length > 0) {
+      initialKanbanSort = savedSort;
     }
   } catch {}
 
   // Restore person filter
   let initialPersonFilter = "all";
   try {
-    const savedPF = localStorage.getItem(STORAGE_KEYS.PERSON_FILTER);
+    const savedPF = storageService.getItem<string>(STORAGE_KEYS.PERSON_FILTER);
     if (savedPF) initialPersonFilter = savedPF;
   } catch {}
 
   // Restore date filter mode
   let initialDateFilterMode: DateFilterMode = "all";
   try {
-    const savedDFM = localStorage.getItem(STORAGE_KEYS.DATE_FILTER_MODE) as DateFilterMode;
+    const savedDFM = storageService.getItem<DateFilterMode>(STORAGE_KEYS.DATE_FILTER_MODE);
     if (savedDFM && ["all", "today", "week", "date", "range"].includes(savedDFM)) initialDateFilterMode = savedDFM;
   } catch {}
 
   // Restore completed filter mode
   let initialCompletedFilterMode: CompletedFilterMode = "show";
   try {
-    const savedCFM = localStorage.getItem(STORAGE_KEYS.COMPLETED_FILTER_MODE) as CompletedFilterMode;
+    const savedCFM = storageService.getItem<CompletedFilterMode>(STORAGE_KEYS.COMPLETED_FILTER_MODE);
     if (savedCFM && ["show", "dim", "filter"].includes(savedCFM)) initialCompletedFilterMode = savedCFM;
   } catch {}
 
@@ -315,7 +312,7 @@ export function loadInitialState() {
           initialParsed = existingRoom.data;
           initialJson = JSON.stringify(existingRoom.data, null, 2);
           try {
-            localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, existingRoom.id);
+            storageService.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, existingRoom.id);
           } catch {}
         }
       }
@@ -330,7 +327,7 @@ export function loadInitialState() {
           initialParsed = existingLinked.data;
           initialJson = JSON.stringify(existingLinked.data, null, 2);
           try {
-            localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, existingLinked.id);
+            storageService.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, existingLinked.id);
           } catch {}
         }
       }

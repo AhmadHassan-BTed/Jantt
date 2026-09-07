@@ -5,13 +5,11 @@ import {
   type Team,
   type TimeScale,
   getTodayISODate,
-  isTaskOnDate,
-  isTaskDone,
-  addDays
+  isTaskDone
 } from "@jantt/core";
 import type { DateFilterMode, CompletedFilterMode, ActiveView, EffectivePerson } from "../types";
 import { STORAGE_KEYS } from "../constants";
-import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../utils";
+import { sortTasksByAssignee } from "../utils";
 
 interface UseDateFilterOptions {
   initialMode: DateFilterMode;
@@ -24,6 +22,11 @@ interface UseDateFilterOptions {
   effectivePeople?: EffectivePerson[];
   teams?: Team[];
 }
+
+import { DateFilterStage, AssigneeFilterStage } from "../services/query";
+
+const dateFilterStage = new DateFilterStage();
+const assigneeFilterStage = new AssigneeFilterStage();
 
 export function useDateFilter({
   initialMode,
@@ -82,41 +85,29 @@ export function useDateFilter({
 
   const isTaskMatchingDateFilter = useCallback(
     (task: Task): boolean => {
-      if (task._deleted) return false;
-      if (dateFilterMode === "all") return true;
-      if (dateFilterMode === "today") {
-        return isTaskOnDate(task.start, task.end, getTodayISODate());
-      }
-      if (dateFilterMode === "week") {
-        const now = new Date();
-        const dayOfWeek = now.getDay();
-        const distanceToMonday = (dayOfWeek + 6) % 7;
-        const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
-        const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
-        const weekStart = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, "0")}-${String(mon.getDate()).padStart(2, "0")}`;
-        const weekEnd = `${sun.getFullYear()}-${String(sun.getMonth() + 1).padStart(2, "0")}-${String(sun.getDate()).padStart(2, "0")}`;
-        return task.start <= weekEnd && task.end >= weekStart;
-      }
-      if (dateFilterMode === "date") {
-        if (!dateFilterValue) return true;
-        return isTaskOnDate(task.start, task.end, dateFilterValue);
-      }
-      if (dateFilterMode === "range") {
-        if (!dateFilterRangeStart && !dateFilterRangeEnd) return true;
-        const start = dateFilterRangeStart || (dateFilterRangeEnd ? addDays(dateFilterRangeEnd, -30) : "0000-01-01");
-        const end = dateFilterRangeEnd || (dateFilterRangeStart ? addDays(dateFilterRangeStart, 30) : "9999-12-31");
-        return task.start <= end && task.end >= start;
-      }
-      return true;
+      return dateFilterStage.matches(task, {
+        dateFilterMode,
+        dateFilterValue,
+        dateFilterRangeStart,
+        dateFilterRangeEnd,
+        selectedPersonFilter,
+        completedFilterMode
+      });
     },
-    [dateFilterMode, dateFilterValue, dateFilterRangeStart, dateFilterRangeEnd]
+    [dateFilterMode, dateFilterValue, dateFilterRangeStart, dateFilterRangeEnd, selectedPersonFilter, completedFilterMode]
   );
 
   const isTaskMatchingPerson = useCallback(
     (task: Task): boolean => {
-      return isTaskMatchingPersonFilter(task, selectedPersonFilter, effectivePeople, teams);
+      return assigneeFilterStage.matches(task, {
+        dateFilterMode,
+        selectedPersonFilter,
+        effectivePeople,
+        teams,
+        completedFilterMode
+      });
     },
-    [selectedPersonFilter, effectivePeople, teams]
+    [selectedPersonFilter, effectivePeople, teams, dateFilterMode, completedFilterMode]
   );
 
   const isTaskMatchingActiveFilter = useCallback(
