@@ -11,7 +11,8 @@ import {
   Activity,
   StickyNote,
   History,
-  Star
+  Star,
+  Cloud
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
@@ -42,6 +43,7 @@ interface NavbarProps {
   onOpenUserHub?: () => void;
   isGitHubVerified?: boolean;
   onOpenVerificationModal?: () => void;
+  onLogin?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -66,7 +68,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   userProfile,
   onOpenUserHub,
   isGitHubVerified = false,
-  onOpenVerificationModal
+  onOpenVerificationModal,
+  onLogin
 }) => {
   return (
     <header className="navbar">
@@ -332,6 +335,30 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
+        ) : onLogin ? (
+          <button
+            type="button"
+            className="btn-connect-cloud"
+            onClick={onLogin}
+            title="Connect to Cloud: Sign in with GitHub to collaborate in real-time rooms"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(129, 140, 248, 0.25))",
+              border: "1px solid rgba(56, 189, 248, 0.45)",
+              color: "var(--jantt-accent, #38BDF8)",
+              borderRadius: "20px",
+              padding: "4px 12px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <Cloud size={14} />
+            <span>Connect Cloud</span>
+          </button>
         ) : null}
       </div>
     </header>

@@ -613,6 +613,7 @@ export function App() {
         onOpenUserHub={() => setShowPlanManagerModal(true)}
         isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
         onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
+        onLogin={auth.loginWithGitHub}
       />
 
       <Subheader
