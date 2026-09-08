@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GitHub Stargazer verification service with automated background checking (`githubVerificationService.ts`).
   - Excluded internal repositories (`.github`, `Fractal-PrivacyPolicy`, `Fractal_basics`) from star requirements.
 
+- **Comprehensive Jantt JSON Specification & Benchmark Cheatsheet (v1.4.0)**:
+  - Exhaustive master kitchen-sink dataset and individual copy-pasteable samples for every single engine functionality:
+    - Root schema metadata (`$schema`, `scale`, `linkRouting`, `defaultGapDays`, `autoCascade`, `showCriticalPath`, `showBaselines`, `currency`, `budget`).
+    - Categories map with hex colors, dark-mode soft tints, and Lucide icons.
+    - People & Squads registry with canonical `@username` handles vs offline `person-xxx` personas.
+    - Collaborative notes with attached `task_ids`, pinning, tagging, and author attribution (`updatedBy`).
+    - Compliance documents & deliverables checklist (`have`, `pending`, `missing`).
+    - Complete task variations: WBS, phases, priorities, urgent pulse badge, locked constraints, progress ratios, zero-duration milestone diamonds, multi-prerequisite DAG dependencies, lag/gap days, planned baselines, direct color overrides, and custom domain fields dictionary (`jira`, `storyPoints`, `repo`, `prUrl`).
+    - Operations research metrics: Critical Path Method (CPM), Earned Value Management (EVM), DCMA-14 schedule health audits, and PERT risk bounds.
+
 ### Changed
 - **Zero-Emoji Policy**:
   - Enforced strict zero-emoji policy across all markdown documentation (only `✓` and `✗` preserved).

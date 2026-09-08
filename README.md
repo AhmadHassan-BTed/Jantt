@@ -27,7 +27,7 @@ Designed from the ground up for:
 
 <br />
 
-[Live Playground](https://ahmadhassan-bted.github.io/Jantt/) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md) • [Changelog](./CHANGELOG.md)
+[Live Playground](https://ahmadhassan-bted.github.io/Jantt/) • [JSON Cheatsheet](./docs/JANTT_JSON_CHEATSHEET.md) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md) • [Changelog](./CHANGELOG.md)
 
 <br />
 
@@ -49,7 +49,7 @@ Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and ca
 | :---: | :---: | :---: | :---: |
 | **Fewer LLM Tokens vs JSX** | **Runtime Dependencies** | **Deterministic DAG Solver** | **Bidirectional State Sync** |
 
-*Schema Contract: [`https://jantt.dev/schema/v1.json`](https://jantt.dev/schema/v1.json) (v1.2.0)*
+*Schema Contract: [`https://jantt.dev/schema/v1.json`](https://jantt.dev/schema/v1.json) (v1.4.0)*
 
 </div>
 
@@ -61,9 +61,9 @@ flowchart LR
     D --> B
 ```
 
-* **Step 1: Feed Cheatsheet to LLM** — Give the AI the compact schema contract (WBS, dates, DAG dependencies, milestones, budget).
+* **Step 1: Feed Cheatsheet to LLM** — Give the AI the compact schema contract (WBS, dates, DAG dependencies, milestones, budget). See the full [Jantt JSON Cheatsheet](./docs/JANTT_JSON_CHEATSHEET.md).
 * **Step 2: AI Outputs Pure JSON** — Uses 10× fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
-* **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban & Analytics.
+* **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban, Notes & Analytics.
 * **Step 4: Bidirectional Loop** — Humans drag and adjust visually. Jantt syncs clean JSON back to localStorage/disk for the AI agent.
 
 ---
@@ -76,7 +76,7 @@ Hand this prompt to ChatGPT, Claude, Gemini, Cursor, or your autonomous AI agent
 You are a precision project management schedule generator.
 Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
 
-# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET
+# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET (v1.4.0)
 
 ## 1. Top-Level Root Structure
 {
@@ -93,9 +93,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
     "linkRouting": "orthogonal" | "curved" | "direct",
     "showCriticalPath": true,
     "showBaselines": true,
+    "autoCascade": true,
     "currency": "USD",
-    "budget": 385000,
-    "version": "1.2.0"
+    "budget": 450000,
+    "version": "1.4.0"
   },
   "categories": {
     "<category_id>": {
@@ -140,6 +141,8 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "pinned": true,
       "category": "Architecture",
       "tags": ["RFC", "Architecture"],
+      "task_ids": ["task-1"],
+      "updatedBy": "@alex",
       "createdAt": "YYYY-MM-DDTHH:mm:ssZ",
       "updatedAt": "YYYY-MM-DDTHH:mm:ssZ"
     }
@@ -174,6 +177,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "milestone": false,
       "status": "not-started" | "in-progress" | "submitted" | "completed" | "blocked",
       "urgent": false,
+      "color": "#EC4899",
       "baseline": {
         "start": "YYYY-MM-DD",
         "end": "YYYY-MM-DD"

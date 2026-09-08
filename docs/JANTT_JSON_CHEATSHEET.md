@@ -1,43 +1,43 @@
 # Jantt JSON Specification & Benchmark Cheatsheet
 
-> **Version**: 1.2.0  
+> **Version**: 1.4.0  
 > **Schema Definition**: `https://jantt.dev/schema/v1.json`  
 > **Target Standard**: Swiss Modernism 2.0 / Enterprise Project Management Standard
 
-This document is the official benchmark cheatsheet and reference guide for authoring, validating, and generating **Jantt JSON** datasets for Gantt charts, Kanban boards, and project management applications.
+This document is the official, comprehensive reference guide and prompt benchmark for authoring, validating, and generating **Jantt JSON** datasets. It includes concrete sample representations for every single functionality supported by the Jantt engine.
 
 ---
 
-## AI Agent Workbench & Schema Cheatsheet
+## AI Agent Workbench & System Prompt
 
 ### AI-Native Ideology: Stop Asking AI to Write Fragile Timeline Code
 
 Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and canvas listeners produces brittle, hallucination-prone results. With Jantt, the AI outputs **pure declarative JSON**, and Jantt delivers deterministic, interactive execution.
 
-| 10× | 0 | 100% | 2-Way |
+| 10x | 0 | 100% | 2-Way |
 | :---: | :---: | :---: | :---: |
 | **Fewer LLM Tokens vs JSX** | **Runtime Dependencies** | **Deterministic DAG Solver** | **Bidirectional State Sync** |
 
-*Schema Contract: `https://jantt.dev/schema/v1.json` (v1.2.0)*
+*Schema Contract: `https://jantt.dev/schema/v1.json` (v1.4.0)*
 
 #### The 4-Step Bidirectional Loop
 
-1. **Step 1: Feed Cheatsheet to LLM** — Give the AI the compact schema contract (WBS, dates, DAG dependencies, milestones, budget).
-2. **Step 2: AI Outputs Pure JSON** — Uses 10× fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
-3. **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban & Analytics.
-4. **Step 4: Bidirectional Loop** — Humans drag and adjust visually. Jantt syncs clean JSON back to localStorage/disk for the AI agent.
+1. **Step 1: Feed Cheatsheet to LLM** — Provide the AI model with the compact schema contract (WBS, dates, DAG dependencies, milestones, budget, people, notes, documents).
+2. **Step 2: AI Outputs Pure JSON** — Uses 10x fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
+3. **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban, Notes & PM Analytics.
+4. **Step 4: Bidirectional Loop** — Humans drag and adjust visually. Jantt syncs clean JSON back to local storage, cloud room, or disk for the AI agent.
 
 ---
 
 ### LLM System Prompt
 
-Hand this prompt to ChatGPT, Claude, Gemini, Cursor, or your autonomous AI agent pipelines:
+Hand this prompt directly to ChatGPT, Claude, Gemini, Cursor, or your autonomous AI agent pipelines:
 
 ```text
 You are a precision project management schedule generator.
 Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
 
-# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET
+# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET (v1.4.0)
 
 ## 1. Top-Level Root Structure
 {
@@ -54,9 +54,10 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
     "linkRouting": "orthogonal" | "curved" | "direct",
     "showCriticalPath": true,
     "showBaselines": true,
+    "autoCascade": true,
     "currency": "USD",
-    "budget": 385000,
-    "version": "1.2.0"
+    "budget": 450000,
+    "version": "1.4.0"
   },
   "categories": {
     "<category_id>": {
@@ -102,6 +103,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "category": "Architecture",
       "tags": ["RFC", "Architecture"],
       "task_ids": ["task-1"],
+      "updatedBy": "@alex",
       "createdAt": "YYYY-MM-DDTHH:mm:ssZ",
       "updatedAt": "YYYY-MM-DDTHH:mm:ssZ"
     }
@@ -136,6 +138,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
       "milestone": false,
       "status": "not-started" | "in-progress" | "submitted" | "completed" | "blocked",
       "urgent": false,
+      "color": "#EC4899",
       "baseline": {
         "start": "YYYY-MM-DD",
         "end": "YYYY-MM-DD"
@@ -172,206 +175,630 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 
 ---
 
-## 1. Top-Level Structure
+## Complete Master Kitchen-Sink Benchmark Dataset
+
+Below is an exhaustive, production-grade Jantt dataset showcasing **every supported feature, attribute, and edge case simultaneously**:
 
 ```json
 {
   "$schema": "https://jantt.dev/schema/v1.json",
-  "meta": { ... },
-  "categories": { ... },
-  "people": [ ... ],
-  "teams": [ ... ],
-  "notes": [ ... ],
-  "documents": [ ... ],
-  "tasks": [ ... ]
+  "meta": {
+    "title": "Autonomous Edge OS & Quantum Crypto Mesh",
+    "description": "High-assurance distributed operating platform with real-time verification and zero-trust orchestration.",
+    "person": "@ahmadhassan",
+    "organization": "Fractal Compute Orchestrations",
+    "start": "2026-09-01",
+    "end": "2027-02-28",
+    "defaultGapDays": 2,
+    "scale": "week",
+    "linkRouting": "orthogonal",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "autoCascade": true,
+    "currency": "USD",
+    "budget": 650000,
+    "version": "1.4.0",
+    "generatedAt": "2026-09-08T00:00:00.000Z"
+  },
+  "categories": {
+    "specs": {
+      "label": "Architecture & Formal Specs",
+      "color": "#38BDF8",
+      "soft": "#0C4A6E",
+      "icon": "file-text"
+    },
+    "kernel": {
+      "label": "Microkernel Core",
+      "color": "#10B981",
+      "soft": "#064E3B",
+      "icon": "cpu"
+    },
+    "crypto": {
+      "label": "Post-Quantum Cryptography",
+      "color": "#8B5CF6",
+      "soft": "#312E81",
+      "icon": "shield-check"
+    },
+    "network": {
+      "label": "P2P Mesh Network",
+      "color": "#06B6D4",
+      "soft": "#083344",
+      "icon": "cloud"
+    },
+    "security": {
+      "label": "Formal Audit & Compliance",
+      "color": "#F59E0B",
+      "soft": "#78350F",
+      "icon": "alert-triangle"
+    },
+    "release": {
+      "label": "Mainnet Deployment & GA",
+      "color": "#EC4899",
+      "soft": "#831843",
+      "icon": "rocket"
+    }
+  },
+  "people": [
+    {
+      "id": "@ahmadhassan",
+      "name": "Ahmad Hassan",
+      "username": "@ahmadhassan",
+      "role": "Principal Architect & Program Director",
+      "avatar": "https://avatars.githubusercontent.com/u/104278065?v=4",
+      "teamId": "team-core",
+      "color": "#38BDF8",
+      "email": "ahmad@fractal.org"
+    },
+    {
+      "id": "@elena-dev",
+      "name": "Elena Rostova",
+      "username": "@elena-dev",
+      "role": "Systems Kernel Engineer",
+      "teamId": "team-core",
+      "color": "#10B981",
+      "email": "elena@fractal.org"
+    },
+    {
+      "id": "person-auditor",
+      "name": "Dr. Marcus Vance",
+      "role": "External Cryptographic Auditor",
+      "teamId": "team-security",
+      "color": "#F59E0B",
+      "email": "vance@crypto-eval.ch"
+    }
+  ],
+  "teams": [
+    {
+      "id": "team-core",
+      "name": "Platform Core Squad",
+      "color": "#38BDF8",
+      "description": "Kernel services, zero-runtime scheduler, and system primitives"
+    },
+    {
+      "id": "team-security",
+      "name": "Formal Verification & Audit Squad",
+      "color": "#F59E0B",
+      "description": "Formal TLA+ proofs, penetration testing, and security assurance"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-rfc-mesh",
+      "title": "RFC-402: Zero-Allocation Microkernel Architecture",
+      "content": "### Scope\nDefines memory isolation contracts between peer nodes.\n\n- Zero unsafe Rust blocks in kernel hot paths.\n- Formal verification completed by @ahmadhassan.\n- Linked to task /task-kernel-core.",
+      "color": "#38BDF8",
+      "pinned": true,
+      "category": "Architecture",
+      "tags": ["RFC", "Kernel", "Zero-Copy"],
+      "task_ids": ["task-arch-spec", "task-kernel-core"],
+      "updatedBy": "@ahmadhassan",
+      "createdAt": "2026-09-01T09:00:00.000Z",
+      "updatedAt": "2026-09-08T18:00:00.000Z"
+    },
+    {
+      "id": "note-crypto-brief",
+      "title": "Kyber-1024 Key Exchange Security Baseline",
+      "content": "Audit checklist and threshold signature parameters verified against NIST Round 4 recommendations.",
+      "color": "#8B5CF6",
+      "pinned": false,
+      "category": "Security",
+      "tags": ["Crypto", "NIST", "Audit"],
+      "task_ids": ["task-pqc-engine", "task-formal-audit"],
+      "updatedBy": "@elena-dev",
+      "createdAt": "2026-09-04T11:30:00.000Z",
+      "updatedAt": "2026-09-07T16:15:00.000Z"
+    }
+  ],
+  "documents": [
+    {
+      "id": "doc-tla-spec",
+      "label": "TLA+ Formal Mathematical Specification",
+      "status": "have",
+      "owner": "@ahmadhassan",
+      "url": "https://specs.fractal.org/tla/mesh.pdf",
+      "note": "Unanimously certified with TLC model checker"
+    },
+    {
+      "id": "doc-soc2-attest",
+      "label": "SOC-2 Type II Independent Audit Report",
+      "status": "pending",
+      "owner": "Dr. Marcus Vance",
+      "url": "https://compliance.fractal.org/soc2",
+      "note": "Field testing commenced; completion targeted before GA"
+    },
+    {
+      "id": "doc-legal-licensing",
+      "label": "Dual Apache-2.0 / Commercial EULA Contract",
+      "status": "missing",
+      "owner": "Legal Counsel",
+      "url": "https://legal.fractal.org/license",
+      "note": "Required regulatory deliverable before international release"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-arch-spec",
+      "wbs": "1.1",
+      "label": "Formal System Specification & Protocol RFC",
+      "category": "specs",
+      "start": "2026-09-01",
+      "end": "2026-09-22",
+      "assignee": "@ahmadhassan",
+      "teamId": "team-core",
+      "phase": "Phase 1: Foundations",
+      "priority": "high",
+      "status": "completed",
+      "progress": 1.0,
+      "estimatedCost": 40000,
+      "actualCost": 38500,
+      "locked": true,
+      "notes": "Completed formal protocol spec with complete mathematical proofs.",
+      "fields": {
+        "repo": "github.com/Fractal-Compute-Orchestrations/mesh-spec",
+        "rfcNumber": 402,
+        "storyPoints": 13
+      }
+    },
+    {
+      "id": "gate-spec-approved",
+      "wbs": "1.2",
+      "label": "Milestone 1: Architecture Sign-Off Gate",
+      "category": "specs",
+      "start": "2026-09-24",
+      "end": "2026-09-24",
+      "milestone": true,
+      "dependsOn": "task-arch-spec",
+      "gapDays": 2,
+      "locked": true,
+      "status": "completed",
+      "progress": 1.0,
+      "assignee": "@ahmadhassan"
+    },
+    {
+      "id": "task-kernel-core",
+      "wbs": "2.1",
+      "label": "Zero-Copy Microkernel Primitive Implementation",
+      "category": "kernel",
+      "start": "2026-09-26",
+      "end": "2026-11-05",
+      "assignee": "@elena-dev",
+      "teamId": "team-core",
+      "phase": "Phase 2: Execution",
+      "priority": "urgent",
+      "urgent": true,
+      "status": "in-progress",
+      "progress": 0.65,
+      "estimatedCost": 125000,
+      "actualCost": 88000,
+      "dependsOn": "gate-spec-approved",
+      "gapDays": 2,
+      "locked": false,
+      "baseline": {
+        "start": "2026-09-25",
+        "end": "2026-10-31"
+      },
+      "notes": "Zero runtime dependencies, strict static memory quotas, microsecond context switching.",
+      "fields": {
+        "jira": "KERN-104",
+        "coverage": "98.4%",
+        "storyPoints": 21
+      }
+    },
+    {
+      "id": "task-pqc-engine",
+      "wbs": "2.2",
+      "label": "Post-Quantum Cryptography & ML-KEM Suite",
+      "category": "crypto",
+      "start": "2026-10-01",
+      "end": "2026-11-15",
+      "assignee": "@ahmadhassan",
+      "teamId": "team-core",
+      "phase": "Phase 2: Execution",
+      "priority": "high",
+      "status": "in-progress",
+      "progress": 0.40,
+      "estimatedCost": 95000,
+      "actualCost": 42000,
+      "dependsOn": "gate-spec-approved",
+      "gapDays": 5,
+      "color": "#8B5CF6",
+      "baseline": {
+        "start": "2026-10-01",
+        "end": "2026-11-10"
+      },
+      "notes": "Hardware-accelerated Kyber and Dilithium implementations."
+    },
+    {
+      "id": "task-mesh-p2p",
+      "wbs": "2.3",
+      "label": "Decentralized Wire Protocol & Kademlia DHT",
+      "category": "network",
+      "start": "2026-11-07",
+      "end": "2026-12-10",
+      "assignee": "@elena-dev",
+      "teamId": "team-core",
+      "phase": "Phase 2: Execution",
+      "priority": "medium",
+      "status": "not-started",
+      "progress": 0.0,
+      "estimatedCost": 70000,
+      "actualCost": 0,
+      "dependsOn": "task-kernel-core",
+      "gapDays": 2
+    },
+    {
+      "id": "task-formal-audit",
+      "wbs": "3.1",
+      "label": "Comprehensive Cryptographic Penetration & Formal Audit",
+      "category": "security",
+      "start": "2026-12-12",
+      "end": "2027-01-15",
+      "assignee": "Dr. Marcus Vance",
+      "teamId": "team-security",
+      "phase": "Phase 3: Verification",
+      "priority": "urgent",
+      "urgent": true,
+      "status": "not-started",
+      "progress": 0.0,
+      "estimatedCost": 150000,
+      "actualCost": 0,
+      "dependsOn": ["task-kernel-core", "task-pqc-engine", "task-mesh-p2p"],
+      "gapDays": 2,
+      "baseline": {
+        "start": "2026-12-10",
+        "end": "2027-01-10"
+      },
+      "notes": "External independent security verification with full fuzz testing harness."
+    },
+    {
+      "id": "task-blocked-hardware",
+      "wbs": "3.2",
+      "label": "Hardware Enclave HSM Integration (TPM 2.0)",
+      "category": "crypto",
+      "start": "2026-12-15",
+      "end": "2027-01-20",
+      "assignee": "@elena-dev",
+      "status": "blocked",
+      "progress": 0.1,
+      "priority": "medium",
+      "dependsOn": "task-pqc-engine",
+      "notes": "Awaiting physical silicon development boards from vendor fab."
+    },
+    {
+      "id": "gate-production-ga",
+      "wbs": "4.0",
+      "label": "Milestone 2: Mainnet Production GA Launch",
+      "category": "release",
+      "start": "2027-02-15",
+      "end": "2027-02-15",
+      "milestone": true,
+      "locked": true,
+      "priority": "urgent",
+      "status": "not-started",
+      "progress": 0.0,
+      "assignee": "@ahmadhassan",
+      "dependsOn": "task-formal-audit",
+      "gapDays": 30,
+      "color": "#EC4899",
+      "notes": "Global deployment to edge nodes worldwide."
+    }
+  ]
+}
+```
+
+---
+
+## 1. Top-Level Root Structure
+
+```json
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "meta": {},
+  "categories": {},
+  "people": [],
+  "teams": [],
+  "notes": [],
+  "documents": [],
+  "tasks": []
 }
 ```
 
 | Key | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
-| `$schema` | `string` | No | Schema URI identifier |
-| `meta` | `object` | No | Project-wide configuration, timeline bounds, and rendering options |
-| `categories` | `object` | Yes | Map of category IDs to display labels, brand colors, and icons |
+| `$schema` | `string` | No | Schema URI identifier (`https://jantt.dev/schema/v1.json`) |
+| `meta` | `object` | No | Project-wide parameters, scale, wire routing, budget, and rendering options |
+| `categories` | `object` | Yes | Map of category IDs to display labels, brand hex colors, soft tints, and icons |
 | `people` | `array` | No | Team members with avatar colors, contact emails, and squad mappings |
 | `teams` | `array` | No | Department or squad registries with distinct theme badge colors |
-| `notes` | `array` | No | Project documentation, architecture RFCs, meeting minutes, and checklists |
-| `documents` | `array` | No | List of project artifacts, RFCs, compliance checklists, or deliverables |
+| `notes` | `array` | No | Collaborative project documentation, architecture RFCs, meeting notes, and task attachments |
+| `documents` | `array` | No | List of project artifacts, compliance checklists, or deliverables |
 | `tasks` | `array` | **Yes** | Array of tasks, milestones, baselines, and dependency definitions |
 
 ---
 
-## 2. Meta Object (`meta`)
+## 2. Meta Object Configuration (`meta`)
+
+The `meta` block configures global project properties, timeline bounds, and visual presentation:
 
 ```json
-"meta": {
-  "title": "Master Kitchen-Sink Specification & Benchmark Cheatsheet",
-  "description": "Project narrative scope and instructions.",
-  "person": "Lead Technical Program Director",
-  "organization": "Acme Global Engineering & Architecture",
-  "start": "2026-09-01",
-  "end": "2027-01-31",
-  "defaultGapDays": 2,
-  "scale": "week",
-  "linkRouting": "orthogonal",
-  "showCriticalPath": true,
-  "showBaselines": true,
-  "currency": "USD",
-  "budget": 385000,
-  "version": "1.2.0",
-  "generatedAt": "2026-08-29T19:00:00.000Z"
+{
+  "meta": {
+    "title": "Quantum Mesh Operating Platform",
+    "description": "High-assurance distributed operating platform with real-time verification.",
+    "person": "@ahmadhassan",
+    "organization": "Fractal Compute Orchestrations",
+    "start": "2026-09-01",
+    "end": "2027-02-28",
+    "defaultGapDays": 2,
+    "scale": "week",
+    "linkRouting": "orthogonal",
+    "showCriticalPath": true,
+    "showBaselines": true,
+    "autoCascade": true,
+    "currency": "USD",
+    "budget": 650000,
+    "version": "1.4.0",
+    "generatedAt": "2026-09-08T00:00:00.000Z"
+  }
 }
 ```
+
+### Meta Field Reference
 
 | Field | Type | Default | Options / Valid Values | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `title` | `string` | `""` | Any text | Main project name displayed in header |
-| `description` | `string` | `""` | Any text | Project scope narrative |
-| `person` | `string` | `""` | Any text | Project manager or lead owner |
+| `description` | `string` | `""` | Any text | Project scope narrative and objectives |
+| `person` | `string` | `""` | Any text / `@username` | Project director or lead owner |
 | `organization` | `string` | `""` | Any text | Organization or enterprise name |
-| `start` / `chartStart` | `string` | Dynamic | `YYYY-MM-DD` | Optional explicit timeline start date |
-| `end` / `chartEnd` | `string` | Dynamic | `YYYY-MM-DD` | Optional explicit timeline end date |
+| `start` / `chartStart` | `string` | Dynamic | `YYYY-MM-DD` | Explicit timeline start date |
+| `end` / `chartEnd` | `string` | Dynamic | `YYYY-MM-DD` | Explicit timeline end date |
 | `defaultGapDays` | `number` | `2` | Integer `>= 0` | Buffer days between sequential dependent tasks |
-| `scale` | `string` | `"day"` | `"day"`, `"week"`, `"month"`, `"quarter"`, `"year"` | Initial zoom scale level |
+| `scale` | `string` | `"day"` | `"day"`, `"week"`, `"month"`, `"quarter"`, `"year"` | Timeline zoom level |
 | `linkRouting` | `string` | `"orthogonal"` | `"orthogonal"`, `"curved"`, `"direct"` | Dependency wire connector geometry |
-| `showCriticalPath` | `boolean` | `false` | `true`, `false` | Highlight critical path tasks & connections |
+| `showCriticalPath` | `boolean` | `false` | `true`, `false` | Highlight critical path tasks & connection lines |
 | `showBaselines` | `boolean` | `true` | `true`, `false` | Render planned vs actual ghost bars |
-| `currency` | `string` | `"USD"` | `"USD"`, `"EUR"`, `"GBP"`, etc. | Currency symbol / code for budgets |
-| `budget` | `number` \| `string` | `0` | e.g. `385000` | Total approved project budget |
+| `autoCascade` | `boolean` | `false` | `true`, `false` | Automatically shift downstream tasks when upstream slips |
+| `currency` | `string` | `"USD"` | `"USD"`, `"EUR"`, `"GBP"`, etc. | Currency symbol for EVM & cost metrics |
+| `budget` | `number` | `0` | Number e.g. `650000` | Total approved project baseline budget |
+| `version` | `string` | `"1.4.0"` | String | Schema specification version |
 
 ---
 
-## 3. Categories Map (`categories`)
+## 3. Categories Dictionary (`categories`)
 
-Every task must reference a valid key defined in the `categories` dictionary:
+Every task must link to a valid key defined in the `categories` dictionary:
 
 ```json
-"categories": {
-  "specs": {
-    "label": "Architecture & Specs",
-    "color": "#3B82F6",
-    "soft": "#1E293B",
-    "icon": "file-text"
-  },
-  "core": {
-    "label": "Core Engine & Services",
-    "color": "#10B981",
-    "soft": "#064E3B",
-    "icon": "cpu"
-  },
-  "ui": {
-    "label": "Frontend & Design System",
-    "color": "#8B5CF6",
-    "soft": "#312E81",
-    "icon": "layout"
-  },
-  "security": {
-    "label": "Security & Compliance",
-    "color": "#F59E0B",
-    "soft": "#78350F",
-    "icon": "shield-check"
-  },
-  "devops": {
-    "label": "Cloud & Infrastructure",
-    "color": "#06B6D4",
-    "soft": "#083344",
-    "icon": "cloud"
-  },
-  "qa": {
-    "label": "QA & Test Automation",
-    "color": "#E11D48",
-    "soft": "#4C0519",
-    "icon": "check-circle"
-  },
-  "release": {
-    "label": "Deployment & Release",
-    "color": "#EC4899",
-    "soft": "#831843",
-    "icon": "rocket"
+{
+  "categories": {
+    "specs": {
+      "label": "Architecture & Formal Specs",
+      "color": "#38BDF8",
+      "soft": "#0C4A6E",
+      "icon": "file-text"
+    },
+    "kernel": {
+      "label": "Microkernel Core",
+      "color": "#10B981",
+      "soft": "#064E3B",
+      "icon": "cpu"
+    },
+    "crypto": {
+      "label": "Post-Quantum Cryptography",
+      "color": "#8B5CF6",
+      "soft": "#312E81",
+      "icon": "shield-check"
+    },
+    "release": {
+      "label": "Mainnet Deployment & GA",
+      "color": "#EC4899",
+      "soft": "#831843",
+      "icon": "rocket"
+    }
   }
 }
 ```
 
 | Field | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
-| `label` | `string` | Yes | Human-readable category title |
-| `color` | `string` | Yes | Hex/RGB brand color for task bars and badges |
-| `soft` | `string` | No | Background tint color for dark/light themes |
-| `icon` | `string` | No | Lucide icon identifier (e.g. `cpu`, `layout`, `rocket`) |
+| `label` | `string` | Yes | Human-readable category display title |
+| `color` | `string` | Yes | Primary hex brand color for task bars and badges |
+| `soft` | `string` | No | Subtle background tint color for theme contrast |
+| `icon` | `string` | No | Lucide icon identifier (e.g. `cpu`, `shield-check`, `file-text`, `cloud`, `rocket`) |
 
 ---
 
-## 4. Documents (`documents`)
+## 4. People & Squads Management (`people`, `teams`)
+
+The Jantt engine manages human resources, squad allocations, and avatar presentation with a dual-mode member architecture:
+
+### Canonical Account Mentions vs Offline Personas
+
+1. **Registered Collaborators**: Use their verified GitHub handle mention for both `id` and `username` (e.g. `"id": "@ahmadhassan"`, `"username": "@ahmadhassan"`).
+2. **Offline Stakeholders / Contractors**: Use a local identifier (e.g. `"id": "person-auditor"`) and omit the `username` field.
+3. **Task Assignment**: Tasks assign responsible owners via `assignee: "@username"` or persona name.
+4. **No Internal Database IDs**: Never place Firebase UIDs, auth tokens, or private keys into JSON.
 
 ```json
-"documents": [
-  {
-    "id": "doc-arch-rfc",
-    "label": "RFC-204: Global Event-Driven Mesh Architecture",
-    "status": "have",
-    "owner": "Sarah Chen",
-    "url": "https://wiki.acme.corp/rfc/204",
-    "note": "Approved unanimously by Architecture Review Board on Aug 24"
-  },
-  {
-    "id": "doc-soc2-audit",
-    "label": "SOC2 Type II & ISO 27001 Security Checklist",
-    "status": "pending",
-    "owner": "Marcus Brody",
-    "url": "https://compliance.acme.corp/soc2-audit",
-    "note": "Under audit review with external auditor"
-  },
-  {
-    "id": "doc-legal-sla",
-    "label": "Global Service Level Agreement & Privacy Policy v2",
-    "status": "missing",
-    "owner": "Legal Counsel",
-    "url": "https://legal.acme.corp/sla-v2",
-    "note": "Mandatory blocker for GA production rollout"
-  }
-]
+{
+  "people": [
+    {
+      "id": "@ahmadhassan",
+      "name": "Ahmad Hassan",
+      "username": "@ahmadhassan",
+      "role": "Principal Architect",
+      "avatar": "https://avatars.githubusercontent.com/u/104278065?v=4",
+      "teamId": "team-core",
+      "color": "#38BDF8",
+      "email": "ahmad@fractal.org"
+    },
+    {
+      "id": "person-auditor",
+      "name": "Dr. Marcus Vance",
+      "role": "External Cryptographic Auditor",
+      "teamId": "team-security",
+      "color": "#F59E0B"
+    }
+  ],
+  "teams": [
+    {
+      "id": "team-core",
+      "name": "Platform Core Squad",
+      "color": "#38BDF8",
+      "description": "Kernel services and low-level primitives"
+    },
+    {
+      "id": "team-security",
+      "name": "Security & Audit Squad",
+      "color": "#F59E0B",
+      "description": "Formal proofs and independent auditing"
+    }
+  ]
+}
+```
+
+---
+
+## 5. Collaborative Notes System (`notes`)
+
+The `notes` array stores persistent markdown documentation, architecture RFCs, meeting minutes, and acceptance checklists. Notes can be attached to one or more tasks and are synchronized across cloud rooms with full role-based permissions:
+
+```json
+{
+  "notes": [
+    {
+      "id": "note-arch-rfc",
+      "title": "RFC-402: Zero-Allocation Microkernel Architecture",
+      "content": "### Scope\nDefines memory isolation contracts between peer nodes.\n\n- Zero unsafe Rust blocks in kernel hot paths.\n- Formal verification completed by @ahmadhassan.\n- Linked to task /task-kernel-core.",
+      "color": "#38BDF8",
+      "pinned": true,
+      "category": "Architecture",
+      "tags": ["RFC", "Kernel", "Zero-Copy"],
+      "task_ids": ["task-arch-spec", "task-kernel-core"],
+      "updatedBy": "@ahmadhassan",
+      "createdAt": "2026-09-01T09:00:00.000Z",
+      "updatedAt": "2026-09-08T18:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Notes Field Reference
+
+| Field | Type | Required | Description | Example |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `string` | **Yes** | Unique note identifier | `"note-arch-rfc"` |
+| `title` | `string` | **Yes** | Note headline | `"RFC-402 Architecture"` |
+| `content` | `string` | **Yes** | Markdown body with `@mention` handles & `/task` links | `"### Scope\n..."` |
+| `color` | `string` | No | Accent color tint for card and badges | `"#38BDF8"` |
+| `pinned` | `boolean` | No | Keep note pinned to the top of the sidebar | `true` |
+| `category` | `string` | No | Categorical grouping | `"Architecture"` |
+| `tags` | `string[]` | No | Array of searchable keywords | `["RFC", "Kernel"]` |
+| `task_ids` | `string[]` | No | Array of attached task IDs | `["task-arch-spec", "task-kernel-core"]` |
+| `updatedBy` | `string` | No | Canonical `@username` handle of last editor | `"@ahmadhassan"` |
+| `createdAt` | `string` | No | ISO 8601 creation timestamp | `"2026-09-01T09:00:00.000Z"` |
+| `updatedAt` | `string` | No | ISO 8601 last modified timestamp | `"2026-09-08T18:00:00.000Z"` |
+
+---
+
+## 6. Documents & Deliverables Checklist (`documents`)
+
+```json
+{
+  "documents": [
+    {
+      "id": "doc-tla-spec",
+      "label": "TLA+ Formal Mathematical Specification",
+      "status": "have",
+      "owner": "@ahmadhassan",
+      "url": "https://specs.fractal.org/tla/mesh.pdf",
+      "note": "Unanimously certified with TLC model checker"
+    },
+    {
+      "id": "doc-soc2-attest",
+      "label": "SOC-2 Type II Independent Audit Report",
+      "status": "pending",
+      "owner": "Dr. Marcus Vance",
+      "url": "https://compliance.fractal.org/soc2",
+      "note": "Field audit commenced; completion targeted before GA"
+    },
+    {
+      "id": "doc-legal-licensing",
+      "label": "Dual Apache-2.0 / Commercial EULA Contract",
+      "status": "missing",
+      "owner": "Legal Counsel",
+      "url": "https://legal.fractal.org/license",
+      "note": "Required regulatory deliverable before international release"
+    }
+  ]
+}
 ```
 
 | Field | Type | Options / Valid Values | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `string` | Unique string | Unique document identifier |
 | `label` | `string` | Any text | Document or deliverable title |
-| `status` | `string` | `"have"`, `"pending"`, `"missing"` | Fulfillment status |
-| `owner` | `string` | Any text | Document owner / author |
-| `url` | `string` | URL string | Link to document, RFC, or ticket |
-| `note` | `string` | Any text | Status note or review findings |
+| `status` | `string` | `"have"`, `"pending"`, `"missing"` | Fulfillment / compliance status |
+| `owner` | `string` | Any text / `@username` | Responsible owner or reviewer |
+| `url` | `string` | URL string | Link to repository, ticket, or artifact |
+| `note` | `string` | Any text | Audit status notes or review criteria |
 
 ---
 
-## 5. Tasks (`tasks`)
+## 7. Tasks Collection (`tasks`)
+
+Each task represents a planned work package, deliverable, or milestone gate:
 
 ```json
 {
-  "id": "task-core-services",
+  "id": "task-kernel-core",
   "wbs": "2.1",
-  "label": "High-Performance DAG Constraint Solver Engine",
-  "category": "core",
-  "start": "2026-09-19",
-  "end": "2026-10-22",
-  "assignee": "Alex Rivera",
+  "label": "Zero-Copy Microkernel Primitive Implementation",
+  "category": "kernel",
+  "start": "2026-09-26",
+  "end": "2026-11-05",
+  "assignee": "@elena-dev",
+  "teamId": "team-core",
+  "phase": "Phase 2: Execution",
   "priority": "urgent",
-  "estimatedCost": 72000,
-  "actualCost": 54000,
-  "dependsOn": "task-gate-1",
+  "urgent": true,
+  "status": "in-progress",
+  "progress": 0.65,
+  "estimatedCost": 125000,
+  "actualCost": 88000,
+  "dependsOn": "gate-spec-approved",
   "gapDays": 2,
   "locked": false,
-  "progress": 0.75,
-  "milestone": false,
-  "status": "in-progress",
-  "urgent": true,
+  "color": "#10B981",
   "baseline": {
-    "start": "2026-09-17",
-    "end": "2026-10-18"
+    "start": "2026-09-25",
+    "end": "2026-10-31"
   },
-  "notes": "Zero-dependency pure TypeScript topological dependency resolver and critical path calculation engine.",
+  "notes": "Zero runtime dependencies, strict static memory quotas, microsecond context switching.",
   "fields": {
-    "repo": "github.com/acme/jantt-core",
-    "coverageTarget": "95%",
-    "jira": "JANTT-201",
+    "jira": "KERN-104",
+    "coverage": "98.4%",
     "storyPoints": 21
   }
 }
@@ -381,253 +808,194 @@ Every task must reference a valid key defined in the `categories` dictionary:
 
 | Field | Type | Required | Description | Example |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `string` | **Yes** | Unique task identifier | `"task-core-services"` |
-| `label` / `name` | `string` | **Yes** | Display title of the task | `"DAG Constraint Solver"` |
-| `category` | `string` | **Yes** | Matching key from `categories` dictionary | `"core"` |
-| `start` | `string` | **Yes** | Start date (`YYYY-MM-DD`) | `"2026-09-19"` |
-| `end` | `string` | **Yes** | End date (`YYYY-MM-DD` >= `start`) | `"2026-10-22"` |
-| `wbs` | `string` | No | Work Breakdown Structure code | `"2.1"`, `"1.2.3"` |
-| `assignee` | `string` | No | Responsible team member or role | `"Alex Rivera"` |
+| `id` | `string` | **Yes** | Unique task identifier | `"task-kernel-core"` |
+| `label` / `name` | `string` | **Yes** | Display name of the task | `"Zero-Copy Microkernel"` |
+| `category` | `string` | **Yes** | Key matching an entry in `categories` | `"kernel"` |
+| `start` | `string` | **Yes** | ISO start date (`YYYY-MM-DD`) | `"2026-09-26"` |
+| `end` | `string` | **Yes** | ISO end date (`YYYY-MM-DD` >= `start`) | `"2026-11-05"` |
+| `wbs` | `string` | No | Work Breakdown Structure numbering | `"2.1"`, `"1.2.3"` |
+| `assignee` | `string` | No | Responsible handle (`@username`) or persona | `"@elena-dev"` |
+| `teamId` | `string` | No | Explicit or inherited squad reference | `"team-core"` |
+| `phase` | `string` | No | Project phase or milestone cycle | `"Phase 2: Execution"` |
 | `priority` | `string` | No | `"low"`, `"medium"`, `"high"`, `"urgent"` | `"urgent"` |
-| `estimatedCost` | `number` | No | Planned budget allocation | `72000` |
-| `actualCost` | `number` | No | Actual spend to date | `54000` |
-| `dependsOn` | `string` \| `string[]` \| `null` | No | Single prerequisite ID or array of IDs | `"task-gate-1"` or `["task-1", "task-2"]` |
-| `gapDays` | `number` | No | Custom buffer days from prerequisite | `2` |
-| `progress` | `number` | No | Completion percentage (`0.0` to `1.0`) | `0.75` (75%) |
-| `milestone` | `boolean` | No | `true` if zero-duration diamond checkpoint | `true` (with `start === end`) |
-| `status` | `string` | No | `"not-started"`, `"in-progress"`, `"completed"`, `"blocked"` | `"in-progress"` |
-| `locked` | `boolean` | No | Prevents accidental drag shifts in GUI | `true` |
-| `urgent` | `boolean` | No | Adds red pulse attention badge | `true` |
-| `baseline` | `object` | No | `{ "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" }` | `{ "start": "2026-09-17", "end": "2026-10-18" }` |
-| `notes` | `string` | No | Detailed multi-line notes / instructions | `"Detailed technical description"` |
-| `fields` | `object` | No | Arbitrary domain-specific metadata (Jira, GitHub, SLA, etc.) | `{ "jira": "JANTT-201", "storyPoints": 21 }` |
+| `urgent` | `boolean` | No | Triggers high-visibility pulsing red badge | `true` |
+| `status` | `string` | No | `"not-started"`, `"in-progress"`, `"submitted"`, `"completed"`, `"blocked"` | `"in-progress"` |
+| `progress` | `number` | No | Float completion ratio (`0.0` to `1.0`) | `0.65` (65%) |
+| `milestone` | `boolean` | No | `true` for zero-duration diamond checkpoints | `true` (with `start === end`) |
+| `dependsOn` | `string` \| `string[]` \| `null` | No | Single prerequisite ID or array of IDs | `"gate-spec-approved"` or `["t1", "t2"]` |
+| `gapDays` | `number` | No | Buffer days between prerequisite and this task | `2` |
+| `locked` | `boolean` | No | Locks dates against accidental drag shifts | `true` |
+| `color` | `string` | No | Direct task bar color override (overrides category) | `"#EC4899"` |
+| `baseline` | `object` | No | Planned timeframe `{ "start", "end" }` for variance | `{"start": "2026-09-25", "end": "2026-10-31"}` |
+| `estimatedCost` | `number` | No | Planned value budget (EVM basis) | `125000` |
+| `actualCost` | `number` | No | Incurred actual cost (EVM basis) | `88000` |
+| `notes` | `string` | No | Technical notes and acceptance criteria | `"Detailed specs..."` |
+| `fields` | `object` | No | Arbitrary domain key-value metadata | `{"jira": "KERN-104", "storyPoints": 21}` |
 
 ---
 
-## 6. Milestone Checkpoints
+## 8. Specific Functionality Samples
 
-A milestone is defined with `"milestone": true` and `"start"` equal to `"end"`:
-
+### Functionality 1: Zero-Duration Milestone Gates
+Milestones mark key phase transitions or contract sign-offs. Represented by diamonds:
 ```json
 {
-  "id": "task-gate-4",
-  "wbs": "5.0",
-  "label": "Milestone 4: Global Production GA Launch",
-  "category": "release",
-  "start": "2027-01-14",
-  "end": "2027-01-14",
-  "assignee": "Lead Technical Program Director",
-  "priority": "urgent",
-  "dependsOn": ["task-canary-rollout", "task-developer-portal"],
-  "gapDays": 4,
-  "locked": true,
-  "progress": 0.0,
+  "id": "gate-spec-approved",
+  "wbs": "1.2",
+  "label": "Milestone 1: Architecture Sign-Off Gate",
+  "category": "specs",
+  "start": "2026-09-24",
+  "end": "2026-09-24",
   "milestone": true,
-  "status": "not-started"
+  "dependsOn": "task-arch-spec",
+  "gapDays": 2,
+  "locked": true,
+  "status": "completed",
+  "progress": 1.0,
+  "assignee": "@ahmadhassan"
 }
 ```
 
----
-
-## 7. Multi-Prerequisite Dependencies
-
-Tasks can depend on multiple upstream tasks by providing an array of IDs:
-
+### Functionality 2: Multi-Prerequisite DAG Dependencies
+Tasks that cannot begin until multiple upstream tasks finish use an array of prerequisite IDs:
 ```json
 {
-  "id": "task-gate-3",
-  "wbs": "4.0",
-  "label": "Milestone 3: Security Clearance & Beta Readiness",
+  "id": "task-formal-audit",
+  "wbs": "3.1",
+  "label": "Comprehensive Cryptographic Penetration & Formal Audit",
   "category": "security",
-  "start": "2026-12-14",
-  "end": "2026-12-14",
-  "dependsOn": ["task-sec-audit", "task-qa-automation", "task-cloud-infra"]
+  "start": "2026-12-12",
+  "end": "2027-01-15",
+  "assignee": "Dr. Marcus Vance",
+  "dependsOn": ["task-kernel-core", "task-pqc-engine", "task-mesh-p2p"],
+  "gapDays": 2
 }
 ```
 
----
-
-## 8. Validation Rules
-
-The `@jantt/core` validation engine enforces:
-1. **Valid ISO Dates**: `YYYY-MM-DD` calendar format.
-2. **Date Order**: `end` must be greater than or equal to `start`.
-3. **Category Matching**: Every task's `category` must exist in `categories`.
-4. **Unique Task IDs**: No duplicate task IDs permitted.
-5. **DAG Dependency Integrity**:
-   - No dangling dependencies (`dependsOn` pointing to non-existent tasks).
-   - No circular dependency cycles (`A -> B -> C -> A`).
-   - Timing sanity (`start` must be on or after prerequisite `end` + `gapDays`).
-6. **Progress Bounds**: `progress` must be a float between `0.0` and `1.0`.
-
----
-
----
-
-## 9. People & Teams Registry (`people`, `teams`)
-
-The Jantt engine manages human resources, squad allocations, and avatar presentation through optional top-level `people` and `teams` arrays.
-
-### Single Source of Truth & Dual-Mode Member Architecture
-
-To maintain strict database and JSON coherence without leaking internal IDs:
-- **Real Registered Teammates**: Defined using their canonical GitHub handle mention for both `id` and `username` (e.g. `"id": "@ahmadhassan"`, `"username": "@ahmadhassan"`).
-- **Offline / Non-Account Personas**: Defined with standard local IDs without a `username` (e.g. `"id": "person-contractor"`, `"name": "Contractor Sarah"`).
-- **Task Assignees**: Tasks assigned to real accounts reference the handle mention (`"assignee": "@ahmadhassan"`).
-- **Zero Internal Database IDs in JSON**: No Firebase UIDs (`uid`, `ownerUid`), secret keys, or auth tokens are ever exposed in JSON. The single canonical exception is public `@username` mentions.
-
+### Functionality 3: Baseline Variance Tracking (Ghost Bars)
+Compare original project commitments against live dates with the `baseline` object:
 ```json
 {
-  "people": [
-    {
-      "id": "@ahmadhassan",
-      "name": "Ahmad Hassan",
-      "username": "@ahmadhassan",
-      "role": "Project Lead / Principal Investigator",
-      "avatar": "https://avatars.githubusercontent.com/u/104278065?v=4",
-      "teamId": "ai-core",
-      "color": "#38BDF8"
-    },
-    {
-      "id": "person-contractor",
-      "name": "Sarah Miller",
-      "role": "External Security Auditor",
-      "teamId": "ai-core",
-      "color": "#10B981"
-    }
-  ],
-  "teams": [
-    {
-      "id": "ai-core",
-      "name": "Distributed Edge & FL Core",
-      "color": "#38BDF8"
-    }
-  ]
+  "id": "task-kernel-core",
+  "label": "Microkernel Primitive Implementation",
+  "category": "kernel",
+  "start": "2026-09-26",
+  "end": "2026-11-05",
+  "baseline": {
+    "start": "2026-09-25",
+    "end": "2026-10-31"
+  }
 }
 ```
 
-### People Field Reference
-
-| Field | Type | Required | Description | Example |
-|---|---|:---:|---|---|
-| `id` | `string` | **Yes** | Unique identifier: `@username` mention for registered accounts, or `person-xxx` for offline personas. | `"@ahmadhassan"` |
-| `name` | `string` | **Yes** | Full display name. | `"Ahmad Hassan"` |
-| `username` | `string` | No | Canonical GitHub username mention. Present **only** for registered accounts. | `"@ahmadhassan"` |
-| `role` | `string` | No | Job title, position, or specialty. | `"Lead Architect"` |
-| `teamId` | `string` | No | Identifier referencing an entry in `teams[].id`. | `"ai-core"` |
-| `avatar` | `string` | No | Profile photo URL or fallback avatar graphic. | `"https://..."` |
-| `color` | `string` | No | Hex color used for visual badge & timeline avatar. | `"#38BDF8"` |
-| `email` | `string` | No | Contact email address. | `"user@org.com"` |
-
-> **Automatic Discovery**: If `people` is omitted, the Jantt UI automatically infers assignees from `meta.person`, `tasks[].assignee`, and `documents[].owner`. Inferred members can be formalized into the JSON schema with a single click.
-
----
-
-## 10. Cloud Security, Plan Sanitization & Real-Time Sync
-
-Jantt integrates a multi-user real-time collaboration engine backed by Firebase Realtime Database and Cloudflare edge proxies:
-
-1. **GitHub-Only Authentication**:
-   - Google login is strictly removed. Only GitHub OAuth 2.0 is allowed.
-   - Usernames are claimed directly from verified GitHub handles with zero manual typing modal.
-2. **Plan Sanitization Pipeline (`sanitizePlanForJson`)**:
-   - Every plan document is sanitized before saving to the database or exporting.
-   - Recursively purges `uid`, `ownerUid`, `firebaseUid`, `secretKey`, `authId`, `authToken`, and `peerId`.
-   - Reconciler timestamps and audit metadata strictly use `@${username}` mentions as client identifiers.
-3. **Database Security Rules (`database.rules.json`)**:
-   - Explicit index on `username` (`.indexOn: ["username"]`) for high-performance prefix autocomplete.
-   - Role-based authorization matrix ensuring only room owners and editors can modify room data and metadata.
-
-
----
-
-## 11. Academic Pipeline & Research Planning Benchmark
-
-Jantt is designed to coordinate complex academic pipelines (such as PhD/MS admissions, scholarship competitions, thesis defenses, and visa pathways). Below is a minimal production benchmark:
-
+### Functionality 4: Locked Tasks & Fixed Deadline Constraints
+Prevent inadvertent mouse or touch dragging by pinning the schedule:
 ```json
 {
-  "$schema": "https://jantt.dev/schema/v1.json",
-  "meta": {
-    "title": "Ahmad Hassan — Global PhD/MS Application Pipeline",
-    "description": "Concurrent admissions and scholarship pipeline with post-study PR pathways",
-    "person": "Ahmad Hassan",
-    "start": "2026-09-01",
-    "end": "2027-03-31",
-    "scale": "month",
-    "showCriticalPath": true,
-    "showBaselines": true,
-    "currency": "USD",
-    "budget": 5000
-  },
-  "categories": {
-    "prep": { "label": "Exams & Transcripts", "color": "#F59E0B" },
-    "germany": { "label": "Germany (DAAD & Direct)", "color": "#38BDF8" },
-    "asia": { "label": "Asia (KAIST & SINGA)", "color": "#10B981" },
-    "na": { "label": "North America (Direct PhD)", "color": "#A78BFA" }
-  },
-  "documents": [
-    { "id": "doc-ielts", "label": "IELTS Academic TRF (Band 8.0+)", "status": "have", "owner": "Ahmad Hassan" },
-    { "id": "doc-transcripts", "label": "HEC Attested Degree & Transcript", "status": "have", "owner": "Ahmad Hassan" },
-    { "id": "doc-sop-germany", "label": "Research Statement (Distributed FL)", "status": "pending", "owner": "Ahmad Hassan" }
-  ],
-  "tasks": [
-    {
-      "id": "gre-exam",
-      "wbs": "1.1",
-      "label": "GRE General Exam & Score Transmission",
-      "category": "prep",
-      "start": "2026-09-01",
-      "end": "2026-09-28",
-      "progress": 0.8,
-      "priority": "high",
-      "assignee": "Ahmad Hassan"
-    },
-    {
-      "id": "gate-prep",
-      "wbs": "1.2",
-      "label": "All Test Scores & Dossiers Finalized",
-      "category": "prep",
-      "start": "2026-09-30",
-      "end": "2026-09-30",
-      "milestone": true,
-      "dependsOn": "gre-exam"
-    },
-    {
-      "id": "daad-sub",
-      "wbs": "2.1",
-      "label": "DAAD Helmut-Schmidt Application Deadline",
-      "category": "germany",
-      "start": "2026-10-01",
-      "end": "2026-10-31",
-      "dependsOn": "gate-prep",
-      "priority": "urgent",
-      "assignee": "Ahmad Hassan",
-      "notes": "Verified official DAAD portal deadline. Hard cutoff."
-    },
-    {
-      "id": "singa-sub",
-      "wbs": "3.1",
-      "label": "Singapore SINGA Agency for Science & Tech Award",
-      "category": "asia",
-      "start": "2026-10-15",
-      "end": "2026-12-01",
-      "dependsOn": "gate-prep",
-      "priority": "urgent",
-      "assignee": "Ahmad Hassan"
-    }
-  ]
+  "id": "gate-production-ga",
+  "label": "Hard Cutoff: Mainnet Release",
+  "category": "release",
+  "start": "2027-02-15",
+  "end": "2027-02-15",
+  "milestone": true,
+  "locked": true
+}
+```
+
+### Functionality 5: Direct Task Color Overrides
+Override the default category theme color for specific high-priority tasks:
+```json
+{
+  "id": "task-special-override",
+  "label": "Executive Board Prototype Demo",
+  "category": "specs",
+  "start": "2026-10-10",
+  "end": "2026-10-18",
+  "color": "#EC4899"
+}
+```
+
+### Functionality 6: Blocked Task State
+Flag tasks impeded by external supply chain, physical hardware, or legal issues:
+```json
+{
+  "id": "task-blocked-hardware",
+  "label": "Hardware Enclave HSM Integration (TPM 2.0)",
+  "category": "crypto",
+  "start": "2026-12-15",
+  "end": "2027-01-20",
+  "status": "blocked",
+  "notes": "Awaiting physical silicon development boards from vendor fab."
+}
+```
+
+### Functionality 7: Custom Domain Fields Dictionary
+Attach Jira ticket keys, story points, PR URLs, and SLAs to any task:
+```json
+{
+  "id": "task-kernel-core",
+  "fields": {
+    "jira": "KERN-104",
+    "repo": "github.com/Fractal-Compute-Orchestrations/mesh-kernel",
+    "prUrl": "https://github.com/org/repo/pull/42",
+    "storyPoints": 21,
+    "coverageTarget": "98.4%",
+    "slaDays": 14
+  }
 }
 ```
 
 ---
 
-## 12. Personal Productivity & Time Blocking
+## 9. Operations Research & Advanced PM Analytics
 
-For daily work, sprint planning, and time blocking:
-1. **Daily Focus**: Switch the Date Filter subheader to **Today** to isolate active tasks.
-2. **Weekly Sprints**: Select **This Week** to review commitments spanning Monday through Sunday.
-3. **Dim vs Filter**:
-   - Use **Dim Mode** to fade out future and completed tasks while preserving the surrounding roadmap context.
-   - Use **Filter Mode** for zero-distraction focus on items due right now.
-4. **Interactive Todo List**: Jump to the **Tasks** tab for a streamlined interactive checklist with one-click completion checkboxes and status updates.
+The Jantt core engine runs classical project management algorithms directly in the browser and CLI:
+
+### 1. Critical Path Method (CPM)
+- **Calculations**: Computes Early Start (ES), Early Finish (EF), Late Start (LS), Late Finish (LF).
+- **Float Analysis**: Calculates **Total Float** (`LS - ES`) and **Free Float** (`min(succ.ES) - EF`).
+- **Identification**: Tasks with `Total Float === 0` are flagged as **Critical** (`isCritical: true`) and rendered with luminous highlight paths.
+
+### 2. Earned Value Management (EVM - ANSI/EIA-748)
+- **Planned Value (PV)**: Planned budget of work scheduled up to today.
+- **Earned Value (EV)**: `BAC * Progress` (budgeted value of work physically completed).
+- **Actual Cost (AC)**: Direct recorded expenditures.
+- **Variances & Indices**:
+  - `Schedule Variance (SV) = EV - PV`
+  - `Cost Variance (CV) = EV - AC`
+  - `Schedule Performance Index (SPI) = EV / PV` (Values > 1.0 indicate ahead of schedule)
+  - `Cost Performance Index (CPI) = EV / AC` (Values > 1.0 indicate under budget)
+  - `Estimate at Completion (EAC) = BAC / CPI`
+
+### 3. DCMA-14 Schedule Health Audit
+- Automated diagnostic checks for missing logic (dangling tasks), high float (> 44 days), negative float (overdue commitments), out-of-sequence completions, and broken logic chains.
+- Outputs an overall Schedule Health Score (0-100) and letter grade (`A`, `B`, `C`, `D`, `F`).
+
+### 4. PERT 3-Point Risk Simulation
+- Calculates expected duration (`(O + 4M + P) / 6`), standard deviation, and variance.
+- Outputs statistical on-time completion probabilities against contractual delivery dates.
+
+---
+
+## 10. Multi-User Collaboration & Security Architecture
+
+1. **Role-Based Permissions**:
+   - **Room Owner**: Full read/write access, access token management, transfer rights.
+   - **Editor**: Full read/write access to tasks, baselines, dependencies, notes, and documents.
+   - **Viewer**: Strict read-only view. Edits, dragging, and modifications are blocked. The viewer can clone the room to their local workspace with a single click.
+2. **Atomic Batching**: Real-time room changes are synchronized using atomic payloads to prevent race conditions.
+3. **Plan Sanitization**: Internal database keys (`uid`, `authId`, `authToken`, `secretKey`) are stripped during plan exports and local persistence. Only canonical `@username` handles are retained.
+
+---
+
+## 11. Validation Rules Enforced by `@jantt/core`
+
+1. **ISO 8601 Date Format**: Dates must be `YYYY-MM-DD`.
+2. **Chronological Validity**: `end` must be greater than or equal to `start`.
+3. **Category Integrity**: Every task `category` must exist in `categories`.
+4. **Task ID Uniqueness**: Duplicate task IDs are strictly rejected.
+5. **DAG Dependency Validation**:
+   - No dangling dependencies pointing to nonexistent tasks.
+   - Zero circular cycles (`A -> B -> C -> A`).
+   - Timing sanity: Dependent tasks cannot start before prerequisite completion + `gapDays`.
+6. **Progress Constraints**: Must be a float between `0.0` and `1.0`.
