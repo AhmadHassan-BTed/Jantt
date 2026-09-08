@@ -78,7 +78,8 @@ import {
   MobileNavbar,
   MobileBottomNav,
   OrientationBanner,
-  ReadOnlyForkModal
+  ReadOnlyForkModal,
+  EditorLoginModal
 } from "./components";
 
 export function App() {
@@ -90,6 +91,7 @@ export function App() {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showPlanManagerModal, setShowPlanManagerModal] = useState(false);
   const [showReadOnlyForkModal, setShowReadOnlyForkModal] = useState(false);
+  const [showEditorLoginModal, setShowEditorLoginModal] = useState(false);
 
   // Firebase Authentication & Cloud User Identity
   const auth = useAuth();
@@ -254,13 +256,24 @@ export function App() {
     onRequireVerification: () => auth.setShowVerificationModal(true)
   });
 
+  const isPendingLoginEditor = roomSync.isPendingLoginEditor;
   const isViewer = roomSync.activeRoomRole === "viewer";
+  const isReadOnly = isViewer;
   const activeRoomTitle =
     ownedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
     sharedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
     project.customProjects.find((p) => p.roomId === roomSync.activeRoomId)?.name ||
     editor.parsedData?.meta?.title ||
     "Shared Plan";
+
+  // Handles restricted editing actions based on whether user holds an editor key or is purely a viewer
+  const handlePromptRestrictedAction = useCallback(() => {
+    if (isPendingLoginEditor) {
+      setShowEditorLoginModal(true);
+    } else {
+      setShowReadOnlyForkModal(true);
+    }
+  }, [isPendingLoginEditor]);
 
   // 1-Click Fork: Make a private local copy so viewers can edit freely
   const handleForkToLocalCopy = useCallback(() => {
@@ -587,8 +600,8 @@ export function App() {
     activeTheme: viewport.activeTheme,
     activeView: viewport.activeView,
     handleChartCommit: editor.handleChartCommit,
-    readOnly: isViewer,
-    onPromptFork: () => setShowReadOnlyForkModal(true)
+    readOnly: isReadOnly,
+    onPromptFork: handlePromptRestrictedAction
   });
 
   // Share Plan Modal & URL Generation
@@ -623,6 +636,11 @@ export function App() {
 
   const handleGanttCommit = useCallback(
     (updated: JanttData) => {
+      if (isPendingLoginEditor) {
+        setShowEditorLoginModal(true);
+        toast.showToast("Please log in with GitHub to activate your editor permissions and edit live.", true);
+        return;
+      }
       if (isViewer) {
         setShowReadOnlyForkModal(true);
         toast.showToast("Cloud room is in Read-Only mode. Make a local copy to edit.", true);
@@ -637,7 +655,7 @@ export function App() {
       const mergedTasks = editor.parsedData.tasks.map((t) => updatedMap.get(t.id) || t);
       editor.handleChartCommit({ ...editor.parsedData, ...updated, tasks: mergedTasks });
     },
-    [isViewer, editor.parsedData, isHideActive, isPersonSorting, editor.handleChartCommit, toast]
+    [isPendingLoginEditor, isViewer, editor.parsedData, isHideActive, isPersonSorting, editor.handleChartCommit, toast]
   );
 
   return (
@@ -684,7 +702,9 @@ export function App() {
             onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
             ownedRooms={ownedRooms}
             sharedRooms={sharedRooms}
-            isViewer={isViewer}
+            isViewer={isViewer && !isPendingLoginEditor}
+            isPendingLoginEditor={isPendingLoginEditor}
+            onOpenEditorLogin={() => setShowEditorLoginModal(true)}
             onPromptFork={() => setShowReadOnlyForkModal(true)}
           />
         )
@@ -715,7 +735,9 @@ export function App() {
             onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
             onLogin={auth.loginWithGitHub}
             onLogout={auth.logout}
-            isViewer={isViewer}
+            isViewer={isViewer && !isPendingLoginEditor}
+            isPendingLoginEditor={isPendingLoginEditor}
+            onOpenEditorLogin={() => setShowEditorLoginModal(true)}
             onPromptFork={() => setShowReadOnlyForkModal(true)}
           />
 
@@ -738,6 +760,8 @@ export function App() {
             onlineUsers={roomSync.onlineUsers}
             onOpenShareRoom={handleOpenShareRoom}
             onLeaveCloudRoom={handleLeaveCloudRoom}
+            isPendingLoginEditor={isPendingLoginEditor}
+            onOpenEditorLogin={() => setShowEditorLoginModal(true)}
             onPromptFork={() => setShowReadOnlyForkModal(true)}
           />
         </>
@@ -781,8 +805,10 @@ export function App() {
           handleDownloadJson={editor.handleDownloadJson}
           handleExportCsv={editor.handleExportCsv}
           isMobile={mobile.isMobile}
-          isViewer={isViewer}
-          onPromptFork={() => setShowReadOnlyForkModal(true)}
+          isViewer={isReadOnly}
+          isPendingLoginEditor={isPendingLoginEditor}
+          onOpenEditorLogin={() => setShowEditorLoginModal(true)}
+          onPromptFork={handlePromptRestrictedAction}
         />
 
         {!sidebar.isSidebarCollapsed && !mobile.isMobile && (
@@ -811,8 +837,8 @@ export function App() {
               autoSave={autoSave}
               project={project}
               isMobile={mobile.isMobile}
-              isViewer={isViewer}
-              onPromptFork={() => setShowReadOnlyForkModal(true)}
+              isViewer={isReadOnly}
+              onPromptFork={handlePromptRestrictedAction}
             />
           </div>
         </section>
@@ -861,6 +887,14 @@ export function App() {
         show={showReadOnlyForkModal}
         setShow={setShowReadOnlyForkModal}
         roomTitle={activeRoomTitle}
+        onMakeLocalCopy={handleForkToLocalCopy}
+      />
+
+      <EditorLoginModal
+        show={showEditorLoginModal}
+        setShow={setShowEditorLoginModal}
+        roomTitle={activeRoomTitle}
+        onLogin={auth.loginWithGitHub}
         onMakeLocalCopy={handleForkToLocalCopy}
       />
 

@@ -34,6 +34,7 @@ export type RepoItemDto = RepoItem;
 export interface VerificationStatus {
   isVerified: boolean;
   isFollowingCreator: boolean;
+  isFollowingOrg?: boolean;
   starredRepos: string[];
   missingRepos: RepoItem[];
   totalRepos: number;

@@ -101,9 +101,19 @@ export function useRoomSync({
     activeProj?.source === "room"
       ? activeProj.secretKey || (activeRoomId ? getStoredRoomSecret(activeRoomId) : null)
       : null;
+
+  // Unauthenticated user who opened an editor invite link with a valid secret key
+  const isPendingLoginEditor = Boolean(
+    activeProj?.source === "room" &&
+    activeProj.role === "collaborator" &&
+    activeSecretKey &&
+    !userProfile
+  );
+
+  // Collaborator role strictly requires being authenticated via GitHub
   const activeRoomRole: "collaborator" | "viewer" | "none" =
     activeProj?.source === "room"
-      ? activeProj.role === "collaborator" && (Boolean(activeSecretKey) || Boolean(userProfile))
+      ? activeProj.role === "collaborator" && Boolean(userProfile)
         ? "collaborator"
         : "viewer"
       : "none";
@@ -1022,6 +1032,7 @@ export function useRoomSync({
     lastSyncTime,
     activeRoomId,
     activeRoomRole,
+    isPendingLoginEditor,
     activeSecretKey,
     onlineUsers,
     handleCreateRoom,

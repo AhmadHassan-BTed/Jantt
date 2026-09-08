@@ -13,6 +13,7 @@ import {
 import {
   verifyAllGitHubRequirements,
   followCreator,
+  followOrg,
   starRepository,
   starAllMissingRepositories,
   runBackgroundAutoVerification
@@ -31,11 +32,12 @@ export interface UseAuthReturn {
   showVerificationModal: boolean;
   setShowVerificationModal: (show: boolean) => void;
   loginWithGitHub: () => Promise<void>;
-  logout: () => Promise<void>;
+  logout: () => void;
   completeUsernameOnboarding: (rawUsername: string) => Promise<UserProfile>;
   refreshProfile: () => Promise<void>;
   checkVerification: () => Promise<VerificationStatus>;
   followCreatorHandler: () => Promise<boolean>;
+  followOrgHandler: () => Promise<boolean>;
   starRepoHandler: (repoFullName: string) => Promise<boolean>;
   starAllHandler: () => Promise<{ success: number; failed: number }>;
   autoVerifyHandler: () => Promise<boolean>;
@@ -251,6 +253,16 @@ export function useAuth(): UseAuthReturn {
     return ok;
   }, [githubToken, checkVerification]);
 
+  const followOrgHandler = useCallback(async (): Promise<boolean> => {
+    const token = githubToken || getStoredGitHubToken();
+    if (!token) return false;
+    const ok = await followOrg(token);
+    if (ok) {
+      await checkVerification();
+    }
+    return ok;
+  }, [githubToken, checkVerification]);
+
   const starRepoHandler = useCallback(
     async (repoFullName: string): Promise<boolean> => {
       const token = githubToken || getStoredGitHubToken();
@@ -302,6 +314,7 @@ export function useAuth(): UseAuthReturn {
     refreshProfile,
     checkVerification,
     followCreatorHandler,
+    followOrgHandler,
     starRepoHandler,
     starAllHandler,
     autoVerifyHandler

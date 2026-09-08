@@ -13,11 +13,17 @@ import { beenieTheme } from "./beenie";
  */
 export class ThemeManager {
   private themes: Map<string, ThemeDefinition> = new Map();
-  private currentThemeId: string = "swiss-light";
+  private currentThemeId: string = "swiss-dark";
 
   constructor() {
     // Register standard out-of-the-box themes
     this.registerTheme(swissDarkTheme);
+    this.registerTheme({
+      ...swissDarkTheme,
+      id: "noir",
+      name: "Swiss Noir",
+      label: "Swiss Noir"
+    });
     this.registerTheme(swissLightTheme);
     this.registerTheme(cyberEmeraldTheme);
     this.registerTheme(midnightRoseTheme);
@@ -40,6 +46,8 @@ export class ThemeManager {
    * Retrieve a theme definition by its ID.
    */
   public getTheme(id: string): ThemeDefinition | undefined {
+    if (id === "noir") return this.themes.get("noir") || this.themes.get("swiss-dark");
+    if (id === "swiss-dark") return this.themes.get("swiss-dark") || this.themes.get("noir");
     return this.themes.get(id);
   }
 

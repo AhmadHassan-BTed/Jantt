@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FolderKanban, MoreVertical, Plus, Share2, Eye } from "lucide-react";
+import { FolderKanban, MoreVertical, Plus, Share2, Eye, KeyRound } from "lucide-react";
 import { JanttLogo } from "../common/JanttLogo";
 import type { SavedProject } from "../../types";
 import type { UserRoomPointer, RoomPresence, UserProfile } from "../../firebase/types";
@@ -38,6 +38,8 @@ interface MobileNavbarProps {
   sharedRooms?: UserRoomPointer[];
   isViewer?: boolean;
   onPromptFork?: () => void;
+  isPendingLoginEditor?: boolean;
+  onOpenEditorLogin?: () => void;
 }
 
 export const MobileNavbar: React.FC<MobileNavbarProps> = ({
@@ -69,7 +71,9 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   ownedRooms = [],
   sharedRooms = [],
   isViewer = false,
-  onPromptFork
+  onPromptFork,
+  isPendingLoginEditor = false,
+  onOpenEditorLogin
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const isRoomActive = Boolean(activeRoomId);
@@ -108,7 +112,33 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
             )}
           </div>
 
-          {isViewer && (
+          {isPendingLoginEditor ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenEditorLogin?.();
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "3px",
+                padding: "3px 7px",
+                fontSize: "10px",
+                fontWeight: 700,
+                borderRadius: "6px",
+                background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+                color: "#ffffff",
+                border: "none",
+                cursor: "pointer",
+                flexShrink: 0
+              }}
+              title="Editor Invite. Tap to sign in and edit live."
+            >
+              <KeyRound size={10} />
+              <span>Sign in to Edit</span>
+            </button>
+          ) : isViewer ? (
             <button
               type="button"
               onClick={(e) => {
@@ -134,7 +164,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
               <Eye size={10} />
               <span>Viewer</span>
             </button>
-          )}
+          ) : null}
         </div>
 
         {/* Right: Quick Action Buttons & Menu Trigger */}

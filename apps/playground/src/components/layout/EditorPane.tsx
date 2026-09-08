@@ -14,7 +14,9 @@ import {
   FileSpreadsheet,
   ArrowDownUp,
   X,
-  Eye
+  Eye,
+  KeyRound,
+  LogIn
 } from "lucide-react";
 import type { JanttData, ValidationResult } from "@jantt/core";
 
@@ -37,6 +39,8 @@ interface EditorPaneProps {
   isMobile?: boolean;
   isViewer?: boolean;
   onPromptFork?: () => void;
+  isPendingLoginEditor?: boolean;
+  onOpenEditorLogin?: () => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
@@ -57,7 +61,9 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   handleExportCsv,
   isMobile,
   isViewer = false,
-  onPromptFork
+  onPromptFork,
+  isPendingLoginEditor = false,
+  onOpenEditorLogin
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showImportExportMenu, setShowImportExportMenu] = useState(false);
@@ -291,20 +297,47 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             alignItems: "center",
             justifyContent: "space-between",
             padding: "8px 12px",
-            background: "rgba(245, 158, 11, 0.12)",
-            borderBottom: "1px solid rgba(245, 158, 11, 0.3)",
+            background: isPendingLoginEditor ? "rgba(56, 189, 248, 0.12)" : "rgba(245, 158, 11, 0.12)",
+            borderBottom: isPendingLoginEditor ? "1px solid rgba(56, 189, 248, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)",
             fontSize: "11.5px",
-            color: "#f59e0b",
+            color: isPendingLoginEditor ? "#38bdf8" : "#f59e0b",
             flexShrink: 0
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Eye size={13} style={{ flexShrink: 0 }} />
+            {isPendingLoginEditor ? <KeyRound size={13} style={{ flexShrink: 0 }} /> : <Eye size={13} style={{ flexShrink: 0 }} />}
             <span>
-              <strong>Read-Only Mode:</strong> Changes cannot be saved to the cloud room.
+              {isPendingLoginEditor ? (
+                <><strong>Editor Invitation:</strong> Sign in with GitHub to edit & live-sync changes.</>
+              ) : (
+                <><strong>Read-Only Mode:</strong> Changes cannot be saved to the cloud room.</>
+              )}
             </span>
           </div>
-          {onPromptFork && (
+          {isPendingLoginEditor && onOpenEditorLogin ? (
+            <button
+              type="button"
+              onClick={onOpenEditorLogin}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "2px 8px",
+                fontSize: "11px",
+                fontWeight: 700,
+                borderRadius: "6px",
+                background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+                color: "#ffffff",
+                border: "none",
+                cursor: "pointer",
+                whiteSpace: "nowrap"
+              }}
+              title="Log in with GitHub to activate your editor permissions and edit live"
+            >
+              <LogIn size={11} />
+              <span>Sign in to Edit</span>
+            </button>
+          ) : onPromptFork ? (
             <button
               type="button"
               onClick={onPromptFork}
@@ -327,7 +360,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               <Copy size={11} />
               <span>Make Local Copy</span>
             </button>
-          )}
+          ) : null}
         </div>
       )}
 

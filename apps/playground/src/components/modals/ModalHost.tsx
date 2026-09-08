@@ -266,6 +266,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
         isVerifying={auth.isVerifying}
         onVerify={auth.checkVerification}
         onFollowCreator={auth.followCreatorHandler}
+        onFollowOrg={auth.followOrgHandler}
         onStarRepo={auth.starRepoHandler}
         onStarAll={auth.starAllHandler}
         onAutoVerify={auth.autoVerifyHandler}

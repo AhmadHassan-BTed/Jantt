@@ -14,7 +14,8 @@ import {
   Star,
   Cloud,
   LogOut,
-  Eye
+  Eye,
+  KeyRound
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
@@ -49,6 +50,8 @@ interface NavbarProps {
   onLogout?: () => void;
   isViewer?: boolean;
   onPromptFork?: () => void;
+  isPendingLoginEditor?: boolean;
+  onOpenEditorLogin?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -77,7 +80,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogin,
   onLogout,
   isViewer = false,
-  onPromptFork
+  onPromptFork,
+  isPendingLoginEditor = false,
+  onOpenEditorLogin
 }) => {
   return (
     <header className="navbar">
@@ -394,25 +399,34 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             className="btn-connect-cloud"
-            onClick={onLogin}
-            title="Connect to Cloud: Sign in with GitHub to collaborate in real-time rooms"
+            onClick={isPendingLoginEditor && onOpenEditorLogin ? onOpenEditorLogin : onLogin}
+            title={
+              isPendingLoginEditor
+                ? "Editor Invitation: Log in with GitHub to activate your editor permissions and edit live"
+                : "Connect to Cloud: Sign in with GitHub to collaborate in real-time rooms"
+            }
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
-              background: "linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(129, 140, 248, 0.25))",
-              border: "1px solid rgba(56, 189, 248, 0.45)",
-              color: "var(--jantt-accent, #38BDF8)",
+              background: isPendingLoginEditor
+                ? "linear-gradient(135deg, #0ea5e9, #6366f1)"
+                : "linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(129, 140, 248, 0.25))",
+              border: isPendingLoginEditor
+                ? "none"
+                : "1px solid rgba(56, 189, 248, 0.45)",
+              color: isPendingLoginEditor ? "#ffffff" : "var(--jantt-accent, #38BDF8)",
               borderRadius: "20px",
               padding: "4px 12px",
               fontSize: "0.82rem",
-              fontWeight: 600,
+              fontWeight: isPendingLoginEditor ? 700 : 600,
               cursor: "pointer",
-              transition: "all 0.2s ease"
+              transition: "all 0.2s ease",
+              boxShadow: isPendingLoginEditor ? "0 2px 10px rgba(99, 102, 241, 0.4)" : "none"
             }}
           >
-            <Cloud size={14} />
-            <span>Connect Cloud</span>
+            {isPendingLoginEditor ? <KeyRound size={14} /> : <Cloud size={14} />}
+            <span>{isPendingLoginEditor ? "Sign in to Edit" : "Connect Cloud"}</span>
           </button>
         ) : null}
       </div>

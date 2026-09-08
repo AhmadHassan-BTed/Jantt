@@ -7,7 +7,9 @@ import {
   Users,
   Layers,
   Eye,
-  Copy
+  Copy,
+  KeyRound,
+  LogIn
 } from "lucide-react";
 import type { SavedProject, EffectivePerson } from "../../types";
 import type { UserRoomPointer, RoomPresence } from "../../firebase/types";
@@ -33,6 +35,8 @@ export interface SubheaderProps {
   onOpenShareRoom?: (roomId: string) => void;
   onLeaveCloudRoom?: (roomId: string) => void;
   onPromptFork?: () => void;
+  isPendingLoginEditor?: boolean;
+  onOpenEditorLogin?: () => void;
 }
 
 export const Subheader: React.FC<SubheaderProps> = ({
@@ -53,7 +57,9 @@ export const Subheader: React.FC<SubheaderProps> = ({
   activeRoomTitle,
   onlineUsers = [],
   onOpenShareRoom,
-  onPromptFork
+  onPromptFork,
+  isPendingLoginEditor = false,
+  onOpenEditorLogin
 }) => {
   const isRoomActive = Boolean(activeRoomId);
 
@@ -221,8 +227,13 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 background:
                   activeRoomRole === "collaborator"
                     ? "rgba(56, 189, 248, 0.18)"
+                    : isPendingLoginEditor
+                    ? "rgba(56, 189, 248, 0.18)"
                     : "rgba(245, 158, 11, 0.20)",
-                color: activeRoomRole === "collaborator" ? "#38BDF8" : "#f59e0b",
+                color:
+                  activeRoomRole === "collaborator" || isPendingLoginEditor
+                    ? "#38BDF8"
+                    : "#f59e0b",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "4px"
@@ -230,6 +241,11 @@ export const Subheader: React.FC<SubheaderProps> = ({
             >
               {activeRoomRole === "collaborator" ? (
                 "Editor"
+              ) : isPendingLoginEditor ? (
+                <>
+                  <KeyRound size={10} />
+                  <span>Editor Invite</span>
+                </>
               ) : (
                 <>
                   <Eye size={10} />
@@ -237,7 +253,35 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 </>
               )}
             </span>
-            {activeRoomRole === "viewer" && onPromptFork && (
+            {isPendingLoginEditor && onOpenEditorLogin && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenEditorLogin();
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "2px 8px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  borderRadius: "6px",
+                  background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+                  color: "#ffffff",
+                  border: "none",
+                  cursor: "pointer",
+                  marginLeft: "4px",
+                  boxShadow: "0 2px 8px rgba(14, 165, 233, 0.35)"
+                }}
+                title="Log in with GitHub to activate your editor permissions and edit live"
+              >
+                <LogIn size={11} />
+                <span>Sign in to Edit</span>
+              </button>
+            )}
+            {!isPendingLoginEditor && activeRoomRole === "viewer" && onPromptFork && (
               <button
                 type="button"
                 onClick={(e) => {
