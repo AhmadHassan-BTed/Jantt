@@ -10,19 +10,24 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-306%2F306%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![Tests Passing](https://img.shields.io/badge/Tests-334%2F334%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
 [![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
 <br />
 
-Turn any declarative JSON file into a high-performance, interactive, draggable Gantt chart.  
+Turn any declarative JSON document into a high-performance, interactive, draggable Gantt chart.  
 **Zero runtime dependencies.** **100% pure TypeScript.**  
 Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI toolchains.
 
+Designed from the ground up for:
+* **Autonomous AI Agents & LLMs** — Declarative JSON schema contract eliminates UI hallucinations; models generate timeline data with 10x fewer tokens than fragile JSX code.
+* **Students, Hobbyists & Creators** — Lightweight, beautiful Swiss Noir dark mode, intuitive drag-and-drop, touch gestures, and instant local storage persistence.
+* **Engineering Teams & Program Directors** — Operations Research Critical Path solver, EVM (Earned Value Management), DCMA-14 schedule health audits, and multi-user CRDT collaboration with secure role-based permissions.
+
 <br />
 
-[Live Playground](https://ahmadhassan-bted.github.io/Jantt/) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md)
+[Live Playground](https://ahmadhassan-bted.github.io/Jantt/) • [Architecture](./docs/architecture.md) • [Schema Specification](./docs/schema-spec.md) • [API Docs](./docs/api-reference.md) • [Roadmap](./ROADMAP.md) • [Changelog](./CHANGELOG.md)
 
 <br />
 
@@ -471,7 +476,7 @@ Jantt/
 │   │   │   ├── exporter.ts    # Client-side CSV, SVG, and JSON exporters
 │   │   │   ├── renderers/     # Modular DOM presentation subsystems
 │   │   │   └── index.ts       # Public package exports
-│   │   └── tests/             # Vitest test suites (22/22 passing)
+│   │   └── tests/             # Vitest test suites (334/334 tests passing across 21 suites)
 │   ├── react/                 # Official React component (<Jantt />)
 │   └── standalone/            # UMD & IIFE script-tag bundles for plain HTML
 ├── cli/                       # Standalone Node.js CLI runner (npx jantt open)
@@ -741,7 +746,7 @@ cd Jantt
 # Install dependencies
 npm install
 
-# Run verification test suite (306/306 passing across 16 test suites)
+# Run verification test suite (334/334 passing across 21 test suites)
 npm test
 
 # Typecheck all packages

@@ -5,6 +5,40 @@ All notable changes to the **Jantt** project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-08
+
+### Added
+- **Role-Based Security & Permissions Guard (Viewer vs Editor)**:
+  - Cryptographic token validation and tamper-resistant room parameters, eliminating naive URL-based privilege escalation.
+  - Strict read-only viewer mode (`isReadOnly`), disallowing unauthorized mutation across timeline drag-to-move, bar resizing, dependency linking, modal commits, note editing, and task deletion.
+  - `ReadOnlyForkModal`: Informative modal when viewers attempt edits, offering "Make a Local Copy" (forks project to isolated local state) or GitHub sign-in.
+  - `EditorLoginModal`: Seamless GitHub OAuth / secret token authentication for authorized editors.
+- **Swiss Noir Default Aesthetic**:
+  - Promoted Swiss Noir to default theme across the entire application and shared room sessions.
+  - True pitch-black OLED background (`#080D18`), high-contrast typography, electric cyan (`#38BDF8`) accents, and glassmorphic panels.
+- **Project Notes & Specifications Redesign (Master-Detail Dual Pane)**:
+  - Complete architectural migration to dual-pane master-detail Notion/Linear-grade interface (`NotesSidebar` + `NoteEditor`).
+  - Left Master Sidebar: Search bar, color filter chips (All, Blue, Green, Amber, Purple, Crimson), scrollable note cards with relative timestamps and attached task counters, and 1-click note creation.
+  - Right Editor Surface: 26px typography title input, rich `contenteditable` surface with placeholder styling, Markdown preview mode toggle, pinning, color switcher popover, and instant deletion.
+  - Live Autocomplete Popover: Notion-style `@person` autocomplete for team members and `/task` autocomplete for roadmap tasks with inline mention pills.
+  - Attached Tasks Drawer: Bottom drawer showing linked tasks with team indicators, remove buttons, and task picker search popover.
+  - Mobile responsive layout with back button navigation between master sidebar and active note editor.
+- **Mobile & Touch Gestures Overhaul**:
+  - Comprehensive mobile responsiveness across Gantt, Kanban, Tasks, and Notes views.
+  - Touch scrub navigation and pinch-to-zoom timeline scaling.
+  - Single-column Kanban scroll snapping (`scroll-snap-type: x mandatory`).
+  - Mobile bottom navigation bar for seamless tab switching.
+- **Cloud Collaboration & Realtime Sync Refinements**:
+  - Firebase Realtime Database CRDT sync with offline queueing and conflict resolution.
+  - GitHub Stargazer verification service with automated background checking (`githubVerificationService.ts`).
+  - Excluded internal repositories (`.github`, `Fractal-PrivacyPolicy`, `Fractal_basics`) from star requirements.
+
+### Changed
+- **Zero-Emoji Policy**:
+  - Enforced strict zero-emoji policy across all markdown documentation (only `✓` and `✗` preserved).
+- **Multi-Audience Documentation**:
+  - Tailored documentation for AI agents generating Gantt charts (declarative schema contract), students/hobbyists (simple, beautiful, zero-dependency timelines), and enterprise program directors (EVM, DCMA-14, multi-user CRDT sync).
+
 ---
 
 ## [1.3.0] - 2026-09-05

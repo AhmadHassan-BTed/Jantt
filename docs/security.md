@@ -66,3 +66,11 @@ The Firebase Realtime Database is governed by strict authorization and validatio
 | `/rooms/{roomId}/members` | Room Owner or Member | Room Owner or Self (on Join/Leave) | Members can join via room invite link or leave; owner manages roles (`editor` vs `viewer`). |
 | `/rooms/{roomId}/data` | Room Owner or Member | Room Owner or Member with role `editor` | Full ACID concurrency control via `runTransaction` with 3-way CRDT reconciliation. |
 
+### 8. Tamper-Resistant Role Parameters & Read-Only Guard
+- **No Client-Side Privilege Escalation**: Role authorization does not rely on simple, unverified query parameters or hash strings. Room state verification validates permissions against the authenticated session and room metadata.
+- **Strict Read-Only Enforcement (`isReadOnly`)**: In viewer mode, all mutation hooks (task bar dragging, duration resizing, dependency linking, task creation/deletion, note editing, and auto-save) are locked down.
+- **Interactive Fork & Authentication Gateway (`ReadOnlyForkModal`)**: When an unauthorized user attempts to edit a shared viewer room, they are presented with an educational modal with two non-destructive paths:
+  1. **Make a Local Copy**: Clones the current plan into private browser storage (`localStorage`), allowing complete freedom to edit without corrupting the remote collaborative room.
+  2. **Sign in as Editor**: Authenticates via GitHub OAuth to claim editor permissions if granted by the room owner.
+
+
