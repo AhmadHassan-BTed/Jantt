@@ -1,33 +1,125 @@
 # Jantt JSON Specification & Benchmark Cheatsheet
 
 > **Version**: 1.4.0  
-> **Schema Definition**: `https://jantt.dev/schema/v1.json`  
+> **Schema Identifier**: `https://jantt.dev/schema/v1.json`  
+> **Live Resolving Schema**: [`schema/jantt.schema.json`](https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json)  
+> **Web Endpoint**: [`https://ahmadhassan-bted.github.io/Jantt/schema/v1.json`](https://ahmadhassan-bted.github.io/Jantt/schema/v1.json)  
 > **Target Standard**: Swiss Modernism 2.0 / Enterprise Project Management Standard
 
-This document is the official, comprehensive reference guide and prompt benchmark for authoring, validating, and generating **Jantt JSON** datasets. It includes concrete sample representations for every single functionality supported by the Jantt engine.
+This document is the official, comprehensive specification and prompt benchmark for authoring, validating, and generating **Jantt JSON** datasets. It includes psychological design rationale, a 10-second instant starter, and concrete copy-pasteable samples for every single engine capability.
+
+---
+
+## Why Declarative JSON? The Timeline Revolution
+
+### The Problem With Modern Timeline Tools
+
+Traditional project management tools force an unacceptable compromise:
+
+1. **Enterprise Bloat**: Commercial Gantt suites (DHTMLX, Bryntum) require 200KB to 800KB runtime dependencies, complex imperative APIs (`gantt.init()`, `gantt.addTask()`, listener bindings), and costly recurring per-seat licenses.
+2. **Brittle AI Generations**: Asking LLMs (ChatGPT, Claude, Gemini) to generate React JSX, SVG coordinate math, or Canvas rendering logic produces broken layouts, coordinate hallucinations, and wastes thousands of output tokens on boilerplate UI code.
+3. **Static Limitations**: DSLs like Mermaid.js are static, read-only images. They cannot be dragged, edited, recalculated, or synchronized back to living project state.
+
+### The Jantt Breakthrough
+
+Jantt flips the paradigm: **The timeline is pure declarative data. The UI is deterministic execution.**
+
+| 10x Fewer Tokens | 0 Runtime Dependencies | 100% Deterministic DAG | 2-Way State Sync |
+| :---: | :---: | :---: | :---: |
+| **Vs Fragile React JSX** | **Sub-14 KB Core Bundle** | **Topological Constraint Solver** | **Visual Drag <-> Clean JSON** |
+
+* **Zero Runtime Dependencies**: The core math and layout engine (`@jantt/core`) is pure, zero-dependency TypeScript weighing less than 14 KB gzipped.
+* **10x Fewer Tokens for AI**: Models output pure, structured JSON. Zero UI hallucinations, machine-verifiable constraints, and instant interactive execution.
+* **Swiss Modernism 2.0 Aesthetics**: Deep OLED Swiss Noir (`#080D18`), 90-degree CAD orthogonal routing, glassmorphic HUD cards, and high-contrast typography.
+* **Operations Research Power**: Built-in Critical Path Method (CPM), ANSI/EIA-748 Earned Value Management (EVM), DCMA-14 schedule health audits, and PERT risk bounds.
+* **Bidirectional Synchronization**: Humans drag bars, adjust progress, and link dependencies visually. Jantt serializes clean, canonical JSON back to disk, cloud rooms, or AI agents.
+
+---
+
+## Instant 10-Second Starter Template
+
+Want to see Jantt run right now? Copy this minimal, 100% valid JSON payload and paste it into the [Live Playground](https://ahmadhassan-bted.github.io/Jantt/) or your application:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
+  "meta": {
+    "title": "Autonomous Launch Schedule",
+    "person": "@ahmadhassan",
+    "scale": "week",
+    "linkRouting": "orthogonal",
+    "showCriticalPath": true
+  },
+  "categories": {
+    "core": { "label": "Engineering Core", "color": "#38BDF8" },
+    "release": { "label": "Deployment Gate", "color": "#10B981" }
+  },
+  "tasks": [
+    {
+      "id": "t1",
+      "wbs": "1.0",
+      "label": "Protocol Architecture & Specs",
+      "category": "core",
+      "start": "2026-09-01",
+      "end": "2026-09-20",
+      "progress": 1.0,
+      "status": "completed",
+      "assignee": "@ahmadhassan"
+    },
+    {
+      "id": "gate-1",
+      "wbs": "1.1",
+      "label": "Architecture Sign-Off Gate",
+      "category": "core",
+      "start": "2026-09-22",
+      "end": "2026-09-22",
+      "milestone": true,
+      "locked": true,
+      "dependsOn": "t1",
+      "progress": 1.0,
+      "status": "completed"
+    },
+    {
+      "id": "t2",
+      "wbs": "2.0",
+      "label": "High-Assurance Core Engine",
+      "category": "core",
+      "start": "2026-09-24",
+      "end": "2026-11-05",
+      "dependsOn": "gate-1",
+      "gapDays": 2,
+      "progress": 0.65,
+      "status": "in-progress",
+      "assignee": "@ahmadhassan"
+    },
+    {
+      "id": "gate-2",
+      "wbs": "3.0",
+      "label": "Global Production Release",
+      "category": "release",
+      "start": "2026-11-15",
+      "end": "2026-11-15",
+      "milestone": true,
+      "locked": true,
+      "dependsOn": "t2",
+      "gapDays": 10,
+      "progress": 0.0,
+      "status": "not-started"
+    }
+  ]
+}
+```
 
 ---
 
 ## AI Agent Workbench & System Prompt
 
-### AI-Native Ideology: Stop Asking AI to Write Fragile Timeline Code
-
-Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and canvas listeners produces brittle, hallucination-prone results. With Jantt, the AI outputs **pure declarative JSON**, and Jantt delivers deterministic, interactive execution.
-
-| 10x | 0 | 100% | 2-Way |
-| :---: | :---: | :---: | :---: |
-| **Fewer LLM Tokens vs JSX** | **Runtime Dependencies** | **Deterministic DAG Solver** | **Bidirectional State Sync** |
-
-*Schema Contract: `https://jantt.dev/schema/v1.json` (v1.4.0)*
-
-#### The 4-Step Bidirectional Loop
+### The 4-Step Bidirectional Loop
 
 1. **Step 1: Feed Cheatsheet to LLM** — Provide the AI model with the compact schema contract (WBS, dates, DAG dependencies, milestones, budget, people, notes, documents).
 2. **Step 2: AI Outputs Pure JSON** — Uses 10x fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
 3. **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban, Notes & PM Analytics.
 4. **Step 4: Bidirectional Loop** — Humans drag and adjust visually. Jantt syncs clean JSON back to local storage, cloud room, or disk for the AI agent.
-
----
 
 ### LLM System Prompt
 
@@ -35,13 +127,13 @@ Hand this prompt directly to ChatGPT, Claude, Gemini, Cursor, or your autonomous
 
 ```text
 You are a precision project management schedule generator.
-Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
+Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json).
 
 # JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET (v1.4.0)
 
 ## 1. Top-Level Root Structure
 {
-  "$schema": "https://jantt.dev/schema/v1.json",
+  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
   "meta": {
     "title": "<Project Title>",
     "description": "<Project narrative and objectives>",
@@ -177,11 +269,11 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 
 ## Complete Master Kitchen-Sink Benchmark Dataset
 
-Below is an exhaustive, production-grade Jantt dataset showcasing **every supported feature, attribute, and edge case simultaneously**:
+Below is an exhaustive, production-grade Jantt dataset showcasing **every supported feature, attribute, and engine capability simultaneously**:
 
 ```json
 {
-  "$schema": "https://jantt.dev/schema/v1.json",
+  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
   "meta": {
     "title": "Autonomous Edge OS & Quantum Crypto Mesh",
     "description": "High-assurance distributed operating platform with real-time verification and zero-trust orchestration.",
@@ -247,7 +339,7 @@ Below is an exhaustive, production-grade Jantt dataset showcasing **every suppor
       "avatar": "https://avatars.githubusercontent.com/u/104278065?v=4",
       "teamId": "team-core",
       "color": "#38BDF8",
-      "email": "ahmad@fractal.org"
+      "email": "ahmadhassan.bted@gmail.com"
     },
     {
       "id": "@elena-dev",
@@ -512,7 +604,7 @@ Below is an exhaustive, production-grade Jantt dataset showcasing **every suppor
 
 ```json
 {
-  "$schema": "https://jantt.dev/schema/v1.json",
+  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
   "meta": {},
   "categories": {},
   "people": [],
@@ -525,7 +617,7 @@ Below is an exhaustive, production-grade Jantt dataset showcasing **every suppor
 
 | Key | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
-| `$schema` | `string` | No | Schema URI identifier (`https://jantt.dev/schema/v1.json`) |
+| `$schema` | `string` | No | Schema URI identifier. Points to live raw schema for automated IDE IntelliSense |
 | `meta` | `object` | No | Project-wide parameters, scale, wire routing, budget, and rendering options |
 | `categories` | `object` | Yes | Map of category IDs to display labels, brand hex colors, soft tints, and icons |
 | `people` | `array` | No | Team members with avatar colors, contact emails, and squad mappings |
@@ -538,7 +630,8 @@ Below is an exhaustive, production-grade Jantt dataset showcasing **every suppor
 
 ## 2. Meta Object Configuration (`meta`)
 
-The `meta` block configures global project properties, timeline bounds, and visual presentation:
+### Why & When to Use
+Use `meta` to declare the high-level boundaries of your project. Setting explicit zoom scales (`scale`), routing styles (`linkRouting`), baseline visibility, and budgets allows Jantt to automatically calibrate the camera, coordinate system, and financial meters upon loading.
 
 ```json
 {
@@ -587,7 +680,8 @@ The `meta` block configures global project properties, timeline bounds, and visu
 
 ## 3. Categories Dictionary (`categories`)
 
-Every task must link to a valid key defined in the `categories` dictionary:
+### Why & When to Use
+Categories group related tasks into cohesive functional tracks. In Jantt, categories define both primary brand colors and soft dark-mode tints, as well as Lucide icons that render alongside task labels.
 
 ```json
 {
@@ -631,9 +725,8 @@ Every task must link to a valid key defined in the `categories` dictionary:
 
 ## 4. People & Squads Management (`people`, `teams`)
 
-The Jantt engine manages human resources, squad allocations, and avatar presentation with a dual-mode member architecture:
-
 ### Canonical Account Mentions vs Offline Personas
+Jantt supports seamless collaboration between verified team accounts and external stakeholders:
 
 1. **Registered Collaborators**: Use their verified GitHub handle mention for both `id` and `username` (e.g. `"id": "@ahmadhassan"`, `"username": "@ahmadhassan"`).
 2. **Offline Stakeholders / Contractors**: Use a local identifier (e.g. `"id": "person-auditor"`) and omit the `username` field.
@@ -651,7 +744,7 @@ The Jantt engine manages human resources, squad allocations, and avatar presenta
       "avatar": "https://avatars.githubusercontent.com/u/104278065?v=4",
       "teamId": "team-core",
       "color": "#38BDF8",
-      "email": "ahmad@fractal.org"
+      "email": "ahmadhassan.bted@gmail.com"
     },
     {
       "id": "person-auditor",
@@ -682,7 +775,8 @@ The Jantt engine manages human resources, squad allocations, and avatar presenta
 
 ## 5. Collaborative Notes System (`notes`)
 
-The `notes` array stores persistent markdown documentation, architecture RFCs, meeting minutes, and acceptance checklists. Notes can be attached to one or more tasks and are synchronized across cloud rooms with full role-based permissions:
+### Why & When to Use
+Use `notes` to store architectural RFCs, sprint planning documentation, meeting minutes, and acceptance checklists directly inside the project file. Notes synchronize across cloud rooms with full role-based permissions and can be attached to one or more tasks.
 
 ```json
 {
@@ -723,6 +817,9 @@ The `notes` array stores persistent markdown documentation, architecture RFCs, m
 ---
 
 ## 6. Documents & Deliverables Checklist (`documents`)
+
+### Why & When to Use
+Use `documents` to track compliance deliverables, security certifications, customer SLAs, and legal contracts alongside the project timeline.
 
 ```json
 {
@@ -837,7 +934,7 @@ Each task represents a planned work package, deliverable, or milestone gate:
 ## 8. Specific Functionality Samples
 
 ### Functionality 1: Zero-Duration Milestone Gates
-Milestones mark key phase transitions or contract sign-offs. Represented by diamonds:
+**Why Use This**: Milestones anchor major project gates (contract approvals, security sign-offs, production freeze) as visual diamond checkpoints.
 ```json
 {
   "id": "gate-spec-approved",
@@ -857,7 +954,7 @@ Milestones mark key phase transitions or contract sign-offs. Represented by diam
 ```
 
 ### Functionality 2: Multi-Prerequisite DAG Dependencies
-Tasks that cannot begin until multiple upstream tasks finish use an array of prerequisite IDs:
+**Why Use This**: Complex tasks often require several upstream deliverables to conclude before kickoff. Providing an array of prerequisite IDs forms a strict topological DAG.
 ```json
 {
   "id": "task-formal-audit",
@@ -873,7 +970,7 @@ Tasks that cannot begin until multiple upstream tasks finish use an array of pre
 ```
 
 ### Functionality 3: Baseline Variance Tracking (Ghost Bars)
-Compare original project commitments against live dates with the `baseline` object:
+**Why Use This**: Track schedule slip against historical project commitments. Jantt renders a subtle ghost bar below the live task bar showing variance in days.
 ```json
 {
   "id": "task-kernel-core",
@@ -889,7 +986,7 @@ Compare original project commitments against live dates with the `baseline` obje
 ```
 
 ### Functionality 4: Locked Tasks & Fixed Deadline Constraints
-Prevent inadvertent mouse or touch dragging by pinning the schedule:
+**Why Use This**: Hard deadlines (e.g. vendor fab cutoffs, regulatory filings) must not accidentally move during interactive drag operations.
 ```json
 {
   "id": "gate-production-ga",
@@ -903,7 +1000,7 @@ Prevent inadvertent mouse or touch dragging by pinning the schedule:
 ```
 
 ### Functionality 5: Direct Task Color Overrides
-Override the default category theme color for specific high-priority tasks:
+**Why Use This**: Draw immediate attention to executive prototypes or special tasks by overriding the category color.
 ```json
 {
   "id": "task-special-override",
@@ -916,7 +1013,7 @@ Override the default category theme color for specific high-priority tasks:
 ```
 
 ### Functionality 6: Blocked Task State
-Flag tasks impeded by external supply chain, physical hardware, or legal issues:
+**Why Use This**: Visually highlight bottlenecks and impediments (e.g. waiting for hardware silicon or legal clearance).
 ```json
 {
   "id": "task-blocked-hardware",
@@ -930,7 +1027,7 @@ Flag tasks impeded by external supply chain, physical hardware, or legal issues:
 ```
 
 ### Functionality 7: Custom Domain Fields Dictionary
-Attach Jira ticket keys, story points, PR URLs, and SLAs to any task:
+**Why Use This**: Preserve arbitrary domain metadata (Jira keys, GitHub PR URLs, Agile story points, SLAs) without corrupting core timeline math.
 ```json
 {
   "id": "task-kernel-core",

@@ -37,6 +37,128 @@ Designed from the ground up for:
 
 ---
 
+## Why Jantt? The Declarative Revolution
+
+Traditional project management and timeline tools force an impossible choice:
+
+1. **Enterprise Bloat**: Commercial suites (DHTMLX, Bryntum) demand 200KB to 800KB runtime dependencies, complex imperative APIs (`gantt.init()`, `gantt.addTask()`), and expensive recurring per-seat fees.
+2. **Brittle AI Generations**: Prompting LLMs (ChatGPT, Claude, Gemini) to generate React JSX or SVG coordinate math produces broken layouts, coordinate hallucinations, and wastes thousands of tokens on boilerplate UI code.
+3. **Static Limitations**: DSLs like Mermaid.js are read-only, non-interactive images. They cannot be dragged, edited, recalculated, or synchronized back to living project state.
+
+### The 4 Superpowers of Jantt
+
+* **Zero Runtime Dependencies**: The core math and layout engine (`@jantt/core`) is pure, zero-dependency TypeScript weighing under 14 KB gzipped.
+* **AI-Native & 10x Fewer Tokens**: Declarative JSON schema contract eliminates UI hallucinations; models generate timeline data with 10x fewer tokens than fragile JSX code.
+* **Swiss Modernism 2.0 Aesthetics**: Deep OLED Swiss Noir (`#080D18`), 90-degree CAD orthogonal routing, glassmorphic HUD cards, and high-contrast typography.
+* **Defense-Grade Operations Research**: Built-in topological DAG solver, Critical Path Method (CPM), Earned Value Management (EVM - ANSI/EIA-748), DCMA-14 schedule health audits, and multi-user CRDT cloud rooms.
+
+---
+
+## Visual Showcase & Curated Themes
+
+Jantt features a fully reactive, CSS variable-driven theming architecture with out-of-the-box support for light modes, sleek dark modes, and high-contrast vibrant styles:
+
+<div align="center">
+
+### Swiss Light Mode
+*Daylight clarity, high contrast typography, and subtle glassmorphic tooltips.*
+
+<img src="./assets/screenshots/jantt-swiss-light-interactive.png" alt="Jantt Swiss Light Theme" width="100%" style="border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;" />
+
+<br />
+
+### Swiss Dark Mode
+*Sleek obsidian palette with glowing critical path indicators and 90° right-angle routing.*
+
+<img src="./assets/screenshots/jantt-swiss-dark-overview.png" alt="Jantt Swiss Dark Theme" width="100%" style="border-radius: 8px; border: 1px solid #1e293b; margin-bottom: 20px;" />
+
+</div>
+
+### Color Theme Gallery
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <b>Cyber Emerald</b><br /><br />
+      <img src="./assets/screenshots/jantt-cyber-emerald-theme.png" alt="Cyber Emerald Theme" width="100%" style="border-radius: 6px;" />
+    </td>
+    <td width="50%" align="center">
+      <b>Midnight Rose</b><br /><br />
+      <img src="./assets/screenshots/jantt-midnight-rose-theme.png" alt="Midnight Rose Theme" width="100%" style="border-radius: 6px;" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <b>Sunset Crimson</b><br /><br />
+      <img src="./assets/screenshots/jantt-sunset-crimson-theme.png" alt="Sunset Crimson Theme" width="100%" style="border-radius: 6px;" />
+    </td>
+    <td width="50%" align="center">
+      <b>Master Specification Benchmark</b><br /><br />
+      <img src="./assets/screenshots/jantt-benchmark-cheatsheet.png" alt="Master Benchmark Cheatsheet" width="100%" style="border-radius: 6px;" />
+    </td>
+  </tr>
+</table>
+
+---
+
+## Comparison Matrix
+
+| Capability | Jantt Engine (`@jantt/core`) | DHTMLX Gantt | Frappe Gantt | Mermaid.js |
+|---|:---:|:---:|:---:|:---:|
+| **Runtime Dependencies** | **0 (Zero)** | Multiple | Multiple | Multiple |
+| **State Paradigm** | **100% Declarative JSON** | Imperative JS API | Imperative JS API | Text-based DSL |
+| **Interactive Drag-to-Link** | **90° Orthogonal Step** | Supported | Not Supported | Static only |
+| **Timeline Zoom Scales** | **5 (Day to Year)** | Supported | Limited | Not Supported |
+| **Critical Path Analysis** | **Built-in Solver** | Commercial tier | Not Supported | Not Supported |
+| **Milestones & Baselines** | **Native in Schema** | Commercial tier | Not Supported | Milestones only |
+| **Inline Progress Dragging** | **Interactive Handle** | Supported | Read-only | Not Supported |
+| **Bi-directional CLI Sync** | **Built-in** | Not Supported | Not Supported | Not Supported |
+| **Bundle Size (gzip)** | **< 14 KB** | ~200 KB | ~35 KB | ~800 KB |
+
+---
+
+## 60-Second Quickstart
+
+### 1. React Integration (`@jantt/react`)
+
+```bash
+npm install @jantt/react @jantt/core
+```
+
+```tsx
+import { Jantt } from "@jantt/react";
+import "@jantt/react/dist/index.css";
+
+const projectData = {
+  tasks: [
+    { id: "t1", label: "Architecture RFC", category: "core", start: "2026-09-01", end: "2026-09-14", progress: 1.0 },
+    { id: "t2", label: "Core Implementation", category: "core", start: "2026-09-15", end: "2026-10-15", dependsOn: "t1" }
+  ],
+  categories: {
+    core: { label: "Core Engineering", color: "#38BDF8" }
+  }
+};
+
+export default function Timeline() {
+  return <Jantt data={projectData} theme="swiss-dark" />;
+}
+```
+
+### 2. Plain HTML / Script Tag (`@jantt/standalone`)
+
+```html
+<script src="https://unpkg.com/@jantt/standalone"></script>
+<link rel="stylesheet" href="https://unpkg.com/@jantt/standalone/dist/jantt.css" />
+
+<div id="timeline" style="width: 100vw; height: 100vh;"></div>
+
+<script>
+  JanttStandalone.render("#timeline", projectData, { theme: "swiss-dark" });
+</script>
+```
+
+---
+
 ## AI Agent Workbench & Schema Cheatsheet
 
 ### AI-Native Ideology: Stop Asking AI to Write Fragile Timeline Code
@@ -49,7 +171,7 @@ Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and ca
 | :---: | :---: | :---: | :---: |
 | **Fewer LLM Tokens vs JSX** | **Runtime Dependencies** | **Deterministic DAG Solver** | **Bidirectional State Sync** |
 
-*Schema Contract: [`https://jantt.dev/schema/v1.json`](https://jantt.dev/schema/v1.json) (v1.4.0)*
+*Schema Contract: [`https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json`](https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json) (v1.4.0)*
 
 </div>
 
@@ -74,13 +196,13 @@ Hand this prompt to ChatGPT, Claude, Gemini, Cursor, or your autonomous AI agent
 
 ```text
 You are a precision project management schedule generator.
-Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://jantt.dev/schema/v1.json).
+Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json).
 
 # JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET (v1.4.0)
 
 ## 1. Top-Level Root Structure
 {
-  "$schema": "https://jantt.dev/schema/v1.json",
+  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
   "meta": {
     "title": "<Project Title>",
     "description": "<Project narrative and objectives>",
@@ -214,16 +336,16 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
 
 ---
 
-### JSON Schema Cheatsheet
+### Minimal JSON Template
 
-Raw minimal Jantt JSON template structure. Provide this benchmark template directly to any code or LLM pipeline:
+Provide this minimal benchmark template directly to any code or LLM pipeline:
 
 ```json
 {
-  "$schema": "https://jantt.dev/schema/v1.json",
+  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
   "meta": {
     "title": "Master Delivery Plan",
-    "person": "Program Lead",
+    "person": "@ahmadhassan",
     "start": "2026-09-01",
     "end": "2027-02-28",
     "scale": "week",
@@ -245,7 +367,8 @@ Raw minimal Jantt JSON template structure. Provide this benchmark template direc
       "start": "2026-09-01",
       "end": "2026-09-20",
       "progress": 1.0,
-      "status": "completed"
+      "status": "completed",
+      "assignee": "@ahmadhassan"
     },
     {
       "id": "gate-1",
@@ -272,70 +395,6 @@ Raw minimal Jantt JSON template structure. Provide this benchmark template direc
   ]
 }
 ```
-
----
-
-## Visual Showcase & Curated Themes
-
-Jantt features a fully reactive, CSS variable-driven theming architecture with out-of-the-box support for light modes, sleek dark modes, and high-contrast vibrant styles:
-
-<div align="center">
-
-### Swiss Light Mode
-*Daylight clarity, high contrast typography, and subtle glassmorphic tooltips.*
-
-<img src="./assets/screenshots/jantt-swiss-light-interactive.png" alt="Jantt Swiss Light Theme" width="100%" style="border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;" />
-
-<br />
-
-### Swiss Dark Mode
-*Sleek obsidian palette with glowing critical path indicators and 90° right-angle routing.*
-
-<img src="./assets/screenshots/jantt-swiss-dark-overview.png" alt="Jantt Swiss Dark Theme" width="100%" style="border-radius: 8px; border: 1px solid #1e293b; margin-bottom: 20px;" />
-
-</div>
-
-### Color Theme Gallery
-
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <b>Cyber Emerald</b><br /><br />
-      <img src="./assets/screenshots/jantt-cyber-emerald-theme.png" alt="Cyber Emerald Theme" width="100%" style="border-radius: 6px;" />
-    </td>
-    <td width="50%" align="center">
-      <b>Midnight Rose</b><br /><br />
-      <img src="./assets/screenshots/jantt-midnight-rose-theme.png" alt="Midnight Rose Theme" width="100%" style="border-radius: 6px;" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <b>Sunset Crimson</b><br /><br />
-      <img src="./assets/screenshots/jantt-sunset-crimson-theme.png" alt="Sunset Crimson Theme" width="100%" style="border-radius: 6px;" />
-    </td>
-    <td width="50%" align="center">
-      <b>Master Specification Benchmark</b><br /><br />
-      <img src="./assets/screenshots/jantt-benchmark-cheatsheet.png" alt="Master Benchmark Cheatsheet" width="100%" style="border-radius: 6px;" />
-    </td>
-  </tr>
-</table>
-
-
----
-
-## Comparison Matrix
-
-| Capability | Jantt Engine (`@jantt/core`) | DHTMLX Gantt | Frappe Gantt | Mermaid.js |
-|---|:---:|:---:|:---:|:---:|
-| **Runtime Dependencies** | **0 (Zero)** | Multiple | Multiple | Multiple |
-| **State Paradigm** | **100% Declarative JSON** | Imperative JS API | Imperative JS API | Text-based DSL |
-| **Interactive Drag-to-Link** | **90° Orthogonal Step** | Supported | Not Supported | Static only |
-| **Timeline Zoom Scales** | **5 (Day to Year)** | Supported | Limited | Not Supported |
-| **Critical Path Analysis** | **Built-in Solver** | Commercial tier | Not Supported | Not Supported |
-| **Milestones & Baselines** | **Native in Schema** | Commercial tier | Not Supported | Milestones only |
-| **Inline Progress Dragging** | **Interactive Handle** | Supported | Read-only | Not Supported |
-| **Bi-directional CLI Sync** | **Built-in** | Not Supported | Not Supported | Not Supported |
-| **Bundle Size (gzip)** | **< 14 KB** | ~200 KB | ~35 KB | ~800 KB |
 
 ---
 
@@ -765,6 +824,7 @@ npm run dev
 ## Author & Maintainer
 
 **Ahmad Hassan (B-Ted)**  
+- Email: [ahmadhassan.bted@gmail.com](mailto:ahmadhassan.bted@gmail.com)
 - GitHub: [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed)
 - Project Repository: [https://github.com/AhmadHassan-BTed/Jantt](https://github.com/AhmadHassan-BTed/Jantt)
 

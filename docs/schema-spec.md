@@ -1,6 +1,9 @@
 # Jantt JSON Schema v1 Specification
 
-**Schema URI**: `https://jantt.dev/schema/v1.json`  
+**Schema Identifier**: `https://jantt.dev/schema/v1.json`  
+**Live Resolving Schema**: [`schema/jantt.schema.json`](https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json)  
+**Web Endpoint**: [`https://ahmadhassan-bted.github.io/Jantt/schema/v1.json`](https://ahmadhassan-bted.github.io/Jantt/schema/v1.json)  
+**Local Workspace Path**: [`schema/jantt.schema.json`](../schema/jantt.schema.json)  
 **JSON Schema Dialect**: Draft-07
 
 ---
@@ -108,7 +111,8 @@ Jantt defines a single source of truth for all human assignees and squads, clean
     "username": "@ahmadhassan",
     "role": "Project Lead / Principal Investigator",
     "teamId": "research",
-    "color": "#38BDF8"
+    "color": "#38BDF8",
+    "email": "ahmadhassan.bted@gmail.com"
   },
   {
     "id": "person-contractor",
