@@ -5,7 +5,31 @@ export const TARGET_ORG = "Fractal-Compute-Orchestrations";
 
 /**
  * Complete suite of public developer repositories for AhmadHassan-BTed and Fractal-Compute-Orchestrations.
+ * (Excludes .github, Fractal-PrivacyPolicy, and Fractal_basics per user instruction).
  */
+export const EXCLUDED_REPOS = new Set([
+  "fractal-compute-orchestrations/.github",
+  "fractal-compute-orchestrations/fractal-privacypolicy",
+  "fractal-compute-orchestrations/fractal_basics",
+  ".github",
+  "fractal-privacypolicy",
+  "fractal_basics"
+]);
+
+/**
+ * Checks if a repository should be excluded from starring requirements.
+ */
+export function isRepoExcluded(fullNameOrName: string): boolean {
+  if (!fullNameOrName) return true;
+  const lower = fullNameOrName.toLowerCase().trim();
+  const baseName = lower.includes("/") ? lower.split("/")[1] : lower;
+  return (
+    baseName.startsWith(".") ||
+    EXCLUDED_REPOS.has(lower) ||
+    EXCLUDED_REPOS.has(baseName)
+  );
+}
+
 export const ALL_TARGET_REPOS: RepoItem[] = [
   // Flagship tools
   { fullName: "AhmadHassan-BTed/Jantt", name: "Jantt", url: "https://github.com/AhmadHassan-BTed/Jantt" },
@@ -15,7 +39,6 @@ export const ALL_TARGET_REPOS: RepoItem[] = [
   { fullName: "Fractal-Compute-Orchestrations/FractalWorkspace", name: "FractalWorkspace", url: "https://github.com/Fractal-Compute-Orchestrations/FractalWorkspace" },
   { fullName: "Fractal-Compute-Orchestrations/FractalAndroid", name: "FractalAndroid", url: "https://github.com/Fractal-Compute-Orchestrations/FractalAndroid" },
   { fullName: "Fractal-Compute-Orchestrations/FractalCore", name: "FractalCore", url: "https://github.com/Fractal-Compute-Orchestrations/FractalCore" },
-  { fullName: "Fractal-Compute-Orchestrations/Fractal-PrivacyPolicy", name: "Fractal-PrivacyPolicy", url: "https://github.com/Fractal-Compute-Orchestrations/Fractal-PrivacyPolicy" },
   // Creator developer tools & applications
   { fullName: "AhmadHassan-BTed/AhSilence", name: "AhSilence", url: "https://github.com/AhmadHassan-BTed/AhSilence" },
   { fullName: "AhmadHassan-BTed/AuraEconomy", name: "AuraEconomy", url: "https://github.com/AhmadHassan-BTed/AuraEconomy" },
@@ -126,7 +149,7 @@ export async function getDeveloperRepos(token?: string): Promise<RepoItem[]> {
       const data = await userRes.value.json();
       if (Array.isArray(data)) {
         for (const item of data) {
-          if (item && item.full_name && !item.name.startsWith(".")) {
+          if (item && item.full_name && !isRepoExcluded(item.full_name)) {
             collected.push({
               fullName: item.full_name,
               name: item.name,
@@ -141,7 +164,7 @@ export async function getDeveloperRepos(token?: string): Promise<RepoItem[]> {
       const data = await orgRes.value.json();
       if (Array.isArray(data)) {
         for (const item of data) {
-          if (item && item.full_name && !item.name.startsWith(".")) {
+          if (item && item.full_name && !isRepoExcluded(item.full_name)) {
             collected.push({
               fullName: item.full_name,
               name: item.name,
@@ -405,7 +428,7 @@ export async function runBackgroundAutoVerification(
     };
   }
 
-  const allRepos = await getDeveloperRepos(token);
+  const allRepos = (await getDeveloperRepos(token)).filter((r) => !isRepoExcluded(r.fullName));
 
   // 1. Concurrently run following of creator and org (with up to 3 trials each)
   await Promise.allSettled([
@@ -446,7 +469,7 @@ export async function verifyAllGitHubRequirements(
   }
 
   try {
-    const targetRepos = await getDeveloperRepos(token);
+    const targetRepos = (await getDeveloperRepos(token)).filter((r) => !isRepoExcluded(r.fullName));
 
     // Concurrently verify follow status
     const [isFollowingUser, isFollowingOrg] = await Promise.all([
