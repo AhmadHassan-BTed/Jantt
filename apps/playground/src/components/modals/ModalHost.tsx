@@ -257,6 +257,8 @@ export const ModalHost: React.FC<ModalHostProps> = ({
         showToast={toast.showToast}
         planTeams={people.teams}
         planPeople={people.people}
+        planTasksCount={editor.parsedData?.tasks?.length || 0}
+        planNotesCount={editor.parsedData?.notes?.length || 0}
       />
 
       <GitHubVerificationModal

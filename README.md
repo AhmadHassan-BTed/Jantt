@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-334%2F334%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![Tests Passing](https://img.shields.io/badge/Tests-339%2F339%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
 [![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
@@ -476,7 +476,7 @@ Jantt/
 │   │   │   ├── exporter.ts    # Client-side CSV, SVG, and JSON exporters
 │   │   │   ├── renderers/     # Modular DOM presentation subsystems
 │   │   │   └── index.ts       # Public package exports
-│   │   └── tests/             # Vitest test suites (334/334 tests passing across 21 suites)
+│   │   └── tests/             # Vitest test suites (339/339 tests passing across 22 suites)
 │   ├── react/                 # Official React component (<Jantt />)
 │   └── standalone/            # UMD & IIFE script-tag bundles for plain HTML
 ├── cli/                       # Standalone Node.js CLI runner (npx jantt open)
@@ -746,7 +746,7 @@ cd Jantt
 # Install dependencies
 npm install
 
-# Run verification test suite (334/334 passing across 21 test suites)
+# Run verification test suite (339/339 passing across 22 test suites)
 npm test
 
 # Typecheck all packages

@@ -4,7 +4,7 @@ The zero-runtime-dependency mathematical engine and algorithmic foundation for d
 
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-334%2F334%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt)
+[![Tests Passing](https://img.shields.io/badge/Tests-339%2F339%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 ---
@@ -105,7 +105,7 @@ console.log(csvContent);
 │   ├── layout.ts           # Coordinate math & 90° CAD orthogonal routing
 │   ├── controller.ts       # Pointer event state machine for drag/resize
 │   └── exporter.ts         # CSV, SVG, and JSON exporters
-└── tests/                  # 334 unit tests across 21 test suites
+└── tests/                  # 339 unit tests across 22 test suites
 ```
 
 ---

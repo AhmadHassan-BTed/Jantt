@@ -43,6 +43,7 @@ export interface RoomMetadata {
   contentHash: string;
   isPublic?: boolean;
   taskCount?: number;
+  noteCount?: number;
   secretKey?: string;
   theme?: string;
 }
@@ -57,6 +58,8 @@ export interface UserRoomPointer {
   role: RoomMemberRole;
   updatedAt: string;
   createdAt: string;
+  taskCount?: number;
+  noteCount?: number;
 }
 
 export type UserRoomPointerDto = UserRoomPointer;

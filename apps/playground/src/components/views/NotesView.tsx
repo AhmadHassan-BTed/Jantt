@@ -16,9 +16,8 @@ interface NotesViewProps {
   teams?: Team[];
   isViewer?: boolean;
   onPromptFork?: () => void;
+  activeProjectId?: string;
 }
-
-const STORAGE_KEY_ACTIVE_NOTE = "jantt_active_note_id";
 
 export const NotesView: React.FC<NotesViewProps> = ({
   parsedData,
@@ -26,7 +25,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
   effectivePeople = [],
   teams = [],
   isViewer = false,
-  onPromptFork
+  onPromptFork,
+  activeProjectId = "default"
 }) => {
   const notes: NoteItem[] = useMemo(() => parsedData.notes || [], [parsedData.notes]);
   const allTasks: Task[] = useMemo(() => parsedData.tasks || [], [parsedData.tasks]);
@@ -37,22 +37,32 @@ export const NotesView: React.FC<NotesViewProps> = ({
     return teams || {};
   }, [teams]);
 
+  const storageKey = useMemo(() => {
+    return `jantt_active_note_id_${activeProjectId}`;
+  }, [activeProjectId]);
+
   const [activeNoteId, setActiveNoteIdState] = useState<string | null>(() => {
-    return storageService.getItem<string>(STORAGE_KEY_ACTIVE_NOTE) || null;
+    return storageService.getItem<string>(`jantt_active_note_id_${activeProjectId}`) || null;
   });
+
+  // Re-hydrate activeNoteId when room/project switches
+  useEffect(() => {
+    const stored = storageService.getItem<string>(storageKey) || null;
+    setActiveNoteIdState(stored);
+  }, [storageKey]);
 
   const setActiveNoteId = useCallback((id: string | null) => {
     setActiveNoteIdState(id);
     if (id) {
-      storageService.setItem(STORAGE_KEY_ACTIVE_NOTE, id);
+      storageService.setItem(storageKey, id);
     } else {
-      storageService.removeItem(STORAGE_KEY_ACTIVE_NOTE);
+      storageService.removeItem(storageKey);
     }
-  }, []);
+  }, [storageKey]);
 
-  // Validate that if activeNoteId is set, it actually exists in notes
+  // Validate that if activeNoteId is set, it actually exists in notes of the current room
   useEffect(() => {
-    if (activeNoteId && notes.length > 0 && !notes.some((n) => n.id === activeNoteId)) {
+    if (activeNoteId && !notes.some((n) => n.id === activeNoteId)) {
       setActiveNoteId(null);
     }
   }, [notes, activeNoteId, setActiveNoteId]);
@@ -338,6 +348,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
         onSearchChange={setSearchQuery}
         selectedColor={selectedColor}
         onSelectColor={setSelectedColor}
+        isViewer={isViewer}
       />
 
       {/* 2. Main Editor Surface */}
@@ -364,19 +375,23 @@ export const NotesView: React.FC<NotesViewProps> = ({
           onContentChange={handleContentChange}
           onAttachTask={handleAttachTask}
           onUnlinkTask={handleDetachTask}
+          isViewer={isViewer}
+          onPromptFork={onPromptFork}
         />
       ) : (
         <div className="note-editor-empty-state">
           <p className="note-editor-empty-title">Select or create a note</p>
           <p className="note-editor-empty-sub">
-            Capture project meeting summaries, team action items, and link roadmap tasks directly in your notes.
+            {isViewer
+              ? "This shared room is in read-only Viewer mode. Select a note to read specifications or make a copy to edit."
+              : "Capture project meeting summaries, team action items, and link roadmap tasks directly in your notes."}
           </p>
           <button
             type="button"
             className="notes-empty-create-btn"
-            onClick={handleCreateNote}
+            onClick={isViewer ? onPromptFork : handleCreateNote}
           >
-            Create New Note
+            {isViewer ? "Fork to Create Note" : "Create New Note"}
           </button>
         </div>
       )}

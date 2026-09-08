@@ -8,6 +8,7 @@ export interface AttachedTasksDrawerProps {
   teamsMap: Record<string, Team>;
   onAttachTask: (taskId: string) => void;
   onUnlinkTask: (taskId: string) => void;
+  isViewer?: boolean;
 }
 
 export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
@@ -15,7 +16,8 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
   allTasks,
   teamsMap,
   onAttachTask,
-  onUnlinkTask
+  onUnlinkTask,
+  isViewer = false
 }) => {
   const [showAttachPicker, setShowAttachPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
@@ -36,16 +38,17 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
           <Paperclip size={13} />
           <span>Attached Tasks ({attachedTasks.length})</span>
         </span>
-        <div className="note-attach-picker-anchor">
-          <button
-            type="button"
-            className="note-attach-add-btn"
-            onClick={() => setShowAttachPicker(!showAttachPicker)}
-            title="Attach a roadmap task to this note"
-          >
-            <PlusCircle size={13} />
-            <span>Attach Task</span>
-          </button>
+        {!isViewer && (
+          <div className="note-attach-picker-anchor">
+            <button
+              type="button"
+              className="note-attach-add-btn"
+              onClick={() => setShowAttachPicker(!showAttachPicker)}
+              title="Attach a roadmap task to this note"
+            >
+              <PlusCircle size={13} />
+              <span>Attach Task</span>
+            </button>
 
           {showAttachPicker && (
             <div className="note-attach-picker-dropdown">
@@ -84,6 +87,7 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
             </div>
           )}
         </div>
+      )}
       </div>
 
       <div className="note-attached-pills-list">
@@ -109,14 +113,16 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
                     {teamObj.name}
                   </span>
                 )}
-                <button
-                  type="button"
-                  className="note-chip-remove"
-                  onClick={() => onUnlinkTask(task.id)}
-                  title="Unlink task from this note"
-                >
-                  <X size={11} />
-                </button>
+                {!isViewer && (
+                  <button
+                    type="button"
+                    className="note-chip-remove"
+                    onClick={() => onUnlinkTask(task.id)}
+                    title="Unlink task from this note"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
               </div>
             );
           })

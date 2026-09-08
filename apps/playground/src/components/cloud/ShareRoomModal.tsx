@@ -40,6 +40,8 @@ interface ShareRoomModalProps {
   showToast: (msg: string, isErr?: boolean) => void;
   planTeams?: Team[];
   planPeople?: Person[];
+  planTasksCount?: number;
+  planNotesCount?: number;
 }
 
 export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
@@ -50,7 +52,9 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   currentUserProfile,
   showToast,
   planTeams = [],
-  planPeople = []
+  planPeople = [],
+  planTasksCount,
+  planNotesCount
 }) => {
   const [activeTab, setActiveTab] = useState<"link" | "username" | "teams" | "members">("link");
   const [searchQuery, setSearchQuery] = useState("");
@@ -275,7 +279,9 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                 Share Room: {roomTitle}
               </h3>
               <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--jantt-muted)" }}>
-                Room ID: <code style={{ color: "var(--jantt-accent)" }}>{roomId}</code> • {members.length} member{members.length === 1 ? "" : "s"} • {roomTeams.length} team{roomTeams.length === 1 ? "" : "s"}
+                Room ID: <code style={{ color: "var(--jantt-accent)" }}>{roomId}</code> • {members.length} member{members.length === 1 ? "" : "s"}
+                {planTasksCount !== undefined && ` • ${planTasksCount} task${planTasksCount === 1 ? "" : "s"}`}
+                {planNotesCount !== undefined && ` • ${planNotesCount} note${planNotesCount === 1 ? "" : "s"}`}
               </p>
             </div>
           </div>

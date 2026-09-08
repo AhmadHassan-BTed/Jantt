@@ -60,6 +60,7 @@ export async function createRoom(
   const now = new Date().toISOString();
   const contentHash = calculatePlanHash(initialData);
   const taskCount = initialData.tasks?.length || 0;
+  const noteCount = initialData.notes?.length || 0;
 
   const meta: RoomMetadata = {
     roomId,
@@ -71,6 +72,7 @@ export async function createRoom(
     revision: 1,
     contentHash,
     taskCount,
+    noteCount,
     secretKey,
     theme: "noir"
   };
@@ -101,7 +103,9 @@ export async function createRoom(
     ownerUsername: user.username,
     role: "owner",
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    taskCount,
+    noteCount
   };
 
   const sanitizedData = sanitizePlanForJson(initialData);
@@ -495,6 +499,7 @@ export async function saveRoomDataAtomic(
     const now = new Date().toISOString();
     const contentHash = calculatePlanHash(finalMergedData);
     const taskCount = finalMergedData.tasks?.length || 0;
+    const noteCount = finalMergedData.notes?.length || 0;
     finalRevision = (currentRoom.meta?.revision || 1) + 1;
 
     currentRoom.data = encodePlanForRtdb(finalMergedData);
@@ -503,7 +508,8 @@ export async function saveRoomDataAtomic(
       revision: finalRevision,
       contentHash,
       updatedAt: now,
-      taskCount
+      taskCount,
+      noteCount
     };
 
     return currentRoom;

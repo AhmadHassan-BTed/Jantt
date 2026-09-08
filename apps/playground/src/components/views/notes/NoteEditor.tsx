@@ -38,6 +38,8 @@ export interface NoteEditorProps {
   onContentChange: () => void;
   onAttachTask: (taskId: string) => void;
   onUnlinkTask: (taskId: string) => void;
+  isViewer?: boolean;
+  onPromptFork?: () => void;
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -61,7 +63,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onDeleteNote,
   onContentChange,
   onAttachTask,
-  onUnlinkTask
+  onUnlinkTask,
+  isViewer = false,
+  onPromptFork
 }) => {
   const [showColorPicker, setShowColorPicker] = useState(false);
 
@@ -91,7 +95,17 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             <span>All Notes</span>
           </button>
           <div className="note-save-indicator">
-            {saveStatus === "saved" ? (
+            {isViewer ? (
+              <button
+                type="button"
+                className="save-tag is-viewer"
+                onClick={() => onPromptFork?.()}
+                title="Shared room note is read-only (Click to fork a local copy)"
+              >
+                <Eye size={12} />
+                <span>Viewer (Read-Only)</span>
+              </button>
+            ) : saveStatus === "saved" ? (
               <span className="save-tag is-saved">
                 <CheckCircle2 size={12} />
                 <span>Saved</span>
@@ -109,8 +123,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           <button
             type="button"
             className={`note-action-btn ${editPinned ? "is-pinned" : ""}`}
-            onClick={() => setEditPinned(!editPinned)}
-            title={editPinned ? "Unpin note" : "Pin note to top"}
+            onClick={() => {
+              if (isViewer) {
+                onPromptFork?.();
+                return;
+              }
+              setEditPinned(!editPinned);
+            }}
+            title={isViewer ? "Note is pinned (View-Only)" : editPinned ? "Unpin note" : "Pin note to top"}
           >
             <Pin size={15} />
           </button>
@@ -120,13 +140,19 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             <button
               type="button"
               className="note-action-btn"
-              onClick={() => setShowColorPicker(!showColorPicker)}
-              title="Change note color theme"
+              onClick={() => {
+                if (isViewer) {
+                  onPromptFork?.();
+                  return;
+                }
+                setShowColorPicker(!showColorPicker);
+              }}
+              title={isViewer ? "Note color theme (View-Only)" : "Change note color theme"}
             >
               <span className="note-color-swatch-indicator" style={{ backgroundColor: editColor }} />
             </button>
 
-            {showColorPicker && (
+            {!isViewer && showColorPicker && (
               <div className="note-color-picker-dropdown">
                 {NOTE_PALETTE.map((pal) => (
                   <button
@@ -154,14 +180,16 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             {isPreviewMode ? <Edit3 size={15} /> : <Eye size={15} />}
           </button>
 
-          <button
-            type="button"
-            className="note-action-btn is-danger"
-            onClick={() => onDeleteNote(activeNote.id)}
-            title="Delete this note"
-          >
-            <Trash2 size={15} />
-          </button>
+          {!isViewer && (
+            <button
+              type="button"
+              className="note-action-btn is-danger"
+              onClick={() => onDeleteNote(activeNote.id)}
+              title="Delete this note"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -172,10 +200,16 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           <input
             ref={titleInputRef}
             type="text"
-            className="note-title-input"
-            placeholder="Note title..."
+            className={`note-title-input ${isViewer ? "is-readonly" : ""}`}
+            placeholder={isViewer ? "Untitled Note" : "Note title..."}
             value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
+            readOnly={isViewer}
+            onClick={() => {
+              if (isViewer) onPromptFork?.();
+            }}
+            onChange={(e) => {
+              if (!isViewer) setEditTitle(e.target.value);
+            }}
           />
 
           {/* Rich ContentEditable Body or Markdown Preview */}
@@ -190,12 +224,19 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           ) : (
             <div
               ref={contentEditableRef}
-              className="note-contenteditable-surface"
-              contentEditable
+              className={`note-contenteditable-surface ${isViewer ? "is-readonly" : ""}`}
+              contentEditable={!isViewer}
               suppressContentEditableWarning
-              onInput={handleEditorInput}
-              onKeyDown={handleEditorKeyDown}
-              data-placeholder="Start typing your note... Use @ to mention team members and / to attach tasks."
+              onInput={isViewer ? undefined : handleEditorInput}
+              onKeyDown={isViewer ? undefined : handleEditorKeyDown}
+              onClick={() => {
+                if (isViewer) onPromptFork?.();
+              }}
+              data-placeholder={
+                isViewer
+                  ? "This note is read-only in Viewer mode. Click to make a local copy."
+                  : "Start typing your note... Use @ to mention team members and / to attach tasks."
+              }
             />
           )}
 
@@ -206,12 +247,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             teamsMap={teamsMap}
             onAttachTask={onAttachTask}
             onUnlinkTask={onUnlinkTask}
+            isViewer={isViewer}
           />
         </div>
       </div>
 
-      {/* Floating Autocomplete Popover */}
-      {mentionPopup.isOpen && (
+      {/* Floating Autocomplete Popover (Editors only) */}
+      {!isViewer && mentionPopup.isOpen && (
         <div
           className="note-mention-dropdown"
           style={{

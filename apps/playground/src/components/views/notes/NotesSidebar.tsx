@@ -14,6 +14,7 @@ export interface NotesSidebarProps {
   onSearchChange: (q: string) => void;
   selectedColor: string;
   onSelectColor: (c: string) => void;
+  isViewer?: boolean;
 }
 
 export const NotesSidebar: React.FC<NotesSidebarProps> = ({
@@ -25,7 +26,8 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
   searchQuery,
   onSearchChange,
   selectedColor,
-  onSelectColor
+  onSelectColor,
+  isViewer = false
 }) => {
   const filteredNotes = notes.filter((n) => {
     if (selectedColor !== "all" && n.color !== selectedColor) return false;
@@ -55,12 +57,13 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
             <StickyNote size={18} className="notes-brand-icon" />
             <span className="notes-brand-title">Project Notes</span>
             <span className="notes-count-badge">{notes.length}</span>
+            {isViewer && <span className="notes-view-only-badge">View-Only</span>}
           </div>
           <button
             type="button"
             className="notes-new-btn"
             onClick={onCreateNote}
-            title="Create a new note"
+            title={isViewer ? "View-only room (Click to fork a local copy)" : "Create a new note"}
           >
             <Plus size={14} />
             <span>New Note</span>
@@ -105,9 +108,13 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
           <div className="notes-empty-list">
             <StickyNote size={28} className="notes-empty-icon" />
             <p className="notes-empty-text">
-              {searchQuery ? "No matching notes found." : "No project notes yet."}
+              {searchQuery
+                ? "No matching notes found."
+                : isViewer
+                ? "No project notes yet in this shared room."
+                : "No project notes yet."}
             </p>
-            {!searchQuery && (
+            {!searchQuery && !isViewer && (
               <button
                 type="button"
                 className="notes-empty-create-btn"
@@ -132,14 +139,16 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
                   <span className="note-item-title">{note.title || "Untitled Note"}</span>
                   <div className="note-item-badges">
                     {note.pinned && <Pin size={11} className="note-pin-badge" />}
-                    <button
-                      type="button"
-                      className="note-item-del-btn"
-                      onClick={(e) => onDeleteNote(note.id, e)}
-                      title="Delete note"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                    {!isViewer && (
+                      <button
+                        type="button"
+                        className="note-item-del-btn"
+                        onClick={(e) => onDeleteNote(note.id, e)}
+                        title="Delete note"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
 

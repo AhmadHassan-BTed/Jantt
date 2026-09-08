@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Touch scrub navigation and pinch-to-zoom timeline scaling.
   - Single-column Kanban scroll snapping (`scroll-snap-type: x mandatory`).
   - Mobile bottom navigation bar for seamless tab switching.
+- **Shared Cloud Room Notes & Realtime Collaborative Documentation**:
+  - Full bidirectional synchronization of the project `notes` collection across all room members via Firebase Realtime Database WebSockets.
+  - Multi-user 3-way CRDT reconciliation with last-write-wins (LWW) per field (`title`, `content`, `color`, `pinned`, `task_ids`) and tombstone propagation for note deletions to prevent resurrection.
+  - Strict role-based permissions: Room Owner and Editors possess full read/write permissions (create, edit, re-color, pin, attach tasks, delete); Viewers possess locked read-only access (`readOnly` inputs, non-editable surface, disabled color/pin toggles, hidden delete and attach buttons).
+  - Per-project active note scoping (`jantt_active_note_id_${activeProjectId}`) eliminating ghost note states when switching between rooms.
+  - Task and note metrics tracking in room metadata (`taskCount` and `noteCount`) for clear visibility in room listings and share modals.
 - **Cloud Collaboration & Realtime Sync Refinements**:
   - Firebase Realtime Database CRDT sync with offline queueing and conflict resolution.
   - GitHub Stargazer verification service with automated background checking (`githubVerificationService.ts`).

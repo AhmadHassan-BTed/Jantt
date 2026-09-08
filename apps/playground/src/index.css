@@ -3352,6 +3352,18 @@ path.jantt-dep-path.jantt-task-dimmed {
   color: var(--jantt-text-muted, #94A3B8);
 }
 
+.notes-view-only-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
 .notes-new-btn {
   display: inline-flex;
   align-items: center;
@@ -3716,6 +3728,20 @@ path.jantt-dep-path.jantt-task-dimmed {
   border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
+.save-tag.is-viewer {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94A3B8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.save-tag.is-viewer:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38BDF8;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
 .spin-icon {
   animation: spin 1s linear infinite;
 }
@@ -3836,6 +3862,11 @@ path.jantt-dep-path.jantt-task-dimmed {
   color: var(--jantt-text-muted, #475569);
 }
 
+.note-title-input.is-readonly {
+  cursor: default;
+  user-select: none;
+}
+
 .note-contenteditable-surface {
   min-height: 280px;
   font-size: 15px;
@@ -3845,6 +3876,10 @@ path.jantt-dep-path.jantt-task-dimmed {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
+}
+
+.note-contenteditable-surface.is-readonly {
+  cursor: default;
 }
 
 .note-contenteditable-surface[data-placeholder]:empty:before {

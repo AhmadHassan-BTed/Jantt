@@ -218,6 +218,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           teams={people.teams}
           isViewer={isViewer}
           onPromptFork={onPromptFork}
+          activeProjectId={project.activeProjectId}
         />
       )}
     </>
