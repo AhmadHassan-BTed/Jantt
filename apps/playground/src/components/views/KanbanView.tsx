@@ -39,6 +39,8 @@ interface KanbanViewProps {
   selectedPersonFilter?: string;
   openTaskDetailSidebar: (task: Task) => void;
   handleChartCommit: (data: JanttData) => void;
+  isViewer?: boolean;
+  onPromptFork?: () => void;
 }
 
 export const KanbanView: React.FC<KanbanViewProps> = ({
@@ -54,7 +56,9 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   teams,
   selectedPersonFilter = "all",
   openTaskDetailSidebar,
-  handleChartCommit
+  handleChartCommit,
+  isViewer = false,
+  onPromptFork
 }) => {
   const isPersonFiltering =
     selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
@@ -66,8 +70,42 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
   const isTaskActiveMatch = (t: Task) =>
     isTaskMatchingDateFilter(t) && isTaskMatchingPerson(t);
+
+  const [mobileActiveCol, setMobileActiveCol] = React.useState<string>("not-started");
+
+  const COLUMNS = [
+    { id: "not-started", label: "To Do / Not Started", shortLabel: "To Do" },
+    { id: "in-progress", label: "In Progress", shortLabel: "In Progress" },
+    { id: "submitted", label: "In Review / Submitted", shortLabel: "Review" },
+    { id: "completed", label: "Completed", shortLabel: "Done" }
+  ] as const;
+
   return (
     <div className="kanban-outer-wrap">
+      {/* Mobile Column Tab Switcher */}
+      <div className="mobile-kanban-tabs">
+        {COLUMNS.map((col) => {
+          const count = (parsedData.tasks || []).filter(
+            (t) => !t._deleted && (col.id === "not-started" ? (!t.status || t.status === "not-started") : t.status === col.id)
+          ).length;
+          return (
+            <button
+              key={col.id}
+              type="button"
+              className={`mobile-kanban-tab ${mobileActiveCol === col.id ? "is-active" : ""}`}
+              onClick={() => {
+                setMobileActiveCol(col.id);
+                const el = document.getElementById(`kanban-col-${col.id}`);
+                el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+              }}
+            >
+              <span>{col.shortLabel}</span>
+              <span className="mobile-kanban-tab-count">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Multi-Sort Bar */}
       <div className="kanban-sort-bar">
         <span className="kanban-sort-label">
@@ -131,14 +169,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
       {/* Kanban Columns */}
       <div className="kanban-view-container">
-        {(
-          [
-            { id: "not-started", label: "To Do / Not Started" },
-            { id: "in-progress", label: "In Progress" },
-            { id: "submitted", label: "In Review / Submitted" },
-            { id: "completed", label: "Completed" }
-          ] as const
-        ).map((col) => {
+        {COLUMNS.map((col) => {
           let colTasks = kanbanMultiSort(
             (parsedData.tasks || []).filter((t) => !t._deleted).filter((t) => {
               if (col.id === "not-started") return !t.status || t.status === "not-started";
@@ -163,7 +194,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             completedFilterMode === "filter" ? colTasks.filter((t) => !isTaskDone(t)).length : colTasks.length;
 
           return (
-            <div key={col.id} className="kanban-column">
+            <div key={col.id} id={`kanban-col-${col.id}`} className="kanban-column">
               <div className="kanban-col-header">
                 <span className="kanban-col-title">{col.label}</span>
                 <span className="kanban-col-count">
@@ -266,9 +297,18 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                         <select
                           className="kanban-status-select"
                           value={t.status || "not-started"}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isViewer) {
+                              onPromptFork?.();
+                            }
+                          }}
                           onChange={(e) => {
                             e.stopPropagation();
+                            if (isViewer) {
+                              onPromptFork?.();
+                              return;
+                            }
                             const newStatus = e.target.value;
                             const synced = syncTaskProgressAndStatus({ status: newStatus as any }, t);
                             const updatedTasks = parsedData.tasks.map((item) =>

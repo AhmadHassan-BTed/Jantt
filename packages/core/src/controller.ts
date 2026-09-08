@@ -196,6 +196,8 @@ export class InteractionController {
 
   public startMarqueeSelection(e: PointerEvent, canvasEl: HTMLElement, taskLayouts: TaskLayout[]) {
     if (this.options.readOnly) return;
+    // On touch devices, touch interactions on background should pan/scroll the canvas, never start marquee
+    if (e.pointerType === "touch" || this.options.disableDragOnTouch || this.options.isMobile) return;
     if (e.button !== 0 && e.button !== 2) return;
 
     e.preventDefault();
@@ -235,6 +237,35 @@ export class InteractionController {
   }
 
   public startDrag(e: PointerEvent, task: Task, mode: DragMode, el?: HTMLElement) {
+    // Touch screen handling: suppress accidental dragging (moving/resizing/wires) to prioritize native scrolling
+    const isTouchInteraction = e.pointerType === "touch" || this.options.disableDragOnTouch === true;
+    if (isTouchInteraction) {
+      if (mode === "move" || mode === "resize") {
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startTime = Date.now();
+        const onTouchPointerUp = (upEvt: PointerEvent) => {
+          window.removeEventListener("pointerup", onTouchPointerUp);
+          window.removeEventListener("pointercancel", onTouchPointerCancel);
+          const dx = Math.abs(upEvt.clientX - startX);
+          const dy = Math.abs(upEvt.clientY - startY);
+          const dt = Date.now() - startTime;
+          // Tap detected (finger released without significant swipe/scroll movement)
+          if (dx < 12 && dy < 12 && dt < 450) {
+            this.selectTask(task.id, false);
+            this.openModalHandler(task);
+          }
+        };
+        const onTouchPointerCancel = () => {
+          window.removeEventListener("pointerup", onTouchPointerUp);
+          window.removeEventListener("pointercancel", onTouchPointerCancel);
+        };
+        window.addEventListener("pointerup", onTouchPointerUp, { once: true });
+        window.addEventListener("pointercancel", onTouchPointerCancel, { once: true });
+      }
+      return;
+    }
+
     if (this.options.readOnly || (task.locked && (mode === "move" || mode === "resize" || mode === "progress"))) {
       if (e.button === 0 && (mode === "move" || mode === "resize")) {
         this.openModalHandler(task);
@@ -297,6 +328,9 @@ export class InteractionController {
   }
 
   public startSplitterDrag(e: PointerEvent, currentWidth: number) {
+    // Suppress splitter dragging on touch to avoid conflict with timeline panning
+    if (e.pointerType === "touch" || this.options.disableDragOnTouch || this.options.isMobile) return;
+
     e.preventDefault();
     e.stopPropagation();
 

@@ -56,6 +56,7 @@ export async function createRoom(
   }
 
   const roomId = generateRoomSlug();
+  const secretKey = generateRoomSlug("key");
   const now = new Date().toISOString();
   const contentHash = calculatePlanHash(initialData);
   const taskCount = initialData.tasks?.length || 0;
@@ -69,7 +70,9 @@ export async function createRoom(
     updatedAt: now,
     revision: 1,
     contentHash,
-    taskCount
+    taskCount,
+    secretKey,
+    theme: "noir"
   };
 
   const metaValidation = validateRoomMetadata(meta);
@@ -339,10 +342,12 @@ export async function deleteRoom(
 
 /**
  * Joins a room via invite link or direct Room ID.
+ * If joining without a valid secretKey, defaults strictly to "viewer" role.
  */
 export async function joinRoomViaInvite(
   roomId: string,
-  user: UserProfile
+  user: UserProfile,
+  secretKey?: string
 ): Promise<FullRoomPayload> {
   const roomSnap = await get(ref(rtdb, `rooms/${roomId}`));
   if (!roomSnap.exists()) {
@@ -350,17 +355,24 @@ export async function joinRoomViaInvite(
   }
 
   const room = roomSnap.val() as FullRoomPayload;
+  const isOwner = room.meta?.ownerUid === user.uid;
   const existingMember = room.members?.[user.uid];
 
-  if (!existingMember) {
-    // Register user as collaborator in the room
+  if (!existingMember && !isOwner) {
+    // Determine assigned role based on cryptographic capability (secretKey)
+    const hasValidKey = Boolean(
+      secretKey &&
+      (!room.meta.secretKey || secretKey.trim().toLowerCase() === room.meta.secretKey.trim().toLowerCase())
+    );
+    const assignedRole: "editor" | "viewer" = hasValidKey ? "editor" : "viewer";
+
     const now = new Date().toISOString();
     const newMember: RoomMember = {
       uid: user.uid,
       username: user.username,
       displayName: user.displayName,
       photoURL: user.photoURL,
-      role: "editor",
+      role: assignedRole,
       joinedAt: now
     };
 
@@ -369,7 +381,7 @@ export async function joinRoomViaInvite(
       title: room.meta.title,
       ownerUid: room.meta.ownerUid,
       ownerUsername: room.meta.ownerUsername,
-      role: "editor",
+      role: assignedRole,
       createdAt: room.meta.createdAt,
       updatedAt: now
     };
@@ -379,7 +391,18 @@ export async function joinRoomViaInvite(
     updates[`user_rooms/${user.uid}/shared/${roomId}`] = sharedPointer;
     await update(ref(rtdb), updates);
 
+    if (!room.members) room.members = {};
     room.members[user.uid] = newMember;
+  } else if (existingMember && secretKey && existingMember.role === "viewer") {
+    // If an existing viewer provides the valid secretKey, elevate them to editor
+    const hasValidKey = !room.meta.secretKey || secretKey.trim().toLowerCase() === room.meta.secretKey.trim().toLowerCase();
+    if (hasValidKey) {
+      const updates: Record<string, any> = {};
+      updates[`rooms/${roomId}/members/${user.uid}/role`] = "editor";
+      updates[`user_rooms/${user.uid}/shared/${roomId}/role`] = "editor";
+      await update(ref(rtdb), updates);
+      existingMember.role = "editor";
+    }
   }
 
   if (room.data) {
@@ -390,7 +413,7 @@ export async function joinRoomViaInvite(
 }
 
 /**
- * Fetches a full room payload by Room ID.
+ * Fetches a full room payload by Room ID (accessible by any visitor with room link).
  */
 export async function getRoom(roomId: string): Promise<FullRoomPayload | null> {
   const snap = await get(ref(rtdb, `rooms/${roomId}`));
@@ -400,6 +423,13 @@ export async function getRoom(roomId: string): Promise<FullRoomPayload | null> {
     room.data = decodePlanFromRtdb(room.data);
   }
   return room;
+}
+
+/**
+ * Alias for getRoom for explicit anonymous consumption.
+ */
+export async function getRoomAnonymous(roomId: string): Promise<FullRoomPayload | null> {
+  return getRoom(roomId);
 }
 
 /**

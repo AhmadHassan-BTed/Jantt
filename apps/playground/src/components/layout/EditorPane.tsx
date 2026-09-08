@@ -12,7 +12,9 @@ import {
   Info,
   Upload,
   FileSpreadsheet,
-  ArrowDownUp
+  ArrowDownUp,
+  X,
+  Eye
 } from "lucide-react";
 import type { JanttData, ValidationResult } from "@jantt/core";
 
@@ -32,6 +34,9 @@ interface EditorPaneProps {
   handleImportJsonFile?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleDownloadJson?: () => void;
   handleExportCsv?: () => void;
+  isMobile?: boolean;
+  isViewer?: boolean;
+  onPromptFork?: () => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
@@ -49,7 +54,10 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   handleEditorChange,
   handleImportJsonFile,
   handleDownloadJson,
-  handleExportCsv
+  handleExportCsv,
+  isMobile,
+  isViewer = false,
+  onPromptFork
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showImportExportMenu, setShowImportExportMenu] = useState(false);
@@ -260,21 +268,87 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           </button>
           <button
             className="btn-nav"
-            style={{ padding: "3px 6px", fontSize: "11px" }}
+            style={{ padding: isMobile ? "3px 8px" : "3px 6px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
             onClick={() => setIsSidebarCollapsed(true)}
-            title="Collapse JSON Sidebar"
+            title={isMobile ? "Close JSON Editor" : "Collapse JSON Sidebar"}
           >
-            <ChevronLeft size={13} />
+            {isMobile ? (
+              <>
+                <X size={13} />
+                <span>Close</span>
+              </>
+            ) : (
+              <ChevronLeft size={13} />
+            )}
           </button>
         </div>
       </div>
+
+      {isViewer && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "8px 12px",
+            background: "rgba(245, 158, 11, 0.12)",
+            borderBottom: "1px solid rgba(245, 158, 11, 0.3)",
+            fontSize: "11.5px",
+            color: "#f59e0b",
+            flexShrink: 0
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <Eye size={13} style={{ flexShrink: 0 }} />
+            <span>
+              <strong>Read-Only Mode:</strong> Changes cannot be saved to the cloud room.
+            </span>
+          </div>
+          {onPromptFork && (
+            <button
+              type="button"
+              onClick={onPromptFork}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "2px 8px",
+                fontSize: "11px",
+                fontWeight: 600,
+                borderRadius: "6px",
+                background: "#f59e0b",
+                color: "#0f172a",
+                border: "none",
+                cursor: "pointer",
+                whiteSpace: "nowrap"
+              }}
+              title="Create a local copy to edit this plan without affecting the cloud room"
+            >
+              <Copy size={11} />
+              <span>Make Local Copy</span>
+            </button>
+          )}
+        </div>
+      )}
 
       <div className={`editor-wrapper ${isLiveSyncing ? "is-live-updating" : ""}`}>
         <textarea
           id="json-editor-textarea"
           className={`code-textarea ${isLiveSyncing ? "is-live-glowing" : ""}`}
           value={jsonText}
-          onChange={(e) => handleEditorChange(e.target.value)}
+          readOnly={isViewer}
+          onChange={(e) => {
+            if (isViewer) {
+              onPromptFork?.();
+              return;
+            }
+            handleEditorChange(e.target.value);
+          }}
+          onClick={() => {
+            if (isViewer) {
+              onPromptFork?.();
+            }
+          }}
           spellCheck={false}
           placeholder="Paste or write your Jantt JSON plan here..."
         />

@@ -14,6 +14,8 @@ interface NotesViewProps {
   handleChartCommit: (data: JanttData) => void;
   effectivePeople?: EffectivePerson[];
   teams?: Team[];
+  isViewer?: boolean;
+  onPromptFork?: () => void;
 }
 
 const STORAGE_KEY_ACTIVE_NOTE = "jantt_active_note_id";
@@ -22,7 +24,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
   parsedData,
   handleChartCommit,
   effectivePeople = [],
-  teams = []
+  teams = [],
+  isViewer = false,
+  onPromptFork
 }) => {
   const notes: NoteItem[] = useMemo(() => parsedData.notes || [], [parsedData.notes]);
   const allTasks: Task[] = useMemo(() => parsedData.tasks || [], [parsedData.tasks]);
@@ -134,6 +138,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
   // Function to commit changes immediately to JanttData JSON
   const commitNoteChanges = useCallback(
     (noteId: string, updates: Partial<NoteItem>) => {
+      if (isViewer) {
+        onPromptFork?.();
+        return;
+      }
       const currentNotes = parsedData.notes || [];
       const noteExists = currentNotes.some((n) => n.id === noteId);
       const now = new Date().toISOString();
@@ -227,6 +235,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
   // Create a fresh note
   const handleCreateNote = () => {
+    if (isViewer) {
+      onPromptFork?.();
+      return;
+    }
     const newId = `note-${Date.now()}`;
     const now = new Date().toISOString();
     const newNote: NoteItem = {
@@ -252,6 +264,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
   // Delete note
   const handleDeleteNote = (noteId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (isViewer) {
+      onPromptFork?.();
+      return;
+    }
     const confirmed = window.confirm("Are you sure you want to delete this note from the project?");
     if (!confirmed) return;
 
@@ -310,7 +326,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   };
 
   return (
-    <div className="notes-view-container">
+    <div className={`notes-view-container ${activeNote ? "has-active-note" : ""}`}>
       {/* 1. Left Sidebar with notes list & search */}
       <NotesSidebar
         notes={notes}

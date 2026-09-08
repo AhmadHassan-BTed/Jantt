@@ -489,4 +489,6 @@ export interface JanttOptions {
   onExportJson?: () => void;
   onExportCsv?: () => void;
   onError?: (error: Error) => void;
+  disableDragOnTouch?: boolean;
+  isMobile?: boolean;
 }

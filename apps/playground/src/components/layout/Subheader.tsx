@@ -5,7 +5,9 @@ import {
   Share2,
   Trash2,
   Users,
-  Layers
+  Layers,
+  Eye,
+  Copy
 } from "lucide-react";
 import type { SavedProject, EffectivePerson } from "../../types";
 import type { UserRoomPointer, RoomPresence } from "../../firebase/types";
@@ -30,6 +32,7 @@ export interface SubheaderProps {
   onlineUsers?: RoomPresence[];
   onOpenShareRoom?: (roomId: string) => void;
   onLeaveCloudRoom?: (roomId: string) => void;
+  onPromptFork?: () => void;
 }
 
 export const Subheader: React.FC<SubheaderProps> = ({
@@ -49,7 +52,8 @@ export const Subheader: React.FC<SubheaderProps> = ({
   activeRoomRole = "none",
   activeRoomTitle,
   onlineUsers = [],
-  onOpenShareRoom
+  onOpenShareRoom,
+  onPromptFork
 }) => {
   const isRoomActive = Boolean(activeRoomId);
 
@@ -212,14 +216,54 @@ export const Subheader: React.FC<SubheaderProps> = ({
               style={{
                 fontSize: "10px",
                 fontWeight: 700,
-                padding: "1px 5px",
+                padding: "2px 6px",
                 borderRadius: "8px",
-                background: activeRoomRole === "collaborator" ? "rgba(56, 189, 248, 0.18)" : "rgba(148, 163, 184, 0.18)",
-                color: activeRoomRole === "collaborator" ? "#38BDF8" : "#94A3B8"
+                background:
+                  activeRoomRole === "collaborator"
+                    ? "rgba(56, 189, 248, 0.18)"
+                    : "rgba(245, 158, 11, 0.20)",
+                color: activeRoomRole === "collaborator" ? "#38BDF8" : "#f59e0b",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px"
               }}
             >
-              {activeRoomRole === "collaborator" ? "Editor" : "Viewer"}
+              {activeRoomRole === "collaborator" ? (
+                "Editor"
+              ) : (
+                <>
+                  <Eye size={10} />
+                  <span>Viewer (Read-Only)</span>
+                </>
+              )}
             </span>
+            {activeRoomRole === "viewer" && onPromptFork && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPromptFork();
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "2px 8px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  borderRadius: "6px",
+                  background: "rgba(245, 158, 11, 0.18)",
+                  border: "1px solid rgba(245, 158, 11, 0.45)",
+                  color: "#f59e0b",
+                  cursor: "pointer",
+                  marginLeft: "4px"
+                }}
+                title="Create a local copy to edit this plan without affecting the cloud room"
+              >
+                <Copy size={11} />
+                <span>Make a Local Copy</span>
+              </button>
+            )}
             {onlineUsers.length > 0 && (
               <span style={{ fontSize: "10.5px", color: "var(--jantt-text-muted, #94A3B8)" }}>
                 {onlineUsers.length} online

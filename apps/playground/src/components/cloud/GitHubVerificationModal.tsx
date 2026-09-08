@@ -7,7 +7,9 @@ import {
   RefreshCw,
   Heart,
   Unlock,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Info
 } from "lucide-react";
 import type { VerificationStatus, RepoItem } from "../../firebase";
 
@@ -20,6 +22,7 @@ interface GitHubVerificationModalProps {
   onFollowCreator: () => Promise<boolean>;
   onStarRepo: (repoFullName: string) => Promise<boolean>;
   onStarAll: () => Promise<{ success: number; failed: number }>;
+  onAutoVerify?: () => Promise<boolean>;
   githubUsername?: string;
   hasGithubToken: boolean;
 }
@@ -33,20 +36,44 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
   onFollowCreator,
   onStarRepo,
   onStarAll,
+  onAutoVerify,
   hasGithubToken
 }) => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isStarringAll, setIsStarringAll] = useState(false);
   const [starringRepoName, setStarringRepoName] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isAutoUnlocking, setIsAutoUnlocking] = useState(false);
 
   if (!show) return null;
 
   const isVerified = Boolean(verificationStatus?.isVerified);
   const isFollowingCreator = Boolean(verificationStatus?.isFollowingCreator);
   const missingRepos = verificationStatus?.missingRepos || [];
-  const totalRepos = verificationStatus?.totalRepos || 4;
+  const totalRepos = verificationStatus?.totalRepos || 5;
   const starredCount = totalRepos - missingRepos.length;
+
+  const handle1ClickAutoUnlock = async () => {
+    setActionError(null);
+    setIsAutoUnlocking(true);
+    try {
+      if (onAutoVerify) {
+        const ok = await onAutoVerify();
+        if (!ok) {
+          await onFollowCreator();
+          await onStarAll();
+        }
+      } else {
+        await onFollowCreator();
+        await onStarAll();
+      }
+      await onVerify();
+    } catch (e: any) {
+      setActionError(e?.message || "Could not complete auto-unlock. Please try the manual buttons below.");
+    } finally {
+      setIsAutoUnlocking(false);
+    }
+  };
 
   const handle1ClickFollow = async () => {
     setActionError(null);
@@ -97,27 +124,30 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
         if (isVerified) setShow(false);
       }}
       style={{
+        position: "fixed",
+        inset: 0,
         zIndex: 10000,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(0, 0, 0, 0.75)",
-        backdropFilter: "blur(6px)"
+        backgroundColor: "rgba(0, 0, 0, 0.8)",
+        backdropFilter: "blur(8px)",
+        padding: "16px"
       }}
     >
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "92%",
-          maxWidth: "540px",
-          background: "var(--jantt-card-bg, #161b22)",
-          border: isVerified ? "1px solid #22c55e" : "1px solid var(--jantt-border, #30363d)",
-          borderRadius: "14px",
-          boxShadow: "0 20px 45px rgba(0,0,0,0.6)",
+          width: "100%",
+          maxWidth: "520px",
+          background: "#0f172a", // Explicit deep navy/slate container for 100% contrast in all themes
+          border: isVerified ? "1px solid #22c55e" : "1px solid #334155",
+          borderRadius: "16px",
+          boxShadow: "0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)",
           padding: "24px",
-          color: "var(--jantt-text, #f0f6fc)",
-          maxHeight: "90vh",
+          color: "#f8fafc", // Crisp white text
+          maxHeight: "88vh",
           overflowY: "auto",
           fontFamily: "inherit"
         }}
@@ -126,17 +156,17 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
         <div
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: "12px",
+            alignItems: "flex-start",
+            gap: "14px",
             marginBottom: "16px"
           }}
         >
           <div
             style={{
-              width: "42px",
-              height: "42px",
-              borderRadius: "10px",
-              background: isVerified ? "rgba(34, 197, 94, 0.15)" : "rgba(245, 158, 11, 0.15)",
+              width: "44px",
+              height: "44px",
+              borderRadius: "12px",
+              background: isVerified ? "rgba(34, 197, 94, 0.2)" : "rgba(245, 158, 11, 0.2)",
               color: isVerified ? "#22c55e" : "#f59e0b",
               display: "flex",
               alignItems: "center",
@@ -144,15 +174,15 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               flexShrink: 0
             }}
           >
-            {isVerified ? <Unlock size={22} /> : <Star size={22} />}
+            {isVerified ? <Unlock size={24} /> : <Star size={24} />}
           </div>
           <div>
             <h2
               style={{
                 margin: 0,
-                fontSize: "1.2rem",
+                fontSize: "1.25rem",
                 fontWeight: 700,
-                color: isVerified ? "#22c55e" : "var(--jantt-text, #f0f6fc)"
+                color: isVerified ? "#22c55e" : "#f8fafc"
               }}
             >
               {isVerified ? "Cloud Collaboration Unlocked!" : "Support Creator to Unlock Cloud"}
@@ -160,25 +190,83 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             <p
               style={{
                 margin: "4px 0 0 0",
-                fontSize: "0.83rem",
-                color: "var(--jantt-text-muted, #8b949e)"
+                fontSize: "0.85rem",
+                color: "#94a3b8"
               }}
             >
               {isVerified
-                ? "Your GitHub account is verified. You have full access to real-time multi-user rooms."
-                : "Star developer repos and follow the creator to use free real-time cloud rooms."}
+                ? "Your GitHub account is verified. You have full access to real-time cloud rooms."
+                : "Support the creator with stars & follow to access free real-time cloud rooms."}
             </p>
           </div>
         </div>
 
+        {/* Upfront Transparency & Consent Card */}
+        {!isVerified && (
+          <div
+            style={{
+              background: "rgba(56, 189, 248, 0.08)",
+              border: "1px solid rgba(56, 189, 248, 0.2)",
+              borderRadius: "10px",
+              padding: "12px 14px",
+              marginBottom: "16px",
+              display: "flex",
+              gap: "10px",
+              fontSize: "0.82rem",
+              color: "#e2e8f0",
+              lineHeight: 1.45
+            }}
+          >
+            <Info size={18} color="#38bdf8" style={{ flexShrink: 0, marginTop: "2px" }} />
+            <div>
+              <strong style={{ color: "#38bdf8" }}>Transparent Consent:</strong> Real-time cloud sync is 100% free and open. By connecting, you agree to auto-follow <strong>@AhmadHassan-BTed</strong> and star the core project repositories using your GitHub session.
+            </div>
+          </div>
+        )}
+
+        {/* 1-Click Auto-Unlock Button (If not yet verified) */}
+        {!isVerified && hasGithubToken && (
+          <div style={{ marginBottom: "18px" }}>
+            <button
+              type="button"
+              onClick={handle1ClickAutoUnlock}
+              disabled={isAutoUnlocking || isVerifying}
+              style={{
+                width: "100%",
+                background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "10px",
+                padding: "12px 16px",
+                fontSize: "0.92rem",
+                fontWeight: 700,
+                cursor: isAutoUnlocking ? "wait" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                boxShadow: "0 4px 15px rgba(99, 102, 241, 0.35)",
+                transition: "all 0.2s ease"
+              }}
+            >
+              {isAutoUnlocking ? (
+                <RefreshCw size={16} className="spin-sync-icon" />
+              ) : (
+                <Sparkles size={16} />
+              )}
+              <span>{isAutoUnlocking ? "Auto-Unlocking Cloud Access..." : "1-Click Auto-Unlock (Consent Given)"}</span>
+            </button>
+          </div>
+        )}
+
         {/* Progress Bar */}
         <div
           style={{
-            background: "rgba(255, 255, 255, 0.05)",
-            borderRadius: "8px",
+            background: "rgba(30, 41, 59, 0.7)",
+            borderRadius: "10px",
             padding: "12px 14px",
             marginBottom: "18px",
-            border: "1px solid var(--jantt-border, rgba(255,255,255,0.08))"
+            border: "1px solid #334155"
           }}
         >
           <div
@@ -190,7 +278,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               marginBottom: "8px"
             }}
           >
-            <span>Verification Progress</span>
+            <span style={{ color: "#cbd5e1" }}>Verification Progress</span>
             <span style={{ color: isVerified ? "#22c55e" : "#38bdf8" }}>
               {isVerified
                 ? "100% Complete"
@@ -230,7 +318,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               background: "rgba(239, 68, 68, 0.15)",
               border: "1px solid rgba(239, 68, 68, 0.4)",
               borderRadius: "8px",
-              color: "#ef4444",
+              color: "#f87171",
               fontSize: "0.82rem",
               marginBottom: "16px"
             }}
@@ -248,8 +336,8 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              background: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid var(--jantt-border, rgba(255,255,255,0.06))",
+              background: "rgba(30, 41, 59, 0.6)",
+              border: "1px solid #334155",
               borderRadius: "8px",
               padding: "10px 12px"
             }}
@@ -261,7 +349,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 <XCircle size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
               )}
               <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f8fafc" }}>
                   Follow Creator:{" "}
                   <a
                     href="https://github.com/AhmadHassan-BTed"
@@ -272,7 +360,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     @AhmadHassan-BTed
                   </a>
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "var(--jantt-text-muted, #8b949e)" }}>
+                <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
                   {isFollowingCreator ? "You are following the creator" : "Click to follow with 1-click"}
                 </div>
               </div>
@@ -284,7 +372,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                   fontSize: "0.75rem",
                   fontWeight: 600,
                   color: "#22c55e",
-                  background: "rgba(34, 197, 94, 0.1)",
+                  background: "rgba(34, 197, 94, 0.15)",
                   padding: "3px 8px",
                   borderRadius: "6px"
                 }}
@@ -298,12 +386,12 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 disabled={isFollowing || isVerifying}
                 style={{
                   background: "#38bdf8",
-                  color: "#000",
+                  color: "#0f172a",
                   border: "none",
                   borderRadius: "6px",
                   padding: "5px 10px",
                   fontSize: "0.78rem",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
@@ -320,57 +408,11 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             )}
           </div>
 
-          {/* Step 2: Explore Organization */}
+          {/* Step 2: Star Flagship Repositories */}
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid var(--jantt-border, rgba(255,255,255,0.06))",
-              borderRadius: "8px",
-              padding: "10px 12px"
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <CheckCircle2 size={18} color="#22c55e" style={{ flexShrink: 0 }} />
-              <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                  Explore Organization:{" "}
-                  <span style={{ color: "#a78bfa" }}>Fractal-Compute-Orchestrations</span>
-                </div>
-                <div style={{ fontSize: "0.75rem", color: "var(--jantt-text-muted, #8b949e)" }}>
-                  Open-source compute engine
-                </div>
-              </div>
-            </div>
-
-            <a
-              href="https://github.com/Fractal-Compute-Orchestrations"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                fontSize: "0.78rem",
-                color: "#a78bfa",
-                textDecoration: "none",
-                background: "rgba(167, 139, 250, 0.1)",
-                padding: "4px 8px",
-                borderRadius: "6px"
-              }}
-            >
-              <span>Visit</span>
-              <ExternalLink size={11} />
-            </a>
-          </div>
-
-          {/* Step 3: Star Repositories */}
-          <div
-            style={{
-              background: "rgba(255, 255, 255, 0.03)",
-              border: "1px solid var(--jantt-border, rgba(255,255,255,0.06))",
+              background: "rgba(30, 41, 59, 0.6)",
+              border: "1px solid #334155",
               borderRadius: "8px",
               padding: "12px"
             }}
@@ -385,8 +427,8 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Star size={16} color={missingRepos.length === 0 ? "#22c55e" : "#f59e0b"} />
-                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                  Developer Repositories ({starredCount}/{totalRepos} Starred)
+                <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f8fafc" }}>
+                  Core Repositories ({starredCount}/{totalRepos} Starred)
                 </span>
               </div>
 
@@ -397,7 +439,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                   disabled={isStarringAll || isVerifying}
                   style={{
                     background: "linear-gradient(135deg, #f59e0b, #eab308)",
-                    color: "#000",
+                    color: "#0f172a",
                     border: "none",
                     borderRadius: "6px",
                     padding: "4px 9px",
@@ -408,14 +450,14 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     alignItems: "center",
                     gap: "5px"
                   }}
-                  title="Automatically star all missing repositories in 1 click using your GitHub OAuth session"
+                  title="Automatically star all missing repositories in 1 click"
                 >
                   {isStarringAll ? (
                     <RefreshCw size={11} className="spin-sync-icon" />
                   ) : (
                     <Star size={11} />
                   )}
-                  <span>Star All Remaining (1-Click)</span>
+                  <span>Star All Remaining</span>
                 </button>
               )}
             </div>
@@ -429,10 +471,11 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    padding: "6px 8px",
-                    background: "rgba(255, 255, 255, 0.02)",
+                    padding: "7px 10px",
+                    background: "rgba(15, 23, 42, 0.8)",
+                    border: "1px solid #334155",
                     borderRadius: "6px",
-                    fontSize: "0.8rem"
+                    fontSize: "0.82rem"
                   }}
                 >
                   <a
@@ -441,6 +484,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     rel="noreferrer"
                     style={{
                       color: "#38bdf8",
+                      fontWeight: 600,
                       textDecoration: "none",
                       display: "inline-flex",
                       alignItems: "center",
@@ -448,7 +492,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     }}
                   >
                     <span>{repo.fullName}</span>
-                    <ExternalLink size={10} color="#8b949e" />
+                    <ExternalLink size={11} color="#94a3b8" />
                   </a>
 
                   <button
@@ -456,12 +500,12 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     onClick={() => handle1ClickStar(repo)}
                     disabled={starringRepoName === repo.fullName || isVerifying}
                     style={{
-                      background: "rgba(245, 158, 11, 0.15)",
-                      color: "#f59e0b",
-                      border: "1px solid rgba(245, 158, 11, 0.3)",
+                      background: "rgba(245, 158, 11, 0.2)",
+                      color: "#fbbf24",
+                      border: "1px solid rgba(245, 158, 11, 0.4)",
                       borderRadius: "5px",
-                      padding: "3px 8px",
-                      fontSize: "0.72rem",
+                      padding: "3px 9px",
+                      fontSize: "0.75rem",
                       fontWeight: 600,
                       cursor: "pointer",
                       display: "inline-flex",
@@ -483,15 +527,15 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 <div
                   style={{
                     padding: "8px",
-                    fontSize: "0.8rem",
+                    fontSize: "0.82rem",
                     color: "#22c55e",
                     display: "flex",
                     alignItems: "center",
                     gap: "6px"
                   }}
                 >
-                  <CheckCircle2 size={14} />
-                  <span>All required repositories are starred! Thank you for your support.</span>
+                  <CheckCircle2 size={15} />
+                  <span>All required core repositories are starred! Thank you for your support.</span>
                 </div>
               )}
             </div>
@@ -507,11 +551,11 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               disabled={isVerifying}
               style={{
                 flex: 1,
-                background: isVerified ? "var(--jantt-accent, #38bdf8)" : "#22c55e",
-                color: "#000",
+                background: isVerified ? "#38bdf8" : "#22c55e",
+                color: "#0f172a",
                 border: "none",
                 borderRadius: "8px",
-                padding: "9px 14px",
+                padding: "10px 14px",
                 fontSize: "0.85rem",
                 fontWeight: 700,
                 cursor: isVerifying ? "wait" : "pointer",
@@ -534,16 +578,16 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               onClick={() => setShow(false)}
               style={{
                 background: "rgba(255, 255, 255, 0.08)",
-                color: "var(--jantt-text, #f0f6fc)",
-                border: "1px solid var(--jantt-border, rgba(255,255,255,0.12))",
+                color: "#f8fafc",
+                border: "1px solid #475569",
                 borderRadius: "8px",
-                padding: "9px 14px",
+                padding: "10px 14px",
                 fontSize: "0.85rem",
                 fontWeight: 600,
                 cursor: "pointer"
               }}
             >
-              {isVerified ? "Close" : "Continue in Local Mode"}
+              {isVerified ? "Close" : "Continue"}
             </button>
           </div>
         </div>

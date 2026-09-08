@@ -14,13 +14,17 @@ interface UseTaskDetailSidebarOptions {
   activeTheme: ThemeDefinition;
   activeView: ActiveView;
   handleChartCommit: (data: JanttData) => void;
+  readOnly?: boolean;
+  onPromptFork?: () => void;
 }
 
 export function useTaskDetailSidebar({
   parsedData,
   activeTheme,
   activeView,
-  handleChartCommit
+  handleChartCommit,
+  readOnly = false,
+  onPromptFork
 }: UseTaskDetailSidebarOptions) {
   const activeSidebarRef = useRef<{ close: () => void } | null>(null);
   const parsedDataRef = useRef(parsedData);
@@ -62,10 +66,15 @@ export function useTaskDetailSidebar({
         categories: parsedDataRef.current.categories || {},
         theme: activeThemeRef.current.vars,
         themeClassName: activeThemeRef.current.className,
+        readOnly,
         onClose: () => {
           activeSidebarRef.current = null;
         },
         onSave: (updatedTask) => {
+          if (readOnly) {
+            onPromptFork?.();
+            return;
+          }
           const currentData = parsedDataRef.current;
           if (!currentData) return;
           const nextTasks = currentData.tasks.map((t) =>
@@ -75,6 +84,10 @@ export function useTaskDetailSidebar({
           handleChartCommit({ ...currentData, tasks: resolved });
         },
         onDelete: (taskId) => {
+          if (readOnly) {
+            onPromptFork?.();
+            return;
+          }
           const currentData = parsedDataRef.current;
           if (!currentData) return;
           const nextTasks = currentData.tasks.filter((t) => t.id !== taskId);

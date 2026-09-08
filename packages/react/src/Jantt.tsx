@@ -35,6 +35,8 @@ export interface JanttProps {
   onExportJson?: () => void;
   onExportCsv?: () => void;
   onError?: (error: Error) => void;
+  disableDragOnTouch?: boolean;
+  isMobile?: boolean;
 }
 
 export const Jantt: React.FC<JanttProps> = ({
@@ -63,7 +65,9 @@ export const Jantt: React.FC<JanttProps> = ({
   onImportJson,
   onExportJson,
   onExportCsv,
-  onError
+  onError,
+  disableDragOnTouch,
+  isMobile
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<JanttInstance | null>(null);
@@ -115,6 +119,8 @@ export const Jantt: React.FC<JanttProps> = ({
     selectedDate,
     showDateFilterBadge,
     filterTasksByDate,
+    disableDragOnTouch,
+    isMobile,
     onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
     onClearDateFilter: () => callbacksRef.current.onClearDateFilter?.(),
     onDayWidthChange: (w: number) => callbacksRef.current.onDayWidthChange?.(w),
@@ -174,7 +180,9 @@ export const Jantt: React.FC<JanttProps> = ({
     sidebarContainer,
     selectedDate,
     showDateFilterBadge,
-    filterTasksByDate
+    filterTasksByDate,
+    disableDragOnTouch,
+    isMobile
   ]);
 
   return (

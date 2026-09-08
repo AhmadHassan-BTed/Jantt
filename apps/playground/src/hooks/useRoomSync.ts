@@ -5,7 +5,6 @@ import {
   type Team,
   type ValidationResult,
   createCloudRoom,
-  fetchCloudRoom,
   saveCloudRoom,
   reconcilePlans,
   calculatePlanHash,
@@ -23,7 +22,8 @@ import {
   createRoom,
   joinRoomViaInvite,
   saveRoomDataAtomic,
-  listenToRoom
+  listenToRoom,
+  getRoomAnonymous
 } from "../firebase/roomService";
 import {
   trackRoomPresence,
@@ -47,6 +47,7 @@ interface UseRoomSyncOptions {
   captureSnapshot: (projectId: string, data: JanttData, reason: string) => void;
   activeView: ActiveView;
   selectedThemeId: string;
+  setSelectedThemeId?: (themeId: string) => void;
   userProfile?: UserProfile | null;
   onRequireVerification?: () => void;
 }
@@ -80,6 +81,7 @@ export function useRoomSync({
   captureSnapshot,
   activeView,
   selectedThemeId,
+  setSelectedThemeId,
   userProfile,
   onRequireVerification
 }: UseRoomSyncOptions) {
@@ -101,9 +103,7 @@ export function useRoomSync({
       : null;
   const activeRoomRole: "collaborator" | "viewer" | "none" =
     activeProj?.source === "room"
-      ? activeProj.role === "viewer"
-        ? "viewer"
-        : userProfile || activeSecretKey || activeProj.role === "collaborator"
+      ? activeProj.role === "collaborator" && (Boolean(activeSecretKey) || Boolean(userProfile))
         ? "collaborator"
         : "viewer"
       : "none";
@@ -317,12 +317,7 @@ export function useRoomSync({
       setIsProcessing(true);
       try {
         if (userProfile) {
-          if (!userProfile.githubVerified) {
-            onRequireVerification?.();
-            showToast("Please star developer repos & follow creator to join cloud rooms.", true);
-            return;
-          }
-          const roomPayload = await joinRoomViaInvite(roomId, userProfile);
+          const roomPayload = await joinRoomViaInvite(roomId, userProfile, secretKey);
           const isOwner = roomPayload.meta.ownerUid === userProfile.uid;
           const memberRecord = roomPayload.members?.[userProfile.uid];
           const isEditor = isOwner || memberRecord?.role === "editor";
@@ -362,33 +357,44 @@ export function useRoomSync({
           setSyncStatus("in-sync");
           setSyncMessage(role === "collaborator" ? "Collaborator (Live Sync)" : "Viewer (Read-Only)");
           setLastSyncTime(new Date());
+          if (roomPayload.meta?.theme && setSelectedThemeId) {
+            setSelectedThemeId(roomPayload.meta.theme);
+          }
           showToast(`Connected to room "${roomPayload.meta.title}" as ${role}!`);
           return;
         }
 
-        const res = await fetchCloudRoom(roomId);
-        const resolvedSecret = secretKey || getStoredRoomSecret(res.roomId) || undefined;
-        if (resolvedSecret) {
-          storeRoomSecret(res.roomId, resolvedSecret);
+        // Unauthenticated visitor (guest viewing roadmap via shared link)
+        const roomPayload = await getRoomAnonymous(roomId);
+        if (!roomPayload || !roomPayload.data) {
+          throw new Error(`Room "${roomId}" was not found or has been deleted by its owner.`);
         }
 
-        const role: "collaborator" | "viewer" = resolvedSecret ? "collaborator" : "viewer";
+        // Strict capability check: editor role requires cryptographic key or registered membership
+        const resolvedSecret = secretKey || getStoredRoomSecret(roomId) || undefined;
+        const hasValidKey = Boolean(
+          resolvedSecret &&
+          (!roomPayload.meta.secretKey || resolvedSecret.trim().toLowerCase() === roomPayload.meta.secretKey.trim().toLowerCase())
+        );
+        const role: "collaborator" | "viewer" = hasValidKey ? "collaborator" : "viewer";
 
-        baseDataMapRef.current.set(res.roomId, res.data);
-        etagMapRef.current.set(res.roomId, res.etag);
-        revisionMapRef.current.set(res.roomId, res.revision);
+        if (resolvedSecret && hasValidKey) {
+          storeRoomSecret(roomPayload.meta.roomId, resolvedSecret);
+        }
+
+        baseDataMapRef.current.set(roomPayload.meta.roomId, roomPayload.data);
+        revisionMapRef.current.set(roomPayload.meta.roomId, roomPayload.meta.revision);
 
         const newProj: SavedProject = {
-          id: `room-${res.roomId}`,
-          name: res.title,
-          updatedAt: res.updatedAt,
-          data: res.data,
+          id: `room-${roomPayload.meta.roomId}`,
+          name: roomPayload.meta.title,
+          updatedAt: roomPayload.meta.updatedAt,
+          data: roomPayload.data,
           source: "room",
-          roomId: res.roomId,
-          secretKey: resolvedSecret,
+          roomId: roomPayload.meta.roomId,
+          secretKey: hasValidKey ? resolvedSecret : undefined,
           role,
-          etag: res.etag,
-          revision: res.revision,
+          revision: roomPayload.meta.revision,
           lastSyncedAt: new Date().toISOString()
         };
 
@@ -402,16 +408,19 @@ export function useRoomSync({
           localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
         } catch {}
 
-        setParsedData(res.data);
-        setJsonText(JSON.stringify(res.data, null, 2));
-        setPeople(res.data.people || []);
-        setTeams(res.data.teams || []);
-        setValidationResult(validate(res.data));
+        setParsedData(roomPayload.data);
+        setJsonText(JSON.stringify(roomPayload.data, null, 2));
+        setPeople(roomPayload.data.people || []);
+        setTeams(roomPayload.data.teams || []);
+        setValidationResult(validate(roomPayload.data));
 
         setSyncStatus("in-sync");
         setSyncMessage(role === "collaborator" ? "Collaborator (Live Sync)" : "Viewer (Read-Only)");
         setLastSyncTime(new Date());
-        showToast(`Connected to room "${res.title}" as ${role}!`);
+        if (roomPayload.meta?.theme && setSelectedThemeId) {
+          setSelectedThemeId(roomPayload.meta.theme);
+        }
+        showToast(`Connected to room "${roomPayload.meta.title}" as ${role}!`);
       } catch (err: any) {
         showToast(`Failed to join room: ${err.message}`, true);
       } finally {
@@ -426,6 +435,7 @@ export function useRoomSync({
       setPeople,
       setTeams,
       setValidationResult,
+      setSelectedThemeId,
       showToast,
       userProfile
     ]
@@ -847,6 +857,38 @@ export function useRoomSync({
       window.removeEventListener("popstate", onPopState);
     };
   }, []);
+
+  // Auto-enroll active room under user's cloud account when user logs in
+  const previousUserUidRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentUid = userProfile?.uid || null;
+    if (userProfile && currentUid && currentUid !== previousUserUidRef.current) {
+      previousUserUidRef.current = currentUid;
+      const currentActive = customProjectsRef.current.find((p) => p.id === activeProjectIdRef.current);
+      if (currentActive?.source === "room" && currentActive.roomId) {
+        const secret = currentActive.secretKey || getStoredRoomSecret(currentActive.roomId) || undefined;
+        const activeProfile = userProfile;
+        joinRoomViaInvite(currentActive.roomId, activeProfile, secret)
+          .then((roomPayload) => {
+            const isOwner = roomPayload.meta.ownerUid === activeProfile.uid;
+            const memberRecord = roomPayload.members?.[activeProfile.uid];
+            const isEditor = isOwner || memberRecord?.role === "editor";
+            const role: "collaborator" | "viewer" = isEditor ? "collaborator" : "viewer";
+
+            const updated = customProjectsRef.current.map((p) =>
+              p.roomId === currentActive.roomId ? { ...p, role } : p
+            );
+            customProjectsRef.current = updated;
+            setCustomProjects(updated);
+            saveCustomProjects(updated);
+            showToast(`Room "${roomPayload.meta.title}" added to your cloud plans!`);
+          })
+          .catch(() => {});
+      }
+    } else if (!currentUid) {
+      previousUserUidRef.current = null;
+    }
+  }, [userProfile, setCustomProjects, showToast]);
 
   // Action: Create Cloud Room from Active Plan directly (1-Click Flow)
   const createRoomFromActive = useCallback(

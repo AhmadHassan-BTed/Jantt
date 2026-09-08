@@ -171,7 +171,7 @@ export function loadInitialState() {
     }
   } catch {}
 
-  let initialTheme = "swiss-light";
+  let initialTheme = "noir";
   try {
     const savedTheme = storageService.getItem<string>(STORAGE_KEYS.THEME);
     if (savedTheme && themeManager.getTheme(savedTheme)) initialTheme = savedTheme;
@@ -229,7 +229,8 @@ export function loadInitialState() {
     else if (savedView && ["gantt", "kanban", "summary", "tasks", "notes"].includes(savedView)) initialView = savedView;
   } catch {}
 
-  let initialCollapsed = false;
+  const isMobileScreen = typeof window !== "undefined" && window.innerWidth <= 768;
+  let initialCollapsed = isMobileScreen;
   try {
     const savedCol = storageService.getItem<string | boolean>(STORAGE_KEYS.SIDEBAR_COLLAPSED);
     if (savedCol !== null) initialCollapsed = savedCol === true || savedCol === "true";

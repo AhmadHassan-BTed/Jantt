@@ -43,6 +43,8 @@ interface TasksViewProps {
   setDateFilterMode: (mode: DateFilterMode) => void;
   openTaskDetailSidebar: (task: Task) => void;
   handleChartCommit: (data: JanttData) => void;
+  isViewer?: boolean;
+  onPromptFork?: () => void;
 }
 
 export const TasksView: React.FC<TasksViewProps> = ({
@@ -62,13 +64,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
   handleAddNewTask,
   setDateFilterMode,
   openTaskDetailSidebar,
-  handleChartCommit
+  handleChartCommit,
+  isViewer = false,
+  onPromptFork
 }) => {
   const activeTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
   const matchingDateFilterTasks = activeTasks.filter(isTaskMatchingDateFilter);
 
   const handleDeleteTask = React.useCallback(
     (taskIdToDelete: string) => {
+      if (isViewer) {
+        onPromptFork?.();
+        return;
+      }
       const active = (parsedData.tasks || []).filter((item) => item.id !== taskIdToDelete && !item._deleted);
       const pruned = active.map((item) => {
         const remaining = getTaskDependencies(item).filter((id) => id !== taskIdToDelete);
@@ -195,7 +203,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
           <button
             className="btn-nav is-primary"
             style={{ padding: "5px 10px", borderRadius: "7px", fontSize: "11.5px" }}
-            onClick={handleAddNewTask}
+            onClick={() => {
+              if (isViewer) {
+                onPromptFork?.();
+                return;
+              }
+              handleAddNewTask();
+            }}
             title="Create a new task in this project"
           >
             <Plus size={12} />
@@ -286,6 +300,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         className={`tasks-checkbox-btn ${isCompleted ? "is-checked" : ""}`}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (isViewer) {
+                            onPromptFork?.();
+                            return;
+                          }
                           const nextStatus = isCompleted ? "in-progress" : "completed";
                           const synced = syncTaskProgressAndStatus({ status: nextStatus }, t);
                           const updatedTasks = parsedData.tasks.map((item) =>
@@ -338,9 +356,18 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       <select
                         className="kanban-status-select"
                         value={t.status || "not-started"}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isViewer) {
+                            onPromptFork?.();
+                          }
+                        }}
                         onChange={(e) => {
                           e.stopPropagation();
+                          if (isViewer) {
+                            onPromptFork?.();
+                            return;
+                          }
                           const newStatus = e.target.value;
                           let newProgress = t.progress;
                           if (newStatus === "completed") newProgress = 1.0;
@@ -413,6 +440,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (isViewer) {
+                            onPromptFork?.();
+                            return;
+                          }
                           const nextStatus = isCompleted ? "in-progress" : "completed";
                           const synced = syncTaskProgressAndStatus({ status: nextStatus }, t);
                           const updatedTasks = parsedData.tasks.map((item) =>

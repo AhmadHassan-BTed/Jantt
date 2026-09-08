@@ -22,6 +22,9 @@ export interface ViewRouterProps {
   editor: any;
   autoSave: any;
   project: any;
+  isMobile?: boolean;
+  isViewer?: boolean;
+  onPromptFork?: () => void;
 }
 
 export const ViewRouter: React.FC<ViewRouterProps> = ({
@@ -36,7 +39,10 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
   taskDetail,
   editor,
   autoSave,
-  project
+  project,
+  isMobile,
+  isViewer = false,
+  onPromptFork
 }) => {
   if (!parsedData) {
     return <EmptyChartState />;
@@ -71,10 +77,19 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
         <Jantt
           data={ganttDisplayData}
           onCommit={handleGanttCommit}
+          readOnly={isViewer}
           onTaskClick={(task) => taskDetail.openTaskDetailSidebar(task)}
-          onTaskAdd={() => tasks.handleAddNewTask()}
+          onTaskAdd={() => {
+            if (isViewer) {
+              onPromptFork?.();
+              return;
+            }
+            tasks.handleAddNewTask();
+          }}
           showDateFilterBadge={false}
           filterTasksByDate={false}
+          disableDragOnTouch={true}
+          isMobile={isMobile}
           selectedDate={dateFilter.dateFilterActiveDate}
           onDateClick={(clickedDate) => {
             if (clickedDate === getTodayISODate()) {
@@ -149,6 +164,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           selectedPersonFilter={people.selectedPersonFilter}
           openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
           handleChartCommit={editor.handleChartCommit}
+          isViewer={isViewer}
+          onPromptFork={onPromptFork}
         />
       )}
 
@@ -171,6 +188,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           setDateFilterMode={dateFilter.setDateFilterMode}
           openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
           handleChartCommit={editor.handleChartCommit}
+          isViewer={isViewer}
+          onPromptFork={onPromptFork}
         />
       )}
 
@@ -197,6 +216,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           handleChartCommit={editor.handleChartCommit}
           effectivePeople={people.effectivePeople}
           teams={people.teams}
+          isViewer={isViewer}
+          onPromptFork={onPromptFork}
         />
       )}
     </>

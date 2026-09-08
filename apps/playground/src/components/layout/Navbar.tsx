@@ -13,7 +13,8 @@ import {
   History,
   Star,
   Cloud,
-  LogOut
+  LogOut,
+  Eye
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
@@ -46,6 +47,8 @@ interface NavbarProps {
   onOpenVerificationModal?: () => void;
   onLogin?: () => void;
   onLogout?: () => void;
+  isViewer?: boolean;
+  onPromptFork?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -72,28 +75,51 @@ export const Navbar: React.FC<NavbarProps> = ({
   isGitHubVerified = false,
   onOpenVerificationModal,
   onLogin,
-  onLogout
+  onLogout,
+  isViewer = false,
+  onPromptFork
 }) => {
   return (
     <header className="navbar">
       {/* 1. Left Zone: Brand, AutoSave Status & Version History */}
       <div className="brand-section nav-group-left">
         <JanttLogo size={28} />
-        <button
-          type="button"
-          className={`btn-autosave-badge is-${saveStatus}`}
-          onClick={() => setShowAutoSaveModal(true)}
-          title={`Last auto-saved: ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • Cadence: ${autoSaveInterval} • Click to configure`}
-        >
-          {saveStatus === "saving" ? (
-            <RefreshCw size={11} className="spin-sync-icon" />
-          ) : saveStatus === "pending" ? (
-            <Clock size={11} />
-          ) : (
-            <CheckCircle2 size={11} />
-          )}
-          <span>{autoSaveLabel}</span>
-        </button>
+        {isViewer ? (
+          <button
+            type="button"
+            className="btn-autosave-badge is-viewer"
+            onClick={onPromptFork}
+            style={{
+              background: "rgba(245, 158, 11, 0.15)",
+              border: "1px solid rgba(245, 158, 11, 0.4)",
+              color: "#f59e0b",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px"
+            }}
+            title="Read-Only Cloud Room. Click to make a local copy to edit."
+          >
+            <Eye size={12} />
+            <span style={{ fontWeight: 600 }}>Viewer (Read-Only)</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`btn-autosave-badge is-${saveStatus}`}
+            onClick={() => setShowAutoSaveModal(true)}
+            title={`Last auto-saved: ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • Cadence: ${autoSaveInterval} • Click to configure`}
+          >
+            {saveStatus === "saving" ? (
+              <RefreshCw size={11} className="spin-sync-icon" />
+            ) : saveStatus === "pending" ? (
+              <Clock size={11} />
+            ) : (
+              <CheckCircle2 size={11} />
+            )}
+            <span>{autoSaveLabel}</span>
+          </button>
+        )}
 
         {/* Version History & Recovery Vault Button */}
         {setShowVersionHistoryModal && (

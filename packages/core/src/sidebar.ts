@@ -165,6 +165,8 @@ function renderDefaultSidebarContent(
   let currentDeps: string[] = getTaskDependencies(task);
 
   container.innerHTML = `
+    <!-- Pull handle for mobile bottom sheet -->
+    <div class="jantt-sidebar-pull-handle" aria-hidden="true"></div>
     <!-- Header -->
     <div class="jantt-sidebar-header">
       <div class="jantt-sidebar-header-info">
@@ -175,6 +177,7 @@ function renderDefaultSidebarContent(
           </span>
           <span class="jantt-hover-id-badge">#${escapeHtml(task.id)}</span>
           ${task.locked ? '<span class="jantt-hover-type-pill is-locked">Locked</span>' : ""}
+          ${readOnly ? '<span class="jantt-hover-type-pill is-locked" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4);">Read-Only</span>' : ""}
           ${task.urgent ? '<span class="jantt-hover-type-pill is-urgent">Urgent</span>' : ""}
           ${task.milestone ? '<span class="jantt-hover-type-pill is-milestone">Milestone</span>' : ""}
         </div>
@@ -187,6 +190,11 @@ function renderDefaultSidebarContent(
 
     <!-- Body Content -->
     <div class="jantt-sidebar-body">
+      ${
+        readOnly
+          ? '<div style="margin-bottom: 14px; padding: 10px 12px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 11.5px; color: #f59e0b; display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span>You are in Read-Only Viewer mode. Task attributes cannot be modified.</span></div>'
+          : ""
+      }
       <!-- Title & Label Field -->
       <div class="jantt-form-group">
         <label class="jantt-form-label">Task Name / Label</label>

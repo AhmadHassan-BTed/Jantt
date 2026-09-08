@@ -29,6 +29,7 @@ import {
   type RoomMember,
   type RoomTeam
 } from "../../firebase";
+import { buildRoomViewerUrl, buildRoomCollaboratorUrl, getStoredRoomSecret } from "../../room-storage";
 
 interface ShareRoomModalProps {
   show: boolean;
@@ -141,9 +142,9 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
 
   if (!show || !roomId) return null;
 
-  const origin = typeof window !== "undefined" ? window.location.origin + window.location.pathname : "";
-  const editLink = `${origin}?room=${encodeURIComponent(roomId)}&role=editor`;
-  const viewLink = `${origin}?room=${encodeURIComponent(roomId)}&role=viewer`;
+  const secretKey = roomId ? getStoredRoomSecret(roomId) : null;
+  const editLink = roomId ? buildRoomCollaboratorUrl(roomId, secretKey, "gantt", "noir") : "";
+  const viewLink = roomId ? buildRoomViewerUrl(roomId, "gantt", "noir") : "";
   const isOwner = currentUserProfile && members.some((m) => m.uid === currentUserProfile.uid && m.role === "owner");
 
   const handleCopyEditLink = async () => {

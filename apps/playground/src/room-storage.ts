@@ -23,27 +23,29 @@ export function storeRoomSecret(roomId: string, secretKey: string): void {
 
 /**
  * Builds the canonical shareable Pure Viewer Link (Read-Only) for a room.
- * Recipients can view the live roadmap but cannot modify tasks or sync edits.
+ * Recipients can view the live roadmap in high fidelity but cannot modify tasks or push edits.
+ * Role cannot be elevated by modifying the URL query parameters.
  */
-export function buildRoomViewerUrl(roomId: string, view = "gantt", theme = "modern-indigo"): string {
+export function buildRoomViewerUrl(roomId: string, view = "gantt", theme = "noir"): string {
   if (typeof window === "undefined") return "";
   const origin = window.location.origin + window.location.pathname;
-  return `${origin}?room=${encodeURIComponent(roomId.trim())}&role=viewer&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}`;
+  return `${origin}?room=${encodeURIComponent(roomId.trim())}&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}`;
 }
 
 /**
  * Builds the canonical shareable Collaborator Link (Edit Mode + Live Sync) for a room.
- * For authenticated users, your account handle is verified on join.
- * For legacy rooms, the key is placed in the URL hash `#key=...` for browser storage.
+ * Write access requires the cryptographic secret key in the URL hash (#key=...) or
+ * verified membership in the room's access list.
  */
 export function buildRoomCollaboratorUrl(
   roomId: string,
   secretKey?: string | null,
   view = "gantt",
-  theme = "modern-indigo"
+  theme = "noir"
 ): string {
   if (typeof window === "undefined") return "";
   const origin = window.location.origin + window.location.pathname;
   const hashKey = secretKey ? `#key=${encodeURIComponent(secretKey.trim())}` : "";
-  return `${origin}?room=${encodeURIComponent(roomId.trim())}&role=editor&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}${hashKey}`;
+  return `${origin}?room=${encodeURIComponent(roomId.trim())}&view=${encodeURIComponent(view)}&theme=${encodeURIComponent(theme)}${hashKey}`;
 }
+

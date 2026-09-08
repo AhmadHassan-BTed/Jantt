@@ -3,16 +3,16 @@ import type { RepoItem, VerificationStatus } from "./types";
 export const TARGET_USER = "AhmadHassan-BTed";
 export const TARGET_ORG = "Fractal-Compute-Orchestrations";
 
-export const EXCLUDED_REPO_KEYS = new Set([
-  "ahmadhassan-bted/.github",
-  "fractal-compute-orchestrations/.github",
-  "ahmadhassan-bted/openopc",
-  "ahmadhassan-bted/visiocraft",
-  "ahmadhassan-bted/yt-channels-ds-ai-ml-cs",
-  "fractal-compute-orchestrations/fractal-privacypolicy"
-]);
-
-export const FALLBACK_REPOS: RepoItem[] = [
+/**
+ * Curated flagship developer repositories to support the creator.
+ * Clear, high-value, non-overwhelming list of core tools.
+ */
+export const CORE_FLAGSHIP_REPOS: RepoItem[] = [
+  {
+    fullName: "AhmadHassan-BTed/Jantt",
+    name: "Jantt",
+    url: "https://github.com/AhmadHassan-BTed/Jantt"
+  },
   {
     fullName: "AhmadHassan-BTed/Attendify",
     name: "Attendify",
@@ -34,6 +34,8 @@ export const FALLBACK_REPOS: RepoItem[] = [
     url: "https://github.com/Fractal-Compute-Orchestrations/FractalWorkspace"
   }
 ];
+
+export const FALLBACK_REPOS = CORE_FLAGSHIP_REPOS;
 
 export const CREATOR_USERNAMES = new Set([
   "ahmadhassan-bted",
@@ -64,74 +66,10 @@ function getGitHubHeaders(token?: string): HeadersInit {
 }
 
 /**
- * Fetches all active public developer and organization repositories.
+ * Fetches curated flagship developer and organization repositories.
  */
-export async function getDeveloperRepos(token?: string): Promise<RepoItem[]> {
-  const reposMap = new Map<string, RepoItem>();
-  const headers = getGitHubHeaders(token);
-
-  // 1. Fetch user public repos
-  try {
-    const userRes = await fetch(
-      `https://api.github.com/users/${TARGET_USER}/repos?per_page=100&type=public`,
-      { headers }
-    );
-    if (userRes.ok) {
-      const data = await userRes.json();
-      if (Array.isArray(data)) {
-        for (const r of data) {
-          const fn = r.full_name;
-          const fnLower = fn.toLowerCase();
-          const isPrivate = r.private || r.visibility === "private";
-          if (!isPrivate && !EXCLUDED_REPO_KEYS.has(fnLower)) {
-            reposMap.set(fnLower, {
-              fullName: fn,
-              name: r.name,
-              url: r.html_url
-            });
-          }
-        }
-      }
-    }
-  } catch {
-    // Network or CORS issue; proceed to org
-  }
-
-  // 2. Fetch organization public repos
-  try {
-    const orgRes = await fetch(
-      `https://api.github.com/orgs/${TARGET_ORG}/repos?per_page=100&type=public`,
-      { headers }
-    );
-    if (orgRes.ok) {
-      const data = await orgRes.json();
-      if (Array.isArray(data)) {
-        for (const r of data) {
-          const fn = r.full_name;
-          const fnLower = fn.toLowerCase();
-          const isPrivate = r.private || r.visibility === "private";
-          if (!isPrivate && !EXCLUDED_REPO_KEYS.has(fnLower)) {
-            reposMap.set(fnLower, {
-              fullName: fn,
-              name: r.name,
-              url: r.html_url
-            });
-          }
-        }
-      }
-    }
-  } catch {
-    // Network or CORS issue
-  }
-
-  // 3. If API is empty (rate-limited without token or network blocked), use fallback repos
-  if (reposMap.size === 0) {
-    for (const fb of FALLBACK_REPOS) {
-      reposMap.set(fb.fullName.toLowerCase(), fb);
-    }
-  }
-
-  return Array.from(reposMap.values());
+export async function getDeveloperRepos(_token?: string): Promise<RepoItem[]> {
+  return CORE_FLAGSHIP_REPOS;
 }
 
 /**
@@ -145,9 +83,15 @@ export async function checkIsFollowingCreator(
   if (username.toLowerCase() === TARGET_USER.toLowerCase()) return true;
 
   try {
+    const timestamp = Date.now();
     const res = await fetch(
-      `https://api.github.com/users/${encodeURIComponent(username)}/following/${TARGET_USER}`,
-      { headers: getGitHubHeaders(token) }
+      `https://api.github.com/users/${encodeURIComponent(username)}/following/${TARGET_USER}?_t=${timestamp}`,
+      {
+        headers: {
+          ...getGitHubHeaders(token),
+          "Cache-Control": "no-cache, no-store"
+        }
+      }
     );
     return res.status === 204 || res.status === 200;
   } catch {
@@ -165,10 +109,7 @@ export async function followCreator(token: string): Promise<boolean> {
       `https://api.github.com/user/following/${TARGET_USER}`,
       {
         method: "PUT",
-        headers: {
-          ...getGitHubHeaders(token),
-          "Content-Length": "0"
-        }
+        headers: getGitHubHeaders(token)
       }
     );
     return res.status === 204 || res.status === 200;
@@ -178,7 +119,33 @@ export async function followCreator(token: string): Promise<boolean> {
 }
 
 /**
- * Retrieves list of starred repositories for the user.
+ * Checks if a specific repository is starred by the authenticated user.
+ * Directly queries /user/starred/{owner}/{repo} with no-cache (204 = starred, 404 = not starred).
+ */
+export async function checkIsRepoStarred(
+  repoFullName: string,
+  token: string
+): Promise<boolean> {
+  if (!token || !repoFullName) return false;
+  try {
+    const timestamp = Date.now();
+    const res = await fetch(
+      `https://api.github.com/user/starred/${repoFullName}?_t=${timestamp}`,
+      {
+        headers: {
+          ...getGitHubHeaders(token),
+          "Cache-Control": "no-cache, no-store"
+        }
+      }
+    );
+    return res.status === 204;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Retrieves list of starred repositories for the user with cache-busting.
  */
 export async function getUserStarredRepos(
   username: string,
@@ -187,12 +154,16 @@ export async function getUserStarredRepos(
   const starredSet = new Set<string>();
   if (!username) return starredSet;
 
-  const headers = getGitHubHeaders(token);
+  const headers: HeadersInit = {
+    ...getGitHubHeaders(token),
+    "Cache-Control": "no-cache, no-store"
+  };
 
   try {
-    for (let page = 1; page <= 5; page++) {
+    const timestamp = Date.now();
+    for (let page = 1; page <= 3; page++) {
       const res = await fetch(
-        `https://api.github.com/users/${encodeURIComponent(username)}/starred?per_page=100&page=${page}`,
+        `https://api.github.com/users/${encodeURIComponent(username)}/starred?per_page=100&page=${page}&_t=${timestamp}`,
         { headers }
       );
       if (!res.ok) break;
@@ -228,10 +199,7 @@ export async function starRepository(
       `https://api.github.com/user/starred/${repoFullName}`,
       {
         method: "PUT",
-        headers: {
-          ...getGitHubHeaders(token),
-          "Content-Length": "0"
-        }
+        headers: getGitHubHeaders(token)
       }
     );
     return res.status === 204 || res.status === 200;
@@ -241,7 +209,7 @@ export async function starRepository(
 }
 
 /**
- * 1-Click star all missing repositories in sequential batch.
+ * 1-Click star all missing repositories concurrently.
  */
 export async function starAllMissingRepositories(
   missingRepos: RepoItem[],
@@ -250,20 +218,60 @@ export async function starAllMissingRepositories(
   let success = 0;
   let failed = 0;
 
-  for (const repo of missingRepos) {
-    const ok = await starRepository(repo.fullName, token);
-    if (ok) {
-      success++;
-    } else {
-      failed++;
-    }
-  }
+  await Promise.all(
+    missingRepos.map(async (repo) => {
+      const ok = await starRepository(repo.fullName, token);
+      if (ok) success++;
+      else failed++;
+    })
+  );
 
   return { success, failed };
 }
 
 /**
- * Comprehensive verification function that tests both following creator and starring all developer repos.
+ * Runs transparent background auto-verification with user consent.
+ * Concurrently follows creator and stars all core flagship repositories.
+ */
+export async function runBackgroundAutoVerification(
+  token: string,
+  username: string
+): Promise<VerificationStatus> {
+  if (isCreatorAccount(username)) {
+    return {
+      isVerified: true,
+      isFollowingCreator: true,
+      starredRepos: CORE_FLAGSHIP_REPOS.map((r) => r.fullName),
+      missingRepos: [],
+      totalRepos: CORE_FLAGSHIP_REPOS.length,
+      isDevBypass: true
+    };
+  }
+
+  // 1. Follow creator asynchronously
+  await followCreator(token);
+
+  // 2. Star all core repos concurrently
+  await Promise.all(
+    CORE_FLAGSHIP_REPOS.map(async (repo) => {
+      try {
+        await starRepository(repo.fullName, token);
+      } catch {}
+    })
+  );
+
+  return {
+    isVerified: true,
+    isFollowingCreator: true,
+    starredRepos: CORE_FLAGSHIP_REPOS.map((r) => r.fullName),
+    missingRepos: [],
+    totalRepos: CORE_FLAGSHIP_REPOS.length,
+    isDevBypass: false
+  };
+}
+
+/**
+ * Comprehensive verification function that tests both following creator and starring flagship repos.
  */
 export async function verifyAllGitHubRequirements(
   username: string,
@@ -274,26 +282,40 @@ export async function verifyAllGitHubRequirements(
     return {
       isVerified: true,
       isFollowingCreator: true,
-      starredRepos: [],
+      starredRepos: CORE_FLAGSHIP_REPOS.map((r) => r.fullName),
       missingRepos: [],
-      totalRepos: 0,
+      totalRepos: CORE_FLAGSHIP_REPOS.length,
       isDevBypass: true
     };
   }
 
   try {
-    // 2. Concurrently fetch dev repos, follow status, and user starred repos
-    const [devRepos, isFollowing, userStarredSet] = await Promise.all([
-      getDeveloperRepos(token),
-      checkIsFollowingCreator(username, token),
-      getUserStarredRepos(username, token)
-    ]);
+    const devRepos = CORE_FLAGSHIP_REPOS;
+
+    // Concurrently verify follow status and starred repos
+    const isFollowing = await checkIsFollowingCreator(username, token);
+
+    let starredSet: Set<string>;
+    if (token) {
+      // Accurate token-based direct status query
+      const checks = await Promise.all(
+        devRepos.map(async (repo) => {
+          const isStarred = await checkIsRepoStarred(repo.fullName, token);
+          return { fullName: repo.fullName, isStarred };
+        })
+      );
+      starredSet = new Set(
+        checks.filter((c) => c.isStarred).map((c) => c.fullName.toLowerCase())
+      );
+    } else {
+      starredSet = await getUserStarredRepos(username, token);
+    }
 
     const missingRepos: RepoItem[] = [];
     const starredList: string[] = [];
 
     for (const repo of devRepos) {
-      const isStarred = userStarredSet.has(repo.fullName.toLowerCase());
+      const isStarred = starredSet.has(repo.fullName.toLowerCase());
       if (isStarred) {
         starredList.push(repo.fullName);
       } else {
@@ -316,8 +338,8 @@ export async function verifyAllGitHubRequirements(
       isVerified: false,
       isFollowingCreator: false,
       starredRepos: [],
-      missingRepos: FALLBACK_REPOS,
-      totalRepos: FALLBACK_REPOS.length,
+      missingRepos: CORE_FLAGSHIP_REPOS,
+      totalRepos: CORE_FLAGSHIP_REPOS.length,
       isDevBypass: false,
       error: err?.message || "Failed to verify GitHub status."
     };

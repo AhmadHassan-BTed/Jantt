@@ -268,6 +268,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
         onFollowCreator={auth.followCreatorHandler}
         onStarRepo={auth.starRepoHandler}
         onStarAll={auth.starAllHandler}
+        onAutoVerify={auth.autoVerifyHandler}
         githubUsername={auth.userProfile?.githubUsername || auth.userProfile?.username}
         hasGithubToken={Boolean(auth.githubToken)}
       />

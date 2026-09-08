@@ -64,6 +64,8 @@ import {
 } from "./firebase/roomService";
 import type { UserRoomPointer, FullRoomPayload } from "./firebase";
 import { commandBus } from "./services";
+import { useMobileDetection } from "./hooks/useMobileDetection";
+import { FolderKanban } from "lucide-react";
 
 // View & Layout & Modal Components (Domain-Driven Architecture)
 import {
@@ -72,16 +74,22 @@ import {
   EditorPane,
   ViewRouter,
   ModalHost,
-  Toast
+  Toast,
+  MobileNavbar,
+  MobileBottomNav,
+  OrientationBanner,
+  ReadOnlyForkModal
 } from "./components";
 
 export function App() {
   const init = useMemo(() => loadInitialState(), []);
+  const mobile = useMobileDetection();
 
   // UI Modals & Notifications
   const toast = useToast();
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showPlanManagerModal, setShowPlanManagerModal] = useState(false);
+  const [showReadOnlyForkModal, setShowReadOnlyForkModal] = useState(false);
 
   // Firebase Authentication & Cloud User Identity
   const auth = useAuth();
@@ -241,9 +249,57 @@ export function App() {
     captureSnapshot: vault.captureSnapshot,
     activeView: viewport.activeView,
     selectedThemeId: viewport.selectedThemeId,
+    setSelectedThemeId: viewport.setSelectedThemeId,
     userProfile: auth.userProfile,
     onRequireVerification: () => auth.setShowVerificationModal(true)
   });
+
+  const isViewer = roomSync.activeRoomRole === "viewer";
+  const activeRoomTitle =
+    ownedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
+    sharedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
+    project.customProjects.find((p) => p.roomId === roomSync.activeRoomId)?.name ||
+    editor.parsedData?.meta?.title ||
+    "Shared Plan";
+
+  // 1-Click Fork: Make a private local copy so viewers can edit freely
+  const handleForkToLocalCopy = useCallback(() => {
+    if (!editor.parsedData) return;
+    const copyName = `${activeRoomTitle} (Local Copy)`;
+    const copyId = `local-copy-${Date.now().toString(36)}`;
+    const clonedData: JanttData = JSON.parse(JSON.stringify(editor.parsedData));
+    if (clonedData.meta) {
+      clonedData.meta.title = copyName;
+    }
+    const newProject: SavedProject = {
+      id: copyId,
+      name: copyName,
+      updatedAt: new Date().toISOString(),
+      data: clonedData,
+      source: "local"
+    };
+
+    const nextProjects = [newProject, ...project.customProjects];
+    project.setCustomProjects(nextProjects);
+    saveCustomProjects(nextProjects);
+
+    // Clean URL query parameters and hash
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("room");
+      url.hash = "";
+      window.history.replaceState({}, document.title, url.pathname + (url.search ? url.search : ""));
+    } catch {}
+
+    project.setActiveProjectId(copyId);
+    editor.setParsedData(clonedData);
+    editor.setJsonText(JSON.stringify(clonedData, null, 2));
+    editor.setValidationResult(validate(clonedData));
+    project.saveProjectData(copyId, clonedData);
+
+    toast.showToast(`Created local copy "${copyName}". You can now edit freely!`);
+    setShowReadOnlyForkModal(false);
+  }, [editor, activeRoomTitle, project, toast]);
 
   // Handlers for Cloud Rooms & User Hub
   const handleSelectCloudRoom = useCallback(
@@ -297,6 +353,10 @@ export function App() {
         people.setPeople(roomPayload.data.people || []);
         people.setTeams(roomPayload.data.teams || []);
         editor.setValidationResult(validate(roomPayload.data));
+
+        if (roomPayload.meta?.theme) {
+          viewport.setSelectedThemeId(roomPayload.meta.theme);
+        }
 
         setShowPlanManagerModal(false);
         toast.showToast(`Opened room "${roomPayload.meta.title}"!`);
@@ -526,7 +586,9 @@ export function App() {
     parsedData: editor.parsedData,
     activeTheme: viewport.activeTheme,
     activeView: viewport.activeView,
-    handleChartCommit: editor.handleChartCommit
+    handleChartCommit: editor.handleChartCommit,
+    readOnly: isViewer,
+    onPromptFork: () => setShowReadOnlyForkModal(true)
   });
 
   // Share Plan Modal & URL Generation
@@ -561,6 +623,11 @@ export function App() {
 
   const handleGanttCommit = useCallback(
     (updated: JanttData) => {
+      if (isViewer) {
+        setShowReadOnlyForkModal(true);
+        toast.showToast("Cloud room is in Read-Only mode. Make a local copy to edit.", true);
+        return;
+      }
       if (!editor.parsedData) return;
       if (!isHideActive && !isPersonSorting) {
         editor.handleChartCommit(updated);
@@ -570,69 +637,131 @@ export function App() {
       const mergedTasks = editor.parsedData.tasks.map((t) => updatedMap.get(t.id) || t);
       editor.handleChartCommit({ ...editor.parsedData, ...updated, tasks: mergedTasks });
     },
-    [editor.parsedData, isHideActive, isPersonSorting, editor.handleChartCommit]
+    [isViewer, editor.parsedData, isHideActive, isPersonSorting, editor.handleChartCommit, toast]
   );
 
   return (
     <div
-      className={`playground-app ${viewport.activeTheme.className}`}
+      className={`playground-app ${viewport.activeTheme.className} ${mobile.isMobile ? "is-mobile-device" : ""} ${mobile.isImmersiveLandscape ? "is-immersive-landscape" : ""}`}
       style={{
         colorScheme: viewport.activeTheme.mode || "dark",
         ...(viewport.activeTheme.vars as React.CSSProperties)
       }}
     >
-      <Navbar
-        saveStatus={autoSave.saveStatus}
-        lastSavedAt={autoSave.lastSavedAt}
-        autoSaveInterval={autoSave.autoSaveInterval}
-        autoSaveLabel={autoSave.autoSaveLabel}
-        setShowAutoSaveModal={autoSave.setShowAutoSaveModal}
-        snapshotsCount={vault.snapshots.length}
-        setShowVersionHistoryModal={vault.setShowVersionHistoryModal}
-        isSidebarCollapsed={sidebar.isSidebarCollapsed}
-        setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
+      {mobile.isMobile ? (
+        !mobile.isImmersiveLandscape && (
+          <MobileNavbar
+            activeProjectId={project.activeProjectId}
+            customProjects={project.customProjects}
+            handleSelectProject={handleSelectProjectOrRoom}
+            handleOpenAddPlanModal={project.handleOpenAddPlanModal}
+            onOpenPlanManager={() => setShowPlanManagerModal(true)}
+            activeRoomId={roomSync.activeRoomId}
+            activeRoomTitle={
+              ownedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
+              sharedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
+              project.customProjects.find((p) => p.roomId === roomSync.activeRoomId)?.name ||
+              "Project Room"
+            }
+            onlineUsers={roomSync.onlineUsers}
+            onOpenShareRoom={handleOpenShareRoom}
+            setShowShareModal={sharing.setShowShareModal}
+            setShowPeopleModal={people.setShowPeopleModal}
+            saveStatus={autoSave.saveStatus}
+            autoSaveLabel={autoSave.autoSaveLabel}
+            onOpenAutoSave={() => autoSave.setShowAutoSaveModal(true)}
+            snapshotsCount={vault.snapshots.length}
+            onOpenVersionHistory={() => vault.setShowVersionHistoryModal(true)}
+            selectedThemeId={viewport.selectedThemeId}
+            setSelectedThemeId={viewport.setSelectedThemeId}
+            onOpenPromptModal={() => setShowPromptModal(true)}
+            onOpenJsonEditor={() => sidebar.setIsSidebarCollapsed(false)}
+            currentUser={auth.currentUser}
+            userProfile={auth.userProfile}
+            isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
+            onLogin={auth.loginWithGitHub}
+            onLogout={auth.logout}
+            onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
+            ownedRooms={ownedRooms}
+            sharedRooms={sharedRooms}
+            isViewer={isViewer}
+            onPromptFork={() => setShowReadOnlyForkModal(true)}
+          />
+        )
+      ) : (
+        <>
+          <Navbar
+            saveStatus={autoSave.saveStatus}
+            lastSavedAt={autoSave.lastSavedAt}
+            autoSaveInterval={autoSave.autoSaveInterval}
+            autoSaveLabel={autoSave.autoSaveLabel}
+            setShowAutoSaveModal={autoSave.setShowAutoSaveModal}
+            snapshotsCount={vault.snapshots.length}
+            setShowVersionHistoryModal={vault.setShowVersionHistoryModal}
+            isSidebarCollapsed={sidebar.isSidebarCollapsed}
+            setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
+            activeView={viewport.activeView}
+            setActiveView={viewport.setActiveView}
+            notesCount={editor.parsedData?.notes?.length || 0}
+            fileInputRef={project.fileInputRef}
+            handleImportJsonFile={project.handleImportJsonFile}
+            selectedThemeId={viewport.selectedThemeId}
+            setSelectedThemeId={viewport.setSelectedThemeId}
+            setShowPromptModal={setShowPromptModal}
+            currentUser={auth.currentUser}
+            userProfile={auth.userProfile}
+            onOpenUserHub={() => setShowPlanManagerModal(true)}
+            isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
+            onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
+            onLogin={auth.loginWithGitHub}
+            onLogout={auth.logout}
+            isViewer={isViewer}
+            onPromptFork={() => setShowReadOnlyForkModal(true)}
+          />
+
+          <Subheader
+            activeProjectId={project.activeProjectId}
+            customProjects={project.customProjects}
+            handleSelectProject={handleSelectProjectOrRoom}
+            handleOpenAddPlanModal={project.handleOpenAddPlanModal}
+            setShowShareModal={sharing.setShowShareModal}
+            setCopiedShareLink={sharing.setCopiedShareLink}
+            handleDeleteProject={project.handleDeleteProject}
+            setShowPeopleModal={people.setShowPeopleModal}
+            effectivePeople={people.effectivePeople}
+            ownedRooms={ownedRooms}
+            sharedRooms={sharedRooms}
+            onOpenPlanManager={() => setShowPlanManagerModal(true)}
+            activeRoomId={roomSync.activeRoomId}
+            activeRoomRole={roomSync.activeRoomRole}
+            activeRoomTitle={activeRoomTitle}
+            onlineUsers={roomSync.onlineUsers}
+            onOpenShareRoom={handleOpenShareRoom}
+            onLeaveCloudRoom={handleLeaveCloudRoom}
+            onPromptFork={() => setShowReadOnlyForkModal(true)}
+          />
+        </>
+      )}
+
+      {/* Suggest landscape orientation on mobile portrait for Gantt view */}
+      <OrientationBanner
+        isMobile={mobile.isMobile}
+        isPortrait={mobile.isPortrait}
         activeView={viewport.activeView}
-        setActiveView={viewport.setActiveView}
-        notesCount={editor.parsedData?.notes?.length || 0}
-        fileInputRef={project.fileInputRef}
-        handleImportJsonFile={project.handleImportJsonFile}
-        selectedThemeId={viewport.selectedThemeId}
-        setSelectedThemeId={viewport.setSelectedThemeId}
-        setShowPromptModal={setShowPromptModal}
-        currentUser={auth.currentUser}
-        userProfile={auth.userProfile}
-        onOpenUserHub={() => setShowPlanManagerModal(true)}
-        isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
-        onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
-        onLogin={auth.loginWithGitHub}
-        onLogout={auth.logout}
       />
 
-      <Subheader
-        activeProjectId={project.activeProjectId}
-        customProjects={project.customProjects}
-        handleSelectProject={handleSelectProjectOrRoom}
-        handleOpenAddPlanModal={project.handleOpenAddPlanModal}
-        setShowShareModal={sharing.setShowShareModal}
-        setCopiedShareLink={sharing.setCopiedShareLink}
-        handleDeleteProject={project.handleDeleteProject}
-        setShowPeopleModal={people.setShowPeopleModal}
-        effectivePeople={people.effectivePeople}
-        ownedRooms={ownedRooms}
-        sharedRooms={sharedRooms}
-        onOpenPlanManager={() => setShowPlanManagerModal(true)}
-        activeRoomId={roomSync.activeRoomId}
-        activeRoomRole={roomSync.activeRoomRole}
-        activeRoomTitle={
-          ownedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
-          sharedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
-          project.customProjects.find((p) => p.roomId === roomSync.activeRoomId)?.name ||
-          "Project Room"
-        }
-        onlineUsers={roomSync.onlineUsers}
-        onOpenShareRoom={handleOpenShareRoom}
-        onLeaveCloudRoom={handleLeaveCloudRoom}
-      />
+      {/* Discreet floating menu trigger in Immersive Landscape */}
+      {mobile.isImmersiveLandscape && (
+        <button
+          type="button"
+          className="mobile-immersive-toggle-btn"
+          onClick={() => setShowPlanManagerModal(true)}
+          title="Open Plan Manager / Hub"
+        >
+          <FolderKanban size={13} />
+          <span>Plans</span>
+        </button>
+      )}
 
       <main className="workspace-main">
         <EditorPane
@@ -651,9 +780,12 @@ export function App() {
           handleImportJsonFile={project.handleImportJsonFile}
           handleDownloadJson={editor.handleDownloadJson}
           handleExportCsv={editor.handleExportCsv}
+          isMobile={mobile.isMobile}
+          isViewer={isViewer}
+          onPromptFork={() => setShowReadOnlyForkModal(true)}
         />
 
-        {!sidebar.isSidebarCollapsed && (
+        {!sidebar.isSidebarCollapsed && !mobile.isMobile && (
           <div
             className={`workspace-splitter ${sidebar.isResizing ? "is-resizing" : ""}`}
             onPointerDown={sidebar.startResizing}
@@ -678,10 +810,22 @@ export function App() {
               editor={editor}
               autoSave={autoSave}
               project={project}
+              isMobile={mobile.isMobile}
+              isViewer={isViewer}
+              onPromptFork={() => setShowReadOnlyForkModal(true)}
             />
           </div>
         </section>
       </main>
+
+      {/* Mobile Bottom Navigation Bar (Hidden in Immersive Landscape to maximize chart space) */}
+      {mobile.isMobile && !mobile.isImmersiveLandscape && (
+        <MobileBottomNav
+          activeView={viewport.activeView}
+          setActiveView={viewport.setActiveView}
+          notesCount={editor.parsedData?.notes?.length || 0}
+        />
+      )}
 
       {/* Modals & Popups */}
       <ModalHost
@@ -711,6 +855,13 @@ export function App() {
         showShareRoomModal={showShareRoomModal}
         setShowShareRoomModal={setShowShareRoomModal}
         shareModalRoomId={shareModalRoomId}
+      />
+
+      <ReadOnlyForkModal
+        show={showReadOnlyForkModal}
+        setShow={setShowReadOnlyForkModal}
+        roomTitle={activeRoomTitle}
+        onMakeLocalCopy={handleForkToLocalCopy}
       />
 
       <Toast

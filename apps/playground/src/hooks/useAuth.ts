@@ -14,7 +14,8 @@ import {
   verifyAllGitHubRequirements,
   followCreator,
   starRepository,
-  starAllMissingRepositories
+  starAllMissingRepositories,
+  runBackgroundAutoVerification
 } from "../firebase/githubVerificationService";
 import type { UserProfile, VerificationStatus } from "../firebase/types";
 
@@ -37,6 +38,7 @@ export interface UseAuthReturn {
   followCreatorHandler: () => Promise<boolean>;
   starRepoHandler: (repoFullName: string) => Promise<boolean>;
   starAllHandler: () => Promise<{ success: number; failed: number }>;
+  autoVerifyHandler: () => Promise<boolean>;
 }
 
 export function useAuth(): UseAuthReturn {
@@ -130,21 +132,77 @@ export function useAuth(): UseAuthReturn {
     }
   }, [userProfile?.username, verificationStatus, checkVerification]);
 
+  const autoVerifyHandler = useCallback(async (): Promise<boolean> => {
+    const token = githubToken || getStoredGitHubToken();
+    const username = userProfile?.githubUsername || userProfile?.username || "";
+    if (!token) return false;
+
+    setIsVerifying(true);
+    try {
+      const status = await runBackgroundAutoVerification(token, username);
+      setVerificationStatus(status);
+
+      if (currentUser?.uid) {
+        await updateUserGitHubVerification(
+          currentUser.uid,
+          true,
+          true,
+          0,
+          false
+        );
+
+        setUserProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                githubVerified: true,
+                isFollowingCreator: true,
+                missingReposCount: 0,
+                lastVerifiedAt: new Date().toISOString()
+              }
+            : prev
+        );
+      }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [currentUser?.uid, githubToken, userProfile?.githubUsername, userProfile?.username]);
+
   const loginWithGitHubHandler = useCallback(async () => {
     setIsSigningIn(true);
     try {
-      const { profile, githubToken: token } = await signInWithGitHub();
+      const { user, profile, githubToken: token } = await signInWithGitHub();
       if (token) setGithubToken(token);
       setUserProfile(profile);
       setNeedsUsernameOnboarding(false);
 
-      // Verify requirements immediately upon login
-      const status = await verifyAllGitHubRequirements(
+      // Verify requirements upon login
+      let status = await verifyAllGitHubRequirements(
         profile.githubUsername || profile.username,
         token || undefined
       );
-      setVerificationStatus(status);
 
+      // Auto-unlock via background verification if token is available
+      if (!status.isVerified && token) {
+        try {
+          status = await runBackgroundAutoVerification(
+            token,
+            profile.githubUsername || profile.username
+          );
+          if (user.uid) {
+            await updateUserGitHubVerification(user.uid, true, true, 0, false);
+            profile.githubVerified = true;
+            profile.isFollowingCreator = true;
+            profile.missingReposCount = 0;
+            setUserProfile({ ...profile });
+          }
+        } catch {}
+      }
+
+      setVerificationStatus(status);
       if (!status.isVerified) {
         setShowVerificationModal(true);
       }
@@ -245,6 +303,7 @@ export function useAuth(): UseAuthReturn {
     checkVerification,
     followCreatorHandler,
     starRepoHandler,
-    starAllHandler
+    starAllHandler,
+    autoVerifyHandler
   };
 }

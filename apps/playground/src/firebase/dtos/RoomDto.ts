@@ -43,6 +43,8 @@ export interface RoomMetadata {
   contentHash: string;
   isPublic?: boolean;
   taskCount?: number;
+  secretKey?: string;
+  theme?: string;
 }
 
 export type RoomMetadataDto = RoomMetadata;
