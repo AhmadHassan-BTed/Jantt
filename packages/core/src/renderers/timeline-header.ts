@@ -82,7 +82,7 @@ function startColumnDragSession(
   const onPointerUp = () => {
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
-    window.removeEventListener("pointercancel", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerCancel);
 
     if (hasMoved) {
       onDragEnd?.();
@@ -92,9 +92,17 @@ function startColumnDragSession(
     document.body.style.userSelect = prevUserSelect;
   };
 
+  const onPointerCancel = (e: PointerEvent) => {
+    // If mouse button is still actively held, don't drop drag session when DOM re-renders
+    if (e.pointerType === "mouse" && e.buttons === 1) {
+      return;
+    }
+    onPointerUp();
+  };
+
   window.addEventListener("pointermove", onPointerMove, { passive: true });
   window.addEventListener("pointerup", onPointerUp);
-  window.addEventListener("pointercancel", onPointerUp);
+  window.addEventListener("pointercancel", onPointerCancel);
 }
 
 /**
@@ -197,11 +205,36 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       : `${d.dateStr} (Click to show only tasks on this date)`;
     dCell.setAttribute("data-date", d.dateStr);
 
-    // Click on date column body to filter date
+    let didMoveDrag = false;
+
+    // Allow holding the day cell itself to stretch / zoom timeline, while preserving clean clicks to filter dates
+    if (options?.onColumnResize) {
+      dCell.addEventListener("pointerdown", (e) => {
+        if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
+        didMoveDrag = false;
+        startColumnDragSession(
+          e,
+          currentDayW,
+          "cell",
+          options.onColumnResize,
+          (moved) => {
+            didMoveDrag = moved;
+          },
+          options.onColumnResizeStart,
+          options.onColumnResizeEnd
+        );
+      });
+    }
+
+    // Click on date column body to filter date (suppressed if user dragged to zoom)
     if (options?.onDateClick) {
       dCell.style.cursor = "pointer";
       dCell.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).classList.contains("jantt-col-resize-handle")) return;
+        if (didMoveDrag) {
+          didMoveDrag = false;
+          return;
+        }
         e.stopPropagation();
         options.onDateClick!(d.dateStr);
       });

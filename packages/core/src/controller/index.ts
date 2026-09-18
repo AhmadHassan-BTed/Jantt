@@ -5,3 +5,4 @@ export * from "./strategies/progress-gesture";
 export * from "./strategies/link-gesture";
 export * from "./strategies/splitter-gesture";
 export * from "./strategies/marquee-gesture";
+export * from "./strategies/pan-gesture";

@@ -147,4 +147,87 @@ describe("Touch & Mobile Interaction Controller", () => {
     // Since user was panning, modal should NOT open
     expect(openModalHandler).not.toHaveBeenCalled();
   });
+
+  it("allows mouse/laptop dragging of task bars even when disableDragOnTouch is enabled", () => {
+    const { controller } = setupController({ disableDragOnTouch: true });
+    const task = initialData.tasks[0];
+    const bar = document.createElement("div");
+    const captureSpy = vi.fn();
+    bar.setPointerCapture = captureSpy;
+
+    const mouseDown = new PointerEvent("pointerdown", {
+      pointerType: "mouse",
+      pointerId: 3,
+      clientX: 100,
+      clientY: 100,
+      button: 0,
+      cancelable: true
+    });
+    const preventDefaultSpy = vi.spyOn(mouseDown, "preventDefault");
+
+    controller.startDrag(mouseDown, task, "move", bar);
+
+    // Mouse drag MUST be initiated: preventDefault called and capture set
+    expect(preventDefaultSpy).toHaveBeenCalled();
+    expect(captureSpy).toHaveBeenCalledWith(3);
+  });
+
+  it("allows mouse/laptop splitter dragging even when disableDragOnTouch or isMobile is true", () => {
+    const { controller } = setupController({ disableDragOnTouch: true, isMobile: true });
+    const mouseDown = new PointerEvent("pointerdown", {
+      pointerType: "mouse",
+      pointerId: 4,
+      clientX: 200,
+      clientY: 200,
+      button: 0,
+      cancelable: true
+    });
+    const preventDefaultSpy = vi.spyOn(mouseDown, "preventDefault");
+
+    controller.startSplitterDrag(mouseDown, 250);
+
+    expect(preventDefaultSpy).toHaveBeenCalled();
+  });
+
+  it("allows mouse/laptop canvas drag to pan timeline bodyWrap scrollLeft", () => {
+    const { controller, container } = setupController();
+    const bodyWrap = container.querySelector<HTMLElement>(".jantt-body-wrap")!;
+    bodyWrap.scrollLeft = 100;
+    const canvas = document.createElement("div");
+    bodyWrap.appendChild(canvas);
+
+    const mouseDown = new PointerEvent("pointerdown", {
+      pointerType: "mouse",
+      pointerId: 5,
+      clientX: 200,
+      clientY: 200,
+      button: 0,
+      cancelable: true
+    });
+
+    controller.startCanvasDrag(mouseDown, canvas, []);
+
+    // Move pointer left by 50px (simulating dragging timeline to scroll right)
+    window.dispatchEvent(
+      new PointerEvent("pointermove", {
+        pointerType: "mouse",
+        pointerId: 5,
+        clientX: 150,
+        clientY: 200
+      })
+    );
+
+    // bodyWrap.scrollLeft should have panned: origScrollLeft (100) - deltaX (-50) = 150
+    expect(bodyWrap.scrollLeft).toBe(150);
+
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerType: "mouse",
+        pointerId: 5,
+        clientX: 150,
+        clientY: 200
+      })
+    );
+  });
 });
+

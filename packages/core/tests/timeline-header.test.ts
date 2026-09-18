@@ -20,11 +20,16 @@ if (typeof window.PointerEvent === "undefined") {
 describe("Timeline Header Interactions (Click to Filter & Border Drag to Resize)", () => {
   const mockHeader: GridHeader = {
     totalHeight: 60,
+    totalWidth: 360,
+    startDate: "2026-09-01",
+    endDate: "2026-09-03",
+    totalDays: 3,
     spansMultipleYears: false,
     years: [],
     months: [
-      { label: "September 2026", month: 8, year: 2026, width: 360 }
+      { label: "September 2026", x: 0, width: 360 }
     ],
+    weeks: [],
     days: [
       {
         dateStr: "2026-09-01",
@@ -35,6 +40,7 @@ describe("Timeline Header Interactions (Click to Filter & Border Drag to Resize)
         isWeekend: false,
         isToday: false,
         isTaskBoundary: false,
+        x: 0,
         width: 36
       },
       {
@@ -46,6 +52,7 @@ describe("Timeline Header Interactions (Click to Filter & Border Drag to Resize)
         isWeekend: false,
         isToday: false,
         isTaskBoundary: true,
+        x: 36,
         width: 36
       },
       {
@@ -57,6 +64,7 @@ describe("Timeline Header Interactions (Click to Filter & Border Drag to Resize)
         isWeekend: false,
         isToday: true,
         isTaskBoundary: false,
+        x: 72,
         width: 36
       }
     ],
@@ -180,4 +188,66 @@ describe("Timeline Header Interactions (Click to Filter & Border Drag to Resize)
     expect(dayCells[1].classList.contains("is-date-selected")).toBe(true);
     expect(dayCells[2].classList.contains("is-date-selected")).toBe(false);
   });
+
+  it("holding and dragging a day cell horizontally invokes onColumnResize and suppresses onDateClick", () => {
+    const onDateClick = vi.fn();
+    const onColumnResize = vi.fn();
+    const onColumnResizeStart = vi.fn();
+    const onColumnResizeEnd = vi.fn();
+
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+
+    const el = renderTimelineHeader(mockHeader, {
+      onDateClick,
+      onColumnResize,
+      onColumnResizeStart,
+      onColumnResizeEnd,
+      dayWidth: 36
+    });
+
+    document.body.appendChild(el);
+    const firstCell = el.querySelector<HTMLElement>(".jantt-day-cell")!;
+
+    // 1. Pointerdown on day cell body (not handle)
+    firstCell.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 50,
+        clientY: 30,
+        button: 0
+      })
+    );
+
+    // 2. Drag 60px horizontally
+    window.dispatchEvent(
+      new PointerEvent("pointermove", {
+        clientX: 110,
+        clientY: 30
+      })
+    );
+
+    expect(onColumnResizeStart).toHaveBeenCalled();
+    expect(onColumnResize).toHaveBeenCalled();
+
+    // 3. Pointerup ends drag
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        clientX: 110,
+        clientY: 30
+      })
+    );
+
+    expect(onColumnResizeEnd).toHaveBeenCalled();
+
+    // 4. Subsequent click event should be suppressed because user dragged
+    firstCell.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onDateClick).not.toHaveBeenCalled();
+
+    document.body.removeChild(el);
+  });
 });
+

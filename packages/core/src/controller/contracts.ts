@@ -1,6 +1,6 @@
 import { JanttData, Task, JanttOptions, TaskLayout } from "../types";
 
-export type DragMode = "move" | "resize" | "progress" | "link" | "split" | "marquee";
+export type DragMode = "move" | "resize" | "progress" | "link" | "split" | "marquee" | "pan";
 
 export interface DragState {
   taskId?: string;
@@ -13,6 +13,8 @@ export interface DragState {
   origEnd?: string;
   origProgress?: number;
   origLabelWidth?: number;
+  origScrollLeft?: number;
+  origScrollTop?: number;
   moved: boolean;
   element?: HTMLElement;
   pointerId?: number;

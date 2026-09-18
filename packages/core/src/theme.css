@@ -1108,6 +1108,7 @@
   bottom: 0;
   width: 6px;
   cursor: col-resize;
+  touch-action: none;
   z-index: 46;
   background: transparent;
   transition: background 0.15s ease;
@@ -1140,6 +1141,7 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  touch-action: none;
 }
 
 .jantt-header-years {
@@ -1185,6 +1187,8 @@
   letter-spacing: -0.01em;
   position: relative;
   overflow: visible;
+  touch-action: none;
+  user-select: none;
 }
 
 .jantt-header-days {
@@ -1211,6 +1215,7 @@
   overflow: visible;
   cursor: pointer;
   user-select: none;
+  touch-action: none;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -1547,6 +1552,7 @@
   border-radius: var(--jantt-bar-radius);
   color: #FFFFFF;
   cursor: grab;
+  touch-action: none;
   z-index: 6;
   transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
@@ -1623,6 +1629,7 @@
   transform: translate(-50%, -50%) rotate(45deg);
   border-radius: 3px;
   cursor: grab;
+  touch-action: none;
   z-index: 7;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   border: 2px solid #FFFFFF;
@@ -1795,6 +1802,7 @@
   bottom: 0;
   width: 9px;
   cursor: col-resize;
+  touch-action: none;
   z-index: 3;
   background: rgba(255, 255, 255, 0.15);
   border-radius: 0 var(--jantt-bar-radius) var(--jantt-bar-radius) 0;
@@ -1816,6 +1824,7 @@
   background: var(--jantt-accent);
   border: 2px solid #FFFFFF;
   cursor: crosshair;
+  touch-action: none;
   z-index: 10;
   opacity: 0;
   transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;

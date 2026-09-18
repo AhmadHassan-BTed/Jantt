@@ -12,7 +12,8 @@ import {
   ProgressGestureStrategy,
   LinkGestureStrategy,
   SplitterGestureStrategy,
-  MarqueeGestureStrategy
+  MarqueeGestureStrategy,
+  PanGestureStrategy
 } from "./controller/index";
 
 export type { DragMode, DragState, GestureContext, IGestureStrategy };
@@ -42,7 +43,8 @@ export class InteractionController {
     ["progress", new ProgressGestureStrategy()],
     ["link", new LinkGestureStrategy()],
     ["split", new SplitterGestureStrategy()],
-    ["marquee", new MarqueeGestureStrategy()]
+    ["marquee", new MarqueeGestureStrategy()],
+    ["pan", new PanGestureStrategy()]
   ] as Array<[DragMode, IGestureStrategy]>);
 
   private scheduleRender() {
@@ -196,8 +198,8 @@ export class InteractionController {
 
   public startMarqueeSelection(e: PointerEvent, canvasEl: HTMLElement, taskLayouts: TaskLayout[]) {
     if (this.options.readOnly) return;
-    // On touch devices, touch interactions on background should pan/scroll the canvas, never start marquee
-    if (e.pointerType === "touch" || this.options.disableDragOnTouch || this.options.isMobile) return;
+    // On touch devices, touch interactions on background should pan/scroll the canvas natively, never start marquee
+    if (e.pointerType === "touch" && (this.options.disableDragOnTouch !== false || this.options.isMobile)) return;
     if (e.button !== 0 && e.button !== 2) return;
 
     e.preventDefault();
@@ -237,8 +239,8 @@ export class InteractionController {
   }
 
   public startDrag(e: PointerEvent, task: Task, mode: DragMode, el?: HTMLElement) {
-    // Touch screen handling: suppress accidental dragging (moving/resizing/wires) to prioritize native scrolling
-    const isTouchInteraction = e.pointerType === "touch" || this.options.disableDragOnTouch === true;
+    // Touch screen handling: only suppress accidental dragging when the actual pointer is touch AND touch drag is disabled
+    const isTouchInteraction = e.pointerType === "touch" && this.options.disableDragOnTouch !== false;
     if (isTouchInteraction) {
       if (mode === "move" || mode === "resize") {
         const startX = e.clientX;
@@ -329,7 +331,7 @@ export class InteractionController {
 
   public startSplitterDrag(e: PointerEvent, currentWidth: number) {
     // Suppress splitter dragging on touch to avoid conflict with timeline panning
-    if (e.pointerType === "touch" || this.options.disableDragOnTouch || this.options.isMobile) return;
+    if (e.pointerType === "touch" && (this.options.disableDragOnTouch !== false || this.options.isMobile)) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -346,6 +348,49 @@ export class InteractionController {
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("pointercancel", this.onPointerUp);
+  }
+
+  public startPan(e: PointerEvent, canvasEl: HTMLElement) {
+    if (e.pointerType === "touch") return;
+    if (e.button !== 0 && e.button !== 1) return;
+
+    e.preventDefault();
+
+    const bodyWrap =
+      canvasEl.closest<HTMLElement>(".jantt-body-wrap") ||
+      this.container?.querySelector<HTMLElement>(".jantt-body-wrap") ||
+      document.querySelector<HTMLElement>(".jantt-body-wrap");
+
+    canvasEl.style.cursor = "grabbing";
+
+    this.dragState = {
+      mode: "pan",
+      startX: e.clientX,
+      startY: e.clientY,
+      origScrollLeft: bodyWrap?.scrollLeft ?? 0,
+      origScrollTop: bodyWrap?.scrollTop ?? 0,
+      moved: false,
+      pointerId: e.pointerId,
+      canvasEl
+    };
+
+    window.addEventListener("pointermove", this.onPointerMove);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
+  }
+
+  public startCanvasDrag(e: PointerEvent, canvasEl: HTMLElement, taskLayouts: TaskLayout[]) {
+    if (this.options.readOnly && e.button !== 0 && e.button !== 1) return;
+    if (e.pointerType === "touch") return;
+
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      this.startMarqueeSelection(e, canvasEl, taskLayouts);
+      return;
+    }
+
+    if (e.button === 0 || e.button === 1) {
+      this.startPan(e, canvasEl);
+    }
   }
 
   private onPointerMove(e: PointerEvent) {
@@ -365,7 +410,7 @@ export class InteractionController {
     }
 
     // Auto-scroll when dragging near or past viewport boundaries (for timeline interactions)
-    if (this.dragState.mode !== "split") {
+    if (this.dragState.mode !== "split" && this.dragState.mode !== "pan") {
       const bodyWrap =
         this.container?.querySelector<HTMLElement>(".jantt-body-wrap") ||
         this.dragState.element?.closest<HTMLElement>(".jantt-body-wrap") ||
@@ -386,7 +431,12 @@ export class InteractionController {
       }
     }
 
-    if (this.dragState.mode !== "split" && this.dragState.mode !== "marquee" && this.dragState.mode !== "link") {
+    if (
+      this.dragState.mode !== "split" &&
+      this.dragState.mode !== "marquee" &&
+      this.dragState.mode !== "link" &&
+      this.dragState.mode !== "pan"
+    ) {
       this.scheduleRender();
       this.options.onChange?.(this.data);
     }
@@ -399,6 +449,10 @@ export class InteractionController {
 
     if (selectionBoxEl && selectionBoxEl.parentNode) {
       selectionBoxEl.parentNode.removeChild(selectionBoxEl);
+    }
+
+    if (this.dragState.canvasEl) {
+      this.dragState.canvasEl.style.cursor = "";
     }
 
     if (element && pointerId !== undefined) {

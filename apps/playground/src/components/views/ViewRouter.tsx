@@ -88,7 +88,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           }}
           showDateFilterBadge={false}
           filterTasksByDate={false}
-          disableDragOnTouch={true}
+          disableDragOnTouch={Boolean(isMobile)}
           isMobile={isMobile}
           selectedDate={dateFilter.dateFilterActiveDate}
           onDateClick={(clickedDate) => {

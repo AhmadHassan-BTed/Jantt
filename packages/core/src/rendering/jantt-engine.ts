@@ -497,7 +497,7 @@ export class JanttRendererEngine {
       gridContainer
     );
 
-    // Canvas background Marquee / Lasso selection handler
+    // Canvas background interaction handler (drag to pan, Shift/Ctrl drag for marquee selection)
     gridContainer.addEventListener("pointerdown", (e) => {
       const target = e.target as HTMLElement;
       if (
@@ -507,7 +507,7 @@ export class JanttRendererEngine {
         !target.closest(".jantt-resize-handle") &&
         !target.closest(".jantt-link-port")
       ) {
-        this.controller.startMarqueeSelection(e, gridContainer, taskLayouts);
+        this.controller.startCanvasDrag(e, gridContainer, taskLayouts);
       }
     });
 
