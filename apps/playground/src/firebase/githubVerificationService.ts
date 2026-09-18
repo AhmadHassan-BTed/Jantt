@@ -241,49 +241,63 @@ export async function checkIsFollowingOrg(
 }
 
 /**
- * 1-Click follow creator with up to 3 retry trials.
+ * Opens creator GitHub profile in a new tab for manual following.
  */
-export async function followCreator(token: string): Promise<boolean> {
-  if (!token) return false;
-  return retryOperation(
-    async () => {
-      try {
-        const res = await fetch(`https://api.github.com/user/following/${TARGET_USER}`, {
-          method: "PUT",
-          headers: getGitHubHeaders(token)
-        });
-        return res.status === 204 || res.status === 200;
-      } catch {
-        return false;
-      }
-    },
-    (ok) => ok,
-    3,
-    250
-  );
+export function openCreatorProfile(): void {
+  if (typeof window !== "undefined") {
+    window.open(`https://github.com/${TARGET_USER}`, "_blank", "noopener,noreferrer");
+  }
 }
 
 /**
- * 1-Click follow organization with up to 3 retry trials.
+ * Opens organization GitHub profile in a new tab for manual following.
  */
-export async function followOrg(token: string): Promise<boolean> {
-  if (!token) return false;
-  return retryOperation(
-    async () => {
-      try {
-        const res = await fetch(`https://api.github.com/user/following/${TARGET_ORG}`, {
-          method: "PUT",
-          headers: getGitHubHeaders(token)
-        });
-        return res.status === 204 || res.status === 200;
-      } catch {
-        return false;
-      }
-    },
-    (ok) => ok,
-    3,
-    250
-  );
+export function openOrgProfile(): void {
+  if (typeof window !== "undefined") {
+    window.open(`https://github.com/${TARGET_ORG}`, "_blank", "noopener,noreferrer");
+  }
+}
+
+/**
+ * Opens repository page in a new tab for manual starring on GitHub.
+ */
+export function openRepoOnGitHub(repoFullNameOrUrl: string): void {
+  if (typeof window !== "undefined") {
+    const url = repoFullNameOrUrl.startsWith("http")
+      ? repoFullNameOrUrl
+      : `https://github.com/${repoFullNameOrUrl}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
+/**
+ * Opens missing repositories in browser tabs for manual starring on GitHub.
+ */
+export function openMissingRepositories(repos: RepoItem[], maxToOpen = 8): number {
+  if (typeof window === "undefined" || !repos.length) return 0;
+  const toOpen = repos.slice(0, maxToOpen);
+  for (const repo of toOpen) {
+    window.open(repo.url || `https://github.com/${repo.fullName}`, "_blank", "noopener,noreferrer");
+  }
+  return toOpen.length;
+}
+
+/**
+ * Manual follow creator helper: opens profile on GitHub.
+ * Zero automated PUT requests are made to comply with GitHub Acceptable Use Policies.
+ */
+export async function followCreator(_token?: string): Promise<boolean> {
+  openCreatorProfile();
+  return false;
+}
+
+/**
+ * Manual follow organization helper: opens org profile on GitHub.
+ * Zero automated PUT requests are made to comply with GitHub Acceptable Use Policies.
+ */
+export async function followOrg(_token?: string): Promise<boolean> {
+  openOrgProfile();
+  return false;
 }
 
 /**
@@ -354,98 +368,36 @@ export async function getUserStarredRepos(
 }
 
 /**
- * 1-Click star a repository using user's GitHub OAuth token with up to 3 retry trials.
+ * Manual star helper: opens repo page on GitHub so user can star it manually.
+ * Zero automated PUT requests are made to comply with GitHub Acceptable Use Policies.
  */
 export async function starRepository(
   repoFullName: string,
-  token: string
+  _token?: string
 ): Promise<boolean> {
-  if (!token || !repoFullName) return false;
-  return retryOperation(
-    async () => {
-      try {
-        const res = await fetch(
-          `https://api.github.com/user/starred/${repoFullName}`,
-          {
-            method: "PUT",
-            headers: getGitHubHeaders(token)
-          }
-        );
-        return res.status === 204 || res.status === 200;
-      } catch {
-        return false;
-      }
-    },
-    (ok) => ok,
-    3,
-    250
-  );
+  openRepoOnGitHub(repoFullName);
+  return false;
 }
 
 /**
- * 1-Click star all missing repositories concurrently in manageable batches.
+ * Opens missing repositories in browser tabs for manual starring.
  */
 export async function starAllMissingRepositories(
   missingRepos: RepoItem[],
-  token: string
+  _token?: string
 ): Promise<{ success: number; failed: number }> {
-  let success = 0;
-  let failed = 0;
-
-  const batchSize = 6;
-  for (let i = 0; i < missingRepos.length; i += batchSize) {
-    const batch = missingRepos.slice(i, i + batchSize);
-    await Promise.allSettled(
-      batch.map(async (repo) => {
-        const ok = await starRepository(repo.fullName, token);
-        if (ok) success++;
-        else failed++;
-      })
-    );
-  }
-
-  return { success, failed };
+  const opened = openMissingRepositories(missingRepos, 8);
+  return { success: opened, failed: 0 };
 }
 
 /**
- * Runs transparent background auto-verification with user consent.
- * Concurrently follows creator & organization with 3 trials, stars all repos with 3 trials,
- * and accurately returns any items that could not be completed so the user can be asked.
+ * Strictly verifies current user status via read-only queries.
+ * Does not make any automated star or follow mutations.
  */
 export async function runBackgroundAutoVerification(
   token: string,
   username: string
 ): Promise<VerificationStatus> {
-  if (isCreatorAccount(username)) {
-    return {
-      isVerified: true,
-      isFollowingCreator: true,
-      isFollowingOrg: true,
-      starredRepos: ALL_TARGET_REPOS.map((r) => r.fullName),
-      missingRepos: [],
-      totalRepos: ALL_TARGET_REPOS.length,
-      isDevBypass: true
-    };
-  }
-
-  const allRepos = (await getDeveloperRepos(token)).filter((r) => !isRepoExcluded(r.fullName));
-
-  // 1. Concurrently run following of creator and org (with up to 3 trials each)
-  await Promise.allSettled([
-    followCreator(token),
-    followOrg(token)
-  ]);
-
-  // 2. Concurrently star all repos in concurrency groups of 6 (with up to 3 trials each)
-  const batchSize = 6;
-  for (let i = 0; i < allRepos.length; i += batchSize) {
-    const batch = allRepos.slice(i, i + batchSize);
-    await Promise.allSettled(
-      batch.map((repo) => starRepository(repo.fullName, token))
-    );
-  }
-
-  // 3. Verify real state after automated trials
   return verifyAllGitHubRequirements(username, token);
 }
 

@@ -15,8 +15,7 @@ import {
   followCreator,
   followOrg,
   starRepository,
-  starAllMissingRepositories,
-  runBackgroundAutoVerification
+  starAllMissingRepositories
 } from "../firebase/githubVerificationService";
 import type { UserProfile, VerificationStatus } from "../firebase/types";
 
@@ -135,74 +134,23 @@ export function useAuth(): UseAuthReturn {
   }, [userProfile?.username, verificationStatus, checkVerification]);
 
   const autoVerifyHandler = useCallback(async (): Promise<boolean> => {
-    const token = githubToken || getStoredGitHubToken();
-    const username = userProfile?.githubUsername || userProfile?.username || "";
-    if (!token) return false;
-
-    setIsVerifying(true);
-    try {
-      const status = await runBackgroundAutoVerification(token, username);
-      setVerificationStatus(status);
-
-      if (currentUser?.uid) {
-        await updateUserGitHubVerification(
-          currentUser.uid,
-          true,
-          true,
-          0,
-          false
-        );
-
-        setUserProfile((prev) =>
-          prev
-            ? {
-                ...prev,
-                githubVerified: true,
-                isFollowingCreator: true,
-                missingReposCount: 0,
-                lastVerifiedAt: new Date().toISOString()
-              }
-            : prev
-        );
-      }
-      return true;
-    } catch {
-      return false;
-    } finally {
-      setIsVerifying(false);
-    }
-  }, [currentUser?.uid, githubToken, userProfile?.githubUsername, userProfile?.username]);
+    const status = await checkVerification();
+    return status.isVerified;
+  }, [checkVerification]);
 
   const loginWithGitHubHandler = useCallback(async () => {
     setIsSigningIn(true);
     try {
-      const { user, profile, githubToken: token } = await signInWithGitHub();
+      const { profile, githubToken: token } = await signInWithGitHub();
       if (token) setGithubToken(token);
       setUserProfile(profile);
       setNeedsUsernameOnboarding(false);
 
-      // Verify requirements upon login
-      let status = await verifyAllGitHubRequirements(
+      // Verify requirements upon login via read-only check
+      const status = await verifyAllGitHubRequirements(
         profile.githubUsername || profile.username,
         token || undefined
       );
-
-      // Auto-unlock via background verification if token is available
-      if (!status.isVerified && token) {
-        try {
-          status = await runBackgroundAutoVerification(
-            token,
-            profile.githubUsername || profile.username
-          );
-          if (user.uid) {
-            await updateUserGitHubVerification(user.uid, true, true, 0, false);
-            profile.githubVerified = true;
-            profile.isFollowingCreator = true;
-            profile.missingReposCount = 0;
-            setUserProfile({ ...profile });
-          }
-        } catch {}
-      }
 
       setVerificationStatus(status);
       if (!status.isVerified) {
@@ -244,58 +192,32 @@ export function useAuth(): UseAuthReturn {
   }, [currentUser, fetchProfile]);
 
   const followCreatorHandler = useCallback(async (): Promise<boolean> => {
-    const token = githubToken || getStoredGitHubToken();
-    if (!token) return false;
-    const ok = await followCreator(token);
-    if (ok) {
-      await checkVerification();
-    }
-    return ok;
-  }, [githubToken, checkVerification]);
+    await followCreator();
+    return true;
+  }, []);
 
   const followOrgHandler = useCallback(async (): Promise<boolean> => {
-    const token = githubToken || getStoredGitHubToken();
-    if (!token) return false;
-    const ok = await followOrg(token);
-    if (ok) {
-      await checkVerification();
-    }
-    return ok;
-  }, [githubToken, checkVerification]);
+    await followOrg();
+    return true;
+  }, []);
 
   const starRepoHandler = useCallback(
     async (repoFullName: string): Promise<boolean> => {
-      const token = githubToken || getStoredGitHubToken();
-      if (!token) return false;
-      const ok = await starRepository(repoFullName, token);
-      if (ok) {
-        await checkVerification();
-      }
-      return ok;
+      await starRepository(repoFullName);
+      return true;
     },
-    [githubToken, checkVerification]
+    []
   );
 
   const starAllHandler = useCallback(async (): Promise<{
     success: number;
     failed: number;
   }> => {
-    const token = githubToken || getStoredGitHubToken();
-    if (!token || !verificationStatus?.missingRepos?.length) {
+    if (!verificationStatus?.missingRepos?.length) {
       return { success: 0, failed: 0 };
     }
-    setIsVerifying(true);
-    try {
-      const res = await starAllMissingRepositories(
-        verificationStatus.missingRepos,
-        token
-      );
-      await checkVerification();
-      return res;
-    } finally {
-      setIsVerifying(false);
-    }
-  }, [githubToken, verificationStatus?.missingRepos, checkVerification]);
+    return starAllMissingRepositories(verificationStatus.missingRepos);
+  }, [verificationStatus?.missingRepos]);
 
   return {
     currentUser,

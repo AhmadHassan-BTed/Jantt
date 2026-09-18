@@ -20,8 +20,6 @@ export const auth = getAuth(app);
 
 export const githubProvider = new GithubAuthProvider();
 githubProvider.addScope("read:user");
-githubProvider.addScope("user:follow");
-githubProvider.addScope("public_repo");
 
 export const rtdb = getDatabase(app);
 export default app;
