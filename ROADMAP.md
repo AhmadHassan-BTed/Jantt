@@ -56,7 +56,16 @@ To be the world's most capable, lightweight, dependency-free Gantt chart engine 
   - Two-way polling and push sync with remote JSON URLs.
   - ETag caching, conflict detection, and network status indicators.
 
-### Phase 4: Enterprise Hierarchy & Scalability (Upcoming v1.3.0) [In Progress]
+### Phase 4: Cloud Sync & Collaborative Rooms (Released in v1.4.0) [Completed]
+- [x] **Firebase Realtime Database Rooms**:
+  - Save, load, and share Jantt plans in live collaboration rooms.
+  - GitHub sign-in for room owners and editors, with read-only viewers.
+  - Repository star verification before a collaborator can open a cloud room.
+- [x] **Field-Level CRDT Reconciler**:
+  - Three-way last-write-wins merge for tasks and notes, with tombstones so deletions are not resurrected.
+  - Shipped in v1.4.0 as `reconcilePlans` in `@jantt/core`.
+
+### Phase 5: Enterprise Hierarchy & Scalability [In Progress]
 - [ ] **Hierarchical Grouping & Subtasks**:
   - Parent summary tasks spanning across subtasks with accordion collapse/expand.
   - Category and Assignee lane grouping.
@@ -65,13 +74,9 @@ To be the world's most capable, lightweight, dependency-free Gantt chart engine 
 - [ ] **Virtual Scrolling**:
   - Ultra-high performance rendering for 5,000+ tasks.
 
-### Phase 4: Cloud Sync & Collaborative Ecosystem (v2.0.0 Vision) [Planned]
-- [ ] **Firebase Cloud Storage & Real-Time Rooms**:
-  - Save, load, and manage Jantt plans directly in Firebase Cloud Firestore.
-  - Live collaboration rooms with real-time multi-user syncing.
-  - Clean GitHub sign-in for Firebase authentication and repository star verification.
-- [ ] **Real-Time Multi-Agent Collaboration (CRDTs)**:
-  - Yjs / Automerge bindings for real-time collaborative schedule editing.
+### Phase 6: Further Collaboration & Framework Wrappers [Planned]
+- [ ] **Yjs / Automerge Bindings**:
+  - Optional CRDT library bindings for real-time multi-agent schedule editing.
 - [ ] **AI Natural Language Command Extension**:
   - Built-in prompt tools for Claude, GPT, and Gemini to stream timeline updates directly into Jantt state.
 - [ ] **Vue, Svelte, and Angular Official Wrappers**:
