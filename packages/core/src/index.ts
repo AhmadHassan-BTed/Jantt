@@ -35,6 +35,7 @@ export * from "./calendar";
 export * from "./resource-leveler";
 export * from "./monte-carlo";
 export * from "./baselines";
+export * from "./worker";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
@@ -46,6 +47,7 @@ import { calculatePertRisk, estimateTaskPert } from "./pert";
 import { detectOverAllocations, levelResources } from "./resource-leveler";
 import { runMonteCarloSimulation } from "./monte-carlo";
 import { freezeProjectBaseline, activateBaselineSnapshot, computeBaselineVariance } from "./baselines";
+import { createScheduleWorkerClient } from "./worker";
 import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "./layout";
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
@@ -84,6 +86,7 @@ export const Jantt = {
   freezeProjectBaseline,
   activateBaselineSnapshot,
   computeBaselineVariance,
+  createScheduleWorkerClient,
   layout,
   computeDependencyPath,
   getScaleFromDayWidth,
