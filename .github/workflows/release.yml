@@ -26,11 +26,11 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Verification Suite
-        run: npm test
-
       - name: Compile Production Bundles
         run: npm run build
+
+      - name: Run Verification Suite
+        run: npm test
 
       - name: Publish Workspaces to NPM
         run: npm publish --workspaces --access public
