@@ -1,0 +1,34 @@
+{
+  "name": "@jantt/yjs",
+  "version": "1.0.0",
+  "description": "Real-time multiplayer CRDT Yjs binding for Jantt JSON Gantt chart engine",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "yjs": "^13.6.0"
+  },
+  "dependencies": {
+    "@jantt/core": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0",
+    "yjs": "^13.6.14"
+  }
+}
