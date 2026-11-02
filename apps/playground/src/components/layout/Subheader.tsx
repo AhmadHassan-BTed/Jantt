@@ -154,7 +154,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
                 onClick={onOpenPlanManager}
                 title="Open Plan Manager: View all 3 lists (Local, Owned, Shared), drag & drop, and organize"
               >
-                <Layers size={13} />
+                <Layers size={13} style={{ color: "#818CF8" }} />
                 <span>Manage Plans</span>
               </button>
             )}
@@ -166,7 +166,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
               onClick={handleOpenAddPlanModal}
               title="Create a new blank plan, clone existing, or create cloud room"
             >
-              <Plus size={13} />
+              <Plus size={13} style={{ color: "#10B981" }} />
               <span>New Plan</span>
             </button>
 
@@ -341,7 +341,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
             color: "var(--jantt-text, #F8FAFC)"
           }}
         >
-          <Share2 size={13} style={{ color: "var(--jantt-accent, #38BDF8)" }} />
+          <Share2 size={13} style={{ color: "#A855F7" }} />
           <span>{activeRoomId ? "Invite / Share" : "Share"}</span>
         </button>
 
@@ -352,7 +352,7 @@ export const Subheader: React.FC<SubheaderProps> = ({
           onClick={() => setShowPeopleModal(true)}
           title="Manage team members, roles, and task assignees"
         >
-          <Users size={14} style={{ color: "var(--jantt-accent, #38BDF8)" }} />
+          <Users size={14} style={{ color: "#F59E0B" }} />
           <span className="subheader-people-title">People &amp; Teams</span>
           <span className="subheader-people-count-pill">
             {effectivePeople.length}

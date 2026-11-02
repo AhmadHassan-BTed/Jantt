@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Layers,
+  Zap,
   Kanban,
   CheckSquare,
   Activity,
@@ -23,27 +24,32 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     {
       id: "gantt",
       label: "Gantt",
-      icon: <Layers size={18} />
+      icon: <Layers size={18} style={{ color: "#38BDF8" }} />
+    },
+    {
+      id: "canvas",
+      label: "Canvas",
+      icon: <Zap size={18} style={{ color: "#A855F7" }} />
     },
     {
       id: "kanban",
       label: "Kanban",
-      icon: <Kanban size={18} />
+      icon: <Kanban size={18} style={{ color: "#F59E0B" }} />
     },
     {
       id: "tasks",
       label: "Tasks",
-      icon: <CheckSquare size={18} />
+      icon: <CheckSquare size={18} style={{ color: "#10B981" }} />
     },
     {
       id: "summary",
       label: "Health",
-      icon: <Activity size={18} />
+      icon: <Activity size={18} style={{ color: "#F43F5E" }} />
     },
     {
       id: "notes",
       label: "Notes",
-      icon: <StickyNote size={18} />,
+      icon: <StickyNote size={18} style={{ color: "#06B6D4" }} />,
       badge: notesCount > 0 ? notesCount : undefined
     }
   ];

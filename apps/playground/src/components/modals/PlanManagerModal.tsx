@@ -1003,7 +1003,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               onClick={() => modalFileInputRef.current?.click()}
               title="Import file (.json, MS Project .xml, Primavera .xer, .csv)"
             >
-              <Upload size={13} />
+              <Upload size={13} style={{ color: "#38BDF8" }} />
               <span>Import Project</span>
             </button>
 
@@ -1018,7 +1018,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               }}
               title="Create a new plan"
             >
-              <Plus size={14} />
+              <Plus size={14} style={{ color: "#10B981" }} />
               <span>New Plan</span>
             </button>
 

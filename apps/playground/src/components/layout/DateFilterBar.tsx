@@ -63,7 +63,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             onClick={() => setDateFilterMode("today")}
             title={`Filter tasks active today (${getTodayISODate()})`}
           >
-            <Clock size={11} />
+            <Clock size={11} style={{ color: "#38BDF8" }} />
             Today
           </button>
           <button
@@ -72,7 +72,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             onClick={() => setDateFilterMode("week")}
             title="Filter tasks active this week (Monday to Sunday)"
           >
-            <Calendar size={11} />
+            <Calendar size={11} style={{ color: "#A78BFA" }} />
             This Week
           </button>
           <button
@@ -84,7 +84,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             }}
             title="Filter tasks active on a specific date"
           >
-            <Calendar size={11} />
+            <Calendar size={11} style={{ color: "#F59E0B" }} />
             Pick Date
           </button>
           <button
@@ -96,7 +96,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             }}
             title="Filter tasks overlapping a date range"
           >
-            <Filter size={11} />
+            <Filter size={11} style={{ color: "#10B981" }} />
             Date Range
           </button>
         </div>
@@ -176,7 +176,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             onClick={() => setDateFilterBehavior("dim")}
             title="Dim Mode: Keep all tasks visible in context, fade non-matching tasks"
           >
-            <EyeOff size={11} />
+            <EyeOff size={11} style={{ color: "#F59E0B" }} />
             <span>Dim</span>
           </button>
           <button
@@ -185,7 +185,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             onClick={() => setDateFilterBehavior("hide")}
             title="Filter Mode: Only show matching tasks, hide non-matching"
           >
-            <Filter size={11} />
+            <Filter size={11} style={{ color: "#818CF8" }} />
             <span>Filter</span>
           </button>
         </div>
@@ -203,7 +203,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
               onClick={() => setCompletedFilterMode("show")}
               title="Show Completed: Display completed tasks normally"
             >
-              <Eye size={11} />
+              <Eye size={11} style={{ color: "#10B981" }} />
               <span>Show</span>
             </button>
             <button
@@ -212,7 +212,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
               onClick={() => setCompletedFilterMode("dim")}
               title="Dim Completed: Fade out completed tasks to emphasize active work"
             >
-              <EyeOff size={11} />
+              <EyeOff size={11} style={{ color: "#F59E0B" }} />
               <span>Dim</span>
             </button>
             <button
@@ -221,7 +221,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
               onClick={() => setCompletedFilterMode("filter")}
               title="Filter Completed: Completely hide completed tasks"
             >
-              <Filter size={11} />
+              <Filter size={11} style={{ color: "#EF4444" }} />
               <span>Filter</span>
             </button>
           </div>
@@ -230,7 +230,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
         {/* Sort & Filter by People Dropdown */}
         {setSelectedPersonFilter && (
           <div className="filter-bar-person-wrap" title="Sort or filter tasks by team member or squad">
-            <Users size={12} className="filter-bar-person-icon" />
+            <Users size={12} className="filter-bar-person-icon" style={{ color: "#38BDF8" }} />
             <select
               className="filter-bar-person-select"
               value={selectedPersonFilter || "all"}

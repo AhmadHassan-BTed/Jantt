@@ -240,7 +240,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             }}
             title="Run Monte Carlo Probabilistic Risk Simulation (2,000+ iterations)"
           >
-            <Dice5 size={14} />
+            <Dice5 size={14} style={{ color: "#F59E0B" }} />
             <span>Monte Carlo Risk Analysis</span>
           </button>
         </div>

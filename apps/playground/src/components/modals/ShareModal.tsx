@@ -663,7 +663,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 disabled={!parsedData}
                 title="Export as Microsoft Project 2013-2021 XML format"
               >
-                <Download size={12} />
+                <Download size={12} style={{ color: "#38BDF8" }} />
                 <span>MS Project (.xml)</span>
               </button>
               <button
@@ -673,7 +673,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 disabled={!parsedData}
                 title="Export as Oracle Primavera P6 .xer batch file"
               >
-                <Download size={12} />
+                <Download size={12} style={{ color: "#F59E0B" }} />
                 <span>Primavera P6 (.xer)</span>
               </button>
               <button
@@ -683,17 +683,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 disabled={!parsedData}
                 title="Export as RFC 4180 CSV spreadsheet"
               >
-                <Download size={12} />
+                <Download size={12} style={{ color: "#10B981" }} />
                 <span>Spreadsheet (.csv)</span>
               </button>
               <button
                 className="btn-nav"
-                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px", background: "rgba(59, 130, 246, 0.12)", color: "var(--jantt-accent, #3b82f6)", borderColor: "rgba(59, 130, 246, 0.3)" }}
+                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px", background: "rgba(168, 85, 247, 0.12)", color: "#C084FC", borderColor: "rgba(168, 85, 247, 0.35)" }}
                 onClick={handleExportExecutiveReport}
                 disabled={!parsedData}
                 title="Export high-resolution Executive PDF Booklet & Status Report with EVM Scorecard & DCMA-14 Diagnostics"
               >
-                <FileText size={12} />
+                <FileText size={12} style={{ color: "#A855F7" }} />
                 <span>Executive Report (.html / PDF)</span>
               </button>
             </div>

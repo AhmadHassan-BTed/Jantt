@@ -135,7 +135,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setShowVersionHistoryModal(true)}
             title="Version History & Recovery Vault (Roll back to past snapshots with zero data loss)"
           >
-            <History size={12} />
+            <History size={12} style={{ color: "#818CF8" }} />
             <span>History</span>
             {snapshotsCount > 0 && (
               <span className="history-count-badge">{snapshotsCount}</span>
@@ -151,7 +151,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Expand JSON Editor Sidebar"
             style={{ marginLeft: "4px" }}
           >
-            <FileJson size={13} />
+            <FileJson size={13} style={{ color: "#38BDF8" }} />
             <span>Show JSON Editor</span>
           </button>
         )}
@@ -166,17 +166,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setActiveView("gantt")}
             title="Gantt Timeline Schedule"
           >
-            <Layers size={13} />
+            <Layers size={13} style={{ color: "#38BDF8" }} />
             <span>Gantt</span>
           </button>
           <button
             type="button"
             className={`jantt-scale-btn ${activeView === "canvas" ? "is-active" : ""}`}
             onClick={() => setActiveView("canvas")}
-            title="60 FPS Canvas Virtualized Engine (Stress-tested up to 100k tasks)"
+            title="High-performance Canvas Virtualized Engine (Stress-tested up to 100k tasks)"
           >
-            <Zap size={13} style={{ color: activeView === "canvas" ? "inherit" : "#38BDF8" }} />
-            <span>Canvas 60fps</span>
+            <Zap size={13} style={{ color: "#A855F7" }} />
+            <span>Canvas</span>
           </button>
           <button
             type="button"
@@ -184,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setActiveView("kanban")}
             title="Kanban Task Board"
           >
-            <Kanban size={13} />
+            <Kanban size={13} style={{ color: "#F59E0B" }} />
             <span>Kanban</span>
           </button>
           <button
@@ -193,7 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setActiveView("tasks")}
             title="Detailed Tasks & Interactive Todo Checklist"
           >
-            <CheckSquare size={13} />
+            <CheckSquare size={13} style={{ color: "#10B981" }} />
             <span>Tasks</span>
           </button>
           <button
@@ -202,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setActiveView("summary")}
             title="Project Health, Schedule Buffers, EVM & Budget Performance"
           >
-            <Activity size={13} />
+            <Activity size={13} style={{ color: "#F43F5E" }} />
             <span>Health &amp; PM</span>
           </button>
           <button
@@ -211,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setActiveView("notes")}
             title="Shared Project Notes, Specs & Documentation"
           >
-            <StickyNote size={13} />
+            <StickyNote size={13} style={{ color: "#06B6D4" }} />
             <span>Notes</span>
             {typeof notesCount === "number" && notesCount > 0 && (
               <span

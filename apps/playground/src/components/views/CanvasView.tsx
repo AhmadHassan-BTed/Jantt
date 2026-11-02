@@ -6,7 +6,6 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  Gauge,
   Activity,
   Layers
 } from "lucide-react";
@@ -32,7 +31,6 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   const [scrollY, setScrollY] = useState(0);
   const [dayWidth, setDayWidth] = useState(36);
   const [showCritical, setShowCritical] = useState(true);
-  const [fps, setFps] = useState(60);
   const [hoveredTask, setHoveredTask] = useState<{ task: Task; x: number; y: number } | null>(null);
 
   const isDraggingRef = useRef(false);
@@ -116,16 +114,8 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   // RequestAnimationFrame trigger
   useEffect(() => {
     let animId: number;
-    let frameCount = 0;
-    let lastTime = performance.now();
 
-    const loop = (now: number) => {
-      frameCount++;
-      if (now - lastTime >= 1000) {
-        setFps(Math.round((frameCount * 1000) / (now - lastTime)));
-        frameCount = 0;
-        lastTime = now;
-      }
+    const loop = () => {
       renderFrame();
       animId = requestAnimationFrame(loop);
     };
@@ -210,18 +200,33 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     }
   };
 
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom
-      const delta = e.deltaY < 0 ? 4 : -4;
-      setDayWidth((prev) => Math.min(Math.max(prev + delta, 12), 120));
-    } else {
-      // Pan
-      setScrollX((prev) => Math.max(0, prev + e.deltaX));
-      setScrollY((prev) => Math.max(0, prev + e.deltaY));
-    }
-  };
+  // Non-passive wheel handler: Wheel zooms; Shift / Alt pans
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.shiftKey) {
+        // Shift + Wheel -> Horizontal Pan
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        setScrollX((prev) => Math.max(0, prev + delta));
+      } else if (e.altKey) {
+        // Alt + Wheel -> Vertical Pan
+        const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        setScrollY((prev) => Math.max(0, prev + delta));
+      } else {
+        // Default Wheel (or Ctrl/Cmd) -> Zoom
+        const zoomDelta = e.deltaY < 0 ? 4 : -4;
+        setDayWidth((prev) => Math.min(Math.max(prev + zoomDelta, 12), 140));
+      }
+    };
+
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", onWheel);
+    };
+  }, []);
 
   // 10,000 Tasks Benchmark Generator
   const handleGenerateBenchmark = (count: number) => {
@@ -294,14 +299,14 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
               gap: "6px",
               padding: "4px 8px",
               borderRadius: "4px",
-              background: "rgba(56, 189, 248, 0.15)",
-              color: "#38BDF8",
+              background: "rgba(168, 85, 247, 0.15)",
+              color: "#C084FC",
               fontSize: "11px",
               fontWeight: 700
             }}
           >
-            <Zap size={13} />
-            <span>CANVAS 60 FPS ENGINE</span>
+            <Zap size={13} style={{ color: "#A855F7" }} />
+            <span>CANVAS ENGINE</span>
           </div>
 
           <div
@@ -314,10 +319,12 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
               fontFamily: "monospace"
             }}
           >
-            <Gauge size={13} style={{ color: fps >= 55 ? "#10B981" : "#F59E0B" }} />
-            <span><strong>{fps} FPS</strong></span>
-            <span>&bull;</span>
+            <Layers size={13} style={{ color: "#38BDF8" }} />
             <span>{taskCount.toLocaleString()} tasks</span>
+            <span>&bull;</span>
+            <span style={{ fontSize: "11px", color: "var(--jantt-text-muted, #64748B)" }}>
+              Wheel to zoom &bull; Shift/Alt to pan
+            </span>
           </div>
         </div>
 
@@ -326,10 +333,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           <button
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
-            onClick={() => setDayWidth((prev) => Math.min(prev + 6, 120))}
+            onClick={() => setDayWidth((prev) => Math.min(prev + 6, 140))}
             title="Zoom In (Scale Day Width)"
           >
-            <ZoomIn size={12} />
+            <ZoomIn size={12} style={{ color: "#38BDF8" }} />
             <span>Zoom In</span>
           </button>
           <button
@@ -338,7 +345,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             onClick={() => setDayWidth((prev) => Math.max(prev - 6, 12))}
             title="Zoom Out"
           >
-            <ZoomOut size={12} />
+            <ZoomOut size={12} style={{ color: "#818CF8" }} />
             <span>Zoom Out</span>
           </button>
           <button
@@ -351,7 +358,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             }}
             title="Reset Pan & Zoom"
           >
-            <RotateCcw size={12} />
+            <RotateCcw size={12} style={{ color: "#F59E0B" }} />
             <span>Reset View</span>
           </button>
           <button
@@ -360,7 +367,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             onClick={() => setShowCritical((prev) => !prev)}
             title="Toggle Critical Path Visualization"
           >
-            <Activity size={12} />
+            <Activity size={12} style={{ color: "#EF4444" }} />
             <span>Critical Path</span>
           </button>
 
@@ -377,7 +384,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             onClick={() => handleGenerateBenchmark(10000)}
             title="Stress-test the canvas renderer with 10,000 synthetic tasks"
           >
-            <Layers size={12} />
+            <Layers size={12} style={{ color: "#10B981" }} />
             <span>Benchmark 10,000 Tasks</span>
           </button>
         </div>
@@ -399,7 +406,6 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onWheel={handleWheel}
           style={{
             display: "block",
             width: "100%",
