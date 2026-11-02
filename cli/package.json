@@ -1,5 +1,5 @@
 {
-  "name": "jantt",
+  "name": "@jantt/cli",
   "version": "1.0.0",
   "description": "CLI tool for opening and editing Jantt JSON Gantt charts locally",
   "type": "module",
