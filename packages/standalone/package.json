@@ -4,6 +4,9 @@
   "description": "Standalone UMD/IIFE bundle for Jantt JSON Gantt chart engine",
   "type": "module",
   "main": "./dist/jantt.standalone.js",
+  "unpkg": "./dist/jantt.standalone.iife.js",
+  "jsdelivr": "./dist/jantt.standalone.iife.js",
+  "style": "./dist/style.css",
   "files": [
     "dist"
   ],

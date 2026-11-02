@@ -152,13 +152,13 @@ export default function Timeline() {
 ### 2. Plain HTML / Script Tag (`@jantt/standalone`)
 
 ```html
-<script src="https://unpkg.com/@jantt/standalone"></script>
-<link rel="stylesheet" href="https://unpkg.com/@jantt/standalone/dist/jantt.css" />
+<link rel="stylesheet" href="https://unpkg.com/@jantt/standalone/dist/style.css" />
+<script src="https://unpkg.com/@jantt/standalone/dist/jantt.standalone.iife.js"></script>
 
 <div id="timeline" style="width: 100vw; height: 100vh;"></div>
 
 <script>
-  JanttStandalone.render("#timeline", projectData, { theme: "swiss-dark" });
+  Jantt.mount("#timeline", projectData, { theme: "swiss-dark" });
 </script>
 ```
 
