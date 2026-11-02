@@ -1,12 +1,12 @@
 # Jantt Project Roadmap
 
-This document outlines the strategic vision, upcoming milestones, and architectural goals for **Jantt — The JSON Gantt Chart Engine**.
+This document outlines the strategic vision, upcoming milestones, and architectural goals for **Jantt - The JSON Gantt Chart Engine**.
 
 ---
 
 ## Strategic Vision
 
-To be the world's most capable, lightweight, dependency-free Gantt chart engine — designed specifically for AI agents, developers, and product teams who want their schedule state to live in clean, declarative, portable JSON.
+To be the world's most capable, lightweight, dependency-free Gantt chart engine - designed specifically for AI agents, developers, and product teams who want their schedule state to live in clean, declarative, portable JSON.
 
 ---
 

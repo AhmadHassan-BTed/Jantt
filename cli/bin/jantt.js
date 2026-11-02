@@ -491,7 +491,7 @@ function generateStandaloneHtml(initialData, filePath, standaloneJsPath, standal
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jantt — ${escapeHtml(path.basename(filePath))}</title>
+  <title>Jantt - ${escapeHtml(path.basename(filePath))}</title>
   <style>
     ${inlinedCss}
   </style>
@@ -622,7 +622,7 @@ function escapeHtml(str) {
 
 function printHelp() {
   console.log(`
-\x1b[1m\x1b[36mJantt\x1b[0m — The Ultimate JSON Gantt & Project Timeline Engine (v1.1.0)
+\x1b[1m\x1b[36mJantt\x1b[0m - The Ultimate JSON Gantt & Project Timeline Engine (v1.1.0)
 
 \x1b[1mUsage:\x1b[0m
   jantt open <file.json>                Open interactive live-sync viewer in browser

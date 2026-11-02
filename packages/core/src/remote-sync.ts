@@ -115,7 +115,7 @@ export function isMatchingCloudUrl(urlA?: string | null, urlB?: string | null): 
 
 /**
  * The project's own Cloudflare Worker CORS proxy.
- * Deploy it once with `npx wrangler deploy` from /worker — free forever.
+ * Deploy it once with `npx wrangler deploy` from /worker - free forever.
  *
  * After deploying you'll get a URL like:
  *   https://jantt-cors-proxy.<your-cf-subdomain>.workers.dev
@@ -156,7 +156,7 @@ async function fetchWithCorsFallback(url: string, _provider?: CloudProviderType)
       return { text, quotaShieldActive: false, source: "direct" };
     }
   } catch {
-    // CORS / network error — fall through to worker
+    // CORS / network error - fall through to worker
   }
 
   // Fallback to our worker proxy

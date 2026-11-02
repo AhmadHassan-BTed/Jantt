@@ -198,7 +198,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   if (props.selectedDate && props.showDateFilterBadge !== false) {
     const dateFilterBadge = document.createElement("div");
     dateFilterBadge.className = "jantt-date-filter-badge";
-    dateFilterBadge.title = `Filtered to ${props.selectedDate} — click to clear filter`;
+    dateFilterBadge.title = `Filtered to ${props.selectedDate} - click to clear filter`;
     dateFilterBadge.innerHTML = `
       <span class="jantt-date-filter-icon">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -422,7 +422,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
     if (!dateFilterBadge && centerZone) {
       dateFilterBadge = document.createElement("div");
       dateFilterBadge.className = "jantt-date-filter-badge";
-      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} — click to clear filter`;
+      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} - click to clear filter`;
       dateFilterBadge.innerHTML = `
         <span class="jantt-date-filter-icon">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -443,7 +443,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
       dateFilterBadge.addEventListener("click", () => propsRef?.current.onClearDateFilter?.());
       centerZone.appendChild(dateFilterBadge);
     } else if (dateFilterBadge) {
-      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} — click to clear filter`;
+      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} - click to clear filter`;
       const txt = dateFilterBadge.querySelector<HTMLSpanElement>(".jantt-date-filter-text");
       if (txt) txt.textContent = nextProps.selectedDate!;
     }

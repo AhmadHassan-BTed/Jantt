@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Jantt Theme System — Swiss Modernism 2.0
+   Jantt Theme System - Swiss Modernism 2.0
    Precision typography, porcelain canvas, razor-sharp hairlines, and flat geometry
    ========================================================================== */
 
@@ -1848,7 +1848,7 @@
   box-shadow: 0 0 10px var(--jantt-accent);
 }
 
-/* Styled Hover Card Popover — Swiss Modernism 2.0 Glassmorphic */
+/* Styled Hover Card Popover - Swiss Modernism 2.0 Glassmorphic */
 .jantt-hover-card {
   position: fixed;
   z-index: 1000;
@@ -2082,7 +2082,7 @@
   border-top: 1px solid var(--jantt-border-subtle);
 }
 
-/* Slide-out Task Details Sidebar Drawer — Swiss Modernism 2.0 */
+/* Slide-out Task Details Sidebar Drawer - Swiss Modernism 2.0 */
 .jantt-sidebar-backdrop {
   position: fixed;
   inset: 0;
@@ -2232,7 +2232,7 @@
   min-width: 105px;
 }
 
-/* Form Controls — Swiss Modernism 2.0 */
+/* Form Controls - Swiss Modernism 2.0 */
 .jantt-form-group {
   display: flex;
   flex-direction: column;
@@ -2396,7 +2396,7 @@
 }
 
 /* ==========================================================================
-   Pink Beenie Theme — Cherry Blossom Aesthetic
+   Pink Beenie Theme - Cherry Blossom Aesthetic
    Soft porcelain & petal pinks, organic petal curves, floral watermark pattern
    ========================================================================== */
 

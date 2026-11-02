@@ -56,7 +56,7 @@ body {
   transition: background 0.2s ease, color 0.2s ease;
 }
 
-/* Header Navbar — Full Screen Width with Responsive Adaptive Spacing */
+/* Header Navbar - Full Screen Width with Responsive Adaptive Spacing */
 .navbar {
   display: flex;
   align-items: center;
@@ -314,7 +314,7 @@ select option,
   box-shadow: 0 0 0 2px var(--jantt-accent-glow, rgba(56, 189, 248, 0.2));
 }
 
-/* Subheader Bar — Directly below topmost header */
+/* Subheader Bar - Directly below topmost header */
 .subheader-bar {
   display: flex;
   align-items: center;
@@ -1747,7 +1747,7 @@ select option,
 }
 
 /* ==========================================================================
-   Settings & Auto-Save Modal — Premium Clean Card Architecture
+   Settings & Auto-Save Modal - Premium Clean Card Architecture
    ========================================================================== */
 .settings-modal-card {
   max-width: 520px;
@@ -1905,7 +1905,7 @@ select option,
 }
 
 /* ==========================================================================
-   Kanban Board View — Swiss Modernist Cards & Columns
+   Kanban Board View - Swiss Modernist Cards & Columns
    ========================================================================== */
 .kanban-view-container {
   display: grid;
@@ -5664,7 +5664,7 @@ path.jantt-dep-path.jantt-task-dimmed {
     flex-shrink: 0;
   }
 
-  /* Responsive Dialog Modals — Bottom Sheet on Mobile */
+  /* Responsive Dialog Modals - Bottom Sheet on Mobile */
   .jantt-modal-card,
   .plan-manager-modal,
   .add-plan-card,

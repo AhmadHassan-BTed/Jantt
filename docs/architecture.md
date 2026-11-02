@@ -1,6 +1,6 @@
 # Jantt Architecture & System Design
 
-This document details the software architecture, design principles, module boundaries, and data flow of **Jantt — The JSON Gantt Chart Engine**.
+This document details the software architecture, design principles, module boundaries, and data flow of **Jantt - The JSON Gantt Chart Engine**.
 
 ---
 

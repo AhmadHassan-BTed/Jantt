@@ -199,9 +199,9 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     } ${isSelected ? "is-date-selected" : ""}`;
     dCell.style.width = `${d.width}px`;
     dCell.title = isSelected
-      ? `${d.dateStr} (Active filter — click to show all dates)`
+      ? `${d.dateStr} (Active filter - click to show all dates)`
       : isBoundary
-      ? `${d.dateStr} (Task boundary date — click to show only tasks on this date)`
+      ? `${d.dateStr} (Task boundary date - click to show only tasks on this date)`
       : `${d.dateStr} (Click to show only tasks on this date)`;
     dCell.setAttribute("data-date", d.dateStr);
 

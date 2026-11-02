@@ -246,7 +246,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           style={{ display: "none" }}
         />
 
-        {/* Theme Selector — Sectioned by Dark Mode & Light Mode */}
+        {/* Theme Selector - Sectioned by Dark Mode & Light Mode */}
         <div className="nav-select-group">
           <label htmlFor="theme-select">Theme:</label>
           <select

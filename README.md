@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/jantt-logo.svg" alt="Jantt — The Declarative JSON Gantt Chart Engine" width="320" />
+<img src="./assets/jantt-logo.svg" alt="Jantt - The Declarative JSON Gantt Chart Engine" width="320" />
 
 <br />
 
@@ -27,9 +27,9 @@ Turn any declarative JSON document into a high-performance, interactive, draggab
 Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI toolchains.
 
 Designed from the ground up for:
-* **Autonomous AI Agents & LLMs** — Declarative JSON schema contract eliminates UI hallucinations; models generate timeline data with 10x fewer tokens than fragile JSX code.
-* **Students, Hobbyists & Creators** — Lightweight, beautiful Swiss Noir dark mode, intuitive drag-and-drop, touch gestures, and instant local storage persistence.
-* **Engineering Teams & Program Directors** — Operations Research Critical Path solver, EVM (Earned Value Management), DCMA-14 schedule health audits, and multi-user CRDT collaboration with secure role-based permissions.
+* **Autonomous AI Agents & LLMs** - Declarative JSON schema contract eliminates UI hallucinations; models generate timeline data with 10x fewer tokens than fragile JSX code.
+* **Students, Hobbyists & Creators** - Lightweight, beautiful Swiss Noir dark mode, intuitive drag-and-drop, touch gestures, and instant local storage persistence.
+* **Engineering Teams & Program Directors** - Operations Research Critical Path solver, EVM (Earned Value Management), DCMA-14 schedule health audits, and multi-user CRDT collaboration with secure role-based permissions.
 
 <br />
 
@@ -368,10 +368,10 @@ flowchart LR
     D --> B
 ```
 
-* **Step 1: Feed Cheatsheet to LLM** — Give the AI the compact schema contract (WBS, dates, DAG dependencies, milestones, budget). See the full [Jantt JSON Cheatsheet](./docs/JANTT_JSON_CHEATSHEET.md).
-* **Step 2: AI Outputs Pure JSON** — Uses 10× fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
-* **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban, Notes & Analytics.
-* **Step 4: Bidirectional Loop** — Humans drag and adjust visually. Jantt syncs clean JSON back to localStorage/disk for the AI agent.
+* **Step 1: Feed Cheatsheet to LLM** - Give the AI the compact schema contract (WBS, dates, DAG dependencies, milestones, budget). See the full [Jantt JSON Cheatsheet](./docs/JANTT_JSON_CHEATSHEET.md).
+* **Step 2: AI Outputs Pure JSON** - Uses 10× fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
+* **Step 3: Instant Interactive Suite** - Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban, Notes & Analytics.
+* **Step 4: Bidirectional Loop** - Humans drag and adjust visually. Jantt syncs clean JSON back to localStorage/disk for the AI agent.
 
 ---
 
@@ -913,7 +913,7 @@ Jantt features a dedicated, enterprise-grade multi-user collaboration engine bac
 ### 1. GitHub-Only Authentication (Zero Google Auth)
 - **Strict Single Provider**: Google login and generic password forms are completely removed. Authentication is restricted to **GitHub OAuth 2.0** (`read:user`, `user:follow`, `public_repo`).
 - **Zero Manual Username Typing**: Jantt automatically claims the user's verified GitHub handle (`@username`) directly into `/usernames/{username}` upon first sign-in.
-- **Creator Follow & Star Gate**: Collaborators unlock free cloud collaboration rooms by supporting the project — following [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed) and starring developer repositories. Creator `@AhmadHassan-BTed` is automatically verified across all checks.
+- **Creator Follow & Star Gate**: Collaborators unlock free cloud collaboration rooms by supporting the project - following [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed) and starring developer repositories. Creator `@AhmadHassan-BTed` is automatically verified across all checks.
 
 ### 2. Single Source of Truth & Zero Internal Database IDs in JSON
 - **No Database Leakage**: Private database UIDs, owner UIDs, internal room secrets, and authentication tokens are strictly stripped and **never exposed in JSON**.
@@ -1017,4 +1017,4 @@ npm run dev
 
 ## License
 
-This project is licensed under the **MIT License** — see the [`LICENSE`](./LICENSE) file for details.
+This project is licensed under the **MIT License** - see the [`LICENSE`](./LICENSE) file for details.

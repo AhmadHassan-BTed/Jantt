@@ -1,5 +1,5 @@
 /**
- * Jantt CORS Proxy & Real-Time High-Scale Sync — Cloudflare Worker
+ * Jantt CORS Proxy & Real-Time High-Scale Sync - Cloudflare Worker
  *
  * Provides:
  * 1. Live Collaboration Rooms (/api/room/:id) with Optimistic Concurrency Control (OCC),

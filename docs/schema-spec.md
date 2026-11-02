@@ -46,7 +46,7 @@ A valid Jantt JSON document is a single root object containing metadata, categor
 
 ```json
 {
-  "title": "Ahmad Hassan — Global PhD/MS Application Pipeline",
+  "title": "Ahmad Hassan - Global PhD/MS Application Pipeline",
   "description": "Concurrent, deadline-driven admissions plan and funding tracker",
   "person": "Ahmad Hassan",
   "start": "2026-09-01",

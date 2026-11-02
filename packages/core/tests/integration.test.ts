@@ -37,7 +37,7 @@ describe("Full Pipeline Integration", () => {
   ];
 
   for (const { name, data } of validFixtures) {
-    describe(`${name} — full pipeline`, () => {
+    describe(`${name} - full pipeline`, () => {
       it("validates successfully", () => {
         const result = validate(data);
         expect(result.valid).toBe(true);
@@ -91,7 +91,7 @@ describe("Full Pipeline Integration", () => {
   }
 
   for (const { name, data, expectedCode } of brokenFixtures) {
-    it(`${name} — fails validation with ${expectedCode}`, () => {
+    it(`${name} - fails validation with ${expectedCode}`, () => {
       const result = validate(data);
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.code === expectedCode)).toBe(true);

@@ -1,4 +1,4 @@
-# Jantt CORS Proxy & Edge Cache — Cloudflare Worker
+# Jantt CORS Proxy & Edge Cache - Cloudflare Worker
 
 A tiny serverless proxy that allows the Jantt web application to fetch remote plan JSON files from cloud feeds (such as raw GitHub repository URLs, GitHub Gists, and Dropbox) without CORS restrictions.
 
@@ -10,7 +10,7 @@ This Worker runs on Cloudflare's global edge network, fetches the file server-si
 
 ## Cost
 
-**Free forever.** Cloudflare Workers free tier includes 100,000 requests/day — more than enough for a team or personal productivity tool.
+**Free forever.** Cloudflare Workers free tier includes 100,000 requests/day - more than enough for a team or personal productivity tool.
 
 ## Deploy (3 minutes)
 

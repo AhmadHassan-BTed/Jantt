@@ -116,10 +116,10 @@ Want to see Jantt run right now? Copy this minimal, 100% valid JSON payload and 
 
 ### The 4-Step Bidirectional Loop
 
-1. **Step 1: Feed Cheatsheet to LLM** — Provide the AI model with the compact schema contract (WBS, dates, DAG dependencies, milestones, budget, people, notes, documents).
-2. **Step 2: AI Outputs Pure JSON** — Uses 10x fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
-3. **Step 3: Instant Interactive Suite** — Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban, Notes & PM Analytics.
-4. **Step 4: Bidirectional Loop** — Humans drag and adjust visually. Jantt syncs clean JSON back to local storage, cloud room, or disk for the AI agent.
+1. **Step 1: Feed Cheatsheet to LLM** - Provide the AI model with the compact schema contract (WBS, dates, DAG dependencies, milestones, budget, people, notes, documents).
+2. **Step 2: AI Outputs Pure JSON** - Uses 10x fewer tokens than JSX. Machine-checkable, type-safe, and zero UI hallucinations.
+3. **Step 3: Instant Interactive Suite** - Jantt resolves topological DAG schedules, routes orthogonal wires, and renders Gantt, Kanban, Notes & PM Analytics.
+4. **Step 4: Bidirectional Loop** - Humans drag and adjust visually. Jantt syncs clean JSON back to local storage, cloud room, or disk for the AI agent.
 
 ### LLM System Prompt
 

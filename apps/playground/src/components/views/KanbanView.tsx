@@ -133,7 +133,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             </select>
             <button
               className="kanban-sort-dir-btn"
-              title={rule.direction === "asc" ? "Ascending — click to reverse" : "Descending — click to reverse"}
+              title={rule.direction === "asc" ? "Ascending - click to reverse" : "Descending - click to reverse"}
               onClick={() => {
                 const updated = [...kanbanSortRules];
                 updated[idx] = { ...rule, direction: rule.direction === "asc" ? "desc" : "asc" };
