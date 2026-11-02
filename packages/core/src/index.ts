@@ -33,6 +33,7 @@ export * from "./virtualizer";
 export * from "./dependencies";
 export * from "./calendar";
 export * from "./resource-leveler";
+export * from "./monte-carlo";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
@@ -42,6 +43,7 @@ import { calculateEVM } from "./evm";
 import { auditScheduleIntegrity } from "./schedule-health";
 import { calculatePertRisk, estimateTaskPert } from "./pert";
 import { detectOverAllocations, levelResources } from "./resource-leveler";
+import { runMonteCarloSimulation } from "./monte-carlo";
 import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "./layout";
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
@@ -76,6 +78,7 @@ export const Jantt = {
   estimateTaskPert,
   detectOverAllocations,
   levelResources,
+  runMonteCarloSimulation,
   layout,
   computeDependencyPath,
   getScaleFromDayWidth,
