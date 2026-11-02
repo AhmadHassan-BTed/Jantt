@@ -1,7 +1,10 @@
 {
   "name": "@jantt/render-canvas",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Ultra-high throughput 60 FPS 2D Canvas & OffscreenCanvas renderer for Jantt timelines (100,000+ tasks)",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

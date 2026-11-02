@@ -226,7 +226,7 @@ export function loadInitialState() {
   try {
     const savedView = storageService.getItem<any>(STORAGE_KEYS.VIEW);
     if (savedView === "today") initialView = "tasks";
-    else if (savedView && ["gantt", "kanban", "summary", "tasks", "notes"].includes(savedView)) initialView = savedView;
+    else if (savedView && ["gantt", "canvas", "kanban", "summary", "tasks", "notes"].includes(savedView)) initialView = savedView;
   } catch {}
 
   const isMobileScreen = typeof window !== "undefined" && window.innerWidth <= 768;
@@ -283,7 +283,7 @@ export function loadInitialState() {
       const hash = window.location.hash;
 
       const viewParam = urlParams.get("view");
-      if (viewParam && ["gantt", "kanban", "summary", "tasks", "notes"].includes(viewParam)) {
+      if (viewParam && ["gantt", "canvas", "kanban", "summary", "tasks", "notes"].includes(viewParam)) {
         initialView = viewParam as ActiveView;
       }
 

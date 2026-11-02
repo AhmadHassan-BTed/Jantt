@@ -17,10 +17,11 @@ import {
   ShieldCheck,
   ArrowRight,
   Loader2,
-  Building2
+  Building2,
+  FileText
 } from "lucide-react";
 import type { JanttData, ThemeDefinition } from "@jantt/core";
-import { exportMsProjectXml, exportPrimaveraXer, exportSpreadsheetCsv } from "@jantt/interop";
+import { exportMsProjectXml, exportPrimaveraXer, exportSpreadsheetCsv, exportExecutiveReportHtml } from "@jantt/interop";
 import type { SavedProject, ActiveView } from "../../types";
 import type { UserProfile } from "../../firebase";
 
@@ -107,6 +108,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     if (!parsedData) return;
     const csv = exportSpreadsheetCsv(parsedData);
     triggerDownload(`${(currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.csv`, csv, "text/csv;charset=utf-8;");
+  };
+
+  const handleExportExecutiveReport = () => {
+    if (!parsedData?.tasks) return;
+    const html = exportExecutiveReportHtml(parsedData.tasks, {
+      title: currentProjectName || "Executive Project Status & Schedule Health Report",
+      projectCode: activeProjectId || "PROJ-1",
+      theme: activeTheme?.mode === "dark" ? "dark" : "corporate"
+    });
+    triggerDownload(`${(currentProjectName || "jantt-executive-report").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.html`, html, "text/html;charset=utf-8;");
   };
 
   return (
@@ -674,6 +685,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               >
                 <Download size={12} />
                 <span>Spreadsheet (.csv)</span>
+              </button>
+              <button
+                className="btn-nav"
+                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px", background: "rgba(59, 130, 246, 0.12)", color: "var(--jantt-accent, #3b82f6)", borderColor: "rgba(59, 130, 246, 0.3)" }}
+                onClick={handleExportExecutiveReport}
+                disabled={!parsedData}
+                title="Export high-resolution Executive PDF Booklet & Status Report with EVM Scorecard & DCMA-14 Diagnostics"
+              >
+                <FileText size={12} />
+                <span>Executive Report (.html / PDF)</span>
               </button>
             </div>
           </div>

@@ -7,4 +7,5 @@ export * from "./PromptModal";
 export * from "./PlanManagerModal";
 export * from "./ReadOnlyForkModal";
 export * from "./EditorLoginModal";
+export * from "./MonteCarloModal";
 export * from "./ModalHost";

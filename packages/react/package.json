@@ -1,7 +1,10 @@
 {
   "name": "@jantt/react",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "React wrapper for Jantt JSON Gantt chart engine",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

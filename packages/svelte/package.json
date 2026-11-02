@@ -1,7 +1,10 @@
 {
   "name": "@jantt/svelte",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Svelte wrapper and action for Jantt JSON Gantt chart engine",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

@@ -1,7 +1,10 @@
 {
   "name": "@jantt/vue",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Vue 3 Composition API wrapper for Jantt JSON Gantt chart engine",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

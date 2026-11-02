@@ -15,7 +15,8 @@ import {
   Cloud,
   LogOut,
   Eye,
-  KeyRound
+  KeyRound,
+  Zap
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
@@ -167,6 +168,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Layers size={13} />
             <span>Gantt</span>
+          </button>
+          <button
+            type="button"
+            className={`jantt-scale-btn ${activeView === "canvas" ? "is-active" : ""}`}
+            onClick={() => setActiveView("canvas")}
+            title="60 FPS Canvas Virtualized Engine (Stress-tested up to 100k tasks)"
+          >
+            <Zap size={13} style={{ color: activeView === "canvas" ? "inherit" : "#38BDF8" }} />
+            <span>Canvas 60fps</span>
           </button>
           <button
             type="button"

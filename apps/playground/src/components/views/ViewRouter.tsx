@@ -3,6 +3,7 @@ import { Jantt } from "@jantt/react";
 import { getTodayISODate, type JanttData } from "@jantt/core";
 import type { ActiveView } from "../../types";
 import { KanbanView } from "./KanbanView";
+import { CanvasView } from "./CanvasView";
 import { TasksView } from "./TasksView";
 import { BudgetKpiView } from "./BudgetKpiView";
 import { NotesView } from "./NotesView";
@@ -146,6 +147,15 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           onImportJson={() => project.fileInputRef.current?.click()}
           onExportJson={editor.handleDownloadJson}
           onExportCsv={editor.handleExportCsv}
+        />
+      )}
+
+      {activeView === "canvas" && (
+        <CanvasView
+          parsedData={parsedData}
+          onCommit={handleGanttCommit}
+          onTaskClick={(task) => taskDetail.openTaskDetailSidebar(task)}
+          activeTheme={viewport.activeTheme}
         />
       )}
 

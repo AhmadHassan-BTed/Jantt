@@ -10,3 +10,4 @@
 export * from "./ms-project.js";
 export * from "./primavera.js";
 export * from "./spreadsheet.js";
+export * from "./report.js";

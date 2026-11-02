@@ -10,7 +10,8 @@ import {
   PlayCircle,
   AlertTriangle,
   Sparkles,
-  BarChart3
+  BarChart3,
+  Dice5
 } from "lucide-react";
 import {
   type JanttData,
@@ -27,6 +28,7 @@ import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "..
 import { isTaskMatchingPersonFilter } from "../../utils";
 import { EvmKpiCards } from "./EvmKpiCards";
 import { ScheduleHealthCard } from "./ScheduleHealthCard";
+import { MonteCarloModal } from "../modals/MonteCarloModal";
 
 interface BudgetKpiViewProps {
   parsedData: JanttData;
@@ -60,6 +62,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   // Mode switcher: "essential" (simple/hobbyist/team lead) vs "advanced" (senior PM/EVM/audit)
   const [viewMode, setViewMode] = useState<"essential" | "advanced">("essential");
   const [quickFilter, setQuickFilter] = useState<"all" | "ready" | "blocked" | "bottleneck">("all");
+  const [showMonteCarlo, setShowMonteCarlo] = useState(false);
 
   // 1. Calculate Comprehensive Project Management Math on the full project schedule
   const allProjectTasks = useMemo(() => {
@@ -212,11 +215,34 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           </div>
         </div>
 
-        {/* Status pill summary */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-          <span>Pace: <strong style={{ color: evm.scheduleStatus === "ahead" ? "#10B981" : evm.scheduleStatus === "behind" ? "#EF4444" : "inherit" }}>{evm.scheduleStatus}</strong></span>
-          <span>•</span>
-          <span>Spend: <strong style={{ color: evm.costStatus === "under-budget" ? "#10B981" : evm.costStatus === "over-budget" ? "#EF4444" : "inherit" }}>{evm.costStatus}</strong></span>
+        {/* Status pill summary & Monte Carlo Trigger */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+            <span>Pace: <strong style={{ color: evm.scheduleStatus === "ahead" ? "#10B981" : evm.scheduleStatus === "behind" ? "#EF4444" : "inherit" }}>{evm.scheduleStatus}</strong></span>
+            <span>•</span>
+            <span>Spend: <strong style={{ color: evm.costStatus === "under-budget" ? "#10B981" : evm.costStatus === "over-budget" ? "#EF4444" : "inherit" }}>{evm.costStatus}</strong></span>
+          </div>
+
+          <button
+            onClick={() => setShowMonteCarlo(true)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "1px solid rgba(245, 158, 11, 0.35)",
+              background: "rgba(245, 158, 11, 0.12)",
+              color: "#D97706",
+              fontSize: "12px",
+              fontWeight: 700,
+              cursor: "pointer"
+            }}
+            title="Run Monte Carlo Probabilistic Risk Simulation (2,000+ iterations)"
+          >
+            <Dice5 size={14} />
+            <span>Monte Carlo Risk Analysis</span>
+          </button>
         </div>
       </div>
 
@@ -636,6 +662,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           </tbody>
         </table>
       </div>
+
+      <MonteCarloModal
+        show={showMonteCarlo}
+        onClose={() => setShowMonteCarlo(false)}
+        parsedData={parsedData}
+      />
     </div>
   );
 };

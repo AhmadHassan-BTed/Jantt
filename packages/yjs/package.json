@@ -1,7 +1,10 @@
 {
   "name": "@jantt/yjs",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Real-time multiplayer CRDT Yjs binding for Jantt JSON Gantt chart engine",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

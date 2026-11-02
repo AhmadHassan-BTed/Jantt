@@ -1,7 +1,10 @@
 {
   "name": "@jantt/elements",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Standard Custom Elements & Web Components for Jantt JSON Gantt chart engine (<jantt-timeline>)",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

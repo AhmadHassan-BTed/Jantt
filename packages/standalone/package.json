@@ -1,7 +1,10 @@
 {
   "name": "@jantt/standalone",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Standalone UMD/IIFE bundle for Jantt JSON Gantt chart engine",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/jantt.standalone.js",
   "unpkg": "./dist/jantt.standalone.iife.js",
