@@ -5,9 +5,11 @@
 
 import type { DependencyType, DependencyItem, DependencyObject } from "./dependencies";
 import type { WorkingCalendar, CalendarPreset } from "./calendar";
+import type { ProjectBaselineSnapshot } from "./baselines";
 
 export type { DependencyType, DependencyRelation, DependencyItem, DependencyObject } from "./dependencies";
 export type { DayOfWeek, CalendarPreset, RegionCode, HolidayDefinition, WorkingCalendar } from "./calendar";
+export type { ProjectBaselineSnapshot, TaskBaselineEntry, TaskVarianceMetric, BaselineVarianceSummary } from "./baselines";
 
 export interface JanttMeta {
   title?: string;
@@ -24,6 +26,8 @@ export interface JanttMeta {
   autoCascade?: boolean;
   calendar?: WorkingCalendar | CalendarPreset;
   useWorkingDays?: boolean;
+  baselines?: ProjectBaselineSnapshot[];
+  activeBaselineId?: string;
   generatedAt?: string;
   revision?: number;
   contentHash?: string;
