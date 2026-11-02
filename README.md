@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-443%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![Tests Passing](https://img.shields.io/badge/Tests-455%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
 [![npm organization](https://img.shields.io/badge/npm-%40jantt-cb3837.svg?style=flat-square&logo=npm)](https://www.npmjs.com/org/jantt)
 [![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
@@ -265,7 +265,7 @@ const undoManager = createJanttUndoManager(doc);
 undoManager.undo();
 ```
 
-### 8. Enterprise Microsoft Project & Primavera P6 Interop (`@jantt/interop`)
+### 8. Enterprise Microsoft Project, Primavera & Vector PDF Interop (`@jantt/interop`)
 
 ```ts
 import {
@@ -273,7 +273,9 @@ import {
   importMsProjectXml,
   exportPrimaveraXer,
   importPrimaveraXer,
-  exportSpreadsheetCsv
+  exportSpreadsheetCsv,
+  exportExecutiveReportHtml,
+  exportExecutiveReportSvg
 } from "@jantt/interop";
 
 // Export to Microsoft Project XML (2013-2021 schema)
@@ -282,11 +284,52 @@ const msXml = exportMsProjectXml(plan);
 // Export to Oracle Primavera P6 .XER batch format
 const p6Xer = exportPrimaveraXer(plan);
 
+// Export publication-ready multi-page landscape Executive PDF Booklet (with EVM & DCMA-14)
+const reportHtml = exportExecutiveReportHtml(plan.tasks, {
+  title: "Apollo Cloud Infrastructure",
+  theme: "corporate"
+});
+
 // Import back into Jantt
 const importedPlan = importMsProjectXml(msXml);
 ```
 
-### 9. Plain HTML / Script Tag (`@jantt/standalone`)
+### 9. High-Performance 60 FPS Canvas Virtualized Engine (`@jantt/render-canvas`)
+
+```ts
+import { CanvasTimelineRenderer } from "@jantt/render-canvas";
+
+// Renders 10,000 to 100,000+ tasks at smooth 60 FPS using 2D virtualized windowing
+const renderer = new CanvasTimelineRenderer(hugePlan, {
+  dayWidth: 36,
+  rowHeight: 34,
+  showCriticalPath: true
+});
+
+renderer.render(ctx, { scrollX, scrollY, width, height });
+```
+
+### 10. Enterprise Terminal CLI Tool (`@jantt/cli`)
+
+```bash
+# Open interactive viewer with 2-way live sync back to disk
+npx jantt open ./project.json --port 3000
+
+# Run DCMA-14 schedule health & EVM scorecard audit
+npx jantt audit ./project.json
+
+# Run 5,000 Monte Carlo probabilistic risk iterations
+npx jantt monte-carlo ./project.json --runs 5000
+
+# Export to MS Project XML, Primavera P6, CSV, or Executive PDF
+npx jantt export ./project.json --format xml --out ./project.xml
+npx jantt export ./project.json --format html --out ./executive-report.html
+
+# Import enterprise schedules back into Jantt JSON
+npx jantt import ./schedule.xer --out ./project.json
+```
+
+### 11. Plain HTML / Script Tag (`@jantt/standalone`)
 
 ```html
 <link rel="stylesheet" href="https://unpkg.com/@jantt/standalone/dist/style.css" />
