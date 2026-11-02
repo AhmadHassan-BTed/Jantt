@@ -33,7 +33,6 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   const [dayWidth, setDayWidth] = useState(36);
   const [showCritical, setShowCritical] = useState(true);
   const [fps, setFps] = useState(60);
-  const [lastRenderTime, setLastRenderTime] = useState(0);
   const [hoveredTask, setHoveredTask] = useState<{ task: Task; x: number; y: number } | null>(null);
 
   const isDraggingRef = useRef(false);
@@ -103,8 +102,6 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       canvas.style.height = `${height}px`;
     }
 
-    const t0 = performance.now();
-
     const viewport: ViewportState = {
       scrollX,
       scrollY,
@@ -114,9 +111,6 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     };
 
     renderer.render(ctx, viewport);
-
-    const t1 = performance.now();
-    setLastRenderTime(Number((t1 - t0).toFixed(2)));
   }, [scrollX, scrollY]);
 
   // RequestAnimationFrame trigger
@@ -322,8 +316,6 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           >
             <Gauge size={13} style={{ color: fps >= 55 ? "#10B981" : "#F59E0B" }} />
             <span><strong>{fps} FPS</strong></span>
-            <span>&bull;</span>
-            <span>{lastRenderTime}ms draw</span>
             <span>&bull;</span>
             <span>{taskCount.toLocaleString()} tasks</span>
           </div>
