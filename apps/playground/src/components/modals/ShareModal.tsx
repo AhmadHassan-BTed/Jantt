@@ -75,6 +75,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   onOpenVerificationModal
 }) => {
   const [isStartingRoom, setIsStartingRoom] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
 
   if (!showShareModal) return null;
 
@@ -534,6 +535,54 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Embed Snippet Generator */}
+          <div
+            style={{
+              background: "var(--jantt-surface, #F8FAFC)",
+              border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
+              borderRadius: "10px",
+              padding: "12px 14px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                Embed in Documentation (Notion / Confluence / Wiki):
+              </span>
+              <button
+                className="btn-nav"
+                style={{ fontSize: "11px", padding: "3px 8px" }}
+                onClick={() => {
+                  const iframeCode = `<iframe src="${shareUrl}" width="100%" height="600" frameborder="0" allowfullscreen></iframe>`;
+                  navigator.clipboard.writeText(iframeCode);
+                  setCopiedEmbed(true);
+                  setTimeout(() => setCopiedEmbed(false), 2000);
+                }}
+              >
+                {copiedEmbed ? <Check size={12} style={{ color: "#10B981" }} /> : <Copy size={12} />}
+                <span>{copiedEmbed ? "Copied HTML!" : "Copy Embed Code"}</span>
+              </button>
+            </div>
+            <code
+              style={{
+                fontSize: "11px",
+                fontFamily: "var(--jantt-font-mono, monospace)",
+                background: "var(--jantt-bg, #0B132B)",
+                padding: "6px 8px",
+                borderRadius: "4px",
+                border: "1px solid var(--jantt-border, #1E293B)",
+                color: "var(--jantt-text-muted, #94A3B8)",
+                overflowX: "auto",
+                whiteSpace: "nowrap",
+                display: "block"
+              }}
+            >
+              {`<iframe src="${shareUrl.slice(0, 80)}..." width="100%" height="600" frameborder="0"></iframe>`}
+            </code>
           </div>
 
           {/* Source Document Section */}

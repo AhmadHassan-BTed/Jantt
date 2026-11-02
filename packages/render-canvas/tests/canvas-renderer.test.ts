@@ -18,6 +18,7 @@ function createMockContext(): any {
     arcTo: vi.fn(),
     rect: vi.fn(),
     clip: vi.fn(),
+    clearRect: vi.fn(),
     fillRect: vi.fn(),
     strokeRect: vi.fn(),
     stroke: vi.fn(),
@@ -122,5 +123,28 @@ describe("CanvasTimelineRenderer", () => {
     const textCalls = ctx.fillText.mock.calls.length;
     expect(textCalls).toBeLessThan(100);
     expect(textCalls).toBeGreaterThan(0);
+  });
+
+  it("calculates accurate world bounds and renders radar minimap", () => {
+    const renderer = new CanvasTimelineRenderer(plan, { rowHeight: 36, dayWidth: 40 });
+    const bounds = renderer.getWorldBounds();
+
+    expect(bounds.totalDays).toBeGreaterThan(0);
+    expect(bounds.totalWorldWidth).toBeGreaterThan(0);
+    expect(bounds.totalWorldHeight).toBe(3 * 36);
+
+    const ctx = createMockContext();
+    const mmResult = renderer.renderMinimap(ctx, 220, 110, {
+      scrollX: 0,
+      scrollY: 0,
+      width: 800,
+      height: 600
+    });
+
+    expect(mmResult).toBeDefined();
+    expect(mmResult?.scaleX).toBeGreaterThan(0);
+    expect(mmResult?.scaleY).toBeGreaterThan(0);
+    expect(ctx.fillRect).toHaveBeenCalled();
+    expect(ctx.strokeRect).toHaveBeenCalled();
   });
 });

@@ -7,7 +7,9 @@ import {
   ZoomOut,
   RotateCcw,
   Activity,
-  Layers
+  Layers,
+  Compass,
+  Maximize2
 } from "lucide-react";
 
 export interface CanvasViewProps {
@@ -25,15 +27,18 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CanvasTimelineRenderer | null>(null);
 
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [dayWidth, setDayWidth] = useState(36);
   const [showCritical, setShowCritical] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(true);
   const [hoveredTask, setHoveredTask] = useState<{ task: Task; x: number; y: number } | null>(null);
 
   const isDraggingRef = useRef(false);
+  const isMinimapDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollX: 0, scrollY: 0 });
 
   // Initialize or update renderer instance
@@ -109,7 +114,16 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     };
 
     renderer.render(ctx, viewport);
-  }, [scrollX, scrollY]);
+
+    // Draw Radar Minimap
+    const minimapCanvas = minimapCanvasRef.current;
+    if (minimapCanvas && showMinimap) {
+      const mmCtx = minimapCanvas.getContext("2d");
+      if (mmCtx) {
+        renderer.renderMinimap(mmCtx, 220, 110, viewport);
+      }
+    }
+  }, [scrollX, scrollY, showMinimap]);
 
   // RequestAnimationFrame trigger
   useEffect(() => {
@@ -227,6 +241,58 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       canvas.removeEventListener("wheel", onWheel);
     };
   }, []);
+
+  // Fit Entire Project to Viewport Width
+  const handleFitToScreen = () => {
+    const container = containerRef.current;
+    const renderer = rendererRef.current;
+    if (!container || !renderer) return;
+    const bounds = renderer.getWorldBounds();
+    const availableWidth = container.clientWidth - 40;
+    const computedDayWidth = Math.min(140, Math.max(12, Math.floor(availableWidth / Math.max(1, bounds.totalDays))));
+    setDayWidth(computedDayWidth);
+    setScrollX(0);
+    setScrollY(0);
+  };
+
+  const handleMinimapMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    isMinimapDraggingRef.current = true;
+    navigateViaMinimap(e);
+  };
+
+  const handleMinimapMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isMinimapDraggingRef.current) {
+      navigateViaMinimap(e);
+    }
+  };
+
+  const handleMinimapMouseUp = () => {
+    isMinimapDraggingRef.current = false;
+  };
+
+  const navigateViaMinimap = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const minimap = minimapCanvasRef.current;
+    const container = containerRef.current;
+    const renderer = rendererRef.current;
+    if (!minimap || !container || !renderer) return;
+
+    const rect = minimap.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const bounds = renderer.getWorldBounds();
+    const targetScrollX = Math.max(
+      0,
+      (clickX / 220) * bounds.totalWorldWidth - container.clientWidth / 2
+    );
+    const targetScrollY = Math.max(
+      0,
+      (clickY / 110) * bounds.totalWorldHeight - container.clientHeight / 2
+    );
+
+    setScrollX(targetScrollX);
+    setScrollY(targetScrollY);
+  };
 
   // 10,000 Tasks Benchmark Generator
   const handleGenerateBenchmark = (count: number) => {
@@ -351,6 +417,24 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           <button
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
+            onClick={handleFitToScreen}
+            title="Fit Entire Project Horizon to Screen"
+          >
+            <Maximize2 size={12} style={{ color: "#38BDF8" }} />
+            <span>Fit Horizon</span>
+          </button>
+          <button
+            className={`btn-nav ${showMinimap ? "btn-nav-primary" : ""}`}
+            style={{ fontSize: "11px", padding: "4px 8px" }}
+            onClick={() => setShowMinimap((prev) => !prev)}
+            title="Toggle Radar Minimap Navigator"
+          >
+            <Compass size={12} style={{ color: "#A855F7" }} />
+            <span>Radar</span>
+          </button>
+          <button
+            className="btn-nav"
+            style={{ fontSize: "11px", padding: "4px 8px" }}
             onClick={() => {
               setScrollX(0);
               setScrollY(0);
@@ -449,6 +533,57 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             <div style={{ fontSize: "10px", color: "#64748B", marginTop: "4px" }}>
               Click to open activity details
             </div>
+          </div>
+        )}
+
+        {/* Radar Minimap Navigator */}
+        {showMinimap && (
+          <div
+            style={{
+              position: "absolute",
+              right: 16,
+              bottom: 16,
+              width: 220,
+              height: 110,
+              borderRadius: "8px",
+              overflow: "hidden",
+              border: "1px solid var(--jantt-border, #1E293B)",
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.6)",
+              background: "rgba(11, 19, 43, 0.9)",
+              backdropFilter: "blur(4px)",
+              zIndex: 25,
+              cursor: "crosshair"
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 4,
+                left: 6,
+                fontSize: "9px",
+                fontWeight: 700,
+                color: "#64748B",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                pointerEvents: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                userSelect: "none"
+              }}
+            >
+              <Compass size={10} style={{ color: "#38BDF8" }} />
+              <span>RADAR MINIMAP</span>
+            </div>
+            <canvas
+              ref={minimapCanvasRef}
+              width={220}
+              height={110}
+              onMouseDown={handleMinimapMouseDown}
+              onMouseMove={handleMinimapMouseMove}
+              onMouseUp={handleMinimapMouseUp}
+              style={{ display: "block", width: "100%", height: "100%" }}
+            />
           </div>
         )}
       </div>

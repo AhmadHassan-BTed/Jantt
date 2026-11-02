@@ -28,6 +28,7 @@ import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "..
 import { isTaskMatchingPersonFilter } from "../../utils";
 import { EvmKpiCards } from "./EvmKpiCards";
 import { ScheduleHealthCard } from "./ScheduleHealthCard";
+import { EvmSCurveChart } from "./EvmSCurveChart";
 import { MonteCarloModal } from "../modals/MonteCarloModal";
 
 interface BudgetKpiViewProps {
@@ -413,6 +414,9 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "20px" }}>
           {/* Advanced EVM Metrics Panel */}
           <EvmKpiCards evm={evm} cpm={cpm} />
+
+          {/* S-Curve Cumulative Cost vs Progress Visualization */}
+          <EvmSCurveChart parsedData={parsedData} evm={evm} cpm={cpm} />
 
           {/* Schedule Health & Integrity Diagnostic Card */}
           <ScheduleHealthCard audit={audit} />

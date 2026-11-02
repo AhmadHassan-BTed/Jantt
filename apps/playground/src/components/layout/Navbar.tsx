@@ -16,7 +16,9 @@ import {
   LogOut,
   Eye,
   KeyRound,
-  Zap
+  Zap,
+  Search,
+  HelpCircle
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
@@ -53,6 +55,8 @@ interface NavbarProps {
   onPromptFork?: () => void;
   isPendingLoginEditor?: boolean;
   onOpenEditorLogin?: () => void;
+  onOpenCommandPalette?: () => void;
+  onOpenShortcuts?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -83,7 +87,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   isViewer = false,
   onPromptFork,
   isPendingLoginEditor = false,
-  onOpenEditorLogin
+  onOpenEditorLogin,
+  onOpenCommandPalette,
+  onOpenShortcuts
 }) => {
   return (
     <header className="navbar">
@@ -272,6 +278,40 @@ export const Navbar: React.FC<NavbarProps> = ({
             </optgroup>
           </select>
         </div>
+
+        {/* Universal Command Palette Trigger */}
+        {onOpenCommandPalette && (
+          <button
+            type="button"
+            className="btn-nav"
+            onClick={onOpenCommandPalette}
+            title="Open Universal Command Palette & Search (Ctrl+K or Cmd+K)"
+            style={{
+              padding: "4px 8px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "12px",
+              fontWeight: 500
+            }}
+          >
+            <Search size={13} style={{ color: "#38BDF8" }} />
+            <span>Cmd+K</span>
+          </button>
+        )}
+
+        {/* Keyboard Shortcuts Sheet Trigger */}
+        {onOpenShortcuts && (
+          <button
+            type="button"
+            className="btn-nav"
+            onClick={onOpenShortcuts}
+            title="Keyboard Shortcuts Cheatsheet (?)"
+            style={{ padding: "4px 7px" }}
+          >
+            <HelpCircle size={13} style={{ color: "#818CF8" }} />
+          </button>
+        )}
 
         {/* Prompt AI Button */}
         <button

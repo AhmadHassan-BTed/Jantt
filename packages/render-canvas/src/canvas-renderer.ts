@@ -246,6 +246,31 @@ export class CanvasTimelineRenderer {
         ctx.fillStyle = barColor;
         ctx.fillRect(-size / 2, -size / 2, size, size);
         ctx.restore();
+      } else if (t.isGroup || t.type === "group" || t.type === "summary") {
+        // Draw Summary / Group Parent Bracket [=======]
+        ctx.fillStyle = colors.text;
+        const bracketH = 8;
+        ctx.fillRect(barX, barY + 2, barW, bracketH);
+        // Downward end chevrons
+        ctx.beginPath();
+        ctx.moveTo(barX, barY + 2);
+        ctx.lineTo(barX, barY + BAR_HEIGHT - 2);
+        ctx.lineTo(barX + 6, barY + 2 + bracketH);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(barX + barW, barY + 2);
+        ctx.lineTo(barX + barW, barY + BAR_HEIGHT - 2);
+        ctx.lineTo(barX + barW - 6, barY + 2 + bracketH);
+        ctx.closePath();
+        ctx.fill();
+
+        // Label Text for Group
+        ctx.fillStyle = colors.text;
+        ctx.font = "bold 12px sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.fillText(t.label || t.name || t.id, barX + barW + 8, barY + BAR_HEIGHT / 2);
       } else {
         // Draw Task Bar
         const radius = 4;
@@ -384,5 +409,72 @@ export class CanvasTimelineRenderer {
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
     ctx.fill();
+  }
+
+  public getWorldBounds() {
+    return {
+      totalDays: this.totalDays,
+      totalWorldWidth: Math.max(1, this.totalDays * this.dayWidth),
+      totalWorldHeight: Math.max(1, (this.plan.tasks?.length || 0) * this.rowHeight),
+      timelineStart: this.timelineStart,
+      timelineEnd: this.timelineEnd
+    };
+  }
+
+  public renderMinimap(
+    ctx: CanvasRenderingContext2D,
+    minimapWidth: number,
+    minimapHeight: number,
+    viewport: ViewportState
+  ) {
+    const tasks = this.plan.tasks || [];
+    const totalCount = tasks.length;
+    if (totalCount === 0) return { scaleX: 1, scaleY: 1, totalWorldWidth: 1, totalWorldHeight: 1 };
+
+    const totalWorldWidth = Math.max(1, this.totalDays * this.dayWidth);
+    const totalWorldHeight = Math.max(1, totalCount * this.rowHeight);
+
+    const scaleX = minimapWidth / totalWorldWidth;
+    const scaleY = minimapHeight / totalWorldHeight;
+
+    ctx.save();
+    ctx.clearRect(0, 0, minimapWidth, minimapHeight);
+
+    // Background
+    ctx.fillStyle = "rgba(11, 19, 43, 0.9)";
+    ctx.fillRect(0, 0, minimapWidth, minimapHeight);
+
+    // Micro task bars
+    for (let i = 0; i < totalCount; i++) {
+      const t = tasks[i];
+      if (!t || !t.start || !t.end) continue;
+      const startDay = diffDays(this.timelineStart, t.start);
+      const durationDays = Math.max(1, diffDays(t.start, t.end) + 1);
+
+      const mx = startDay * this.dayWidth * scaleX;
+      const my = i * this.rowHeight * scaleY;
+      const mw = Math.max(2, durationDays * this.dayWidth * scaleX);
+      const mh = Math.max(1.5, (this.rowHeight - 8) * scaleY);
+
+      ctx.fillStyle = t.critical ? "#EF4444" : "#38BDF8";
+      ctx.fillRect(mx, my, mw, mh);
+    }
+
+    // Viewport Frustum Box
+    const vx = viewport.scrollX * scaleX;
+    const vy = viewport.scrollY * scaleY;
+    const vw = Math.min(minimapWidth, viewport.width * scaleX);
+    const vh = Math.min(minimapHeight, (viewport.height - this.headerHeight) * scaleY);
+
+    ctx.fillStyle = "rgba(56, 189, 248, 0.15)";
+    ctx.fillRect(vx, vy, vw, vh);
+
+    ctx.strokeStyle = "#38BDF8";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(vx, vy, vw, vh);
+
+    ctx.restore();
+
+    return { scaleX, scaleY, totalWorldWidth, totalWorldHeight };
   }
 }

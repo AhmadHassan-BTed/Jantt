@@ -8,4 +8,5 @@ export * from "./PlanManagerModal";
 export * from "./ReadOnlyForkModal";
 export * from "./EditorLoginModal";
 export * from "./MonteCarloModal";
+export * from "./ShortcutsModal";
 export * from "./ModalHost";

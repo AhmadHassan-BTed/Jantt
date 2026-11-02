@@ -65,6 +65,8 @@ import {
 import type { UserRoomPointer, FullRoomPayload } from "./firebase";
 import { commandBus } from "./services";
 import { useMobileDetection } from "./hooks/useMobileDetection";
+import { useUndoRedo } from "./hooks/useUndoRedo";
+import { exportMsProjectXml, exportPrimaveraXer, exportExecutiveReportHtml } from "@jantt/interop";
 import { FolderKanban } from "lucide-react";
 
 // View & Layout & Modal Components (Domain-Driven Architecture)
@@ -79,7 +81,9 @@ import {
   MobileBottomNav,
   OrientationBanner,
   ReadOnlyForkModal,
-  EditorLoginModal
+  EditorLoginModal,
+  CommandPalette,
+  ShortcutsModal
 } from "./components";
 
 export function App() {
@@ -92,6 +96,8 @@ export function App() {
   const [showPlanManagerModal, setShowPlanManagerModal] = useState(false);
   const [showReadOnlyForkModal, setShowReadOnlyForkModal] = useState(false);
   const [showEditorLoginModal, setShowEditorLoginModal] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
   // Firebase Authentication & Cloud User Identity
   const auth = useAuth();
@@ -127,6 +133,13 @@ export function App() {
     onPeopleChange: (p) => commandBus.emit("PEOPLE_CHANGED", p),
     onTeamsChange: (t) => commandBus.emit("TEAMS_CHANGED", t)
   });
+
+  // Deterministic Undo / Redo History Stack
+  const undoRedo = useUndoRedo(
+    editor.parsedData,
+    (restored) => editor.handleChartCommit(restored),
+    toast.showToast
+  );
 
   // Gantt Viewport & Visual Themes
   const viewport = useGanttViewport({
@@ -179,6 +192,84 @@ export function App() {
     effectivePeople: people.effectivePeople,
     teams: people.teams
   });
+
+  // Global Power-User Keyboard Shortcut Orchestration
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowCommandPalette((prev) => !prev);
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        if (!isInput) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            undoRedo.redo();
+          } else {
+            undoRedo.undo();
+          }
+          return;
+        }
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+        if (!isInput) {
+          e.preventDefault();
+          undoRedo.redo();
+          return;
+        }
+      }
+
+      if (isInput) return;
+
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      } else if (e.key === "1") {
+        e.preventDefault();
+        viewport.setActiveView("gantt");
+      } else if (e.key === "2") {
+        e.preventDefault();
+        viewport.setActiveView("canvas");
+      } else if (e.key === "3") {
+        e.preventDefault();
+        viewport.setActiveView("kanban");
+      } else if (e.key === "4") {
+        e.preventDefault();
+        viewport.setActiveView("tasks");
+      } else if (e.key === "5") {
+        e.preventDefault();
+        viewport.setActiveView("summary");
+      } else if (e.key === "6") {
+        e.preventDefault();
+        viewport.setActiveView("notes");
+      } else if (e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        viewport.setShowCriticalPath((prev) => !prev);
+      } else if (e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        viewport.setShowBaselines((prev) => !prev);
+      } else if (e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        dateFilter.setDateFilterMode((prev: string) => (prev === "today" ? "all" : "today"));
+      } else if (e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        dateFilter.setDateFilterMode((prev: string) => (prev === "week" ? "all" : "week"));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undoRedo, viewport, dateFilter]);
 
   // Project Management (Local & Template CRUD)
   const project = useProjectState({
@@ -647,6 +738,7 @@ export function App() {
         return;
       }
       if (!editor.parsedData) return;
+      undoRedo.pushSnapshot(editor.parsedData);
       if (!isHideActive && !isPersonSorting) {
         editor.handleChartCommit(updated);
         return;
@@ -655,7 +747,7 @@ export function App() {
       const mergedTasks = editor.parsedData.tasks.map((t) => updatedMap.get(t.id) || t);
       editor.handleChartCommit({ ...editor.parsedData, ...updated, tasks: mergedTasks });
     },
-    [isPendingLoginEditor, isViewer, editor.parsedData, isHideActive, isPersonSorting, editor.handleChartCommit, toast]
+    [isPendingLoginEditor, isViewer, editor.parsedData, isHideActive, isPersonSorting, editor.handleChartCommit, toast, undoRedo]
   );
 
   return (
@@ -739,6 +831,8 @@ export function App() {
             isPendingLoginEditor={isPendingLoginEditor}
             onOpenEditorLogin={() => setShowEditorLoginModal(true)}
             onPromptFork={() => setShowReadOnlyForkModal(true)}
+            onOpenCommandPalette={() => setShowCommandPalette(true)}
+            onOpenShortcuts={() => setShowShortcutsModal(true)}
           />
 
           <Subheader
@@ -896,6 +990,72 @@ export function App() {
         roomTitle={activeRoomTitle}
         onLogin={auth.loginWithGitHub}
         onMakeLocalCopy={handleForkToLocalCopy}
+      />
+
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        parsedData={editor.parsedData}
+        activeView={viewport.activeView}
+        setActiveView={viewport.setActiveView}
+        selectedThemeId={viewport.selectedThemeId}
+        setSelectedThemeId={viewport.setSelectedThemeId}
+        showCriticalPath={viewport.showCriticalPath}
+        onToggleCriticalPath={() => viewport.setShowCriticalPath((prev) => !prev)}
+        showBaselines={viewport.showBaselines}
+        onToggleBaselines={() => viewport.setShowBaselines((prev) => !prev)}
+        onSelectTask={(task) => taskDetail.openTaskDetailSidebar(task)}
+        onOpenMonteCarlo={() => viewport.setActiveView("summary")}
+        onOpenShare={() => sharing.setShowShareModal(true)}
+        onOpenAddPlan={project.handleOpenAddPlanModal}
+        onOpenPlanManager={() => setShowPlanManagerModal(true)}
+        onOpenShortcuts={() => setShowShortcutsModal(true)}
+        onExportMsProject={() => {
+          if (!editor.parsedData) return;
+          const xml = exportMsProjectXml(editor.parsedData, { projectName: project.currentProjectName });
+          const blob = new Blob([xml], { type: "application/xml" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${(project.currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.xml`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }}
+        onExportPrimavera={() => {
+          if (!editor.parsedData) return;
+          const xer = exportPrimaveraXer(editor.parsedData, { projectName: project.currentProjectName });
+          const blob = new Blob([xer], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${(project.currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.xer`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }}
+        onExportCsv={editor.handleExportCsv}
+        onExportExecutiveReport={() => {
+          if (!editor.parsedData?.tasks) return;
+          const html = exportExecutiveReportHtml(editor.parsedData.tasks, {
+            title: project.currentProjectName || "Executive Project Status Report",
+            projectCode: project.activeProjectId || "PROJ-1",
+            theme: viewport.activeTheme?.mode === "dark" ? "dark" : "corporate"
+          });
+          const blob = new Blob([html], { type: "text/html" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${(project.currentProjectName || "jantt-executive-report").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.html`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }}
+        onDownloadJson={editor.handleDownloadJson}
+        onJumpToday={() => dateFilter.setDateFilterMode("today")}
+        onFilterWeek={() => dateFilter.setDateFilterMode("week")}
+      />
+
+      <ShortcutsModal
+        show={showShortcutsModal}
+        onClose={() => setShowShortcutsModal(false)}
       />
 
       <Toast
