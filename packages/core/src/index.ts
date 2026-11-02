@@ -32,6 +32,7 @@ export * from "./pipeline";
 export * from "./virtualizer";
 export * from "./dependencies";
 export * from "./calendar";
+export * from "./resource-leveler";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
@@ -40,6 +41,7 @@ import { calculateCriticalPath, getTaskDependencies } from "./cpm";
 import { calculateEVM } from "./evm";
 import { auditScheduleIntegrity } from "./schedule-health";
 import { calculatePertRisk, estimateTaskPert } from "./pert";
+import { detectOverAllocations, levelResources } from "./resource-leveler";
 import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "./layout";
 import { createTaskSidebar } from "./sidebar";
 import { exportToCsv, downloadCsv, downloadJson, exportSvgString } from "./exporter";
@@ -72,6 +74,8 @@ export const Jantt = {
   auditScheduleIntegrity,
   calculatePertRisk,
   estimateTaskPert,
+  detectOverAllocations,
+  levelResources,
   layout,
   computeDependencyPath,
   getScaleFromDayWidth,
