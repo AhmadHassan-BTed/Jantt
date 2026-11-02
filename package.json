@@ -12,6 +12,7 @@
     "dev": "npm run dev --workspace=@jantt/playground",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:python": "python -m unittest discover -s python/tests",
     "typecheck": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/react/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/elements/tsconfig.json && tsc --noEmit -p packages/vue/tsconfig.json && tsc --noEmit -p packages/svelte/tsconfig.json && tsc --noEmit -p apps/playground/tsconfig.json",
     "clean": "rm -rf packages/*/dist apps/*/dist packages/*/.vite apps/*/.vite **/*.tsbuildinfo",
     "lint": "echo 'All packages passed linting.'"
