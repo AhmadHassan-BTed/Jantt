@@ -597,7 +597,7 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
     const userAPlan: JanttData = {
       ...planWithDeps,
       tasks: [
-        { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05", _deleted: true, deletedAt: "2026-09-05T12:00:00.000Z#user-A" },
+        { id: "t1", label: "Task 1", category: "dev", start: "2026-09-01", end: "2026-09-05", _deleted: true, deletedAt: `${new Date().toISOString()}#user-A` },
         planWithDeps.tasks[1],
         planWithDeps.tasks[2]
       ]
@@ -622,7 +622,7 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
         title: "Bloated Plan",
         tombstones: {
           "ancient-1": { deletedAt: "2020-01-01T00:00:00.000Z#peer1", entityType: "task" },
-          "fresh-1": { deletedAt: "2026-09-05T12:00:00.000Z#peer2", entityType: "task" }
+          "fresh-1": { deletedAt: `${new Date().toISOString()}#peer2`, entityType: "task" }
         }
       },
       tasks: [
