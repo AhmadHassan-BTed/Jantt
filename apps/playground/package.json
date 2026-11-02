@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@jantt/core": "*",
+    "@jantt/interop": "*",
     "@jantt/react": "*",
     "firebase": "^12.18.0",
     "lucide-react": "^0.378.0",

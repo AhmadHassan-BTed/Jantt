@@ -24,7 +24,8 @@
     "yjs": "^13.6.0"
   },
   "dependencies": {
-    "@jantt/core": "*"
+    "@jantt/core": "*",
+    "y-protocols": "^1.0.7"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

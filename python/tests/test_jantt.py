@@ -2,6 +2,13 @@
 Unit tests for Jantt Python Bridge.
 """
 
+import os
+import sys
+from pathlib import Path
+
+# Add src to sys.path so tests run seamlessly in both monorepo and standalone
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
 import unittest
 from jantt import Task, JanttPlan, from_records, from_dataframe, to_dataframe, to_html
 

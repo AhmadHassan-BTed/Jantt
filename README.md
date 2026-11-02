@@ -10,8 +10,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-339%2F339%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
-[![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Tests Passing](https://img.shields.io/badge/Tests-436%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![npm organization](https://img.shields.io/badge/npm-%40jantt-cb3837.svg?style=flat-square&logo=npm)](https://www.npmjs.com/org/jantt)
+[![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
 <br />
@@ -122,9 +123,9 @@ Jantt features a fully reactive, CSS variable-driven theming architecture with o
 
 ---
 
-## 60-Second Quickstart
+## 60-Second Quickstart Across Frameworks
 
-### 1. React Integration (`@jantt/react`)
+### 1. React (`@jantt/react`)
 
 ```bash
 npm install @jantt/react @jantt/core
@@ -145,11 +146,147 @@ const projectData = {
 };
 
 export default function Timeline() {
-  return <Jantt data={projectData} theme="swiss-dark" />;
+  return <Jantt data={projectData} theme="swiss-dark" onCommit={(next) => console.log(next)} />;
 }
 ```
 
-### 2. Plain HTML / Script Tag (`@jantt/standalone`)
+### 2. Vue 3 (`@jantt/vue`)
+
+```bash
+npm install @jantt/vue @jantt/core
+```
+
+```vue
+<script setup>
+import { JanttTimeline } from "@jantt/vue";
+import "@jantt/core/dist/theme.css";
+
+const props = defineProps(["plan"]);
+const handleCommit = (updatedPlan) => console.log("Committed:", updatedPlan);
+</script>
+
+<template>
+  <JanttTimeline :data="props.plan" theme="swiss-dark" @commit="handleCommit" />
+</template>
+```
+
+### 3. Svelte 4 / 5 (`@jantt/svelte`)
+
+```bash
+npm install @jantt/svelte @jantt/core
+```
+
+```svelte
+<script>
+  import { janttAction } from "@jantt/svelte";
+  import "@jantt/core/dist/theme.css";
+  export let plan;
+</script>
+
+<div
+  use:janttAction={{ data: plan, theme: "swiss-dark" }}
+  on:commit={(e) => console.log("Committed:", e.detail)}
+  style="width: 100%; height: 600px;"
+/>
+```
+
+### 4. Framework-Agnostic Web Component (`@jantt/elements`)
+
+Drop directly into PHP, Ruby on Rails, Django, Laravel, WordPress, or static HTML:
+
+```html
+<script type="module" src="https://unpkg.com/@jantt/elements/dist/index.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@jantt/core/dist/theme.css" />
+
+<jantt-timeline
+  data-src="/api/plan.json"
+  theme="swiss-dark"
+  scale="day"
+  show-critical-path="true">
+</jantt-timeline>
+```
+
+### 5. Python, Jupyter & Streamlit (`pip install jantt`)
+
+```python
+import jantt
+import pandas as pd
+
+df = pd.DataFrame([
+    {"id": "t1", "label": "Design System", "category": "design", "start": "2026-11-01", "end": "2026-11-05"},
+    {"id": "t2", "label": "API Engine", "category": "dev", "start": "2026-11-06", "end": "2026-11-15", "dependsOn": "t1"}
+])
+
+# Inside Jupyter Notebook:
+jantt.show(df, theme="swiss-dark")
+
+# Inside Streamlit app:
+# jantt.streamlit(df)
+```
+
+### 6. AI Agent Protocol (`@jantt/mcp`)
+
+Run as an official Model Context Protocol server for Claude Desktop, Cursor, Gemini, and autonomous AI Agents:
+
+```bash
+npx @jantt/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "jantt": {
+      "command": "npx",
+      "args": ["-y", "@jantt/mcp"]
+    }
+  }
+}
+```
+
+Provides 6 deterministic PM tools: `jantt_inspect_plan`, `jantt_add_task`, `jantt_reschedule_task`, `jantt_audit_schedule`, `jantt_diff_plans`, `jantt_export_csv`.
+
+### 7. Real-Time Multiplayer CRDT (`@jantt/yjs`)
+
+```ts
+import * as Y from "yjs";
+import { bindJanttToYDoc, bindJanttAwareness, createJanttUndoManager } from "@jantt/yjs";
+
+const doc = new Y.Doc();
+const binding = bindJanttToYDoc(doc, {
+  initialPlan,
+  onPlanChange: (plan) => render(plan)
+});
+
+// Fine-grained task update (synced to all connected peers)
+binding.updateTask("t1", { progress: 0.85 });
+
+// Infinite Undo / Redo
+const undoManager = createJanttUndoManager(doc);
+undoManager.undo();
+```
+
+### 8. Enterprise Microsoft Project & Primavera P6 Interop (`@jantt/interop`)
+
+```ts
+import {
+  exportMsProjectXml,
+  importMsProjectXml,
+  exportPrimaveraXer,
+  importPrimaveraXer,
+  exportSpreadsheetCsv
+} from "@jantt/interop";
+
+// Export to Microsoft Project XML (2013-2021 schema)
+const msXml = exportMsProjectXml(plan);
+
+// Export to Oracle Primavera P6 .XER batch format
+const p6Xer = exportPrimaveraXer(plan);
+
+// Import back into Jantt
+const importedPlan = importMsProjectXml(msXml);
+```
+
+### 9. Plain HTML / Script Tag (`@jantt/standalone`)
 
 ```html
 <link rel="stylesheet" href="https://unpkg.com/@jantt/standalone/dist/style.css" />

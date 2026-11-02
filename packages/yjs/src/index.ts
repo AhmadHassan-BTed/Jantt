@@ -2,10 +2,12 @@
  * Jantt Yjs Real-Time CRDT Multiplayer Binding
  *
  * Provides bidirectional real-time synchronization between Jantt JSON timeline plans
- * and shared Y.Doc structures with fine-grained delta updates and zero-conflict resolution.
+ * and shared Y.Doc structures with fine-grained delta updates, zero-conflict resolution,
+ * multi-user awareness/presence, and full undo/redo time travel history.
  */
 
 import * as Y from "yjs";
+import { Awareness } from "y-protocols/awareness";
 import type { JanttData, Task } from "@jantt/core";
 
 export interface JanttYjsBindingOptions {
@@ -22,7 +24,7 @@ export interface JanttYjsBinding {
   destroy: () => void;
 }
 
-const ORIGIN_LOCAL = "jantt-local-binding";
+export const ORIGIN_LOCAL = "jantt-local-binding";
 
 export function bindJanttToYDoc(
   doc: Y.Doc,
@@ -107,7 +109,7 @@ export function bindJanttToYDoc(
     }, ORIGIN_LOCAL);
   };
 
-  // Delete task
+  // Delete task (soft delete tombstone)
   const deleteTask = (taskId: string): void => {
     doc.transact(() => {
       const yTask = yTasks.get(taskId);
@@ -173,6 +175,181 @@ export function bindJanttToYDoc(
     updateTask,
     deleteTask,
     destroy
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Multiplayer Presence & Awareness Protocol Binding
+// ---------------------------------------------------------------------------
+
+export interface JanttCollaboratorUser {
+  id: string;
+  name: string;
+  color: string;
+  avatar?: string;
+  email?: string;
+}
+
+export interface JanttCollaboratorPresence {
+  user: JanttCollaboratorUser;
+  selectedTaskId?: string | null;
+  cursor?: {
+    date?: string;
+    taskIndex?: number;
+    mouseX?: number;
+    mouseY?: number;
+  } | null;
+  isDragging?: boolean;
+  draggingTaskId?: string | null;
+  lastActive?: number;
+}
+
+export interface JanttAwarenessBindingOptions {
+  user: JanttCollaboratorUser;
+  onPeersChange?: (peers: Map<number, JanttCollaboratorPresence>) => void;
+}
+
+export interface JanttAwarenessBinding {
+  awareness: Awareness;
+  getLocalPresence: () => JanttCollaboratorPresence | null;
+  setLocalUser: (user: Partial<JanttCollaboratorUser>) => void;
+  selectTask: (taskId: string | null) => void;
+  setCursor: (cursor: JanttCollaboratorPresence["cursor"]) => void;
+  setDragging: (isDragging: boolean, taskId?: string | null) => void;
+  getPeers: () => Map<number, JanttCollaboratorPresence>;
+  destroy: () => void;
+}
+
+export function bindJanttAwareness(
+  awareness: Awareness,
+  options: JanttAwarenessBindingOptions
+): JanttAwarenessBinding {
+  const localPresence: JanttCollaboratorPresence = {
+    user: options.user,
+    selectedTaskId: null,
+    cursor: null,
+    isDragging: false,
+    draggingTaskId: null,
+    lastActive: Date.now()
+  };
+
+  awareness.setLocalStateField("jantt", localPresence);
+
+  const getPeers = (): Map<number, JanttCollaboratorPresence> => {
+    const peers = new Map<number, JanttCollaboratorPresence>();
+    const states = awareness.getStates();
+    states.forEach((state, clientID) => {
+      if (state && state.jantt) {
+        peers.set(clientID, state.jantt as JanttCollaboratorPresence);
+      }
+    });
+    return peers;
+  };
+
+  const handleChange = () => {
+    if (options.onPeersChange) {
+      options.onPeersChange(getPeers());
+    }
+  };
+
+  awareness.on("change", handleChange);
+
+  const updateLocal = (patch: Partial<JanttCollaboratorPresence>) => {
+    const current = (awareness.getLocalState()?.jantt as JanttCollaboratorPresence) || localPresence;
+    const updated: JanttCollaboratorPresence = {
+      ...current,
+      ...patch,
+      lastActive: Date.now()
+    };
+    awareness.setLocalStateField("jantt", updated);
+  };
+
+  const setLocalUser = (userPatch: Partial<JanttCollaboratorUser>) => {
+    const current = (awareness.getLocalState()?.jantt as JanttCollaboratorPresence) || localPresence;
+    updateLocal({
+      user: {
+        ...current.user,
+        ...userPatch
+      }
+    });
+  };
+
+  const selectTask = (taskId: string | null) => {
+    updateLocal({ selectedTaskId: taskId });
+  };
+
+  const setCursor = (cursor: JanttCollaboratorPresence["cursor"]) => {
+    updateLocal({ cursor });
+  };
+
+  const setDragging = (isDragging: boolean, taskId: string | null = null) => {
+    updateLocal({ isDragging, draggingTaskId: taskId });
+  };
+
+  const getLocalPresence = (): JanttCollaboratorPresence | null => {
+    return (awareness.getLocalState()?.jantt as JanttCollaboratorPresence) || null;
+  };
+
+  const destroy = () => {
+    awareness.off("change", handleChange);
+    awareness.setLocalStateField("jantt", null);
+  };
+
+  return {
+    awareness,
+    getLocalPresence,
+    setLocalUser,
+    selectTask,
+    setCursor,
+    setDragging,
+    getPeers,
+    destroy
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Infinite Undo/Redo & Time Travel Engine
+// ---------------------------------------------------------------------------
+
+export interface JanttUndoManagerOptions {
+  trackedOrigins?: Set<any>;
+}
+
+export interface JanttUndoManager {
+  undoManager: Y.UndoManager;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  clear: () => void;
+  destroy: () => void;
+}
+
+export function createJanttUndoManager(
+  doc: Y.Doc,
+  options: JanttUndoManagerOptions = {}
+): JanttUndoManager {
+  const yTasks = doc.getMap<Y.Map<any>>("jantt_tasks");
+  const yMeta = doc.getMap<any>("jantt_meta");
+  const yCategories = doc.getMap<any>("jantt_categories");
+  const yPeople = doc.getArray<any>("jantt_people");
+  const yTeams = doc.getArray<any>("jantt_teams");
+
+  const trackedOrigins = options.trackedOrigins || new Set([ORIGIN_LOCAL]);
+
+  const undoManager = new Y.UndoManager(
+    [yTasks, yMeta, yCategories, yPeople, yTeams],
+    { trackedOrigins }
+  );
+
+  return {
+    undoManager,
+    undo: () => undoManager.undo(),
+    redo: () => undoManager.redo(),
+    canUndo: () => undoManager.canUndo(),
+    canRedo: () => undoManager.canRedo(),
+    clear: () => undoManager.clear(),
+    destroy: () => undoManager.destroy()
   };
 }
 

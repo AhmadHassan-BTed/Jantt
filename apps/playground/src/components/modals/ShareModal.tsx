@@ -16,9 +16,11 @@ import {
   LogIn,
   ShieldCheck,
   ArrowRight,
-  Loader2
+  Loader2,
+  Building2
 } from "lucide-react";
 import type { JanttData, ThemeDefinition } from "@jantt/core";
+import { exportMsProjectXml, exportPrimaveraXer, exportSpreadsheetCsv } from "@jantt/interop";
 import type { SavedProject, ActiveView } from "../../types";
 import type { UserProfile } from "../../firebase";
 
@@ -76,6 +78,36 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   if (!showShareModal) return null;
 
   const isRoomActive = activeProject?.source === "room" && Boolean(activeProject.roomId);
+
+  const triggerDownload = (filename: string, content: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportMsProject = () => {
+    if (!parsedData) return;
+    const xml = exportMsProjectXml(parsedData, { projectName: currentProjectName });
+    triggerDownload(`${(currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.xml`, xml, "application/xml");
+  };
+
+  const handleExportPrimavera = () => {
+    if (!parsedData) return;
+    const xer = exportPrimaveraXer(parsedData, { projectName: currentProjectName });
+    triggerDownload(`${(currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.xer`, xer, "text/plain");
+  };
+
+  const handleExportCsv = () => {
+    if (!parsedData) return;
+    const csv = exportSpreadsheetCsv(parsedData);
+    triggerDownload(`${(currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.csv`, csv, "text/csv;charset=utf-8;");
+  };
 
   return (
     <div className="prompt-modal-backdrop" onClick={() => setShowShareModal(false)}>
@@ -591,6 +623,59 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Enterprise Interop Export Section */}
+          <div
+            style={{
+              background: "var(--jantt-surface, #F8FAFC)",
+              border: "1px solid var(--jantt-border, #E2E8F0)",
+              borderRadius: "8px",
+              padding: "12px 14px",
+              marginTop: "12px"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+              <div style={{ fontWeight: 600, fontSize: "12px", color: "var(--jantt-text, #1E293B)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Building2 size={13} />
+                <span>Enterprise Interoperability & Lossless Export</span>
+              </div>
+            </div>
+            <div style={{ color: "var(--jantt-text-muted)", fontSize: "11px", marginBottom: "10px", lineHeight: "1.4" }}>
+              Losslessly export schedule constraints, milestones, and 4-type dependencies into standard enterprise suites:
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                className="btn-nav"
+                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                onClick={handleExportMsProject}
+                disabled={!parsedData}
+                title="Export as Microsoft Project 2013-2021 XML format"
+              >
+                <Download size={12} />
+                <span>MS Project (.xml)</span>
+              </button>
+              <button
+                className="btn-nav"
+                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                onClick={handleExportPrimavera}
+                disabled={!parsedData}
+                title="Export as Oracle Primavera P6 .xer batch file"
+              >
+                <Download size={12} />
+                <span>Primavera P6 (.xer)</span>
+              </button>
+              <button
+                className="btn-nav"
+                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                onClick={handleExportCsv}
+                disabled={!parsedData}
+                title="Export as RFC 4180 CSV spreadsheet"
+              >
+                <Download size={12} />
+                <span>Spreadsheet (.csv)</span>
+              </button>
+            </div>
           </div>
         </div>
 

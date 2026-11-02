@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as Y from "yjs";
-import { bindJanttToYDoc } from "../src/index";
+import { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } from "y-protocols/awareness";
+import { bindJanttToYDoc, bindJanttAwareness, createJanttUndoManager } from "../src/index";
 import type { JanttData } from "@jantt/core";
 
 describe("Jantt Yjs Multiplayer CRDT Binding", () => {
@@ -82,6 +83,75 @@ describe("Jantt Yjs Multiplayer CRDT Binding", () => {
     expect(plan.tasks).toHaveLength(1);
     expect(plan.tasks[0].id).toBe("t2");
 
+    binding.destroy();
+  });
+
+  it("manages multi-user presence and awareness correctly", () => {
+    const doc1 = new Y.Doc();
+    const doc2 = new Y.Doc();
+    const awareness1 = new Awareness(doc1);
+    const awareness2 = new Awareness(doc2);
+
+    let client2PeersCount = 0;
+
+    const binding1 = bindJanttAwareness(awareness1, {
+      user: { id: "u1", name: "Alice", color: "#3b82f6" }
+    });
+
+    const binding2 = bindJanttAwareness(awareness2, {
+      user: { id: "u2", name: "Bob", color: "#10b981" },
+      onPeersChange: (peers) => {
+        client2PeersCount = peers.size;
+      }
+    });
+
+    // Alice selects task t1 and moves cursor
+    binding1.selectTask("t1");
+    binding1.setCursor({ date: "2026-11-03", taskIndex: 0 });
+    binding1.setDragging(true, "t1");
+
+    expect(binding1.getLocalPresence()?.selectedTaskId).toBe("t1");
+    expect(binding1.getLocalPresence()?.isDragging).toBe(true);
+    expect(binding1.getLocalPresence()?.draggingTaskId).toBe("t1");
+    expect(binding1.getLocalPresence()?.cursor?.date).toBe("2026-11-03");
+
+    // Sync awareness from peer 1 to peer 2
+    const update = encodeAwarenessUpdate(awareness1, [awareness1.clientID]);
+    applyAwarenessUpdate(awareness2, update, null);
+
+    expect(client2PeersCount).toBeGreaterThanOrEqual(1);
+    const peersOn2 = binding2.getPeers();
+    const aliceState = peersOn2.get(awareness1.clientID);
+    expect(aliceState?.user.name).toBe("Alice");
+    expect(aliceState?.selectedTaskId).toBe("t1");
+    expect(aliceState?.isDragging).toBe(true);
+
+    binding1.destroy();
+    binding2.destroy();
+  });
+
+  it("supports infinite undo/redo time-travel history", () => {
+    const doc = new Y.Doc();
+    const binding = bindJanttToYDoc(doc, { initialPlan });
+    const undoManager = createJanttUndoManager(doc);
+
+    expect(undoManager.canUndo()).toBe(false);
+
+    // Perform an edit
+    binding.updateTask("t1", { label: "Updated Spec" });
+    expect(binding.getPlan().tasks[0].label).toBe("Updated Spec");
+    expect(undoManager.canUndo()).toBe(true);
+
+    // Undo edit
+    undoManager.undo();
+    expect(binding.getPlan().tasks[0].label).toBe("Spec");
+    expect(undoManager.canRedo()).toBe(true);
+
+    // Redo edit
+    undoManager.redo();
+    expect(binding.getPlan().tasks[0].label).toBe("Updated Spec");
+
+    undoManager.destroy();
     binding.destroy();
   });
 });

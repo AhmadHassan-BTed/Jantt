@@ -1,0 +1,30 @@
+{
+  "name": "@jantt/interop",
+  "version": "1.0.0",
+  "description": "Enterprise interoperability engine for Jantt: Microsoft Project XML, Primavera P6 XER, and CSV/Spreadsheet ingest & export",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jantt/core": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
