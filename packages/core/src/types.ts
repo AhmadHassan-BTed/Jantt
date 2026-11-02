@@ -3,6 +3,12 @@
  * Specification for the JSON Gantt Chart engine
  */
 
+import type { DependencyType, DependencyItem, DependencyObject } from "./dependencies";
+import type { WorkingCalendar, CalendarPreset } from "./calendar";
+
+export type { DependencyType, DependencyRelation, DependencyItem, DependencyObject } from "./dependencies";
+export type { DayOfWeek, CalendarPreset, RegionCode, HolidayDefinition, WorkingCalendar } from "./calendar";
+
 export interface JanttMeta {
   title?: string;
   person?: string;
@@ -16,6 +22,8 @@ export interface JanttMeta {
   showCriticalPath?: boolean;
   showBaselines?: boolean;
   autoCascade?: boolean;
+  calendar?: WorkingCalendar | CalendarPreset;
+  useWorkingDays?: boolean;
   generatedAt?: string;
   revision?: number;
   contentHash?: string;
@@ -125,11 +133,10 @@ export interface Person {
   avatar?: string; // URL or initials fallback
   color?: string; // Hex color for avatar badge
   email?: string;
+  calendar?: WorkingCalendar | CalendarPreset | string;
+  calendarId?: string;
   [key: string]: unknown;
 }
-
-import type { DependencyType, DependencyItem, DependencyObject } from "./dependencies";
-export type { DependencyType, DependencyRelation, DependencyItem, DependencyObject } from "./dependencies";
 
 export interface TaskBaseline {
   start: string; // YYYY-MM-DD
@@ -155,6 +162,8 @@ export interface Task {
   priority?: "low" | "medium" | "high" | "urgent" | string;
   assignee?: string; // Person.id or Person.name
   teamId?: string; // Direct or inherited Team.id
+  calendar?: WorkingCalendar | CalendarPreset | string;
+  calendarId?: string;
   wbs?: string;
   phase?: string;
   estimatedCost?: number;
@@ -174,6 +183,7 @@ export interface JanttData {
   $schema?: string;
   meta?: JanttMeta;
   categories?: CategoriesMap;
+  calendars?: Record<string, WorkingCalendar>;
   documents?: DocumentItem[];
   notes?: NoteItem[];
   teams?: Team[];

@@ -31,6 +31,7 @@ export * from "./firebase-sync";
 export * from "./pipeline";
 export * from "./virtualizer";
 export * from "./dependencies";
+export * from "./calendar";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";
