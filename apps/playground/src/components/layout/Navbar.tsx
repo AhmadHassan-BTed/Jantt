@@ -234,11 +234,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* 3. Right Zone: Theme Selector & AI Prompt */}
       <div className="nav-controls nav-group-right">
-        {/* Hidden File Input for JSON Import */}
+        {/* Hidden File Input for Universal Project Import (.json, .xml, .xer, .csv) */}
         <input
           type="file"
           ref={fileInputRef}
-          accept=".json,application/json"
+          accept=".json,.xml,.xer,.csv,application/json,text/xml,text/csv"
           onChange={(e) => {
             handleImportJsonFile(e);
             if (e.target) e.target.value = "";

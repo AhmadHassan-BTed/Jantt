@@ -988,11 +988,11 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               </span>
             )}
 
-            {/* Quick Import JSON Button */}
+            {/* Universal Project Import Button (.json, .xml, .xer, .csv) */}
             <input
               type="file"
               ref={modalFileInputRef}
-              accept=".json"
+              accept=".json,.xml,.xer,.csv,application/json,text/xml,text/csv"
               style={{ display: "none" }}
               onChange={onImportJsonFile}
             />
@@ -1001,10 +1001,10 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               className="btn-nav"
               style={{ padding: "6px 11px", fontSize: "12px", gap: "6px" }}
               onClick={() => modalFileInputRef.current?.click()}
-              title="Import local JSON file"
+              title="Import file (.json, MS Project .xml, Primavera .xer, .csv)"
             >
               <Upload size={13} />
-              <span>Import JSON</span>
+              <span>Import Project</span>
             </button>
 
             {/* Quick New Plan Button */}

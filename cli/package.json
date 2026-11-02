@@ -7,7 +7,8 @@
     "jantt": "./bin/jantt.js"
   },
   "files": [
-    "bin"
+    "bin",
+    "README.md"
   ],
   "scripts": {
     "test": "vitest run"
@@ -16,8 +17,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@jantt/core": "*",
-    "@jantt/interop": "*"
+    "@jantt/core": "^1.1.0",
+    "@jantt/interop": "^1.1.0"
   },
   "devDependencies": {
     "vitest": "^1.6.0"

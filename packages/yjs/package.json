@@ -17,7 +17,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -27,7 +28,7 @@
     "yjs": "^13.6.0"
   },
   "dependencies": {
-    "@jantt/core": "*",
+    "@jantt/core": "^1.1.0",
     "y-protocols": "^1.0.7"
   },
   "devDependencies": {

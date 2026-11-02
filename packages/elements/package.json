@@ -17,14 +17,15 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@jantt/core": "*"
+    "@jantt/core": "^1.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

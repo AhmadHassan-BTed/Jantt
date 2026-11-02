@@ -17,7 +17,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -27,7 +28,7 @@
     "vue": ">=3.0.0"
   },
   "dependencies": {
-    "@jantt/core": "*"
+    "@jantt/core": "^1.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

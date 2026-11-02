@@ -7,12 +7,22 @@
   },
   "type": "module",
   "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "bin": {
     "jantt-mcp": "./bin/jantt-mcp.js"
   },
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -20,9 +30,10 @@
     "start": "node ./bin/jantt-mcp.js"
   },
   "dependencies": {
-    "@jantt/core": "*"
+    "@jantt/core": "^1.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
   }
 }

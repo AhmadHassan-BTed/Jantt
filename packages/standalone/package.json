@@ -11,13 +11,14 @@
   "jsdelivr": "./dist/jantt.standalone.iife.js",
   "style": "./dist/style.css",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "vite build"
   },
   "dependencies": {
-    "@jantt/core": "*"
+    "@jantt/core": "^1.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

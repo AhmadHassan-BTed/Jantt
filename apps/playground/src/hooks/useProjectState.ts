@@ -7,6 +7,11 @@ import {
   type ValidationResult,
   validate
 } from "@jantt/core";
+import {
+  importMsProjectXml,
+  importPrimaveraXer,
+  importSpreadsheetCsv
+} from "@jantt/interop";
 import type { SavedProject } from "../types";
 import { DEFAULT_TEMPLATE, STORAGE_KEYS } from "../constants";
 import { saveCustomProjects, createBlankPlan, loadSavedProjects } from "../utils";
@@ -494,10 +499,23 @@ export function useProjectState({
       reader.onload = (event) => {
         try {
           const content = event.target?.result as string;
-          const parsed = JSON.parse(content);
+          let parsed: JanttData;
+          const lowerName = file.name.toLowerCase();
+
+          if (lowerName.endsWith(".xml")) {
+            parsed = importMsProjectXml(content);
+          } else if (lowerName.endsWith(".xer")) {
+            parsed = importPrimaveraXer(content);
+          } else if (lowerName.endsWith(".csv")) {
+            parsed = importSpreadsheetCsv(content);
+          } else {
+            parsed = JSON.parse(content);
+          }
+
           const val = validate(parsed);
           if (val.valid) {
-            const projName = parsed.meta?.title || file.name.replace(/\.json$/i, "");
+            const cleanBase = file.name.replace(/\.(json|xml|xer|csv)$/i, "");
+            const projName = parsed.meta?.title || cleanBase;
             const newProj: SavedProject = {
               id: `proj-${Date.now().toString(36)}`,
               name: projName,
@@ -528,7 +546,7 @@ export function useProjectState({
             );
           }
         } catch (err: any) {
-          alert("Invalid JSON file: " + err.message);
+          alert("Failed to parse imported file: " + err.message);
         }
       };
       reader.readAsText(file);

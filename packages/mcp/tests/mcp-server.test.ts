@@ -47,6 +47,23 @@ describe("@jantt/mcp Model Context Protocol Server", () => {
     });
   });
 
+  describe("jantt_reschedule_task", () => {
+    it("shifts task dates and propagates downstream dependencies", () => {
+      const res = executeTool("jantt_reschedule_task", {
+        planJson: JSON.stringify(basicJson),
+        taskId: basicJson.tasks[0].id,
+        newStart: "2026-10-01",
+        newEnd: "2026-10-10"
+      }) as any;
+
+      expect(res.success).toBe(true);
+      expect(res.rescheduledTaskId).toBe(basicJson.tasks[0].id);
+      const rescheduled = res.plan.tasks.find((t: any) => t.id === basicJson.tasks[0].id);
+      expect(rescheduled.start).toBe("2026-10-01");
+      expect(rescheduled.end).toBe("2026-10-10");
+    });
+  });
+
   describe("jantt_audit_schedule", () => {
     it("runs DCMA-14 schedule health checks", () => {
       const res = executeTool("jantt_audit_schedule", { planJson: JSON.stringify(basicJson) }) as any;

@@ -256,7 +256,7 @@ export function startMcpServer(): void {
         sendResponse(id, {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "jantt-mcp", version: "1.0.0" }
+          serverInfo: { name: "jantt-mcp", version: "1.1.0" }
         });
       } else if (method === "tools/list") {
         sendResponse(id, { tools: MCP_TOOLS });
