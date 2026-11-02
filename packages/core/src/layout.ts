@@ -23,7 +23,8 @@ import {
   minISODate,
   parseISODate
 } from "./date-math";
-import { calculateCriticalPath, getTaskDependencies } from "./resolver";
+import { calculateCriticalPath } from "./resolver";
+import { getTaskDependencyRelations } from "./dependencies";
 import { clampDayWidth, getTaskDisplayName } from "./utils";
 import {
   DEFAULT_CATEGORY,
@@ -294,19 +295,22 @@ export function layout(
   const dependencies: DependencyLine[] = [];
 
   tasks.forEach((task) => {
-    const depIds = getTaskDependencies(task);
-    if (depIds.length === 0) return;
+    const relations = getTaskDependencyRelations(task);
+    if (relations.length === 0) return;
     const curr = layoutById.get(task.id);
     if (!curr) return;
 
-    depIds.forEach((depId) => {
-      const prereq = layoutById.get(depId);
+    relations.forEach((rel) => {
+      const prereq = layoutById.get(rel.id);
       if (!prereq) return;
 
-      const fromX = prereq.anchorOutX ?? (prereq.x + prereq.width);
-      const fromY = prereq.anchorOutY ?? (prereq.y + prereq.height / 2);
-      const toX = curr.anchorInX ?? curr.x;
-      const toY = curr.anchorInY ?? (curr.y + curr.height / 2);
+      const fromStart = rel.type === "SS" || rel.type === "SF";
+      const toEnd = rel.type === "FF" || rel.type === "SF";
+
+      const fromX = fromStart ? (prereq.anchorInX ?? prereq.x) : (prereq.anchorOutX ?? (prereq.x + prereq.width));
+      const fromY = fromStart ? (prereq.anchorInY ?? (prereq.y + prereq.height / 2)) : (prereq.anchorOutY ?? (prereq.y + prereq.height / 2));
+      const toX = toEnd ? (curr.anchorOutX ?? (curr.x + curr.width)) : (curr.anchorInX ?? curr.x);
+      const toY = toEnd ? (curr.anchorOutY ?? (curr.y + curr.height / 2)) : (curr.anchorInY ?? (curr.y + curr.height / 2));
 
       const path = computeDependencyPath(fromX, fromY, toX, toY, viewport.rowHeight, linkRouting);
       const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
@@ -319,7 +323,9 @@ export function layout(
         toX,
         toY,
         path,
-        isCritical
+        isCritical,
+        type: rel.type,
+        lagDays: rel.lagDays
       });
     });
   });

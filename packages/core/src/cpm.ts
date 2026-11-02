@@ -13,25 +13,14 @@
 import { Task, CriticalPathResult, CriticalPathOptions, TaskScheduleMetrics } from "./types";
 import { addDays, diffDays } from "./date-math";
 import { getEffectiveGap } from "./utils";
+import { getTaskDependencyRelations } from "./dependencies";
 
 /**
  * Normalizes task dependencies into a clean string array.
- * Supports string, string[], or comma-separated formats.
+ * Supports string, string[], comma-separated, or structured object formats.
  */
-export function getTaskDependencies(task: Task | { dependsOn?: string | string[] | null }): string[] {
-  if (!task || !task.dependsOn) return [];
-  if (Array.isArray(task.dependsOn)) {
-    return task.dependsOn
-      .map((id) => (typeof id === "string" ? id.trim() : ""))
-      .filter((id) => id.length > 0);
-  }
-  if (typeof task.dependsOn === "string") {
-    return task.dependsOn
-      .split(/[;,]/)
-      .map((s) => s.trim())
-      .filter((id) => id.length > 0);
-  }
-  return [];
+export function getTaskDependencies(task: Task | { dependsOn?: unknown }): string[] {
+  return getTaskDependencyRelations(task).map((rel) => rel.id);
 }
 
 /**

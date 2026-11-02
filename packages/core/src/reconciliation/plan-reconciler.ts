@@ -776,10 +776,18 @@ export function maintainPlanData(
     .map((t) => {
       let dependsOn = t.dependsOn;
       if (dependsOn) {
+        const getDepId = (d: unknown): string => {
+          if (typeof d === "string") return d.split(/[:\+\-]/)[0].trim();
+          if (typeof d === "object" && d !== null && "id" in d) return String((d as { id: unknown }).id).trim();
+          return "";
+        };
         const deps = Array.isArray(dependsOn)
           ? dependsOn
           : String(dependsOn).split(",").map((s) => s.trim()).filter(Boolean);
-        const pruned = deps.filter((d) => activeTaskIdSet.has(d) && !deletedIds.has(d) && d !== t.id);
+        const pruned = deps.filter((d) => {
+          const depId = getDepId(d);
+          return activeTaskIdSet.has(depId) && !deletedIds.has(depId) && depId !== t.id;
+        });
         dependsOn = pruned.length === 0 ? null : (pruned.length === 1 ? pruned[0] : pruned);
       }
 

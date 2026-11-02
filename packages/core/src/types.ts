@@ -128,6 +128,9 @@ export interface Person {
   [key: string]: unknown;
 }
 
+import type { DependencyType, DependencyItem, DependencyObject } from "./dependencies";
+export type { DependencyType, DependencyRelation, DependencyItem, DependencyObject } from "./dependencies";
+
 export interface TaskBaseline {
   start: string; // YYYY-MM-DD
   end: string; // YYYY-MM-DD
@@ -140,7 +143,7 @@ export interface Task {
   category: string;
   start: string; // YYYY-MM-DD
   end: string; // YYYY-MM-DD
-  dependsOn?: string | string[] | null;
+  dependsOn?: string | DependencyItem[] | DependencyObject | null;
   gapDays?: number | null;
   minGapDays?: number | null; // Backwards-compatible alias for gapDays
   locked?: boolean;
@@ -388,6 +391,8 @@ export interface DependencyLine {
   toY: number;
   path: string;
   isCritical: boolean;
+  type?: DependencyType;
+  lagDays?: number;
 }
 
 export interface HeaderYear {

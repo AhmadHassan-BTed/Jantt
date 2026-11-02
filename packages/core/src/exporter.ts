@@ -43,7 +43,7 @@ export function exportToCsv(data: JanttData): string {
       t.estimatedCost !== undefined && t.estimatedCost !== null ? String(t.estimatedCost) : "",
       escapeCsv(progressPct),
       isMilestone ? "TRUE" : "FALSE",
-      escapeCsv(Array.isArray(t.dependsOn) ? t.dependsOn.join("; ") : (t.dependsOn || "")),
+      escapeCsv(Array.isArray(t.dependsOn) ? t.dependsOn.map((d) => (typeof d === "string" ? d : d.id)).join("; ") : (typeof t.dependsOn === "string" ? t.dependsOn : (t.dependsOn?.id || ""))),
       escapeCsv(t.status || ""),
       escapeCsv(t.notes || "")
     ].join(",");

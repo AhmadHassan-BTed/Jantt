@@ -30,6 +30,7 @@ export * from "./share-coder";
 export * from "./firebase-sync";
 export * from "./pipeline";
 export * from "./virtualizer";
+export * from "./dependencies";
 
 import { renderJantt } from "./renderer";
 import { validate } from "./validator";

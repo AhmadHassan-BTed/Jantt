@@ -139,7 +139,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Depends On</span>
           <span class="jantt-hover-stat-value" style="font-family: var(--jantt-font-mono); color: var(--jantt-accent); font-weight: 600;">
-            ${escapeHtml(Array.isArray(task.dependsOn) ? task.dependsOn.join(", ") : (task.dependsOn || ""))}
+            ${escapeHtml(Array.isArray(task.dependsOn) ? task.dependsOn.map((d) => (typeof d === "string" ? d : d.id)).join(", ") : (typeof task.dependsOn === "string" ? task.dependsOn : (task.dependsOn?.id || "")))}
           </span>
         </div>
         `

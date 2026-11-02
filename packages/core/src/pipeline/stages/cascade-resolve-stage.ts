@@ -1,14 +1,18 @@
 import { Task } from "../../types";
 import { addDays, diffDays } from "../../date-math";
 import { getEffectiveGap } from "../../utils";
-import { getTaskDependencies } from "../../cpm";
+import { getTaskDependencyRelations } from "../../dependencies";
 import { IPipelineStage, PipelineContext } from "../contracts";
 
 /**
  * CascadeResolveStage:
  * Implements coordinated multi-predecessor pacing:
- * 1. Multi-Dependency Resolution: If a task depends on multiple tasks (e.g. [A, B]),
- *    it cannot start before max(A.end, B.end) + gapDays. Preserves task duration when shifted.
+ * 1. Enterprise 4-Type Dependency Relationships:
+ *    - FS (Finish-to-Start)
+ *    - SS (Start-to-Start)
+ *    - FF (Finish-to-Finish)
+ *    - SF (Start-to-Finish)
+ *    with positive/negative lead & lag support.
  * 2. Honors locked tasks (`locked: true`).
  */
 export class CascadeResolveStage implements IPipelineStage<Task[], Task[]> {
@@ -48,16 +52,36 @@ export class CascadeResolveStage implements IPipelineStage<Task[], Task[]> {
         if (t.locked) continue;
 
         // Filter self-dependencies and dangling links
-        const explicitDeps = getTaskDependencies(t).filter((depId) => depId !== t.id && Boolean(byId[depId]));
+        const relations = getTaskDependencyRelations(t).filter((rel) => rel.id !== t.id && Boolean(byId[rel.id]));
         let calculatedMinStart: string | null = null;
 
-        if (explicitDeps.length > 0) {
-          const gap = getEffectiveGap(t, defaultGapDays);
+        if (relations.length > 0) {
+          const defaultGap = getEffectiveGap(t, defaultGapDays);
+          const duration = Math.max(diffDays(t.start, t.end), 0);
 
-          for (const depId of explicitDeps) {
-            const prereq = byId[depId];
+          for (const rel of relations) {
+            const prereq = byId[rel.id];
             if (!prereq) continue;
-            const minForThisDep = addDays(prereq.end, gap);
+
+            const lag = rel.lagDays !== 0 ? rel.lagDays : defaultGap;
+            let minForThisDep: string;
+
+            switch (rel.type) {
+              case "SS":
+                minForThisDep = addDays(prereq.start, lag);
+                break;
+              case "FF":
+                minForThisDep = addDays(addDays(prereq.end, lag), -duration);
+                break;
+              case "SF":
+                minForThisDep = addDays(addDays(prereq.start, lag), -duration);
+                break;
+              case "FS":
+              default:
+                minForThisDep = addDays(prereq.end, lag);
+                break;
+            }
+
             if (!calculatedMinStart || diffDays(calculatedMinStart, minForThisDep) > 0) {
               calculatedMinStart = minForThisDep;
             }
