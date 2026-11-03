@@ -19,6 +19,7 @@
 
 <p align="center">
   <a href="https://trendshift.io/repositories/247657?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-247657" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/247657/daily?language=TypeScript" alt="AhmadHassan-BTed%2FJantt | Trendshift" width="250" height="55"/></a>
+  <a href="https://trendshift.io/repositories/247657?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-247657" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/247657/weekly?language=TypeScript" alt="AhmadHassan-BTed%2FJantt | Trendshift" width="250" height="55"/></a>
   <a href="https://trendshift.io/repositories/247657?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-247657" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/247657/daily" alt="AhmadHassan-BTed%2FJantt | Trendshift" width="250" height="55"/></a>
 </p>
 
