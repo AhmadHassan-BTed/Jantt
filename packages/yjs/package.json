@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "typescript": "^5.4.5",
-    "vitest": "^1.6.0",
+    "vitest": "^5.1.0",
     "yjs": "^13.6.14"
   }
 }
