@@ -11,6 +11,7 @@ import {
   updateUserGitHubVerification
 } from "../firebase/authService";
 import {
+  ENABLE_GITHUB_VERIFICATION_GATE,
   verifyAllGitHubRequirements,
   followCreator,
   followOrg,
@@ -153,7 +154,7 @@ export function useAuth(): UseAuthReturn {
       );
 
       setVerificationStatus(status);
-      if (!status.isVerified) {
+      if (ENABLE_GITHUB_VERIFICATION_GATE && !status.isVerified) {
         setShowVerificationModal(true);
       }
     } finally {

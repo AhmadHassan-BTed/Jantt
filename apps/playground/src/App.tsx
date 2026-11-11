@@ -62,7 +62,7 @@ import {
   getRoom,
   saveRoomDataAtomic
 } from "./firebase/roomService";
-import type { UserRoomPointer, FullRoomPayload } from "./firebase";
+import { ENABLE_GITHUB_VERIFICATION_GATE, type UserRoomPointer, type FullRoomPayload } from "./firebase";
 import { commandBus } from "./services";
 import { useMobileDetection } from "./hooks/useMobileDetection";
 import { useUndoRedo } from "./hooks/useUndoRedo";
@@ -344,7 +344,11 @@ export function App() {
     selectedThemeId: viewport.selectedThemeId,
     setSelectedThemeId: viewport.setSelectedThemeId,
     userProfile: auth.userProfile,
-    onRequireVerification: () => auth.setShowVerificationModal(true)
+    onRequireVerification: () => {
+      if (ENABLE_GITHUB_VERIFICATION_GATE) {
+        auth.setShowVerificationModal(true);
+      }
+    }
   });
 
   const isPendingLoginEditor = roomSync.isPendingLoginEditor;
@@ -409,7 +413,7 @@ export function App() {
   const handleSelectCloudRoom = useCallback(
     async (roomId: string) => {
       try {
-        if (auth.userProfile && !auth.userProfile.githubVerified) {
+        if (ENABLE_GITHUB_VERIFICATION_GATE && auth.userProfile && !auth.userProfile.githubVerified) {
           auth.setShowVerificationModal(true);
           toast.showToast("Support the creator by following & starring repos to collaborate in cloud rooms.", true);
           return;
@@ -477,7 +481,7 @@ export function App() {
         auth.loginWithGitHub();
         return null;
       }
-      if (!auth.userProfile?.githubVerified) {
+      if (ENABLE_GITHUB_VERIFICATION_GATE && !auth.userProfile?.githubVerified) {
         auth.setShowVerificationModal(true);
         toast.showToast("Support the creator by following & starring repos to collaborate in cloud rooms.", true);
         return null;
@@ -498,7 +502,7 @@ export function App() {
         auth.loginWithGitHub();
         return false;
       }
-      if (!auth.userProfile.githubVerified) {
+      if (ENABLE_GITHUB_VERIFICATION_GATE && !auth.userProfile.githubVerified) {
         auth.setShowVerificationModal(true);
         toast.showToast("Support the creator by following & starring repos to collaborate in cloud rooms.", true);
         return false;
@@ -788,10 +792,10 @@ export function App() {
             onOpenJsonEditor={() => sidebar.setIsSidebarCollapsed(false)}
             currentUser={auth.currentUser}
             userProfile={auth.userProfile}
-            isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
+            isGitHubVerified={Boolean(!ENABLE_GITHUB_VERIFICATION_GATE || auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
             onLogin={auth.loginWithGitHub}
             onLogout={auth.logout}
-            onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
+            onOpenVerificationModal={ENABLE_GITHUB_VERIFICATION_GATE ? () => auth.setShowVerificationModal(true) : undefined}
             ownedRooms={ownedRooms}
             sharedRooms={sharedRooms}
             isViewer={isViewer && !isPendingLoginEditor}
@@ -823,8 +827,8 @@ export function App() {
             currentUser={auth.currentUser}
             userProfile={auth.userProfile}
             onOpenUserHub={() => setShowPlanManagerModal(true)}
-            isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
-            onOpenVerificationModal={() => auth.setShowVerificationModal(true)}
+            isGitHubVerified={Boolean(!ENABLE_GITHUB_VERIFICATION_GATE || auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
+            onOpenVerificationModal={ENABLE_GITHUB_VERIFICATION_GATE ? () => auth.setShowVerificationModal(true) : undefined}
             onLogin={auth.loginWithGitHub}
             onLogout={auth.logout}
             isViewer={isViewer && !isPendingLoginEditor}
