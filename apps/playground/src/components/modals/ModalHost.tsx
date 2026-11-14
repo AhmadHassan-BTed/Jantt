@@ -14,6 +14,7 @@ import {
   ShareRoomModal,
   GitHubVerificationModal
 } from "../cloud";
+import { ENABLE_GITHUB_VERIFICATION_GATE } from "../../firebase";
 import type { JanttData } from "@jantt/core";
 
 export interface ModalHostProps {
@@ -99,9 +100,9 @@ export const ModalHost: React.FC<ModalHostProps> = ({
         ownedRooms={ownedRooms}
         sharedRooms={sharedRooms}
         isLoggedIn={Boolean(auth.currentUser)}
-        isGitHubVerified={Boolean(auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
+        isGitHubVerified={Boolean(!ENABLE_GITHUB_VERIFICATION_GATE || auth.userProfile?.githubVerified || auth.verificationStatus?.isVerified)}
         onLogin={auth.loginWithGitHub}
-        onRequireVerification={() => auth.setShowVerificationModal(true)}
+        onRequireVerification={ENABLE_GITHUB_VERIFICATION_GATE ? () => auth.setShowVerificationModal(true) : undefined}
       />
 
       <PlanManagerModal
@@ -262,7 +263,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
       />
 
       <GitHubVerificationModal
-        show={auth.showVerificationModal}
+        show={ENABLE_GITHUB_VERIFICATION_GATE && auth.showVerificationModal}
         setShow={auth.setShowVerificationModal}
         verificationStatus={auth.verificationStatus}
         isVerifying={auth.isVerifying}

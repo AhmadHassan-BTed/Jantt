@@ -18,7 +18,7 @@ import {
 import { auth, githubProvider, rtdb } from "./firebaseConfig";
 import type { UserProfile } from "./types";
 import { normalizeUsername } from "./dtos/UserDto";
-import { isCreatorAccount } from "./githubVerificationService";
+import { isCreatorAccount, ENABLE_GITHUB_VERIFICATION_GATE } from "./githubVerificationService";
 
 const GH_TOKEN_KEY = "jantt_gh_access_token";
 
@@ -90,8 +90,8 @@ export async function signInWithGitHub(): Promise<{
       username: normalized,
       displayUsername: rawGhUsername,
       githubUsername: rawGhUsername,
-      githubVerified: isCreator,
-      isFollowingCreator: isCreator,
+      githubVerified: isCreator || !ENABLE_GITHUB_VERIFICATION_GATE,
+      isFollowingCreator: isCreator || !ENABLE_GITHUB_VERIFICATION_GATE,
       createdAt: now,
       updatedAt: now
     };

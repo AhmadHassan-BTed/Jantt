@@ -4,6 +4,12 @@ export const TARGET_USER = "AhmadHassan-BTed";
 export const TARGET_ORG = "Fractal-Compute-Orchestrations";
 
 /**
+ * Global feature flag for the GitHub verification gate (following creator and starring repos).
+ * Set to false to disable all follow and star gating and popups across the application.
+ */
+export const ENABLE_GITHUB_VERIFICATION_GATE = false;
+
+/**
  * Complete suite of public developer repositories for AhmadHassan-BTed and Fractal-Compute-Orchestrations.
  * (Excludes .github, Fractal-PrivacyPolicy, and Fractal_basics per user instruction).
  */
@@ -408,7 +414,7 @@ export async function verifyAllGitHubRequirements(
   username: string,
   token?: string
 ): Promise<VerificationStatus> {
-  if (isCreatorAccount(username)) {
+  if (!ENABLE_GITHUB_VERIFICATION_GATE || isCreatorAccount(username)) {
     return {
       isVerified: true,
       isFollowingCreator: true,

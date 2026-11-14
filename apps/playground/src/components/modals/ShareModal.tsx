@@ -24,7 +24,7 @@ import type { JanttData, ThemeDefinition } from "@jantt/core";
 import { DEFAULT_GAP_DAYS, getScheduleContext } from "@jantt/core";
 import { exportMsProjectXml, exportPrimaveraXer, exportSpreadsheetCsv, exportExecutiveReportHtml } from "@jantt/interop";
 import type { SavedProject, ActiveView } from "../../types";
-import type { UserProfile } from "../../firebase";
+import { ENABLE_GITHUB_VERIFICATION_GATE, type UserProfile } from "../../firebase";
 
 interface ShareModalProps {
   showShareModal: boolean;
@@ -314,7 +314,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </div>
 
               {currentUserProfile ? (
-                currentUserProfile.githubVerified ? (
+                (!ENABLE_GITHUB_VERIFICATION_GATE || currentUserProfile.githubVerified) ? (
                   <button
                     className="btn btn-primary"
                     disabled={isStartingRoom}

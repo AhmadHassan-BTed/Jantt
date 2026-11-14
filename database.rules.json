@@ -20,23 +20,38 @@
           ".write": "auth != null && auth.uid === $uid"
         },
         "shared": {
-          ".write": "auth != null"
+          "$roomId": {
+            ".write": "auth != null && (auth.uid === $uid || root.child('rooms').child($roomId).child('meta/ownerUid').val() === auth.uid || root.child('rooms').child($roomId).child('members/' + auth.uid + '/role').val() === 'owner')"
+          }
         }
       }
     },
     "rooms": {
       "$roomId": {
         ".read": true,
-        ".write": "auth != null && (!data.exists() && newData.child('meta/ownerUid').val() === auth.uid || data.child('meta/ownerUid').val() === auth.uid || data.child('members/' + auth.uid + '/role').val() === 'owner' || data.child('members/' + auth.uid + '/role').val() === 'editor')",
+        ".write": "auth != null && ((!data.exists() && newData.child('meta/ownerUid').val() === auth.uid) || data.child('meta/ownerUid').val() === auth.uid || (data.child('members/' + auth.uid + '/role').val() === 'editor' && (!newData.exists() ? false : (newData.child('members').val() === data.child('members').val() && (!data.child('teams').exists() || newData.child('teams').val() === data.child('teams').val()) && newData.child('meta/ownerUid').val() === data.child('meta/ownerUid').val()))))",
         "meta": {
           ".read": true,
-          ".write": "auth != null && (!data.exists() || data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid + '/role').val() === 'editor')"
+          ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid || (data.parent().child('members/' + auth.uid + '/role').val() === 'editor' && newData.child('ownerUid').val() === data.child('ownerUid').val() && (!data.child('secretKey').exists() || newData.child('secretKey').val() === data.child('secretKey').val())))",
+          "ownerUid": {
+            ".validate": "newData.isString() && (!data.exists() ? newData.val() === auth.uid : newData.val() === data.val())"
+          },
+          "secretKey": {
+            ".validate": "!data.exists() || newData.val() === data.val() || data.parent().child('ownerUid').val() === auth.uid"
+          }
         },
         "members": {
           "$memberUid": {
             ".read": true,
-            ".write": "auth != null && (!data.parent().parent().exists() || data.parent().parent().child('meta/ownerUid').val() === auth.uid || auth.uid === $memberUid)"
+            ".write": "auth != null && (data.parent().parent().child('meta/ownerUid').val() === auth.uid || (!data.parent().parent().exists() && auth.uid === $memberUid && newData.child('role').val() === 'owner') || (auth.uid === $memberUid && (!newData.exists() || (data.exists() && newData.child('role').val() === data.child('role').val()) || (!data.exists() && newData.child('role').val() === 'viewer'))))",
+            "role": {
+              ".validate": "newData.val() === 'owner' || newData.val() === 'editor' || newData.val() === 'viewer'"
+            }
           }
+        },
+        "teams": {
+          ".read": true,
+          ".write": "auth != null && data.parent().child('meta/ownerUid').val() === auth.uid"
         },
         "presence": {
           ".read": true,
@@ -46,7 +61,7 @@
         },
         "data": {
           ".read": true,
-          ".write": "auth != null && (!data.parent().exists() || data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid + '/role').val() === 'editor')"
+          ".write": "auth != null && (data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid + '/role').val() === 'owner' || data.parent().child('members/' + auth.uid + '/role').val() === 'editor')"
         }
       }
     }

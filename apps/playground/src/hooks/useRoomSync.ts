@@ -29,6 +29,7 @@ import {
   trackRoomPresence,
   listenToRoomPresence
 } from "../firebase/presenceService";
+import { ENABLE_GITHUB_VERIFICATION_GATE } from "../firebase/githubVerificationService";
 
 export type RoomSyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict" | "error";
 
@@ -215,7 +216,7 @@ export function useRoomSync({
       setIsProcessing(true);
       try {
         if (userProfile) {
-          if (!userProfile.githubVerified) {
+          if (ENABLE_GITHUB_VERIFICATION_GATE && !userProfile.githubVerified) {
             onRequireVerification?.();
             showToast("Please verify GitHub following & starred repos to create cloud rooms.", true);
             return;
@@ -503,7 +504,7 @@ export function useRoomSync({
 
       try {
         if (userProfile) {
-          if (!userProfile.githubVerified) {
+          if (ENABLE_GITHUB_VERIFICATION_GATE && !userProfile.githubVerified) {
             onRequireVerification?.();
             setSyncStatus("error");
             setSyncMessage("Verification required");
@@ -912,7 +913,7 @@ export function useRoomSync({
       setIsProcessing(true);
       try {
         if (userProfile) {
-          if (!userProfile.githubVerified) {
+          if (ENABLE_GITHUB_VERIFICATION_GATE && !userProfile.githubVerified) {
             onRequireVerification?.();
             showToast("Please verify GitHub stars & follow creator to create cloud rooms.", true);
             return null;
