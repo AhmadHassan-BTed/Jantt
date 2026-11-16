@@ -6,14 +6,14 @@ This document outlines the strategic vision, upcoming milestones, and architectu
 
 ## Strategic Vision
 
-To be the world's most capable, lightweight, dependency-free Gantt chart engine - designed specifically for AI agents, developers, and product teams who want their schedule state to live in clean, declarative, portable JSON.
+To be the world's most capable, lightweight Gantt chart engine - designed specifically for AI agents, developers, and product teams who want their schedule state to live in clean, declarative, portable JSON.
 
 ---
 
 ## Release Milestones
 
 ### Phase 1: Core Foundation (Released in v1.0.0) [Completed]
-- [x] Zero-dependency `@jantt/core` engine.
+- [x] `@jantt/core` engine written from first principles in TypeScript.
 - [x] UTC date math & ISO-8601 validation.
 - [x] Self-correcting JSON Schema validator with granular diagnostics.
 - [x] Topological schedule cascade resolver.
@@ -52,31 +52,32 @@ To be the world's most capable, lightweight, dependency-free Gantt chart engine 
   - Native RFC-4180 CSV spreadsheet export (`exportToCsv`, `downloadCsv`).
   - Native SVG vector download.
   - JSON plan export.
-- [x] **Remote Cloud URL Live Sync**:
-  - Two-way polling and push sync with remote JSON URLs.
-  - ETag caching, conflict detection, and network status indicators.
+- [x] **Remote JSON Loading**:
+  - Load plans from GitHub, Dropbox, or any HTTPS URL (`parseCloudUrl`, `fetchRemotePlan`).
 
-### Phase 4: Enterprise Hierarchy & Scalability (Upcoming v1.3.0) [In Progress]
+### Phase 4: Analytics, Collaboration & Ecosystem (Released in v1.3.0 - v1.4.0) [Completed]
+- [x] **Operations Research Suite**: Critical Path Method with total/free float, Earned Value Management (ANSI/EIA-748), DCMA-14 schedule health audit, PERT estimates, Monte Carlo risk simulation, resource leveling, working calendars with statutory holidays, and baseline snapshots.
+- [x] **Cloud Rooms on Firebase Realtime Database**: GitHub sign-in, owner/editor/viewer roles enforced by `database.rules.json`, live multi-user sync with three-way reconciliation, shared notes.
+- [x] **Real-Time CRDT Collaboration**: `@jantt/yjs` binding with presence awareness and scoped undo/redo.
+- [x] **Framework Wrappers**: `@jantt/vue`, `@jantt/svelte`, and the `<jantt-timeline>` Web Component (`@jantt/elements`).
+- [x] **Enterprise Interop**: `@jantt/interop` for MS Project XML, Primavera P6 XER, CSV, and executive reports.
+- [x] **Scale**: `PlanVirtualizer` windowed rendering, off-main-thread scheduling worker, and the `@jantt/render-canvas` 2D canvas renderer for very large plans.
+- [x] **AI Agent Protocol**: `@jantt/mcp` Model Context Protocol server with deterministic planning tools.
+
+### Phase 5: Hierarchy, Customization & Release Engineering (Upcoming) [Planned]
 - [ ] **Hierarchical Grouping & Subtasks**:
   - Parent summary tasks spanning across subtasks with accordion collapse/expand.
   - Category and Assignee lane grouping.
-- [ ] **Custom Column Configuration**:
-  - Declarative column definitions in JSON `viewport.columns`.
-- [ ] **Virtual Scrolling**:
-  - Ultra-high performance rendering for 5,000+ tasks.
-
-### Phase 4: Cloud Sync & Collaborative Ecosystem (v2.0.0 Vision) [Planned]
-- [ ] **Firebase Cloud Storage & Real-Time Rooms**:
-  - Save, load, and manage Jantt plans directly in Firebase Cloud Firestore.
-  - Live collaboration rooms with real-time multi-user syncing.
-  - Clean GitHub sign-in for Firebase authentication and repository star verification.
-- [ ] **Real-Time Multi-Agent Collaboration (CRDTs)**:
-  - Yjs / Automerge bindings for real-time collaborative schedule editing.
-- [ ] **AI Natural Language Command Extension**:
-  - Built-in prompt tools for Claude, GPT, and Gemini to stream timeline updates directly into Jantt state.
-- [ ] **Vue, Svelte, and Angular Official Wrappers**:
-  - Lightweight wrappers for other major web frameworks.
-
+- [ ] **Custom Column Configuration in JSON**:
+  - Declarative column definitions stored in the plan, building on the existing `viewport.columns` option.
+- [ ] **Angular Wrapper**:
+  - Lightweight wrapper alongside the React, Vue, Svelte, and Web Component adapters.
+- [ ] **AI Natural Language Commands**:
+  - Stream natural-language timeline edits into Jantt state, building on the MCP tools.
+- [ ] **Faster Playground Loads**:
+  - Lazy-load secondary views and the cloud (Firebase) features so local-only users download less.
+- [ ] **Release Automation**:
+  - Single-source package versioning and changelog generation for all `@jantt/*` packages.
 
 ---
 

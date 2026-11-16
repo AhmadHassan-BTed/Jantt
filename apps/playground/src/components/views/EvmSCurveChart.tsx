@@ -1,217 +1,258 @@
 import React, { useMemo, useState } from "react";
-import type { JanttData, EVMResult, CriticalPathResult } from "@jantt/core";
-import { diffDays, addDays } from "@jantt/core";
+import type { JanttData, EVMAnalysis, Task } from "@jantt/core";
+import { diffDays, addDays, getTodayISODate, isValidISODate } from "@jantt/core";
 import { TrendingUp } from "lucide-react";
+import { formatMoney } from "./EvmKpiCards";
 
 interface EvmSCurveChartProps {
   parsedData: JanttData;
-  evm: EVMResult;
-  cpm: CriticalPathResult;
+  /** Core EVM result; EV, AC, BAC and the status date are taken from it so the chart matches the KPI cards. */
+  evm: EVMAnalysis;
+  currency?: string;
 }
 
-interface SPoint {
+export interface SCurvePoint {
   date: string;
   dayIndex: number;
+  /** Cumulative planned value (budget scheduled to be earned by `date`). */
   pv: number;
-  ev: number;
-  ac: number;
 }
 
-export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm }) => {
-  const [hoveredPoint, setHoveredPoint] = useState<SPoint | null>(null);
-  const [hoverX, setHoverX] = useState<number | null>(null);
+export interface SCurveSeries {
+  points: SCurvePoint[];
+  minDate: string;
+  maxDate: string;
+  totalDays: number;
+  /** Sum of task budgets (the value the planned curve ends on). */
+  bac: number;
+}
 
-  const tasks = useMemo(() => {
-    return (parsedData.tasks || []).filter((t) => !t._deleted && t.start && t.end);
-  }, [parsedData.tasks]);
+const TARGET_POINTS = 16;
 
-  const { points, minDate, maxDate, maxVal } = useMemo(() => {
-    if (tasks.length === 0) {
-      return { points: [], minDate: "2026-01-01", maxDate: "2026-12-31", maxVal: 10000 };
-    }
+const costOf = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0);
 
-    let minD = tasks[0].start;
-    let maxD = tasks[0].end;
-    for (const t of tasks) {
-      if (t.start < minD) minD = t.start;
-      if (t.end > maxD) maxD = t.end;
-    }
+/** Planned window used for PV: the baseline when valid, else current dates (as core calculateEVM). */
+function plannedWindow(task: Task): { start: string; end: string } | null {
+  const b = task.baseline;
+  if (b && isValidISODate(b.start) && isValidISODate(b.end)) return { start: b.start, end: b.end };
+  if (isValidISODate(task.start) && isValidISODate(task.end)) return { start: task.start, end: task.end };
+  return null;
+}
 
-    const totalDays = Math.max(1, diffDays(minD, maxD));
-    const stepDays = Math.max(1, Math.floor(totalDays / 16));
-    const totalBac = Math.max(1, evm.bac);
+function plannedFraction(window: { start: string; end: string }, date: string): number {
+  if (date >= window.end) return 1;
+  if (date <= window.start) return 0;
+  return Math.min(1, Math.max(0, diffDays(window.start, date) / Math.max(1, diffDays(window.start, window.end))));
+}
 
-    const pts: SPoint[] = [];
-    const today = new Date().toISOString().split("T")[0];
+/**
+ * Time-phased planned value (PV) from project start to finish, sampled at ~16 points and always
+ * ending exactly on the last planned finish. Malformed costs count as 0 instead of NaN.
+ */
+export function computePlannedValueSeries(tasks: Task[]): SCurveSeries | null {
+  const planned: Array<{ window: { start: string; end: string }; budget: number }> = [];
+  for (const t of tasks || []) {
+    if (!t || t._deleted) continue;
+    const window = plannedWindow(t);
+    if (window) planned.push({ window, budget: costOf(t.estimatedCost) });
+  }
+  if (planned.length === 0) return null;
 
-    for (let d = 0; d <= totalDays; d += stepDays) {
-      const curDate = addDays(minD, d);
+  let minDate = planned[0].window.start;
+  let maxDate = planned[0].window.end;
+  for (const { window } of planned) {
+    if (window.start < minDate) minDate = window.start;
+    if (window.end > maxDate) maxDate = window.end;
+  }
 
-      // Calculate planned value up to curDate
-      let curPv = 0;
-      let curEv = 0;
-      let curAc = 0;
+  const totalDays = Math.max(1, diffDays(minDate, maxDate));
+  const stepDays = Math.max(1, Math.floor(totalDays / TARGET_POINTS));
+  const dayIndices: number[] = [];
+  for (let d = 0; d < totalDays; d += stepDays) dayIndices.push(d);
+  dayIndices.push(totalDays);
 
-      for (const t of tasks) {
-        const taskBudget = typeof t.estimatedCost === "number" ? t.estimatedCost : 1000;
-        const taskActualCost = typeof t.actualCost === "number" ? t.actualCost : taskBudget * 0.9;
-        if (curDate >= t.end) {
-          curPv += taskBudget;
-        } else if (curDate > t.start) {
-          const tTotal = Math.max(1, diffDays(t.start, t.end));
-          const tPassed = diffDays(t.start, curDate);
-          curPv += taskBudget * Math.min(1, tPassed / tTotal);
-        }
+  const points = dayIndices.map((dayIndex) => {
+    const date = addDays(minDate, dayIndex);
+    let pv = 0;
+    for (const { window, budget } of planned) pv += budget * plannedFraction(window, date);
+    return { date, dayIndex, pv };
+  });
 
-        // EV and AC only up to today (or end of project if past)
-        if (curDate <= today || d === totalDays) {
-          const prog = t.progress || 0;
-          if (curDate >= t.end) {
-            curEv += taskBudget * prog;
-            curAc += taskActualCost * prog;
-          } else if (curDate > t.start) {
-            const tTotal = Math.max(1, diffDays(t.start, t.end));
-            const tPassed = diffDays(t.start, curDate);
-            const ratio = Math.min(1, tPassed / tTotal);
-            curEv += taskBudget * prog * ratio;
-            curAc += taskActualCost * prog * ratio;
-          }
-        }
-      }
+  return {
+    points,
+    minDate,
+    maxDate,
+    totalDays,
+    bac: planned.reduce((sum, p) => sum + p.budget, 0)
+  };
+}
 
-      pts.push({
-        date: curDate,
-        dayIndex: d,
-        pv: Math.min(totalBac, curPv),
-        ev: Math.min(totalBac, curEv),
-        ac: curAc
-      });
-    }
+const COLORS = { pv: "#38BDF8", ev: "#10B981", ac: "#F59E0B" };
 
-    const highestVal = Math.max(totalBac, evm.eac || totalBac, ...pts.map((p) => Math.max(p.pv, p.ev, p.ac)));
+export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm, currency }) => {
+  const [hoveredPoint, setHoveredPoint] = useState<SCurvePoint | null>(null);
+  const series = useMemo(() => computePlannedValueSeries(parsedData.tasks || []), [parsedData.tasks]);
 
-    return {
-      points: pts,
-      minDate: minD,
-      maxDate: maxD,
-      maxVal: highestVal * 1.1
-    };
-  }, [tasks, evm.bac, evm.eac]);
+  const statusDate = isValidISODate(evm.statusDate) ? evm.statusDate : getTodayISODate();
+  const money = (val: number) => formatMoney(val, currency);
 
-  if (points.length < 2) return null;
+  const cardStyle: React.CSSProperties = {
+    borderRadius: "8px",
+    background: "var(--jantt-surface, #0B132B)",
+    border: "1px solid var(--jantt-border, #1E293B)",
+    padding: "16px 20px",
+    marginBottom: "20px"
+  };
+
+  const heading = (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <TrendingUp size={16} style={{ color: COLORS.pv }} />
+      <h4 style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "var(--jantt-text, #F8FAFC)" }}>
+        Earned Value S-Curve
+      </h4>
+    </div>
+  );
+
+  if (!series) return null;
+
+  const bac = Number.isFinite(evm.bac) ? evm.bac : series.bac;
+  if (!(bac > 0) || !(series.bac > 0)) {
+    return (
+      <div style={cardStyle}>
+        {heading}
+        <p style={{ margin: "10px 0 0", fontSize: "12px", color: "var(--jantt-text-muted)" }}>
+          Add an <code>estimatedCost</code> to tasks to see planned value, earned value and actual cost over time.
+        </p>
+      </div>
+    );
+  }
+
+  const ev = Number.isFinite(evm.ev) ? evm.ev : 0;
+  const ac = Number.isFinite(evm.ac) ? evm.ac : 0;
+  // No reported actualCost means AC is unknown: show no point rather than a fabricated $0.
+  const hasActualCost = evm.costCoverage > 0 || ac > 0;
+  const pvNow = Number.isFinite(evm.pv) ? evm.pv : 0;
 
   const width = 640;
   const height = 220;
-  const padLeft = 60;
+  const padLeft = 64;
   const padRight = 30;
   const padTop = 20;
   const padBottom = 30;
-
   const chartW = width - padLeft - padRight;
   const chartH = height - padTop - padBottom;
 
-  const getX = (idx: number) => padLeft + (idx / (points.length - 1)) * chartW;
+  const maxVal = Math.max(1, bac, series.bac, ev, ac, Number.isFinite(evm.eac) ? evm.eac : 0) * 1.1;
+  const xForDay = (dayIndex: number) => padLeft + (dayIndex / series.totalDays) * chartW;
   const getY = (val: number) => padTop + chartH - (val / maxVal) * chartH;
 
-  // Build SVG Paths
-  const pvPath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(p.pv)}`).join(" ");
-  const evPath = points.filter((p) => p.ev > 0 || p.dayIndex === 0).map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(p.ev)}`).join(" ");
-  const acPath = points.filter((p) => p.ac > 0 || p.dayIndex === 0).map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(p.ac)}`).join(" ");
-
-  const formatCurrency = (val: number) => `$${Math.round(val).toLocaleString()}`;
+  const pvPath = series.points.map((p, i) => `${i === 0 ? "M" : "L"} ${xForDay(p.dayIndex)} ${getY(p.pv)}`).join(" ");
+  const statusDayIndex = Math.min(series.totalDays, Math.max(0, diffDays(series.minDate, statusDate)));
+  const statusX = xForDay(statusDayIndex);
+  const statusInRange = statusDate >= series.minDate && statusDate <= series.maxDate;
 
   return (
-    <div
-      style={{
-        borderRadius: "8px",
-        background: "var(--jantt-surface, #0B132B)",
-        border: "1px solid var(--jantt-border, #1E293B)",
-        padding: "16px 20px",
-        marginBottom: "20px"
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <TrendingUp size={16} style={{ color: "#38BDF8" }} />
-          <h4 style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "var(--jantt-text, #F8FAFC)" }}>
-            Earned Value S-Curve (ANSI/EIA-748 Standard)
-          </h4>
-        </div>
+    <div style={cardStyle}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px", flexWrap: "wrap", gap: "8px" }}>
+        {heading}
         {/* Legends */}
-        <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "11px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "11px", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-            <span style={{ width: "12px", height: "3px", background: "#38BDF8", borderRadius: "2px" }} />
+            <span style={{ width: "12px", height: "3px", background: COLORS.pv, borderRadius: "2px" }} />
             <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Planned Value (PV)</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-            <span style={{ width: "12px", height: "3px", background: "#10B981", borderRadius: "2px" }} />
-            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Earned Value (EV)</span>
+            <span style={{ width: "8px", height: "8px", background: COLORS.ev, borderRadius: "50%" }} />
+            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Earned Value (EV) {money(ev)}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-            <span style={{ width: "12px", height: "3px", background: "#F59E0B", borderRadius: "2px" }} />
-            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Actual Cost (AC)</span>
+            <span style={{ width: "8px", height: "8px", background: COLORS.ac, borderRadius: "50%" }} />
+            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Actual Cost (AC) {hasActualCost ? money(ac) : "n/a"}</span>
           </div>
         </div>
       </div>
+      <p style={{ margin: "0 0 10px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+        The line is the planned budget over time. EV and AC are measured on {statusDate}; past progress is not
+        recorded, so they are shown at that date only.
+      </p>
 
       <div style={{ position: "relative", width: "100%", overflowX: "auto" }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label={`Planned value rises to ${money(series.bac)} by ${series.maxDate}. On ${statusDate}: planned ${money(pvNow)}, earned ${money(ev)}, actual cost ${hasActualCost ? money(ac) : "not reported"}.`}
           style={{ width: "100%", height: "auto", minWidth: "480px", display: "block" }}
           onMouseMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const relX = ((e.clientX - rect.left) / rect.width) * width;
-            if (relX >= padLeft && relX <= padLeft + chartW) {
-              const ratio = (relX - padLeft) / chartW;
-              const idx = Math.round(ratio * (points.length - 1));
-              setHoveredPoint(points[idx] || null);
-              setHoverX(getX(idx));
+            if (relX < padLeft || relX > padLeft + chartW) return;
+            const day = ((relX - padLeft) / chartW) * series.totalDays;
+            let nearest = series.points[0];
+            for (const p of series.points) {
+              if (Math.abs(p.dayIndex - day) < Math.abs(nearest.dayIndex - day)) nearest = p;
             }
+            setHoveredPoint(nearest);
           }}
-          onMouseLeave={() => {
-            setHoveredPoint(null);
-            setHoverX(null);
-          }}
+          onMouseLeave={() => setHoveredPoint(null)}
         >
           {/* Horizontal Grid lines & Y-axis labels */}
           {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
             const y = padTop + chartH * (1 - pct);
-            const val = maxVal * pct;
             return (
               <g key={i}>
-                <line x1={padLeft} y1={y} x2={padLeft + chartW} y2={y} stroke="rgba(255, 255, 255, 0.06)" strokeDasharray="3 3" />
+                <line
+                  x1={padLeft}
+                  y1={y}
+                  x2={padLeft + chartW}
+                  y2={y}
+                  style={{ stroke: "var(--jantt-border, rgba(255, 255, 255, 0.06))" }}
+                  strokeDasharray="3 3"
+                />
                 <text x={padLeft - 8} y={y + 3} textAnchor="end" fontSize="9.5" fill="#64748B" fontFamily="monospace">
-                  {formatCurrency(val)}
+                  {money(maxVal * pct)}
                 </text>
               </g>
             );
           })}
 
+          {/* Budget at completion reference */}
+          <line x1={padLeft} y1={getY(series.bac)} x2={padLeft + chartW} y2={getY(series.bac)} stroke={COLORS.pv} strokeOpacity={0.35} strokeDasharray="6 4" />
+
           {/* PV Curve (Planned Value) */}
-          <path d={pvPath} fill="none" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={pvPath} fill="none" stroke={COLORS.pv} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
-          {/* EV Curve (Earned Value) */}
-          <path d={evPath} fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-          {/* AC Curve (Actual Cost) */}
-          <path d={acPath} fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          {/* Status date marker with measured EV / AC */}
+          {statusInRange && (
+            <line x1={statusX} y1={padTop} x2={statusX} y2={padTop + chartH} stroke="#94A3B8" strokeOpacity={0.6} strokeDasharray="2 3" />
+          )}
+          {hasActualCost && (
+            <circle cx={statusX} cy={getY(ac)} r={5} fill={COLORS.ac} stroke="#0B132B" strokeWidth={1.5}>
+              <title>{`Actual cost on ${statusDate}: ${money(ac)}`}</title>
+            </circle>
+          )}
+          <circle cx={statusX} cy={getY(ev)} r={5} fill={COLORS.ev} stroke="#0B132B" strokeWidth={1.5}>
+            <title>{`Earned value on ${statusDate}: ${money(ev)}`}</title>
+          </circle>
 
           {/* Crosshair indicator on hover */}
-          {hoverX !== null && hoveredPoint && (
+          {hoveredPoint && (
             <g>
-              <line x1={hoverX} y1={padTop} x2={hoverX} y2={padTop + chartH} stroke="rgba(255, 255, 255, 0.3)" strokeDasharray="2 2" />
-              <circle cx={hoverX} cy={getY(hoveredPoint.pv)} r={4} fill="#38BDF8" stroke="#0B132B" strokeWidth={1.5} />
-              <circle cx={hoverX} cy={getY(hoveredPoint.ev)} r={4} fill="#10B981" stroke="#0B132B" strokeWidth={1.5} />
-              <circle cx={hoverX} cy={getY(hoveredPoint.ac)} r={4} fill="#F59E0B" stroke="#0B132B" strokeWidth={1.5} />
+              <line x1={xForDay(hoveredPoint.dayIndex)} y1={padTop} x2={xForDay(hoveredPoint.dayIndex)} y2={padTop + chartH} stroke="rgba(148, 163, 184, 0.5)" strokeDasharray="2 2" />
+              <circle cx={xForDay(hoveredPoint.dayIndex)} cy={getY(hoveredPoint.pv)} r={4} fill={COLORS.pv} stroke="#0B132B" strokeWidth={1.5} />
             </g>
           )}
 
           {/* Date Axis Labels */}
           <text x={padLeft} y={height - 8} fontSize="10" fill="#64748B" fontFamily="monospace">
-            {minDate}
+            {series.minDate}
           </text>
+          {statusInRange && (
+            <text x={statusX} y={height - 8} textAnchor="middle" fontSize="10" fill="#94A3B8" fontFamily="monospace">
+              Today
+            </text>
+          )}
           <text x={padLeft + chartW} y={height - 8} textAnchor="end" fontSize="10" fill="#64748B" fontFamily="monospace">
-            {maxDate}
+            {series.maxDate}
           </text>
         </svg>
 
@@ -235,13 +276,10 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm 
             }}
           >
             <span style={{ color: "#94A3B8" }}>Date: <strong>{hoveredPoint.date}</strong></span>
-            <span style={{ color: "#38BDF8" }}>PV: <strong>{formatCurrency(hoveredPoint.pv)}</strong></span>
-            <span style={{ color: "#10B981" }}>EV: <strong>{formatCurrency(hoveredPoint.ev)}</strong></span>
-            <span style={{ color: "#F59E0B" }}>AC: <strong>{formatCurrency(hoveredPoint.ac)}</strong></span>
+            <span style={{ color: COLORS.pv }}>Planned: <strong>{money(hoveredPoint.pv)}</strong></span>
           </div>
         )}
       </div>
     </div>
   );
 };
-

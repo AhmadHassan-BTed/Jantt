@@ -1,5 +1,8 @@
 import { Task, Category, TaskScheduleMetrics } from "../types";
-import { formatHumanDate, diffDays } from "../date-math";
+import { formatHumanDate, taskDurationDays } from "../date-math";
+import { escapeHtml, getTaskDisplayName, sanitizeCssColor } from "../utils";
+import { DEFAULT_CATEGORY } from "../constants";
+import { applyThemeVariables } from "../themes/manager";
 
 export interface TooltipOptions {
   theme?: Record<string, string>;
@@ -12,8 +15,23 @@ export interface TooltipController {
   updateTheme: (theme?: Record<string, string>, themeClassName?: string) => void;
 }
 
+function formatDependsOn(dependsOn: Task["dependsOn"]): string {
+  const items = Array.isArray(dependsOn) ? dependsOn : [dependsOn];
+  return items
+    .map((d) => (typeof d === "string" ? d : d && typeof d === "object" ? String(d.id ?? "") : ""))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function formatCost(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return `$${value.toLocaleString()}`;
+}
+
 /**
  * Creates and manages floating glassmorphic hover cards for tasks and milestones.
+ * Every interpolated value is HTML-escaped; colors never enter the markup at all: they are
+ * allow-listed and handed to the static template through CSS custom properties (CSSOM).
  */
 export function createTooltipController(initialOptions: TooltipOptions = {}): TooltipController {
   let activeCard: HTMLElement | null = null;
@@ -28,36 +46,54 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
   const hide = () => {
     if (activeCard && activeCard.parentNode) {
       activeCard.parentNode.removeChild(activeCard);
-      activeCard = null;
     }
+    activeCard = null;
   };
 
   const show = (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics) => {
     hide();
-    const duration = Math.max(diffDays(task.start, task.end), task.milestone ? 0 : 1);
-    const progressPercent = Math.round((task.progress || 0) * 100);
+    // Same rules as the layout/grid: only flagged tasks are milestones, durations are inclusive.
+    const isMilestone = task.milestone === true;
+    const duration = taskDurationDays(task.start, task.end, isMilestone);
+    const rawProgress = typeof task.progress === "number" && Number.isFinite(task.progress) ? task.progress : 0;
+    const progressPercent = Math.max(0, Math.min(100, Math.round(rawProgress * 100)));
 
     const card = document.createElement("div");
     card.className = `jantt-hover-card ${currentThemeClassName || ""}`.trim();
+    applyThemeVariables(card, currentTheme);
 
-    // Apply custom theme CSS variables if supplied
-    if (currentTheme) {
-      Object.entries(currentTheme).forEach(([k, v]) => {
-        const varName = k.startsWith("--") ? k : `--jantt-${k}`;
-        card.style.setProperty(varName, v);
-      });
+    const title = escapeHtml(getTaskDisplayName(task));
+    const catLabel = escapeHtml(category.label || task.category || "General");
+    const catColor = sanitizeCssColor(category.color, DEFAULT_CATEGORY.color);
+    const cost = formatCost(task.estimatedCost);
+    const dependsOnText = task.dependsOn ? formatDependsOn(task.dependsOn) : "";
+
+    let bufferColor = "#10B981";
+    let bufferText = "";
+    if (metrics) {
+      if (metrics.isCritical) {
+        bufferColor = "var(--jantt-critical, #EF4444)";
+        bufferText = "Critical Path (0d buffer)";
+      } else if (metrics.totalFloat < 0) {
+        bufferColor = "#EF4444";
+        bufferText = `Behind by ${Math.abs(metrics.totalFloat)}d (negative float)`;
+      } else {
+        if (metrics.isNearCritical) bufferColor = "#F59E0B";
+        bufferText = `${metrics.totalFloat}d buffer (Free: ${metrics.freeFloat}d)`;
+      }
     }
 
-    const title = escapeHtml(task.label || task.name || task.id);
-    const catLabel = escapeHtml(category.label || task.category || "General");
-    const catColor = category.color || "#38BDF8";
-    const isMilestone = Boolean(task.milestone || task.start === task.end);
+    const priorityColor =
+      task.priority === "urgent" ? "#E11D48" : task.priority === "high" ? "#D97706" : "var(--jantt-accent)";
+    card.style.setProperty("--jantt-hover-cat", catColor);
+    card.style.setProperty("--jantt-hover-buffer", bufferColor);
+    card.style.setProperty("--jantt-hover-priority", priorityColor);
 
     card.innerHTML = `
       <div class="jantt-hover-card-header">
         <div class="jantt-hover-card-tags">
-          <span class="jantt-hover-category-pill" style="background: ${catColor}20; color: ${catColor}; border: 1px solid ${catColor}50;">
-            <span class="jantt-hover-dot" style="background: ${catColor};"></span>
+          <span class="jantt-hover-category-pill" style="background: color-mix(in srgb, var(--jantt-hover-cat) 14%, transparent); color: var(--jantt-hover-cat); border: 1px solid color-mix(in srgb, var(--jantt-hover-cat) 35%, transparent);">
+            <span class="jantt-hover-dot" style="background: var(--jantt-hover-cat);"></span>
             ${catLabel}
           </span>
           ${isMilestone ? '<span class="jantt-hover-type-pill is-milestone">Milestone</span>' : ""}
@@ -73,8 +109,8 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Timeline</span>
           <span class="jantt-hover-stat-value">
-            ${formatHumanDate(task.start)} → ${formatHumanDate(task.end)}
-            <span class="jantt-hover-duration-tag">(${duration}d)</span>
+            ${escapeHtml(formatHumanDate(task.start))} → ${escapeHtml(formatHumanDate(task.end))}
+            <span class="jantt-hover-duration-tag">(${escapeHtml(duration)}d)</span>
           </span>
         </div>
 
@@ -84,10 +120,10 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
         <div class="jantt-hover-progress-section">
           <div class="jantt-hover-progress-labels">
             <span class="jantt-hover-stat-label">Progress</span>
-            <span class="jantt-hover-progress-val">${progressPercent}%</span>
+            <span class="jantt-hover-progress-val">${escapeHtml(progressPercent)}%</span>
           </div>
           <div class="jantt-hover-progress-track">
-            <div class="jantt-hover-progress-bar" style="width: ${progressPercent}%; background: ${catColor};"></div>
+            <div class="jantt-hover-progress-bar" style="background: var(--jantt-hover-cat);"></div>
           </div>
         </div>
         `
@@ -112,7 +148,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
             ? `
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Priority Level</span>
-          <span class="jantt-hover-stat-value" style="font-weight: 700; text-transform: uppercase; font-size: 11px; color: ${task.priority === "urgent" ? "#E11D48" : task.priority === "high" ? "#D97706" : "var(--jantt-accent)"};">
+          <span class="jantt-hover-stat-value" style="font-weight: 700; text-transform: uppercase; font-size: 11px; color: var(--jantt-hover-priority);">
             ${escapeHtml(task.priority)}
           </span>
         </div>
@@ -121,12 +157,12 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
         }
 
         ${
-          task.estimatedCost !== undefined && task.estimatedCost !== null
+          cost !== null
             ? `
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Planned Budget</span>
           <span class="jantt-hover-stat-value" style="font-family: var(--jantt-font-mono); font-weight: 600;">
-            $${task.estimatedCost.toLocaleString()}
+            ${escapeHtml(cost)}
           </span>
         </div>
         `
@@ -134,12 +170,12 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
         }
 
         ${
-          task.dependsOn
+          dependsOnText
             ? `
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Depends On</span>
           <span class="jantt-hover-stat-value" style="font-family: var(--jantt-font-mono); color: var(--jantt-accent); font-weight: 600;">
-            ${escapeHtml(Array.isArray(task.dependsOn) ? task.dependsOn.map((d) => (typeof d === "string" ? d : d.id)).join(", ") : (typeof task.dependsOn === "string" ? task.dependsOn : (task.dependsOn?.id || "")))}
+            ${escapeHtml(dependsOnText)}
           </span>
         </div>
         `
@@ -151,8 +187,8 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
             ? `
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Schedule Buffer</span>
-          <span class="jantt-hover-stat-value" style="font-weight: 600; color: ${metrics.isCritical ? "var(--jantt-critical, #EF4444)" : metrics.totalFloat < 0 ? "#EF4444" : metrics.isNearCritical ? "#F59E0B" : "#10B981"};">
-            ${metrics.isCritical ? "Critical Path (0d buffer)" : metrics.totalFloat < 0 ? `Overdue by ${Math.abs(metrics.totalFloat)}d` : `${metrics.totalFloat}d buffer (Free: ${metrics.freeFloat}d)`}
+          <span class="jantt-hover-stat-value" style="font-weight: 600; color: var(--jantt-hover-buffer);">
+            ${escapeHtml(bufferText)}
           </span>
         </div>
         `
@@ -175,6 +211,10 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
       </div>
     `;
 
+    const progressBar = card.querySelector<HTMLElement>(".jantt-hover-progress-bar");
+    if (progressBar) progressBar.style.width = `${progressPercent}%`;
+
+    // Mounted on body (top-level stacking); theme tokens are applied inline above.
     document.body.appendChild(card);
     activeCard = card;
 
@@ -196,13 +236,4 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
   };
 
   return { show, hide, updateTheme };
-}
-
-function escapeHtml(str: string): string {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }

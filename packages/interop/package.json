@@ -2,6 +2,16 @@
   "name": "@jantt/interop",
   "version": "1.1.0",
   "description": "Enterprise interoperability engine for Jantt: Microsoft Project XML, Primavera P6 XER, and CSV/Spreadsheet ingest & export",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AhmadHassan-BTed/Jantt.git",
+    "directory": "packages/interop"
+  },
+  "homepage": "https://github.com/AhmadHassan-BTed/Jantt#readme",
+  "bugs": {
+    "url": "https://github.com/AhmadHassan-BTed/Jantt/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -28,7 +38,9 @@
     "@jantt/core": "^1.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.5",
-    "vitest": "^1.6.0"
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

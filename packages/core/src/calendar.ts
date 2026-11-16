@@ -4,9 +4,13 @@
  * Implements enterprise working-time arithmetic, custom shifts,
  * statutory holiday registries, and hierarchical calendar resolution.
  * Strictly zero external dependencies.
+ *
+ * Performance: a calendar is compiled once into an index (working weekdays, holiday and exception
+ * day sets) that is cached per calendar object, statutory holidays are memoized per region and
+ * year, and the day loops run on integer day numbers instead of re-parsing date strings.
  */
 
-import { parseISODate, formatISODate, isValidISODate, addDays, diffDays } from "./date-math";
+import { formatISODate, addDays, toEpochDay, fromEpochDay } from "./date-math";
 import type { Task, Person } from "./types";
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sun, 1 = Mon, ..., 6 = Sat
@@ -53,6 +57,33 @@ export const CALENDAR_PRESETS: Record<CalendarPreset, WorkingCalendar> = {
     holidays: []
   }
 };
+
+const DEFAULT_WORKING_DAYS: DayOfWeek[] = [1, 2, 3, 4, 5];
+const SUPPORTED_REGIONS: ReadonlySet<string> = new Set(["US", "UK", "GB", "EU", "CA", "AU"]);
+const DAY_NAME_INDEX: Record<string, DayOfWeek> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+/** True when statutory holidays are generated for this region code (case-insensitive). */
+export function isSupportedRegion(region: unknown): boolean {
+  return typeof region === "string" && SUPPORTED_REGIONS.has(region.trim().toUpperCase());
+}
+
+/**
+ * Normalizes a raw `workingDays` value: keeps integers 0-6 and day names ("Mon", "monday"),
+ * de-duplicated and sorted. Returns null when the input yields no valid day.
+ */
+export function normalizeWorkingDays(raw: unknown): DayOfWeek[] | null {
+  if (!Array.isArray(raw)) return null;
+  const days = new Set<DayOfWeek>();
+  for (const value of raw) {
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 6) {
+      days.add(value as DayOfWeek);
+    } else if (typeof value === "string") {
+      const day = DAY_NAME_INDEX[value.trim().slice(0, 3).toLowerCase()];
+      if (day !== undefined) days.add(day);
+    }
+  }
+  return days.size > 0 ? Array.from(days).sort((a, b) => a - b) : null;
+}
 
 /**
  * Calculates Western Easter Sunday for a given year using Anonymous Gregorian algorithm (Meeus/Jones/Butcher).
@@ -118,87 +149,226 @@ export function getNthWeekdayOfMonth(
   return `${year}-${String(month).padStart(2, "0")}-01`;
 }
 
-/**
- * Standard observation adjustment:
- * If a fixed holiday falls on Saturday, observe on Friday.
- * If on Sunday, observe on Monday.
- */
-function observedDate(isoDate: string): string {
-  const d = parseISODate(isoDate);
-  const day = d.getUTCDay();
-  if (day === 6) {
-    // Saturday -> Friday
-    return addDays(isoDate, -1);
-  }
-  if (day === 0) {
-    // Sunday -> Monday
-    return addDays(isoDate, 1);
-  }
-  return isoDate;
+/** Day of week (0 = Sunday) of an epoch day; 1970-01-01 was a Thursday. */
+function weekdayOf(epochDay: number): number {
+  return (((epochDay + 4) % 7) + 7) % 7;
+}
+
+function isWeekendDay(epochDay: number): boolean {
+  const dow = weekdayOf(epochDay);
+  return dow === 0 || dow === 6;
 }
 
 /**
- * Generates statutory holidays for supported region codes and years.
+ * How a fixed-date holiday that falls on a weekend is observed:
+ * - "nearest": Saturday -> preceding Friday, Sunday -> following Monday (US federal).
+ * - "next": the next weekday that is not already a holiday (UK, CA, AU substitute days).
+ * - "none": not moved.
  */
-export function getStatutoryHolidays(region: string, year: number): HolidayDefinition[] {
-  const normRegion = region.trim().toUpperCase();
-  const holidays: HolidayDefinition[] = [];
+type SubstituteRule = "nearest" | "next" | "none";
 
-  if (normRegion === "US") {
-    holidays.push({ date: observedDate(`${year}-01-01`), name: "New Year's Day" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 1, 1, 3), name: "Martin Luther King Jr. Day" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 2, 1, 3), name: "Presidents' Day" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 5, 1, -1), name: "Memorial Day" });
-    holidays.push({ date: observedDate(`${year}-06-19`), name: "Juneteenth" });
-    holidays.push({ date: observedDate(`${year}-07-04`), name: "Independence Day" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 9, 1, 1), name: "Labor Day" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 10, 1, 2), name: "Columbus Day" });
-    holidays.push({ date: observedDate(`${year}-11-11`), name: "Veterans Day" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 11, 4, 4), name: "Thanksgiving Day" });
-    holidays.push({ date: observedDate(`${year}-12-25`), name: "Christmas Day" });
-  } else if (normRegion === "UK" || normRegion === "GB") {
-    holidays.push({ date: observedDate(`${year}-01-01`), name: "New Year's Day" });
-    const easter = getEasterSunday(year);
-    holidays.push({ date: addDays(easter, -2), name: "Good Friday" });
-    holidays.push({ date: addDays(easter, 1), name: "Easter Monday" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 5, 1, 1), name: "Early May Bank Holiday" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 5, 1, -1), name: "Spring Bank Holiday" });
-    holidays.push({ date: getNthWeekdayOfMonth(year, 8, 1, -1), name: "Summer Bank Holiday" });
-    // Christmas and Boxing Day
-    const dec25 = parseISODate(`${year}-12-25`);
-    const dec25Day = dec25.getUTCDay();
-    if (dec25Day === 5) {
-      // Friday
-      holidays.push({ date: `${year}-12-25`, name: "Christmas Day" });
-      holidays.push({ date: `${year}-12-28`, name: "Boxing Day (Observed)" });
-    } else if (dec25Day === 6) {
-      // Saturday
-      holidays.push({ date: `${year}-12-28`, name: "Christmas Day (Observed)" });
-      holidays.push({ date: `${year}-12-29`, name: "Boxing Day (Observed)" });
-    } else if (dec25Day === 0) {
-      // Sunday
-      holidays.push({ date: `${year}-12-27`, name: "Christmas Day (Observed)" });
-      holidays.push({ date: `${year}-12-28`, name: "Boxing Day (Observed)" });
-    } else {
-      holidays.push({ date: `${year}-12-25`, name: "Christmas Day" });
-      holidays.push({ date: `${year}-12-26`, name: "Boxing Day" });
+interface HolidaySeed {
+  date: string;
+  name: string;
+  /** Fixed-date holidays can move when they fall on a weekend; floating ones never do. */
+  movable?: boolean;
+}
+
+/** Applies a region's weekend-substitution rule to one holiday year's seeds. */
+function observeHolidays(seeds: HolidaySeed[], rule: SubstituteRule, observedSuffix: string): HolidayDefinition[] {
+  const result: HolidayDefinition[] = [];
+  if (rule === "next") {
+    // Holidays already on weekdays keep their date; weekend ones take the next free weekday in order.
+    const taken = new Set<number>();
+    const deferred: HolidaySeed[] = [];
+    for (const seed of seeds) {
+      const day = toEpochDay(seed.date);
+      if (seed.movable && isWeekendDay(day)) {
+        deferred.push(seed);
+      } else {
+        taken.add(day);
+        result.push({ date: seed.date, name: seed.name });
+      }
     }
-  } else if (normRegion === "EU") {
-    holidays.push({ date: `${year}-01-01`, name: "New Year's Day" });
-    const easter = getEasterSunday(year);
-    holidays.push({ date: addDays(easter, 1), name: "Easter Monday" });
-    holidays.push({ date: `${year}-05-01`, name: "Labour Day" });
-    holidays.push({ date: addDays(easter, 39), name: "Ascension Day" });
-    holidays.push({ date: addDays(easter, 50), name: "Whit Monday" });
-    holidays.push({ date: `${year}-12-25`, name: "Christmas Day" });
-    holidays.push({ date: `${year}-12-26`, name: "Second Day of Christmas" });
+    for (const seed of deferred) {
+      let day = toEpochDay(seed.date) + 1;
+      while (isWeekendDay(day) || taken.has(day)) day++;
+      taken.add(day);
+      result.push({ date: fromEpochDay(day), name: `${seed.name} ${observedSuffix}` });
+    }
+  } else {
+    for (const seed of seeds) {
+      const day = toEpochDay(seed.date);
+      const dow = weekdayOf(day);
+      if (rule === "nearest" && seed.movable && (dow === 6 || dow === 0)) {
+        result.push({ date: fromEpochDay(day + (dow === 6 ? -1 : 1)), name: `${seed.name} ${observedSuffix}` });
+      } else {
+        result.push({ date: seed.date, name: seed.name });
+      }
+    }
+  }
+  return result;
+}
+
+/** UK (England & Wales) one-off changes to the regular bank holiday pattern. */
+const UK_ONE_OFF_CHANGES: Record<number, { moved?: Record<string, string>; added?: HolidaySeed[] }> = {
+  2020: { moved: { "Early May Bank Holiday": "2020-05-08" } },
+  2022: {
+    moved: { "Spring Bank Holiday": "2022-06-02" },
+    added: [
+      { date: "2022-06-03", name: "Platinum Jubilee Bank Holiday" },
+      { date: "2022-09-19", name: "State Funeral of Queen Elizabeth II" }
+    ]
+  },
+  2023: { added: [{ date: "2023-05-08", name: "Coronation of King Charles III" }] }
+};
+
+/** Victoria Day: the Monday preceding May 25. */
+function victoriaDay(year: number): string {
+  const may24 = toEpochDay(`${year}-05-24`);
+  return fromEpochDay(may24 - ((weekdayOf(may24) + 6) % 7));
+}
+
+/**
+ * Holidays belonging to one holiday-year (New Year's Day of `year`, Christmas of `year`, ...),
+ * with weekend substitution applied. Substitutes may land in an adjacent calendar year
+ * (the US observes a Saturday New Year's Day on Friday 31 December of the previous year).
+ */
+function holidaysForHolidayYear(region: string, year: number): HolidayDefinition[] {
+  if (region === "US") {
+    const seeds: HolidaySeed[] = [
+      { date: `${year}-01-01`, name: "New Year's Day", movable: true },
+      { date: getNthWeekdayOfMonth(year, 1, 1, 3), name: "Martin Luther King Jr. Day" },
+      { date: getNthWeekdayOfMonth(year, 2, 1, 3), name: "Presidents' Day" },
+      { date: getNthWeekdayOfMonth(year, 5, 1, -1), name: "Memorial Day" }
+    ];
+    if (year >= 2021) seeds.push({ date: `${year}-06-19`, name: "Juneteenth", movable: true });
+    seeds.push(
+      { date: `${year}-07-04`, name: "Independence Day", movable: true },
+      { date: getNthWeekdayOfMonth(year, 9, 1, 1), name: "Labor Day" },
+      { date: getNthWeekdayOfMonth(year, 10, 1, 2), name: "Columbus Day" },
+      { date: `${year}-11-11`, name: "Veterans Day", movable: true },
+      { date: getNthWeekdayOfMonth(year, 11, 4, 4), name: "Thanksgiving Day" },
+      { date: `${year}-12-25`, name: "Christmas Day", movable: true }
+    );
+    return observeHolidays(seeds, "nearest", "(Observed)");
   }
 
-  return holidays;
+  if (region === "UK" || region === "GB") {
+    const easter = getEasterSunday(year);
+    const changes = UK_ONE_OFF_CHANGES[year];
+    const seeds: HolidaySeed[] = [
+      { date: `${year}-01-01`, name: "New Year's Day", movable: true },
+      { date: addDays(easter, -2), name: "Good Friday" },
+      { date: addDays(easter, 1), name: "Easter Monday" },
+      { date: getNthWeekdayOfMonth(year, 5, 1, 1), name: "Early May Bank Holiday" },
+      { date: getNthWeekdayOfMonth(year, 5, 1, -1), name: "Spring Bank Holiday" },
+      { date: getNthWeekdayOfMonth(year, 8, 1, -1), name: "Summer Bank Holiday" },
+      { date: `${year}-12-25`, name: "Christmas Day", movable: true },
+      { date: `${year}-12-26`, name: "Boxing Day", movable: true },
+      ...(changes?.added || [])
+    ].map((seed) => (changes?.moved?.[seed.name] ? { ...seed, date: changes.moved[seed.name] } : seed));
+    return observeHolidays(seeds, "next", "(substitute day)");
+  }
+
+  if (region === "CA") {
+    const easter = getEasterSunday(year);
+    const seeds: HolidaySeed[] = [
+      { date: `${year}-01-01`, name: "New Year's Day", movable: true },
+      { date: addDays(easter, -2), name: "Good Friday" },
+      { date: victoriaDay(year), name: "Victoria Day" },
+      { date: `${year}-07-01`, name: "Canada Day", movable: true },
+      { date: getNthWeekdayOfMonth(year, 9, 1, 1), name: "Labour Day" }
+    ];
+    if (year >= 2021) {
+      seeds.push({ date: `${year}-09-30`, name: "National Day for Truth and Reconciliation", movable: true });
+    }
+    seeds.push(
+      { date: getNthWeekdayOfMonth(year, 10, 1, 2), name: "Thanksgiving Day" },
+      { date: `${year}-11-11`, name: "Remembrance Day", movable: true },
+      { date: `${year}-12-25`, name: "Christmas Day", movable: true },
+      { date: `${year}-12-26`, name: "Boxing Day", movable: true }
+    );
+    return observeHolidays(seeds, "next", "(Observed)");
+  }
+
+  if (region === "AU") {
+    const easter = getEasterSunday(year);
+    return observeHolidays(
+      [
+        { date: `${year}-01-01`, name: "New Year's Day", movable: true },
+        { date: `${year}-01-26`, name: "Australia Day", movable: true },
+        { date: addDays(easter, -2), name: "Good Friday" },
+        { date: addDays(easter, 1), name: "Easter Monday" },
+        { date: `${year}-04-25`, name: "Anzac Day" },
+        { date: getNthWeekdayOfMonth(year, 6, 1, 2), name: "King's Birthday" },
+        { date: `${year}-12-25`, name: "Christmas Day", movable: true },
+        { date: `${year}-12-26`, name: "Boxing Day", movable: true }
+      ],
+      "next",
+      "(Additional Day)"
+    );
+  }
+
+  if (region === "EU") {
+    const easter = getEasterSunday(year);
+    return [
+      { date: `${year}-01-01`, name: "New Year's Day" },
+      { date: addDays(easter, 1), name: "Easter Monday" },
+      { date: `${year}-05-01`, name: "Labour Day" },
+      { date: addDays(easter, 39), name: "Ascension Day" },
+      { date: addDays(easter, 50), name: "Whit Monday" },
+      { date: `${year}-12-25`, name: "Christmas Day" },
+      { date: `${year}-12-26`, name: "Second Day of Christmas" }
+    ];
+  }
+
+  return [];
+}
+
+const MAX_MEMO_ENTRIES = 512;
+const statutoryMemo = new Map<string, HolidayDefinition[]>();
+const statutoryDaysMemo = new Map<string, Set<number>>();
+
+function memoize<V>(memo: Map<string, V>, key: string, compute: () => V): V {
+  let value = memo.get(key);
+  if (value === undefined) {
+    if (memo.size >= MAX_MEMO_ENTRIES) memo.clear();
+    value = compute();
+    memo.set(key, value);
+  }
+  return value;
+}
+
+function statutoryHolidaysFor(region: string, year: number): HolidayDefinition[] {
+  return memoize(statutoryMemo, `${region}|${year}`, () => {
+    const prefix = `${year}-`;
+    return [year - 1, year, year + 1]
+      .flatMap((holidayYear) => holidaysForHolidayYear(region, holidayYear))
+      .filter((h) => h.date.startsWith(prefix))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  });
+}
+
+/**
+ * Generates the statutory holidays observed during calendar `year` for supported region codes
+ * (US federal, UK/GB England & Wales bank holidays, EU common, CA federal statutory, AU national),
+ * including weekend substitute days. Unknown regions return an empty list.
+ */
+export function getStatutoryHolidays(region: string, year: number): HolidayDefinition[] {
+  if (typeof region !== "string" || !Number.isInteger(year)) return [];
+  return statutoryHolidaysFor(region.trim().toUpperCase(), year).map((h) => ({ ...h }));
+}
+
+function statutoryDays(region: string, year: number): Set<number> {
+  return memoize(statutoryDaysMemo, `${region}|${year}`, () =>
+    new Set(statutoryHolidaysFor(region, year).map((h) => toEpochDay(h.date)))
+  );
 }
 
 /**
  * Creates and normalizes a WorkingCalendar instance.
+ * Invalid or empty `workingDays` fall back to Monday-Friday; day names ("Mon") are accepted.
  */
 export function createCalendar(
   config?: Partial<WorkingCalendar> | CalendarPreset
@@ -213,49 +383,99 @@ export function createCalendar(
   return {
     id: config.id || "custom",
     name: config.name || "Custom Calendar",
-    workingDays: config.workingDays ? [...config.workingDays] : [...(base.workingDays || [1, 2, 3, 4, 5])],
-    holidays: config.holidays ? [...config.holidays] : [],
+    workingDays: normalizeWorkingDays(config.workingDays) || [...DEFAULT_WORKING_DAYS],
+    holidays: Array.isArray(config.holidays) ? [...config.holidays] : [],
     region: config.region,
-    exceptions: config.exceptions ? [...config.exceptions] : []
+    exceptions: Array.isArray(config.exceptions) ? [...config.exceptions] : []
   };
 }
 
+/** Compiled, lookup-friendly form of a calendar. */
+interface CalendarIndex {
+  workingWeekdays: boolean[];
+  holidays: Set<number>;
+  exceptions: Map<number, boolean>;
+  region?: string;
+  /** Statutory holidays of the most recently queried year (avoids a memo lookup per day). */
+  statutory?: { from: number; to: number; days: Set<number> };
+}
+
+interface CachedIndex {
+  source: [unknown, unknown, unknown, unknown, number, number];
+  index: CalendarIndex;
+}
+
+const indexCache = new WeakMap<object, CachedIndex>();
+
+function compileCalendar(cal: Partial<WorkingCalendar>): CalendarIndex {
+  const workingWeekdays = new Array<boolean>(7).fill(false);
+  for (const day of normalizeWorkingDays(cal.workingDays) || DEFAULT_WORKING_DAYS) workingWeekdays[day] = true;
+
+  const holidays = new Set<number>();
+  for (const h of Array.isArray(cal.holidays) ? cal.holidays : []) {
+    const day = toEpochDay(typeof h === "string" ? h : (h as HolidayDefinition)?.date);
+    if (!Number.isNaN(day)) holidays.add(day);
+  }
+
+  // First matching exception wins (same precedence as a linear lookup)
+  const exceptions = new Map<number, boolean>();
+  for (const ex of Array.isArray(cal.exceptions) ? cal.exceptions : []) {
+    const day = toEpochDay(ex?.date);
+    if (!Number.isNaN(day) && !exceptions.has(day)) exceptions.set(day, Boolean(ex.isWorkingDay));
+  }
+
+  const region = typeof cal.region === "string" && cal.region.trim() ? cal.region.trim().toUpperCase() : undefined;
+  return { workingWeekdays, holidays, exceptions, region };
+}
+
 /**
- * Internal helper to check if a specific date string is a holiday or exception in the calendar.
+ * Returns the compiled index for a calendar, preset name or nothing (standard Mon-Fri).
+ * Indexes are cached per calendar object and rebuilt if its arrays or region are replaced.
  */
-function getDayStatus(
-  dateStr: string,
-  calendar: WorkingCalendar
-): { isException: boolean; isWorking?: boolean; isHoliday: boolean } {
-  // Check exceptions first
-  if (calendar.exceptions && calendar.exceptions.length > 0) {
-    const matchEx = calendar.exceptions.find((ex) => ex.date === dateStr);
-    if (matchEx) {
-      return { isException: true, isWorking: matchEx.isWorkingDay, isHoliday: !matchEx.isWorkingDay };
-    }
+function getCalendarIndex(calendar?: WorkingCalendar | CalendarPreset | string): CalendarIndex {
+  const cal: Partial<WorkingCalendar> =
+    typeof calendar === "object" && calendar !== null
+      ? calendar
+      : CALENDAR_PRESETS[calendar as CalendarPreset] || CALENDAR_PRESETS.standard;
+  const source: CachedIndex["source"] = [
+    cal.workingDays,
+    cal.holidays,
+    cal.exceptions,
+    cal.region,
+    Array.isArray(cal.holidays) ? cal.holidays.length : -1,
+    Array.isArray(cal.exceptions) ? cal.exceptions.length : -1
+  ];
+  const cached = indexCache.get(cal);
+  if (cached && cached.source.every((value, i) => value === source[i])) {
+    return cached.index;
   }
+  const index = compileCalendar(cal);
+  indexCache.set(cal, { source, index });
+  return index;
+}
 
-  // Check explicit holidays list
-  if (calendar.holidays && calendar.holidays.length > 0) {
-    const isExplicitHoliday = calendar.holidays.some((h) => {
-      const d = typeof h === "string" ? h : h.date;
-      return d === dateStr;
-    });
-    if (isExplicitHoliday) {
-      return { isException: false, isHoliday: true };
+function isWorkingEpochDay(day: number, index: CalendarIndex): boolean {
+  const exception = index.exceptions.get(day);
+  if (exception !== undefined) return exception;
+  if (index.holidays.has(day)) return false;
+  if (index.region) {
+    let year = index.statutory;
+    if (!year || day < year.from || day > year.to) {
+      const y = new Date(day * 86400000).getUTCFullYear();
+      year = { from: Date.UTC(y, 0, 1) / 86400000, to: Date.UTC(y, 11, 31) / 86400000, days: statutoryDays(index.region, y) };
+      index.statutory = year;
     }
+    if (year.days.has(day)) return false;
   }
+  return index.workingWeekdays[weekdayOf(day)];
+}
 
-  // Check regional statutory holidays
-  if (calendar.region) {
-    const year = parseInt(dateStr.slice(0, 4), 10);
-    const statutory = getStatutoryHolidays(calendar.region, year);
-    if (statutory.some((h) => h.date === dateStr)) {
-      return { isException: false, isHoliday: true };
-    }
-  }
+function toDayInput(date: string | Date): number {
+  return typeof date === "string" ? toEpochDay(date) : toEpochDay(formatISODate(date));
+}
 
-  return { isException: false, isHoliday: false };
+function cleanDateInput(date: string | Date): string {
+  return typeof date === "string" ? date.split("T")[0].trim() : formatISODate(date);
 }
 
 /**
@@ -265,22 +485,16 @@ export function isWorkingDay(
   date: string | Date,
   calendar?: WorkingCalendar | CalendarPreset
 ): boolean {
-  const cal = createCalendar(calendar);
-  const dateStr = typeof date === "string" ? date.split("T")[0].trim() : formatISODate(date);
-  if (!isValidISODate(dateStr)) return false;
+  const day = toDayInput(date);
+  if (Number.isNaN(day)) return false;
+  return isWorkingEpochDay(day, getCalendarIndex(calendar));
+}
 
-  const status = getDayStatus(dateStr, cal);
-  if (status.isException && status.isWorking !== undefined) {
-    return status.isWorking;
-  }
-  if (status.isHoliday) {
-    return false;
-  }
-
-  const d = parseISODate(dateStr);
-  const dayOfWeek = d.getUTCDay() as DayOfWeek;
-  const workingDays = cal.workingDays || [1, 2, 3, 4, 5];
-  return workingDays.includes(dayOfWeek);
+/** Steps from `day` in `step` direction (inclusive) to the first working day, within one year. */
+function snapToWorkingDay(day: number, step: 1 | -1, index: CalendarIndex): number {
+  let curr = day;
+  for (let guard = 0; guard < 366 && !isWorkingEpochDay(curr, index); guard++) curr += step;
+  return curr;
 }
 
 /**
@@ -291,14 +505,9 @@ export function getNextWorkingDay(
   date: string | Date,
   calendar?: WorkingCalendar | CalendarPreset
 ): string {
-  const cal = createCalendar(calendar);
-  let curr = typeof date === "string" ? date.split("T")[0].trim() : formatISODate(date);
-  let guard = 0;
-  while (!isWorkingDay(curr, cal) && guard < 366) {
-    curr = addDays(curr, 1);
-    guard++;
-  }
-  return curr;
+  const day = toDayInput(date);
+  if (Number.isNaN(day)) return cleanDateInput(date);
+  return fromEpochDay(snapToWorkingDay(day, 1, getCalendarIndex(calendar)));
 }
 
 /**
@@ -309,14 +518,9 @@ export function getPreviousWorkingDay(
   date: string | Date,
   calendar?: WorkingCalendar | CalendarPreset
 ): string {
-  const cal = createCalendar(calendar);
-  let curr = typeof date === "string" ? date.split("T")[0].trim() : formatISODate(date);
-  let guard = 0;
-  while (!isWorkingDay(curr, cal) && guard < 366) {
-    curr = addDays(curr, -1);
-    guard++;
-  }
-  return curr;
+  const day = toDayInput(date);
+  if (Number.isNaN(day)) return cleanDateInput(date);
+  return fromEpochDay(snapToWorkingDay(day, -1, getCalendarIndex(calendar)));
 }
 
 /**
@@ -326,34 +530,33 @@ export function getPreviousWorkingDay(
  * - If `days === 0`: Returns `date` if it is a working day, otherwise snaps to next working day.
  * - If `days > 0`: Steps forward, advancing by 1 day until `days` working days have elapsed.
  * - If `days < 0`: Steps backward, decreasing by 1 day until `|days|` working days have elapsed.
+ * - If the calendar yields no working day at all (e.g. every day is an exception), plain calendar
+ *   days are used instead of drifting years into the future.
  */
 export function addWorkingDays(
   date: string | Date,
   days: number,
   calendar?: WorkingCalendar | CalendarPreset
 ): string {
-  const cal = createCalendar(calendar);
-  let curr = typeof date === "string" ? date.split("T")[0].trim() : formatISODate(date);
+  const start = toDayInput(date);
+  if (Number.isNaN(start)) return cleanDateInput(date);
+  const index = getCalendarIndex(calendar);
   const targetDays = Number.isFinite(days) ? Math.round(days) : 0;
 
   if (targetDays === 0) {
-    return isWorkingDay(curr, cal) ? curr : getNextWorkingDay(curr, cal);
+    return fromEpochDay(snapToWorkingDay(start, 1, index));
   }
 
   const step = targetDays > 0 ? 1 : -1;
   let remaining = Math.abs(targetDays);
-  let guard = 0;
-  const MAX_STEPS = 5000;
-
-  while (remaining > 0 && guard < MAX_STEPS) {
-    curr = addDays(curr, step);
-    if (isWorkingDay(curr, cal)) {
-      remaining--;
-    }
-    guard++;
+  const maxSteps = remaining * 7 + 366;
+  let curr = start;
+  for (let guard = 0; remaining > 0; guard++) {
+    if (guard >= maxSteps) return fromEpochDay(start + targetDays);
+    curr += step;
+    if (isWorkingEpochDay(curr, index)) remaining--;
   }
-
-  return curr;
+  return fromEpochDay(curr);
 }
 
 /**
@@ -369,30 +572,17 @@ export function diffWorkingDays(
   endDate: string | Date,
   calendar?: WorkingCalendar | CalendarPreset
 ): number {
-  const cal = createCalendar(calendar);
-  const startStr = typeof startDate === "string" ? startDate.split("T")[0].trim() : formatISODate(startDate);
-  const endStr = typeof endDate === "string" ? endDate.split("T")[0].trim() : formatISODate(endDate);
+  const a = toDayInput(startDate);
+  const b = toDayInput(endDate);
+  if (Number.isNaN(a) || Number.isNaN(b) || a === b) return 0;
 
-  if (startStr === endStr) return 0;
-
-  const inverted = diffDays(startStr, endStr) < 0;
-  let a = inverted ? endStr : startStr;
-  const b = inverted ? startStr : endStr;
-
+  const index = getCalendarIndex(calendar);
+  const [from, to] = a < b ? [a, b] : [b, a];
   let workingCount = 0;
-  let curr = addDays(a, 1);
-  let guard = 0;
-  const MAX_DAYS = 10000;
-
-  while (diffDays(curr, b) >= 0 && guard < MAX_DAYS) {
-    if (isWorkingDay(curr, cal)) {
-      workingCount++;
-    }
-    curr = addDays(curr, 1);
-    guard++;
+  for (let curr = from + 1; curr <= to; curr++) {
+    if (isWorkingEpochDay(curr, index)) workingCount++;
   }
-
-  return inverted ? -workingCount : workingCount;
+  return a < b ? workingCount : -workingCount;
 }
 
 /**
@@ -403,22 +593,16 @@ export function getWorkingDaysInRange(
   endDate: string | Date,
   calendar?: WorkingCalendar | CalendarPreset
 ): string[] {
-  const cal = createCalendar(calendar);
-  let curr = typeof startDate === "string" ? startDate.split("T")[0].trim() : formatISODate(startDate);
-  const end = typeof endDate === "string" ? endDate.split("T")[0].trim() : formatISODate(endDate);
-
+  const from = toDayInput(startDate);
+  const to = toDayInput(endDate);
   const result: string[] = [];
-  let guard = 0;
+  if (Number.isNaN(from) || Number.isNaN(to)) return result;
+
+  const index = getCalendarIndex(calendar);
   const MAX_DAYS = 5000;
-
-  while (diffDays(curr, end) >= 0 && guard < MAX_DAYS) {
-    if (isWorkingDay(curr, cal)) {
-      result.push(curr);
-    }
-    curr = addDays(curr, 1);
-    guard++;
+  for (let curr = from; curr <= to && curr - from < MAX_DAYS; curr++) {
+    if (isWorkingEpochDay(curr, index)) result.push(fromEpochDay(curr));
   }
-
   return result;
 }
 
@@ -482,9 +666,11 @@ export function resolveTaskCalendar(
     }
   }
 
-  // 3. Default calendar
+  // 3. Default calendar (an object is shared as-is so its compiled index is reused across tasks)
   if (context?.defaultCalendar) {
-    return createCalendar(context.defaultCalendar);
+    return typeof context.defaultCalendar === "object"
+      ? context.defaultCalendar
+      : createCalendar(context.defaultCalendar);
   }
 
   // 4. Fallback Standard

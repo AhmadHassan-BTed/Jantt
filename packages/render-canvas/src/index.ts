@@ -1,7 +1,8 @@
 /**
  * @jantt/render-canvas
  *
- * Ultra-high throughput 60 FPS 2D Canvas & OffscreenCanvas renderer for Jantt timelines.
+ * High-throughput 2D Canvas renderer for Jantt timelines (viewport culling, HiDPI,
+ * O(1) hit-testing, OffscreenCanvas-cached minimap).
  */
 
 export * from "./spatial-grid.js";

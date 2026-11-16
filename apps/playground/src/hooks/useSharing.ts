@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { JanttData } from "@jantt/core";
 import type { SavedProject, ActiveView } from "../types";
 import { DEFAULT_TEMPLATE } from "../constants";
 import { encodeDataToBase64Url } from "../utils";
+import { buildRoomViewerUrl } from "../room-storage";
 
 interface UseSharingOptions {
   activeProjectId: string;
@@ -13,6 +14,37 @@ interface UseSharingOptions {
   parsedData: JanttData | null;
   jsonText: string;
   showToast: (msg: string, isErr?: boolean) => void;
+}
+
+let defaultTemplateJson: string | null = null;
+function getDefaultTemplateJson(): string {
+  if (defaultTemplateJson === null) defaultTemplateJson = JSON.stringify(DEFAULT_TEMPLATE.data, null, 2);
+  return defaultTemplateJson;
+}
+
+function buildAppUrl(params: URLSearchParams, hash = ""): string {
+  const query = params.toString();
+  return `${window.location.origin}${window.location.pathname}${query ? `?${query}` : ""}${hash}`;
+}
+
+/** Copies text to the clipboard, with a fallback for non-secure contexts. */
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.left = "-999999px";
+  document.body.appendChild(ta);
+  try {
+    ta.select();
+    if (!document.execCommand("copy")) throw new Error("Copy command was rejected");
+  } finally {
+    document.body.removeChild(ta);
+  }
 }
 
 export function useSharing({
@@ -27,155 +59,118 @@ export function useSharing({
 }: UseSharingOptions) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
+  const copiedTimerRef = useRef<number | null>(null);
 
-  const shareUrl = useMemo(() => {
+  const roomId = activeProject?.source === "room" ? activeProject.roomId : undefined;
+
+  /**
+   * Builds the share link of the active plan. Room links only identify the room (never a key);
+   * other plans embed their data in the hash, which is the expensive part (clone + deflate).
+   */
+  const buildShareUrl = useCallback((): string => {
     if (typeof window === "undefined") return "";
-    const origin = window.location.origin;
-    const pathname = window.location.pathname;
 
-    if (activeProject && activeProject.source === "room" && activeProject.roomId) {
-      const secret = activeProject.secretKey;
-      if (secret) {
-        return `${origin}${pathname}?room=${encodeURIComponent(activeProject.roomId)}&view=${activeView}&theme=${selectedThemeId}#key=${encodeURIComponent(secret)}`;
-      }
-      return `${origin}${pathname}?room=${encodeURIComponent(activeProject.roomId)}&view=${activeView}&theme=${selectedThemeId}`;
+    if (roomId) return buildRoomViewerUrl(roomId, activeView, selectedThemeId);
+
+    const params = new URLSearchParams();
+    if (activeProjectId === "default" && jsonText === getDefaultTemplateJson()) {
+      params.set("plan", "default");
+      params.set("view", activeView);
+      params.set("theme", selectedThemeId);
+      return buildAppUrl(params);
     }
 
-    if (activeProject && activeProject.source === "linked" && activeProject.sourceUrl) {
-      return `${origin}${pathname}?url=${encodeURIComponent(activeProject.sourceUrl)}&view=${activeView}&theme=${selectedThemeId}`;
+    params.set("view", activeView);
+    params.set("theme", selectedThemeId);
+    if (!parsedData) return buildAppUrl(params);
+    if (currentProjectName && currentProjectName !== DEFAULT_TEMPLATE.name) {
+      params.set("name", currentProjectName);
     }
+    return buildAppUrl(params, `#data=${encodeDataToBase64Url(parsedData)}`);
+  }, [roomId, activeProjectId, activeView, selectedThemeId, parsedData, jsonText, currentProjectName]);
 
-    if (activeProjectId === "default" && jsonText === JSON.stringify(DEFAULT_TEMPLATE.data, null, 2)) {
-      return `${origin}${pathname}?plan=default&view=${activeView}&theme=${selectedThemeId}`;
-    }
+  // Only computed while the share dialog is open, so editing never pays for compressing the plan.
+  const shareUrl = useMemo(() => (showShareModal ? buildShareUrl() : ""), [showShareModal, buildShareUrl]);
 
-    // Local / custom plan or edited template
-    if (parsedData) {
-      const b64 = encodeDataToBase64Url(parsedData);
-      const nameParam =
-        currentProjectName && currentProjectName !== DEFAULT_TEMPLATE.name
-          ? `&name=${encodeURIComponent(currentProjectName)}`
-          : "";
-      return `${origin}${pathname}?view=${activeView}&theme=${selectedThemeId}${nameParam}#data=${b64}`;
-    }
-
-    return `${origin}${pathname}`;
-  }, [activeProjectId, activeProject, activeView, selectedThemeId, parsedData, jsonText, currentProjectName]);
-
-  // Keep browser address bar clean and synchronized with view/theme/room without hash-thrashing local plans
+  // Keep ?view= and ?theme= in the address bar current. Room parameters belong to useRoomSync.
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     try {
-      const currentUrl = new URL(window.location.href);
+      const url = new URL(window.location.href);
       let changed = false;
 
-      // Handle room URL parameters
-      if (activeProject?.source === "room" && activeProject.roomId) {
-        if (currentUrl.searchParams.get("room") !== activeProject.roomId) {
-          currentUrl.searchParams.set("room", activeProject.roomId);
-          changed = true;
-        }
-        if (activeProject.secretKey) {
-          const expectedHash = `#key=${encodeURIComponent(activeProject.secretKey)}`;
-          if (window.location.hash !== expectedHash) {
-            currentUrl.hash = expectedHash;
+      if (!roomId) {
+        // One-shot share parameters have been consumed at load time.
+        for (const key of ["plan", "data", "name"]) {
+          if (url.searchParams.has(key)) {
+            url.searchParams.delete(key);
             changed = true;
           }
         }
-      } else {
-        if (currentUrl.searchParams.has("room")) {
-          currentUrl.searchParams.delete("room");
-          changed = true;
-        }
-        if (currentUrl.searchParams.has("cloud")) {
-          currentUrl.searchParams.delete("cloud");
-          changed = true;
-        }
-        if (currentUrl.searchParams.has("plan")) {
-          currentUrl.searchParams.delete("plan");
-          changed = true;
-        }
-        if (currentUrl.searchParams.has("data")) {
-          currentUrl.searchParams.delete("data");
-          changed = true;
-        }
-        if (currentUrl.searchParams.has("name")) {
-          currentUrl.searchParams.delete("name");
-          changed = true;
-        }
-        if (window.location.hash.startsWith("#key=") || window.location.hash.startsWith("#edit=")) {
-          currentUrl.hash = "";
-          changed = true;
-        }
       }
-
-      if (currentUrl.searchParams.get("view") !== activeView) {
-        currentUrl.searchParams.set("view", activeView);
+      if (url.searchParams.get("view") !== activeView) {
+        url.searchParams.set("view", activeView);
         changed = true;
       }
-      if (currentUrl.searchParams.get("theme") !== selectedThemeId) {
-        currentUrl.searchParams.set("theme", selectedThemeId);
+      if (url.searchParams.get("theme") !== selectedThemeId) {
+        url.searchParams.set("theme", selectedThemeId);
         changed = true;
       }
 
-      if (changed) {
-        window.history.replaceState(null, "", currentUrl.toString());
-      }
-    } catch {}
-  }, [activeProject?.source, activeProject?.roomId, activeProject?.secretKey, activeView, selectedThemeId]);
+      if (changed) window.history.replaceState(window.history.state, "", url.toString());
+    } catch {
+      // intentionally ignored: the History API can be unavailable (sandboxed frames); the
+      // address bar is cosmetic and share links are built from state, not from it.
+    }
+  }, [roomId, activeView, selectedThemeId]);
+
+  useEffect(
+    () => () => {
+      if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+    },
+    []
+  );
 
   const handleCopyShareLink = useCallback(async () => {
-    if (!shareUrl) return;
+    const url = shareUrl || buildShareUrl();
+    if (!url) return;
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = shareUrl;
-        ta.style.position = "fixed";
-        ta.style.left = "-999999px";
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
+      await copyText(url);
       setCopiedShareLink(true);
       showToast("Shareable link copied to clipboard!");
-      setTimeout(() => setCopiedShareLink(false), 2500);
+      if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = window.setTimeout(() => setCopiedShareLink(false), 2500);
     } catch {
-      showToast("Failed to copy link to clipboard", true);
+      showToast("Couldn't copy the link. Select it and copy it manually.", true);
     }
-  }, [shareUrl, showToast]);
+  }, [shareUrl, buildShareUrl, showToast]);
 
   const handleNativeShare = useCallback(async () => {
-    if (!shareUrl) return;
+    const url = shareUrl || buildShareUrl();
+    if (!url || !navigator.share) return;
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: currentProjectName,
-          text: `Check out this project plan: ${currentProjectName}`,
-          url: shareUrl
-        });
-        showToast("Shared successfully!");
-      }
-    } catch {
-      // User cancelled native share
+      await navigator.share({
+        title: currentProjectName,
+        text: `Check out this project plan: ${currentProjectName}`,
+        url
+      });
+      showToast("Shared successfully!");
+    } catch (err) {
+      // Closing the share sheet rejects with AbortError: not a failure.
+      if (err instanceof Error && err.name === "AbortError") return;
+      showToast("Couldn't open the share sheet. Copy the link instead.", true);
     }
-  }, [shareUrl, currentProjectName, showToast]);
+  }, [shareUrl, buildShareUrl, currentProjectName, showToast]);
 
-  const isWhatsAppSafe = useMemo(() => {
-    // WhatsApp GET /send query limit is 2,048 chars; keeping shareUrl under 1,900 ensures the full message sends cleanly
-    return shareUrl.length <= 1900;
-  }, [shareUrl]);
+  // WhatsApp's GET /send limit is 2,048 chars; keeping the link under 1,900 leaves room for the message.
+  const isWhatsAppSafe = useMemo(() => shareUrl.length <= 1900, [shareUrl]);
 
   const handleWhatsAppShare = useCallback(() => {
-    if (!shareUrl) return;
-    const msg = `Check out this project plan: ${currentProjectName}\n\n${shareUrl}`;
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
-    window.open(waUrl, "_blank", "noopener,noreferrer");
-  }, [shareUrl, currentProjectName]);
+    const url = shareUrl || buildShareUrl();
+    if (!url) return;
+    const msg = `Check out this project plan: ${currentProjectName}\n\n${url}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer");
+  }, [shareUrl, buildShareUrl, currentProjectName]);
 
   return {
     showShareModal,
@@ -183,6 +178,7 @@ export function useSharing({
     copiedShareLink,
     setCopiedShareLink,
     shareUrl,
+    buildShareUrl,
     handleCopyShareLink,
     handleNativeShare,
     handleWhatsAppShare,

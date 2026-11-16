@@ -329,14 +329,12 @@ describe("Stress & Boundary Tests", () => {
 
   describe("Dynamic Today's Line Intra-Day Progress", () => {
     it("starts at column left edge at 00:00 and moves rightward as day progresses", () => {
-      const midnight = new Date();
-      midnight.setHours(0, 0, 0, 0);
-
-      const noon = new Date();
-      noon.setHours(12, 0, 0, 0);
-
-      const evening = new Date();
-      evening.setHours(18, 0, 0, 0);
+      // Pin "today" inside the fixture's range (meta.start + 14 days, local time) so the test
+      // never depends on the real wall clock.
+      const [y, m, d] = (basicJson.meta.start as string).split("-").map(Number);
+      const midnight = new Date(y, m - 1, d + 14, 0, 0, 0, 0);
+      const noon = new Date(y, m - 1, d + 14, 12, 0, 0, 0);
+      const evening = new Date(y, m - 1, d + 14, 18, 0, 0, 0);
 
       const resMidnight = layout(basicJson as JanttData, { dayWidth: 40, currentTime: midnight });
       const resNoon = layout(basicJson as JanttData, { dayWidth: 40, currentTime: noon });
@@ -784,7 +782,9 @@ describe("Stress & Boundary Tests", () => {
       document.body.removeChild(container);
     });
 
-    it("supports draggable column length resize via header handle and Ctrl+Wheel zoom", () => {
+    it("supports draggable column length resize via header handle and Ctrl+Wheel zoom", async () => {
+      // Zoom re-renders run on animation frames; let them land between gestures like a real user would
+      const flushFrames = () => new Promise((resolve) => setTimeout(resolve, 50));
       const container = document.createElement("div");
       document.body.appendChild(container);
 
@@ -824,6 +824,7 @@ describe("Stress & Boundary Tests", () => {
       bodyWrap!.dispatchEvent(wheelEvt);
 
       expect(chart.getDayWidth?.()).toBeGreaterThan(initialWidth);
+      await flushFrames();
 
       // Test holding the day cell and dragging horizontally to stretch columns smoothly
       const PEvent = (typeof PointerEvent !== "undefined" ? PointerEvent : MouseEvent);
@@ -853,6 +854,11 @@ describe("Stress & Boundary Tests", () => {
         bubbles: true
       }));
 
+      // Dragging the day cell to the right stretches the columns (zoom in)
+      expect(chart.getDayWidth?.()).toBeGreaterThan(preDragWidth);
+      expect(changedWidth).toBe(chart.getDayWidth?.());
+      await flushFrames();
+
       // Test border resize handle dragging
       const handle = container.querySelector<HTMLElement>(".jantt-col-resize-handle");
       expect(handle).not.toBeNull();
@@ -876,6 +882,10 @@ describe("Stress & Boundary Tests", () => {
         clientY: 20,
         bubbles: true
       }));
+
+      // Dragging the border handle to the right widens the columns
+      expect(chart.getDayWidth?.()).toBeGreaterThan(preHandleWidth);
+      expect(changedWidth).toBe(chart.getDayWidth?.());
 
       chart.destroy();
       document.body.removeChild(container);

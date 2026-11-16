@@ -1,9 +1,8 @@
-import { Task, TimeScale, LinkRoutingStyle, RowHeightMode, JanttOptions, ViewportOptions } from "../types";
-import { parseISODate, diffDays, getTodayISODate, isTaskOnDate } from "../date-math";
-import { buildViewportSnapshot } from "../utils";
+import { Task, TimeScale, LinkRoutingStyle, RowHeightMode, JanttData, JanttOptions, ViewportOptions } from "../types";
+import { diffDays, isTaskOnDate } from "../date-math";
+import { buildViewportSnapshot, getTaskDisplayName } from "../utils";
+import { computeChartBounds, resolveHeaderHeight } from "../layout";
 import {
-  DEFAULT_HEADER_HEIGHT,
-  MULTI_YEAR_HEADER_HEIGHT,
   TOOLBAR_HEIGHT,
   ADD_ROW_HEIGHT,
   MIN_ROW_HEIGHT,
@@ -23,13 +22,19 @@ export interface ViewportCoordinationState {
   selectedDateFilter: string | null;
   renderedDayWidth: number;
   renderedStartDate: string;
+  /**
+   * Zoom anchor (header drag or wheel zoom): the anchored date as days from `dragAnchorStartDate`,
+   * kept at `dragAnchorOffsetPx` from the visible timeline's left edge (0 = leftmost date).
+   */
   dragAnchorLeftmostDays: number | null;
   dragAnchorStartDate: string;
+  dragAnchorOffsetPx: number;
 }
 
 export class ViewportCoordinator {
   /**
    * Filters active tasks for display based on search text and selected date filter.
+   * Soft-deleted tasks (sync tombstones) are never displayed, counted or used for fit sizing.
    */
   public static filterDisplayTasks(
     allTasks: Task[],
@@ -37,15 +42,14 @@ export class ViewportCoordinator {
     selectedDateFilter: string | null,
     options: JanttOptions
   ): Task[] {
-    let displayTasks = allTasks;
+    let displayTasks = allTasks.some((t) => t._deleted) ? allTasks.filter((t) => !t._deleted) : allTasks;
 
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
-      displayTasks = allTasks.filter(
-        (t) =>
-          (t.label || t.name || t.id).toLowerCase().includes(q) ||
-          (t.category || "").toLowerCase().includes(q) ||
-          (t.notes || "").toLowerCase().includes(q)
+      // Plan fields may hold non-strings at runtime (e.g. a numeric label from JSON): coerce first.
+      const matches = (value: unknown) => String(value ?? "").toLowerCase().includes(q);
+      displayTasks = displayTasks.filter(
+        (t) => matches(getTaskDisplayName(t)) || matches(t.category) || matches(t.notes)
       );
     }
 
@@ -64,42 +68,54 @@ export class ViewportCoordinator {
   }
 
   /**
-   * Calculates the optimal dynamic row height when rowHeightMode is 'fit',
-   * taking into account header multi-year spanning, toolbar height, and container dimensions.
+   * Calculates the row height for rowHeightMode 'fit' so header + rows + add-row exactly fill the
+   * chart body. `layoutData`/`layoutOptions` must be what `layout()` receives, so the header height
+   * (multi-year tier) matches the rendered chart.
+   *
+   * The budget is exact (measured toolbar, horizontal scrollbar, add row that shrinks with the
+   * rows), which makes the result a fixed point for content-sized hosts: re-measuring after our own
+   * render yields the same height instead of shrinking rows on every resize notification. When the
+   * chart has no definite space yet (hidden host, first render in an auto-height container) the
+   * custom row height is used. When rows cannot fit, they clamp to MIN_ROW_HEIGHT and the body scrolls.
    */
   public static calculateRowHeight(
     container: HTMLElement,
     root: HTMLElement,
-    allTasks: Task[],
-    displayTaskCount: number,
+    layoutData: JanttData,
+    layoutOptions: ViewportOptions,
     rowHeightMode: RowHeightMode,
     customRowHeight: number,
-    viewportOptions?: ViewportOptions,
     readOnly?: boolean
   ): number {
     if (rowHeightMode !== "fit") {
       return customRowHeight;
     }
 
-    const containerH = container.clientHeight || root.clientHeight || 550;
-    let minStart = allTasks[0]?.start || getTodayISODate(viewportOptions?.currentTime);
-    let maxEnd = allTasks[allTasks.length - 1]?.end || minStart;
+    const toolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
+    const toolbarH = toolbar ? toolbar.offsetHeight : TOOLBAR_HEIGHT;
+    const body = root.querySelector<HTMLElement>(".jantt-body-wrap");
+    const horizontalScrollbarH = body ? Math.max(0, body.offsetHeight - body.clientHeight) : 0;
+    const innerH = root.clientHeight || container.clientHeight;
 
-    allTasks.forEach((t) => {
-      if (t.start && t.start < minStart) minStart = t.start;
-      if (t.end && t.end > maxEnd) maxEnd = t.end;
-    });
+    const bounds = computeChartBounds(layoutData, layoutOptions);
+    const headerH = resolveHeaderHeight(bounds.spansMultipleYears, layoutOptions.headerHeight);
+    const availH = innerH - toolbarH - horizontalScrollbarH - headerH;
+    const count = Math.max(layoutData.tasks.length, 1);
 
-    const spansMulti = parseISODate(minStart).getUTCFullYear() !== parseISODate(maxEnd).getUTCFullYear();
-    const headerH = spansMulti ? MULTI_YEAR_HEADER_HEIGHT : (viewportOptions?.headerHeight || DEFAULT_HEADER_HEIGHT);
-    const existingToolbar = root.querySelector<HTMLElement>(".jantt-toolbar");
-    const toolbarH = existingToolbar ? existingToolbar.offsetHeight : TOOLBAR_HEIGHT;
-    const addRowH = readOnly ? 0 : ADD_ROW_HEIGHT;
-    const borderBuffer = 6;
-    const availH = Math.max(containerH - headerH - toolbarH - addRowH - borderBuffer, 100);
-    const count = Math.max(displayTaskCount, 1);
+    if (availH < MIN_ROW_HEIGHT) {
+      return customRowHeight;
+    }
 
-    return Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT, Math.floor(availH / count)));
+    let rowH: number;
+    if (readOnly) {
+      rowH = Math.floor(availH / count);
+    } else {
+      rowH = Math.floor((availH - ADD_ROW_HEIGHT) / count);
+      // Below ADD_ROW_HEIGHT the add row is as tall as a task row (min(rowHeight, ADD_ROW_HEIGHT))
+      if (rowH < ADD_ROW_HEIGHT) rowH = Math.floor(availH / (count + 1));
+    }
+
+    return Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT, rowH));
   }
 
   /**
@@ -117,10 +133,10 @@ export class ViewportCoordinator {
 
     if (hadPreviousRender) {
       if (state.dragAnchorLeftmostDays !== null && state.dragAnchorStartDate) {
-        // Continuous column header drag session: anchor to drag start
+        // Anchored zoom (header drag session / wheel): the anchored date keeps its screen offset
         const startDeltaDays = diffDays(newStartDate, state.dragAnchorStartDate);
-        const newLeftmostDays = Math.max(0, state.dragAnchorLeftmostDays + startDeltaDays);
-        targetScrollLeft = Math.max(0, Math.round(newLeftmostDays * currentDayWidth));
+        const anchorDays = Math.max(0, state.dragAnchorLeftmostDays + startDeltaDays);
+        targetScrollLeft = Math.max(0, Math.round(anchorDays * currentDayWidth - (state.dragAnchorOffsetPx || 0)));
       } else if (currentDayWidth !== state.renderedDayWidth || newStartDate !== state.renderedStartDate) {
         // Discrete zoom / scale changes / wheel / slider
         const prevLeftmostDays = savedScrollLeft / state.renderedDayWidth;

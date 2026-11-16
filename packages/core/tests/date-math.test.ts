@@ -15,7 +15,10 @@ import {
   getTodayISODate,
   getTodayProgressFraction,
   isTaskOnDate,
-  isTaskToday
+  isTaskToday,
+  isStrictISODate,
+  toEpochDay,
+  fromEpochDay
 } from "../src/date-math";
 
 
@@ -331,5 +334,41 @@ describe("Date Math Utilities", () => {
       expect(frac).toBeLessThan(1.0);
     });
   });
-});
 
+  // ─── Strict validation & epoch-day helpers ────────────────────────────
+
+  describe("isStrictISODate", () => {
+    it("accepts plain dates and well-formed ISO timestamps", () => {
+      expect(isStrictISODate("2026-01-01")).toBe(true);
+      expect(isStrictISODate("2026-01-01T09:30")).toBe(true);
+      expect(isStrictISODate("2026-01-01T09:30:00.000Z")).toBe(true);
+      expect(isStrictISODate("2026-01-01T09:30:00+05:30")).toBe(true);
+    });
+
+    it("rejects padding, garbage suffixes, impossible dates and non-strings", () => {
+      expect(isStrictISODate(" 2026-01-01")).toBe(false);
+      expect(isStrictISODate("2026-01-01 ")).toBe(false);
+      expect(isStrictISODate("2026-01-01T99:99garbage")).toBe(false);
+      expect(isStrictISODate("2026-02-30")).toBe(false);
+      expect(isStrictISODate("2026-1-01")).toBe(false);
+      expect(isStrictISODate(20260101)).toBe(false);
+      expect(isStrictISODate(undefined)).toBe(false);
+    });
+  });
+
+  describe("toEpochDay / fromEpochDay", () => {
+    it("round-trips dates as whole UTC days", () => {
+      expect(toEpochDay("1970-01-01")).toBe(0);
+      expect(toEpochDay("1970-01-02")).toBe(1);
+      expect(fromEpochDay(toEpochDay("2024-02-29") + 1)).toBe("2024-03-01");
+      expect(toEpochDay("2026-09-05") - toEpochDay("2026-09-01")).toBe(diffDays("2026-09-01", "2026-09-05"));
+      expect(fromEpochDay(-1)).toBe("1969-12-31");
+    });
+
+    it("returns NaN for invalid input instead of a fallback date", () => {
+      expect(toEpochDay("garbage")).toBeNaN();
+      expect(toEpochDay("2026-02-30")).toBeNaN();
+      expect(toEpochDay(undefined)).toBeNaN();
+    });
+  });
+});

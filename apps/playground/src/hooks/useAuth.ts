@@ -1,14 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
-import { auth } from "../firebase/firebaseConfig";
+import { ref, onValue } from "firebase/database";
+import { auth, rtdb } from "../firebase/firebaseConfig";
 import {
   signInWithGitHub,
+  completeRedirectSignIn,
+  isRedirectSignInPending,
   signOutUser,
-  getUserProfile,
   claimUsername,
   getStoredGitHubToken,
   clearStoredGitHubToken,
-  updateUserGitHubVerification
+  updateUserGitHubVerification,
+  syncPublicProfile,
+  describeAuthError,
+  type GitHubSignInResult
 } from "../firebase/authService";
 import {
   ENABLE_GITHUB_VERIFICATION_GATE,
@@ -20,19 +25,29 @@ import {
 } from "../firebase/githubVerificationService";
 import type { UserProfile, VerificationStatus } from "../firebase/types";
 
+/** Stop reporting "loading" when the profile cannot be fetched (e.g. offline at startup). */
+const PROFILE_LOAD_TIMEOUT_MS = 10000;
+
+type ProfileStatus = "idle" | "loading" | "missing" | "ready" | "error";
+
 export interface UseAuthReturn {
   currentUser: FirebaseUser | null;
   userProfile: UserProfile | null;
+  /** True until the session and the signed-in user's profile are resolved; gate deep links on it. */
   isLoadingAuth: boolean;
   needsUsernameOnboarding: boolean;
   isSigningIn: boolean;
+  /** Last user-facing sign-in or profile error, or null. */
+  authError: string | null;
+  dismissAuthError: () => void;
   githubToken: string | null;
   verificationStatus: VerificationStatus | null;
   isVerifying: boolean;
   showVerificationModal: boolean;
   setShowVerificationModal: (show: boolean) => void;
+  /** Never rejects; failures land in `authError`. Concurrent calls share one sign-in. */
   loginWithGitHub: () => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   completeUsernameOnboarding: (rawUsername: string) => Promise<UserProfile>;
   refreshProfile: () => Promise<void>;
   checkVerification: () => Promise<VerificationStatus>;
@@ -43,94 +58,208 @@ export interface UseAuthReturn {
   autoVerifyHandler: () => Promise<boolean>;
 }
 
+function isSameProfile(a: UserProfile | null, b: UserProfile | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const left = a as unknown as Record<string, unknown>;
+  const right = b as unknown as Record<string, unknown>;
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if (left[key] !== right[key]) return false;
+  }
+  return true;
+}
+
 export function useAuth(): UseAuthReturn {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfileState] = useState<UserProfile | null>(null);
+  const [profileStatus, setProfileStatus] = useState<ProfileStatus>("idle");
+  const [profileEpoch, setProfileEpoch] = useState(0);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [needsUsernameOnboarding, setNeedsUsernameOnboarding] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [githubToken, setGithubToken] = useState<string | null>(getStoredGitHubToken);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [githubToken, setGithubToken] = useState<string | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
 
-  const fetchProfile = useCallback(async (user: FirebaseUser | null) => {
-    if (!user) {
-      setUserProfile(null);
-      setNeedsUsernameOnboarding(false);
-      setVerificationStatus(null);
-      return;
-    }
-    try {
-      const profile = await getUserProfile(user.uid);
-      if (profile && profile.username) {
-        setUserProfile(profile);
-        setNeedsUsernameOnboarding(false);
-      } else {
-        setUserProfile(null);
-        setNeedsUsernameOnboarding(true);
-      }
-    } catch {
-      // In case of network/first load issue
-      setNeedsUsernameOnboarding(true);
-    }
+  const signInRef = useRef<Promise<void> | null>(null);
+  const syncedUidRef = useRef<string | null>(null);
+  /** Bumped per verification run and per account change; stale results are dropped. */
+  const verifyRunRef = useRef(0);
+  const verifyInFlightRef = useRef<Promise<VerificationStatus> | null>(null);
+  /** Open the verification modal after the first check that follows an interactive sign-in. */
+  const promptVerificationRef = useRef(false);
+  const userProfileRef = useRef<UserProfile | null>(null);
+  userProfileRef.current = userProfile;
+
+  /** Keeps the profile object identity stable when nothing changed (consumers key effects on it). */
+  const setUserProfile = useCallback((next: UserProfile | null) => {
+    setUserProfileState((prev) => (isSameProfile(prev, next) ? prev : next));
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      await fetchProfile(user);
-      setIsLoadingAuth(false);
-    });
+  const reportAuthError = useCallback((err: unknown) => {
+    const message = describeAuthError(err);
+    if (!message) return;
+    console.warn("[useAuth] GitHub sign-in failed:", err);
+    setAuthError(message);
+  }, []);
 
-    return () => unsubscribe();
-  }, [fetchProfile]);
-
-  const checkVerification = useCallback(
-    async (): Promise<VerificationStatus> => {
-      const username = userProfile?.githubUsername || userProfile?.username || "";
-      const token = githubToken || getStoredGitHubToken() || undefined;
-
-      setIsVerifying(true);
-      try {
-        const result = await verifyAllGitHubRequirements(username, token);
-        setVerificationStatus(result);
-
-        if (currentUser?.uid) {
-          await updateUserGitHubVerification(
-            currentUser.uid,
-            result.isVerified,
-            result.isFollowingCreator,
-            result.missingRepos.length,
-            result.isDevBypass
-          );
-
-          setUserProfile((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  githubVerified: result.isVerified,
-                  isFollowingCreator: result.isFollowingCreator,
-                  missingReposCount: result.missingRepos.length,
-                  isDevBypass: result.isDevBypass,
-                  lastVerifiedAt: new Date().toISOString()
-                }
-              : prev
-          );
-        }
-
-        return result;
-      } finally {
-        setIsVerifying(false);
+  const applySignInResult = useCallback(
+    (result: GitHubSignInResult) => {
+      setCurrentUser(result.user);
+      if (result.githubToken) setGithubToken(result.githubToken);
+      if (result.profile) {
+        setUserProfile(result.profile);
+        setProfileStatus("ready");
       }
+      promptVerificationRef.current = ENABLE_GITHUB_VERIFICATION_GATE && Boolean(result.profile);
     },
-    [currentUser?.uid, githubToken, userProfile?.githubUsername, userProfile?.username]
+    [setUserProfile]
   );
 
-  // Auto-verify on login once profile is loaded
+  // Session restore (works offline from local persistence) and account switches.
   useEffect(() => {
-    if (userProfile?.username && !verificationStatus) {
-      checkVerification();
+    return onAuthStateChanged(auth, (user) => {
+      verifyRunRef.current++;
+      verifyInFlightRef.current = null;
+      setIsVerifying(false);
+      setVerificationStatus(null);
+      setCurrentUser(user);
+      setGithubToken(getStoredGitHubToken(user?.uid));
+      setUserProfileState((prev) => (prev && user && prev.uid === user.uid ? prev : null));
+      if (!user) {
+        // Also covers sign-outs from another tab, which never run signOutUser here.
+        clearStoredGitHubToken();
+        syncedUidRef.current = null;
+        setProfileStatus("idle");
+        setShowVerificationModal(false);
+        setIsLoadingAuth(false);
+      }
+    });
+  }, []);
+
+  // Finish a redirect sign-in (popup fallback) started before this page load.
+  useEffect(() => {
+    if (!isRedirectSignInPending()) return;
+    setIsSigningIn(true);
+    completeRedirectSignIn()
+      .then((result) => {
+        if (result) {
+          applySignInResult(result);
+        } else if (!auth.currentUser) {
+          // The redirect was abandoned, or the browser dropped the auth state (third-party
+          // storage blocking). Say so instead of failing silently.
+          setAuthError("GitHub sign-in did not complete. Allow pop-ups for this site, then try again.");
+        }
+      })
+      .catch(reportAuthError)
+      .finally(() => setIsSigningIn(false));
+  }, [applySignInResult, reportAuthError]);
+
+  // Live profile of the signed-in user. Read failures never route to onboarding.
+  const uid = currentUser?.uid || null;
+  useEffect(() => {
+    if (!uid) return;
+    // A profile already applied for this account (e.g. by the sign-in itself) stays usable.
+    const hasProfile = userProfileRef.current?.uid === uid;
+    setIsLoadingAuth(!hasProfile);
+    setProfileStatus(hasProfile ? "ready" : "loading");
+
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) setIsLoadingAuth(false);
+    }, PROFILE_LOAD_TIMEOUT_MS);
+
+    const unsubscribe = onValue(
+      ref(rtdb, `users/${uid}`),
+      (snap) => {
+        settled = true;
+        const stored = snap.exists() ? (snap.val() as UserProfile) : null;
+        if (stored?.username) {
+          const profile: UserProfile = { ...stored, uid, email: auth.currentUser?.email || stored.email || "" };
+          setUserProfile(profile);
+          setProfileStatus("ready");
+          if (syncedUidRef.current !== uid) {
+            syncedUidRef.current = uid;
+            void syncPublicProfile(profile, stored.email !== undefined);
+          }
+        } else {
+          setUserProfile(null);
+          setProfileStatus("missing");
+        }
+        setIsLoadingAuth(false);
+      },
+      (error) => {
+        settled = true;
+        // Signing out revokes this listener before the effect cleanup runs: not an error.
+        if (auth.currentUser?.uid !== uid) return;
+        console.warn("[useAuth] Could not load the profile:", error);
+        setProfileStatus("error");
+        setAuthError("Couldn't load your Jantt profile. Check your connection, then try again.");
+        setIsLoadingAuth(false);
+      }
+    );
+
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [uid, profileEpoch, setUserProfile]);
+
+  const githubLogin = userProfile?.githubUsername || "";
+  const checkVerification = useCallback(async (): Promise<VerificationStatus> => {
+    if (!ENABLE_GITHUB_VERIFICATION_GATE) {
+      // Gate off: bypass status without network calls or database writes.
+      const status = await verifyAllGitHubRequirements("");
+      setVerificationStatus(status);
+      return status;
+    }
+    if (verifyInFlightRef.current) return verifyInFlightRef.current;
+
+    const run = ++verifyRunRef.current;
+    const verifiedUid = uid;
+    setIsVerifying(true);
+
+    const task = (async () => {
+      const result = await verifyAllGitHubRequirements(githubLogin, githubToken || undefined);
+      if (run !== verifyRunRef.current) return result;
+      setVerificationStatus(result);
+
+      if (promptVerificationRef.current) {
+        promptVerificationRef.current = false;
+        if (!result.isVerified && !result.error) setShowVerificationModal(true);
+      }
+
+      // Persist real outcomes only, and only when they changed: errors (rate limits, network)
+      // never downgrade a stored state, and bypasses are never stored.
+      const stored = userProfileRef.current;
+      const missing = result.missingRepos.length;
+      const changed =
+        stored?.githubVerified !== result.isVerified ||
+        stored?.isFollowingCreator !== result.isFollowingCreator ||
+        stored?.missingReposCount !== missing;
+      if (verifiedUid && !result.error && !result.isDevBypass && changed) {
+        updateUserGitHubVerification(verifiedUid, result.isVerified, result.isFollowingCreator, missing).catch(
+          (err) => console.warn("[useAuth] Could not store the verification result:", err)
+        );
+      }
+      return result;
+    })();
+
+    verifyInFlightRef.current = task;
+    try {
+      return await task;
+    } finally {
+      if (verifyInFlightRef.current === task) verifyInFlightRef.current = null;
+      if (run === verifyRunRef.current) setIsVerifying(false);
+    }
+  }, [uid, githubLogin, githubToken]);
+
+  // Auto-verify once per loaded profile (only while the gate is enabled).
+  useEffect(() => {
+    if (ENABLE_GITHUB_VERIFICATION_GATE && userProfile?.username && !verificationStatus) {
+      void checkVerification();
     }
   }, [userProfile?.username, verificationStatus, checkVerification]);
 
@@ -139,38 +268,40 @@ export function useAuth(): UseAuthReturn {
     return status.isVerified;
   }, [checkVerification]);
 
-  const loginWithGitHubHandler = useCallback(async () => {
-    setIsSigningIn(true);
-    try {
-      const { profile, githubToken: token } = await signInWithGitHub();
-      if (token) setGithubToken(token);
-      setUserProfile(profile);
-      setNeedsUsernameOnboarding(false);
-
-      // Verify requirements upon login via read-only check
-      const status = await verifyAllGitHubRequirements(
-        profile.githubUsername || profile.username,
-        token || undefined
-      );
-
-      setVerificationStatus(status);
-      if (ENABLE_GITHUB_VERIFICATION_GATE && !status.isVerified) {
-        setShowVerificationModal(true);
+  const loginWithGitHubHandler = useCallback((): Promise<void> => {
+    if (signInRef.current) return signInRef.current;
+    const task = (async () => {
+      setIsSigningIn(true);
+      setAuthError(null);
+      try {
+        applySignInResult(await signInWithGitHub());
+      } catch (err) {
+        reportAuthError(err);
+      } finally {
+        setIsSigningIn(false);
+        signInRef.current = null;
       }
-    } finally {
-      setIsSigningIn(false);
-    }
-  }, []);
+    })();
+    signInRef.current = task;
+    return task;
+  }, [applySignInResult, reportAuthError]);
 
   const logoutHandler = useCallback(async () => {
-    clearStoredGitHubToken();
+    verifyRunRef.current++;
+    verifyInFlightRef.current = null;
+    setShowVerificationModal(false);
+    try {
+      await signOutUser();
+    } catch (err) {
+      console.warn("[useAuth] Sign-out failed:", err);
+      setAuthError("Sign-out failed. Please try again.");
+      return;
+    }
     setGithubToken(null);
     setVerificationStatus(null);
-    setShowVerificationModal(false);
-    await signOutUser();
     setCurrentUser(null);
-    setUserProfile(null);
-    setNeedsUsernameOnboarding(false);
+    setUserProfileState(null);
+    setProfileStatus("idle");
   }, []);
 
   const completeUsernameOnboarding = useCallback(
@@ -180,35 +311,22 @@ export function useAuth(): UseAuthReturn {
       }
       const profile = await claimUsername(currentUser, rawUsername);
       setUserProfile(profile);
-      setNeedsUsernameOnboarding(false);
+      setProfileStatus("ready");
       return profile;
     },
-    [currentUser]
+    [currentUser, setUserProfile]
   );
 
   const refreshProfile = useCallback(async () => {
-    if (currentUser) {
-      await fetchProfile(currentUser);
-    }
-  }, [currentUser, fetchProfile]);
-
-  const followCreatorHandler = useCallback(async (): Promise<boolean> => {
-    await followCreator();
-    return true;
+    setAuthError(null);
+    setProfileEpoch((epoch) => epoch + 1);
   }, []);
 
-  const followOrgHandler = useCallback(async (): Promise<boolean> => {
-    await followOrg();
-    return true;
-  }, []);
+  const dismissAuthError = useCallback(() => setAuthError(null), []);
 
-  const starRepoHandler = useCallback(
-    async (repoFullName: string): Promise<boolean> => {
-      await starRepository(repoFullName);
-      return true;
-    },
-    []
-  );
+  const followCreatorHandler = useCallback(() => followCreator(), []);
+  const followOrgHandler = useCallback(() => followOrg(), []);
+  const starRepoHandler = useCallback((repoFullName: string) => starRepository(repoFullName), []);
 
   const starAllHandler = useCallback(async (): Promise<{
     success: number;
@@ -224,8 +342,11 @@ export function useAuth(): UseAuthReturn {
     currentUser,
     userProfile,
     isLoadingAuth,
-    needsUsernameOnboarding,
+    // Never during a sign-in (the profile is being provisioned) and never after a failed read.
+    needsUsernameOnboarding: Boolean(currentUser) && profileStatus === "missing" && !isSigningIn,
     isSigningIn,
+    authError,
+    dismissAuthError,
     githubToken,
     verificationStatus,
     isVerifying,

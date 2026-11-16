@@ -27,9 +27,10 @@ export class MemoryStorageService implements IStorageService {
     }
   }
 
-  public setItem<T = unknown>(key: string, value: T): void {
+  public setItem<T = unknown>(key: string, value: T): boolean {
     const raw = typeof value === "string" ? value : JSON.stringify(value);
     this.store.set(key, raw);
+    return true;
   }
 
   public removeItem(key: string): void {
@@ -42,5 +43,17 @@ export class MemoryStorageService implements IStorageService {
 
   public hasItem(key: string): boolean {
     return this.store.has(key);
+  }
+
+  public keys(prefix = ""): string[] {
+    return [...this.store.keys()].filter((key) => key.startsWith(prefix));
+  }
+
+  public estimateSize(prefix = ""): number {
+    let total = 0;
+    this.store.forEach((raw, key) => {
+      if (key.startsWith(prefix)) total += key.length + raw.length;
+    });
+    return total;
   }
 }

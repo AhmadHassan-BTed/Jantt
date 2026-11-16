@@ -1,13 +1,15 @@
-import { defineConfig } from "vite";
-import { resolve } from "path";
+import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
 
+// `tsc` emits the npm entry (dist/index.js, importing "@jantt/core"). This build adds
+// dist/jantt-elements.js, a self-contained ES module for <script type="module"> / CDN use.
 export default defineConfig({
   build: {
+    emptyOutDir: false,
     lib: {
-      entry: resolve(__dirname, "src/index.ts"),
-      name: "JanttElements",
-      formats: ["es", "cjs"],
-      fileName: (format) => `index.${format === "es" ? "js" : "cjs"}`
+      entry: resolve(import.meta.dirname, "src/index.ts"),
+      formats: ["es"],
+      fileName: () => "jantt-elements.js"
     }
   },
   test: {

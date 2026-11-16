@@ -9,6 +9,8 @@ import {
   getWorkingDaysInRange,
   getStatutoryHolidays,
   resolveTaskCalendar,
+  normalizeWorkingDays,
+  isSupportedRegion,
   CALENDAR_PRESETS
 } from "../src/calendar";
 import { CascadeResolveStage } from "../src/pipeline/stages/cascade-resolve-stage";
@@ -274,6 +276,115 @@ describe("Multi-Calendar & Statutory Holiday Matrix", () => {
       const resolved = stage.process(tasks, { defaultGapDays: 1 });
       const t2 = resolved.find((t) => t.id === "t2")!;
       expect(t2.start).toBe("2026-11-07");
+    });
+  });
+
+  describe("Weekend substitute days (GitHub #61)", () => {
+    const datesOf = (region: string, year: number) => getStatutoryHolidays(region, year).map((h) => h.date);
+
+    // England & Wales bank holidays as published on gov.uk/bank-holidays
+    const ukBankHolidays: Record<number, string[]> = {
+      2021: ["2021-01-01", "2021-04-02", "2021-04-05", "2021-05-03", "2021-05-31", "2021-08-30", "2021-12-27", "2021-12-28"],
+      2022: [
+        "2022-01-03", "2022-04-15", "2022-04-18", "2022-05-02", "2022-06-02", "2022-06-03",
+        "2022-08-29", "2022-09-19", "2022-12-26", "2022-12-27"
+      ],
+      2027: ["2027-01-01", "2027-03-26", "2027-03-29", "2027-05-03", "2027-05-31", "2027-08-30", "2027-12-27", "2027-12-28"],
+      2028: ["2028-01-03", "2028-04-14", "2028-04-17", "2028-05-01", "2028-05-29", "2028-08-28", "2028-12-25", "2028-12-26"],
+      2033: ["2033-01-03", "2033-04-15", "2033-04-18", "2033-05-02", "2033-05-30", "2033-08-29", "2033-12-26", "2033-12-27"]
+    };
+    for (const [year, expected] of Object.entries(ukBankHolidays)) {
+      it(`matches the UK ${year} bank holiday list`, () => {
+        expect(datesOf("UK", Number(year))).toEqual(expected);
+        expect(datesOf("GB", Number(year))).toEqual(expected);
+      });
+    }
+
+    // US federal holidays as published by OPM (observed dates)
+    const usFederalHolidays: Record<number, string[]> = {
+      2021: [
+        "2021-01-01", "2021-01-18", "2021-02-15", "2021-05-31", "2021-06-18", "2021-07-05",
+        "2021-09-06", "2021-10-11", "2021-11-11", "2021-11-25", "2021-12-24", "2021-12-31"
+      ],
+      2022: [
+        "2022-01-17", "2022-02-21", "2022-05-30", "2022-06-20", "2022-07-04", "2022-09-05",
+        "2022-10-10", "2022-11-11", "2022-11-24", "2022-12-26"
+      ]
+    };
+    for (const [year, expected] of Object.entries(usFederalHolidays)) {
+      it(`matches the US ${year} federal holiday list`, () => {
+        expect(datesOf("US", Number(year))).toEqual(expected);
+      });
+    }
+
+    it("treats substitute and cross-year observed days as non-working", () => {
+      expect(isWorkingDay("2021-12-27", { region: "UK" })).toBe(false);
+      expect(isWorkingDay("2021-12-31", { region: "UK" })).toBe(true);
+      expect(isWorkingDay("2022-01-03", { region: "UK" })).toBe(false);
+      expect(isWorkingDay("2022-12-26", { region: "UK" })).toBe(false);
+      // New Year's Day 2028 is a Saturday: observed on Friday 2027-12-31 by the US
+      expect(isWorkingDay("2027-12-31", { region: "US" })).toBe(false);
+      expect(addWorkingDays("2027-12-30", 1, { region: "US" })).toBe("2028-01-03");
+    });
+
+    it("generates Canadian and Australian holidays instead of an empty list", () => {
+      const ca = datesOf("CA", 2026);
+      expect(ca).toContain("2026-05-18"); // Victoria Day
+      expect(ca).toContain("2026-07-01"); // Canada Day
+      expect(ca).toContain("2026-12-28"); // Boxing Day observed (26th is a Saturday)
+      const au = datesOf("AU", 2026);
+      expect(au).toContain("2026-01-26"); // Australia Day
+      expect(au).toContain("2026-04-25"); // Anzac Day (not substituted)
+      expect(au).toContain("2026-12-28");
+      expect(isSupportedRegion("ca")).toBe(true);
+      expect(isSupportedRegion("XX")).toBe(false);
+      expect(getStatutoryHolidays("XX", 2026)).toEqual([]);
+    });
+
+    it("returns defensive copies of memoized holiday lists", () => {
+      getStatutoryHolidays("UK", 2026)[0].date = "1999-01-01";
+      expect(getStatutoryHolidays("UK", 2026)[0].date).toBe("2026-01-01");
+    });
+  });
+
+  describe("Calendar sanitization and guards", () => {
+    it("normalizes day names and falls back to Mon-Fri for empty or invalid workingDays", () => {
+      expect(normalizeWorkingDays(["Mon", "tuesday", 3, 3, 9, "xx"])).toEqual([1, 2, 3]);
+      expect(normalizeWorkingDays([])).toBeNull();
+      expect(createCalendar({ workingDays: [] as any }).workingDays).toEqual([1, 2, 3, 4, 5]);
+      expect(createCalendar({ workingDays: ["Sat", "Sun"] as any }).workingDays).toEqual([0, 6]);
+    });
+
+    it("never drifts years into the future for empty or misspelled calendars", () => {
+      expect(addWorkingDays("2026-01-05", 3, { workingDays: [] as any })).toBe("2026-01-08");
+      expect(addWorkingDays("2026-01-05", 3, { workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri"] as any })).toBe("2026-01-08");
+    });
+
+    it("falls back to calendar days when a calendar has no working day at all", () => {
+      const allOff = {
+        workingDays: [1, 2, 3, 4, 5] as any,
+        exceptions: Array.from({ length: 800 }, (_, i) => ({
+          date: new Date(Date.UTC(2026, 0, 6 + i)).toISOString().slice(0, 10),
+          isWorkingDay: false
+        }))
+      };
+      expect(addWorkingDays("2026-01-05", 2, allOff)).toBe("2026-01-07");
+    });
+
+    it("re-indexes a calendar whose holiday list is replaced", () => {
+      const cal: WorkingCalendar = { workingDays: [1, 2, 3, 4, 5], holidays: [] };
+      expect(isWorkingDay("2026-11-09", cal)).toBe(true);
+      cal.holidays = ["2026-11-09"];
+      expect(isWorkingDay("2026-11-09", cal)).toBe(false);
+    });
+
+    it("keeps working-day arithmetic fast with regional holidays", () => {
+      const cal = { region: "US", workingDays: [1, 2, 3, 4, 5] as any };
+      const startedAt = Date.now();
+      let total = 0;
+      for (let i = 0; i < 200; i++) total += diffWorkingDays("2026-01-01", "2026-12-31", cal);
+      expect(total).toBe(200 * 250);
+      expect(Date.now() - startedAt).toBeLessThan(1500);
     });
   });
 });

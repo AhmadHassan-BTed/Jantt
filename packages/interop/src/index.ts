@@ -1,13 +1,20 @@
 /**
  * @jantt/interop
  *
- * Enterprise interoperability engine for Jantt:
- * - Lossless Microsoft Project XML (2013-2021) Ingest & Export
- * - Oracle Primavera P6 XER Batch Ingest & Export
- * - RFC 4180 Bidirectional CSV / Spreadsheet Sync
+ * Interoperability engine for Jantt:
+ * - Microsoft Project XML (MSPDI 2013-2021) import & export
+ * - Oracle Primavera P6 XER import & export
+ * - CSV / TSV spreadsheet import & export (RFC 4180)
+ * - Executive report: print-ready HTML booklet & standalone SVG timeline
+ *
+ * The public surface is listed explicitly so helpers shared between modules stay internal.
  */
 
-export * from "./ms-project.js";
-export * from "./primavera.js";
-export * from "./spreadsheet.js";
-export * from "./report.js";
+export { exportMsProjectXml, importMsProjectXml } from "./ms-project.js";
+export type { MsProjectExportOptions, MsProjectImportOptions } from "./ms-project.js";
+export { exportPrimaveraXer, importPrimaveraXer } from "./primavera.js";
+export type { PrimaveraExportOptions, PrimaveraImportOptions } from "./primavera.js";
+export { exportSpreadsheetCsv, importSpreadsheetCsv, decodeTextBytes } from "./spreadsheet.js";
+export type { SpreadsheetExportOptions, SpreadsheetImportOptions } from "./spreadsheet.js";
+export { exportExecutiveReportHtml, exportExecutiveReportSvg, downloadExecutiveReport } from "./report.js";
+export type { ExecutiveReportOptions } from "./report.js";

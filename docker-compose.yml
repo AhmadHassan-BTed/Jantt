@@ -7,11 +7,13 @@ services:
     container_name: jantt-playground
     restart: unless-stopped
     ports:
-      - "${VITE_PLAYGROUND_PORT:-5173}:80"
-    environment:
-      - NODE_ENV=production
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      # Defaults to 8080 so it never collides with the `npm run dev` server on 5173.
+      - "${PLAYGROUND_HTTP_PORT:-8080}:8080"
+    # Static site served by unprivileged nginx: no writes outside /tmp, no capabilities.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

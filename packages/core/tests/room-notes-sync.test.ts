@@ -225,4 +225,41 @@ describe("Room Notes Synchronization & CRDT Merge", () => {
     const activeNotes = (merged.notes || []).filter((n) => !n._deleted);
     expect(activeNotes).toHaveLength(0);
   });
+
+  describe("note removed from the list with only a meta tombstone (Notes view delete)", () => {
+    const DELETED_AT = "2026-09-02T12:00:00.000Z";
+    const deletedLocally = (): JanttData => {
+      const plan: JanttData = JSON.parse(JSON.stringify(basePlan));
+      plan.notes = [];
+      plan.meta = { ...plan.meta, tombstones: { "note-1": { deletedAt: DELETED_AT, entityType: "note" } } };
+      return plan;
+    };
+    const withNoteUpdatedAt = (updatedAt: string): JanttData => {
+      const plan: JanttData = JSON.parse(JSON.stringify(basePlan));
+      plan.notes![0] = { ...plan.notes![0], content: "Edited", updatedAt };
+      return plan;
+    };
+
+    it("drops the note when the other side left it untouched (3-way)", () => {
+      const base: JanttData = JSON.parse(JSON.stringify(basePlan));
+      // Retention purge is wall-clock based; disable it so the fixed fixture date cannot expire.
+      const merged = reconcilePlans(base, deletedLocally(), JSON.parse(JSON.stringify(basePlan)), { purgeTombstones: false }).mergedData;
+      expect(merged.notes ?? []).toHaveLength(0);
+      expect(merged.meta?.tombstones?.["note-1"]).toMatchObject({ entityType: "note" });
+
+      // The same holds with the sides swapped
+      const swapped = reconcilePlans(base, JSON.parse(JSON.stringify(basePlan)), deletedLocally()).mergedData;
+      expect(swapped.notes ?? []).toHaveLength(0);
+    });
+
+    it("without a base, keeps the note only when it was edited after the deletion", () => {
+      const stale = reconcilePlans(null, deletedLocally(), withNoteUpdatedAt("2026-09-02T11:00:00.000Z")).mergedData;
+      expect(stale.notes ?? []).toHaveLength(0);
+
+      const later = reconcilePlans(null, deletedLocally(), withNoteUpdatedAt("2026-09-02T13:00:00.000Z"));
+      expect(later.mergedData.notes?.map((n) => n.content)).toEqual(["Edited"]);
+      expect(later.mergedData.meta?.tombstones?.["note-1"]).toBeUndefined();
+      expect(later.conflicts.some((c) => c.entityId === "note-1")).toBe(true);
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import { JanttData } from "./types";
 import { validate } from "./validator";
-import { calculatePlanHash } from "./reconciler";
+import { calculatePlanHash } from "./reconciliation/crdt-hash";
 
 export type CloudProviderType = "github" | "dropbox" | "generic";
 
@@ -12,9 +12,69 @@ export interface CloudUrlInfo {
   label: string;
 }
 
+/** Default time budget for one network request (connect + response body), in milliseconds. */
+export const DEFAULT_FETCH_TIMEOUT_MS = 15000;
+/** Largest remote plan file accepted, in bytes. */
+export const MAX_REMOTE_PLAN_BYTES = 10 * 1024 * 1024;
+
+// Query parameters that never change which file a link points to (download mode, cache busting).
+const VOLATILE_QUERY_PARAMS: ReadonlySet<string> = new Set(["dl", "raw", "v", "t"]);
+// Query parameters that carry credentials; such URLs are never sent to a third-party proxy.
+const CREDENTIAL_QUERY_PARAMS: ReadonlySet<string> = new Set([
+  "token",
+  "access_token",
+  "auth",
+  "key",
+  "apikey",
+  "api_key",
+  "password",
+  "sig",
+  "signature",
+  "x-amz-signature",
+  "x-goog-signature"
+]);
+
+function hostMatches(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
 /**
- * Parses and normalizes various cloud storage and raw file sharing URLs
- * into direct JSON-downloadable endpoints.
+ * IP literals, localhost and single-label (intranet) names. The URL parser has already turned
+ * every IPv4 spelling (hex, octal, integer) into dotted decimal and wrapped IPv6 in brackets.
+ */
+function isLocalOrPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.startsWith("[") ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) ||
+    !host.includes(".")
+  );
+}
+
+function parseHttpsUrl(inputUrl: string): URL {
+  let url: URL;
+  try {
+    url = new URL(inputUrl);
+  } catch {
+    throw new Error("Invalid URL: enter a full https:// link to a Jantt JSON file.");
+  }
+  if (url.protocol !== "https:") {
+    throw new Error("Only https:// links are supported for remote plans.");
+  }
+  if (url.username || url.password) {
+    throw new Error("Links with embedded credentials (user:password@) are not supported.");
+  }
+  if (isLocalOrPrivateHost(url.hostname)) {
+    throw new Error("Links to localhost, IP addresses or private network hosts are not supported.");
+  }
+  return url;
+}
+
+/**
+ * Parses and normalizes cloud storage and raw file sharing URLs into direct JSON-downloadable
+ * endpoints. Providers are recognized by host name; only https:// links are accepted.
  */
 export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
   if (!inputUrl || typeof inputUrl !== "string") {
@@ -22,68 +82,62 @@ export function parseCloudUrl(inputUrl: string): CloudUrlInfo {
   }
 
   const trimmed = inputUrl.trim();
+  const url = parseHttpsUrl(trimmed);
+  const host = url.hostname.toLowerCase();
 
-  // Reject Google Drive URLs explicitly
-  const driveRegex = /drive\.google\.com|docs\.google\.com/i;
-  if (driveRegex.test(trimmed)) {
+  if (host === "drive.google.com" || host === "docs.google.com") {
     throw new Error(
       "Google Drive linking is no longer supported. Please use Firebase Cloud Storage or Cloud Rooms."
     );
   }
 
-  // 2. GitHub URLs (convert blob URL to raw.githubusercontent.com)
-  const githubBlobRegex = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/i;
-  const githubMatch = trimmed.match(githubBlobRegex);
-  if (githubMatch) {
-    const [, user, repo, branch, path] = githubMatch;
-    const downloadUrl = `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
-    return {
-      originalUrl: trimmed,
-      provider: "github",
-      downloadUrl,
-      label: "GitHub"
-    };
-  }
-
-  // GitHub raw URL
-  if (/raw\.githubusercontent\.com/i.test(trimmed) || /gist\.githubusercontent\.com/i.test(trimmed)) {
-    return {
-      originalUrl: trimmed,
-      provider: "github",
-      downloadUrl: trimmed,
-      label: "GitHub Raw"
-    };
-  }
-
-  // 3. Dropbox URLs (convert ?dl=0 to ?dl=1)
-  if (/dropbox\.com/i.test(trimmed)) {
-    let downloadUrl = trimmed;
-    if (downloadUrl.includes("dl=0")) {
-      downloadUrl = downloadUrl.replace("dl=0", "dl=1");
-    } else if (!downloadUrl.includes("dl=1") && !downloadUrl.includes("raw=1")) {
-      const separator = downloadUrl.includes("?") ? "&" : "?";
-      downloadUrl = `${downloadUrl}${separator}dl=1`;
+  // GitHub blob URL -> raw.githubusercontent.com
+  if (host === "github.com" || host === "www.github.com") {
+    const [user, repo, kind, branch, ...path] = url.pathname.split("/").filter(Boolean);
+    if (kind === "blob" && user && repo && branch && path.length > 0) {
+      return {
+        originalUrl: trimmed,
+        provider: "github",
+        downloadUrl: `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path.join("/")}`,
+        label: "GitHub"
+      };
     }
-    return {
-      originalUrl: trimmed,
-      provider: "dropbox",
-      downloadUrl,
-      label: "Dropbox"
-    };
   }
 
-  // 4. Generic Direct JSON URL
-  return {
-    originalUrl: trimmed,
-    provider: "generic",
-    downloadUrl: trimmed,
-    label: "Direct JSON URL"
-  };
+  if (host === "raw.githubusercontent.com" || host === "gist.githubusercontent.com") {
+    return { originalUrl: trimmed, provider: "github", downloadUrl: trimmed, label: "GitHub Raw" };
+  }
+
+  // Dropbox share links download directly with dl=1 (raw=1 is kept as is)
+  if (hostMatches(host, "dropbox.com") || hostMatches(host, "dropboxusercontent.com")) {
+    if (url.searchParams.get("raw") !== "1") url.searchParams.set("dl", "1");
+    return { originalUrl: trimmed, provider: "dropbox", downloadUrl: url.toString(), label: "Dropbox" };
+  }
+
+  return { originalUrl: trimmed, provider: "generic", downloadUrl: trimmed, label: "Direct JSON URL" };
+}
+
+/** Identity of a file URL: scheme, host and exact path, plus its non-volatile query parameters. */
+function resourceKey(rawUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  const params = Array.from(url.searchParams.entries())
+    .filter(([name]) => !VOLATILE_QUERY_PARAMS.has(name.toLowerCase()))
+    .sort(([a, av], [b, bv]) => (a < b ? -1 : a > b ? 1 : av < bv ? -1 : av > bv ? 1 : 0));
+  const query = new URLSearchParams(params).toString();
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  return `${url.protocol}//${url.host}${path}${query ? `?${query}` : ""}`;
 }
 
 /**
- * Compares two cloud URLs to determine if they reference the identical remote resource.
- * Intelligently recognizes GitHub files (matching repo & branch paths), Dropbox links, and normalized URLs.
+ * True when two cloud URLs reference the same remote file. GitHub blob and raw forms of a file
+ * match; scheme and host are case-insensitive, paths are case-sensitive, trailing slashes, the
+ * fragment and download/cache-busting parameters (dl, raw, v, t) are ignored, and every other
+ * query parameter (for example Dropbox's rlkey) must match.
  */
 export function isMatchingCloudUrl(urlA?: string | null, urlB?: string | null): boolean {
   if (!urlA || !urlB) return false;
@@ -91,46 +145,143 @@ export function isMatchingCloudUrl(urlA?: string | null, urlB?: string | null): 
   const b = urlB.trim();
   if (a === b) return true;
 
-  try {
-    const infoA = parseCloudUrl(a);
-    const infoB = parseCloudUrl(b);
-
-    if (infoA.provider !== infoB.provider) return false;
-
-    if (infoA.downloadUrl === infoB.downloadUrl) return true;
-  } catch {
-    // Fall back to clean URL comparison
-  }
-
-  // Fallback: strip query params, hash and trailing slash
-  const cleanA = a.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
-  const cleanB = b.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
-  return cleanA === cleanB;
+  const normalize = (raw: string): string | null => {
+    try {
+      return resourceKey(parseCloudUrl(raw).downloadUrl);
+    } catch {
+      return resourceKey(raw);
+    }
+  };
+  const keyA = normalize(a);
+  return keyA !== null && keyA === normalize(b);
 }
 
 // ---------------------------------------------------------------------------
-
-// CORS-aware fetch helper
+// Network helpers
 // ---------------------------------------------------------------------------
 
-/**
- * The project's own Cloudflare Worker CORS proxy.
- * Deploy it once with `npx wrangler deploy` from /worker - free forever.
- *
- * After deploying you'll get a URL like:
- *   https://jantt-cors-proxy.<your-cf-subdomain>.workers.dev
- *
- * Update the URL below, or set it at runtime via:
- *   (window as any).__JANTT_CORS_PROXY = "https://jantt-cors-proxy.YOUR.workers.dev";
- */
-const DEFAULT_WORKER_URL = "https://jantt-cors-proxy.ahmadhassan-bted.workers.dev";
+export interface FetchTimeoutOptions {
+  /** Time budget for the whole exchange, including reading the body (default 15 s; 0 disables). */
+  timeoutMs?: number;
+  /** Aborts the request when signalled. */
+  signal?: AbortSignal | null;
+}
 
-function getWorkerUrl(): string {
-  // Allow runtime override from the app
-  if (typeof window !== "undefined" && (window as any).__JANTT_CORS_PROXY) {
-    return (window as any).__JANTT_CORS_PROXY;
+/**
+ * Runs `fetch` and then `read` on the response within one time budget, so neither a stalled
+ * connection nor a stalled body can hang the caller. A timeout rejects with a "timed out" error;
+ * an abort through `options.signal` rejects with the fetch AbortError.
+ */
+export async function fetchWithTimeout<T>(
+  url: string,
+  init: RequestInit,
+  read: (response: Response) => Promise<T>,
+  options: FetchTimeoutOptions = {}
+): Promise<T> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const external = options.signal;
+  const onAbort = () => controller.abort(external?.reason);
+  if (external?.aborted) controller.abort(external.reason);
+  else external?.addEventListener("abort", onAbort, { once: true });
+
+  let timedOut = false;
+  const timer =
+    timeoutMs > 0 && Number.isFinite(timeoutMs)
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : undefined;
+
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    return await read(response);
+  } catch (err) {
+    if (timedOut) {
+      const budget = timeoutMs >= 1000 ? `${Math.round(timeoutMs / 1000)} s` : `${timeoutMs} ms`;
+      throw new Error(`Request timed out after ${budget}.`);
+    }
+    throw err;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    external?.removeEventListener("abort", onAbort);
   }
-  return DEFAULT_WORKER_URL;
+}
+
+function tooLargeError(maxBytes: number): Error {
+  return new Error(`Remote file is larger than ${Math.round(maxBytes / (1024 * 1024))} MB.`);
+}
+
+/** Reads a response body as text, rejecting it once it exceeds `maxBytes`. */
+async function readTextCapped(response: Response, maxBytes: number): Promise<string> {
+  const declared = Number(response.headers?.get?.("Content-Length"));
+  if (Number.isFinite(declared) && declared > maxBytes) throw tooLargeError(maxBytes);
+
+  const reader = response.body && typeof response.body.getReader === "function" ? response.body.getReader() : null;
+  if (!reader) {
+    const text = await response.text();
+    if (text.length > maxBytes) throw tooLargeError(maxBytes);
+    return text;
+  }
+
+  const decoder = new TextDecoder();
+  let received = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > maxBytes) {
+      // ignored: a failed cancel changes nothing; the size error is what the caller needs
+      await reader.cancel().catch(() => undefined);
+      throw tooLargeError(maxBytes);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
+function describeHttpError(status: number, statusText?: string): Error {
+  if (status === 404) {
+    return new Error("File not found (404). Verify the share link is correct and the file is publicly accessible.");
+  }
+  if (status === 401 || status === 403) {
+    return new Error(`Access denied (${status}). Ensure the file is public or has appropriate access permissions.`);
+  }
+  if (status === 429) {
+    return new Error("Download rate limit temporarily exceeded. Please try again in a few seconds.");
+  }
+  return new Error(`Remote server returned error ${status}${statusText ? `: ${statusText}` : ""}`);
+}
+
+/** True when a URL carries credentials and therefore must never be sent to a third party. */
+function hasCredentials(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    if (url.username || url.password) return true;
+    for (const name of url.searchParams.keys()) {
+      if (CREDENTIAL_QUERY_PARAMS.has(name.toLowerCase())) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Explicitly configured CORS proxy, if any: `options.proxyUrl`, else (only with
+ * `allowGlobalOverrides`) `window.__JANTT_CORS_PROXY`.
+ */
+function resolveProxyUrl(options: Pick<FetchRemotePlanOptions, "proxyUrl" | "allowGlobalOverrides">): string | null {
+  const { proxyUrl } = options;
+  if (proxyUrl === null) return null;
+  const candidate =
+    proxyUrl ??
+    (options.allowGlobalOverrides === true && typeof window !== "undefined"
+      ? (window as unknown as { __JANTT_CORS_PROXY?: unknown }).__JANTT_CORS_PROXY
+      : undefined);
+  return typeof candidate === "string" && candidate.trim() ? candidate.trim() : null;
 }
 
 interface FetchRawResult {
@@ -139,73 +290,68 @@ interface FetchRawResult {
   source?: string;
 }
 
-/**
- * Fetches a URL, routing through our own Cloudflare Worker proxy
- * Fetches a URL, routing through our own Cloudflare Worker proxy
- * when needed or when CORS is blocked.
- */
-async function fetchWithCorsFallback(url: string, _provider?: CloudProviderType): Promise<FetchRawResult> {
-  // For GitHub, generic, try direct first
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { Accept: "application/json, text/plain, */*" }
-    });
-    if (res.ok) {
-      const text = await res.text();
-      return { text, quotaShieldActive: false, source: "direct" };
-    }
-  } catch {
-    // CORS / network error - fall through to worker
-  }
+const ACCEPT_HEADERS = { Accept: "application/json, text/plain, */*" };
 
-  // Fallback to our worker proxy
-  return fetchViaWorker(url);
+/**
+ * Fetches a URL directly. Only when the browser blocks the request (CORS or network failure, never
+ * an HTTP error status) and a proxy was configured, retries through the proxy. URLs carrying
+ * credentials are never proxied.
+ */
+async function fetchWithCorsFallback(url: string, options: FetchRemotePlanOptions): Promise<FetchRawResult> {
+  try {
+    return await fetchWithTimeout(
+      url,
+      { method: "GET", headers: ACCEPT_HEADERS },
+      async (res) => {
+        if (!res.ok) throw describeHttpError(res.status, res.statusText);
+        return { text: await readTextCapped(res, MAX_REMOTE_PLAN_BYTES), quotaShieldActive: false, source: "direct" };
+      },
+      options
+    );
+  } catch (err) {
+    const proxy = resolveProxyUrl(options);
+    // fetch rejects with a TypeError only when the request could not be made (CORS, DNS, offline)
+    if (!(err instanceof TypeError) || !proxy || hasCredentials(url)) {
+      if (err instanceof TypeError) {
+        throw new Error(
+          "Could not download the file: the host is unreachable or blocks cross-origin requests (CORS). " +
+            "Use a raw GitHub/Dropbox link or configure a CORS proxy."
+        );
+      }
+      throw err;
+    }
+    return fetchViaProxy(proxy, url, options);
+  }
 }
 
-/**
- * Fetches via our Cloudflare Worker CORS proxy.
- */
-async function fetchViaWorker(targetUrl: string): Promise<FetchRawResult> {
-  const workerBase = getWorkerUrl();
-  const proxyUrl = `${workerBase}?url=${encodeURIComponent(targetUrl)}`;
-
-  let res: Response;
+/** Fetches through a Jantt CORS proxy worker (see /worker/README.md). */
+async function fetchViaProxy(proxyBase: string, targetUrl: string, options: FetchTimeoutOptions): Promise<FetchRawResult> {
+  const separator = proxyBase.includes("?") ? "&" : "?";
+  const proxyUrl = `${proxyBase}${separator}url=${encodeURIComponent(targetUrl)}`;
   try {
-    res = await fetch(proxyUrl, {
-      method: "GET",
-      headers: { Accept: "application/json, text/plain, */*" }
-    });
-  } catch (e: any) {
-    throw new Error(
-      `Could not connect to the Jantt CORS proxy.\n\n` +
-      `If the proxy hasn't been deployed yet, see the deployment guide in /worker/README.md.\n\n` +
-      `(${e.message || "Network error"})`
+    return await fetchWithTimeout(
+      proxyUrl,
+      { method: "GET", headers: ACCEPT_HEADERS },
+      async (res) => {
+        if (!res.ok) throw describeHttpError(res.status, res.statusText);
+        return {
+          text: await readTextCapped(res, MAX_REMOTE_PLAN_BYTES),
+          quotaShieldActive: res.headers?.get?.("X-Jantt-Quota-Shield") === "active",
+          source: res.headers?.get?.("X-Jantt-Cache") || "proxy"
+        };
+      },
+      options
     );
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error(`Could not connect to the CORS proxy. See /worker/README.md. (${err.message || "Network error"})`);
+    }
+    throw err;
   }
+}
 
-  const quotaShieldActive = Boolean(res.headers?.get?.("X-Jantt-Quota-Shield") === "active");
-  const source = res.headers?.get?.("X-Jantt-Cache") || undefined;
-
-  if (!res.ok) {
-    if (res.status === 404) {
-      throw new Error("File not found (404). Verify the share link is correct and the file is publicly accessible.");
-    }
-    if (res.status === 429) {
-      throw new Error(
-        "Download rate limit temporarily exceeded. The serverless proxy is pacing requests."
-      );
-    }
-    if (res.status === 403 || res.status === 401) {
-      throw new Error(
-        `Access denied (${res.status}). Ensure the file is public or has appropriate access permissions.`
-      );
-    }
-    throw new Error(`Proxy returned error ${res.status}: ${res.statusText}`);
-  }
-
-  const text = await res.text();
-  return { text, quotaShieldActive, source };
+function looksLikeHtml(text: string): boolean {
+  return /^\s*</.test(text) && /<html|<!doctype/i.test(text.slice(0, 512));
 }
 
 // ---------------------------------------------------------------------------
@@ -222,22 +368,34 @@ export interface RemoteFetchResult {
   source?: string;
 }
 
+export interface FetchRemotePlanOptions extends FetchTimeoutOptions {
+  /** Content hash of the copy already held; sets `notModified` when unchanged. */
+  previousHash?: string;
+  /**
+   * CORS proxy base URL (see /worker/README.md), used only when the direct request is blocked.
+   * There is no default proxy; pass null to never use one.
+   */
+  proxyUrl?: string | null;
+  /**
+   * @deprecated Honour a page-wide `window.__JANTT_CORS_PROXY` when `proxyUrl` is not given. Off
+   * by default, so no other script on the page can route plan URLs through a proxy of its choice.
+   */
+  allowGlobalOverrides?: boolean;
+}
+
 /**
- * Fetches, parses, and validates a remote Jantt plan from a shared URL.
- * Handles CORS automatically via proxy fallback.
- * Calculates deterministic content hash for high-efficiency collision and change detection.
+ * Fetches, parses, and validates a remote Jantt plan from a shared https:// URL.
+ * Files larger than {@link MAX_REMOTE_PLAN_BYTES} are rejected, and every request is bounded by
+ * `timeoutMs`. A CORS proxy is used only when one is configured explicitly.
  */
-export async function fetchRemotePlan(
-  url: string,
-  options?: { previousHash?: string }
-): Promise<RemoteFetchResult> {
+export async function fetchRemotePlan(url: string, options?: FetchRemotePlanOptions): Promise<RemoteFetchResult> {
   const info = parseCloudUrl(url);
 
-  const rawResult = await fetchWithCorsFallback(info.downloadUrl, info.provider);
+  const rawResult = await fetchWithCorsFallback(info.downloadUrl, options ?? {});
   const rawText = rawResult.text;
 
   // Detect HTML error pages (login redirects, 404 HTML pages, etc.)
-  if (rawText.trimStart().startsWith("<!DOCTYPE") || rawText.trimStart().startsWith("<html")) {
+  if (looksLikeHtml(rawText)) {
     throw new Error(
       `The URL returned an HTML page instead of JSON. ` +
       `Make sure the link points directly to a public Jantt JSON file or raw GitHub URL.`

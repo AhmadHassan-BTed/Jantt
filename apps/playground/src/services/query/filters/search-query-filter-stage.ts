@@ -1,4 +1,4 @@
-import { Task } from "@jantt/core";
+import { Task, resolveTaskAssignee } from "@jantt/core";
 import { ITaskFilterStage, TaskQueryContext } from "../contracts";
 
 export class SearchQueryFilterStage implements ITaskFilterStage {
@@ -9,12 +9,22 @@ export class SearchQueryFilterStage implements ITaskFilterStage {
     const query = context.searchQuery?.trim().toLowerCase();
     if (!query) return true;
 
-    const labelMatch = (task.label || "").toLowerCase().includes(query);
-    const idMatch = (task.id || "").toLowerCase().includes(query);
-    const catMatch = (task.category || "").toLowerCase().includes(query);
-    const assigneeMatch = (task.assignee || "").toLowerCase().includes(query);
-    const wbsMatch = (task.wbs || "").toLowerCase().includes(query);
+    const includes = (value: unknown) => typeof value === "string" && value.toLowerCase().includes(query);
+    if (
+      includes(task.label || task.name) ||
+      includes(task.id) ||
+      includes(task.category) ||
+      includes(task.assignee) ||
+      includes(task.wbs)
+    ) {
+      return true;
+    }
 
-    return labelMatch || idMatch || catMatch || assigneeMatch || wbsMatch;
+    // Match the resolved person / team name, not only the raw assignee id
+    if (context.effectivePeople?.length || context.teams?.length) {
+      const info = resolveTaskAssignee(task, context.effectivePeople || [], context.teams || []);
+      return includes(info.displayName) || includes(info.team?.name);
+    }
+    return false;
   }
 }

@@ -2,33 +2,71 @@
  * Critical Path Method (CPM) Engine
  *
  * Implements rigorous 2-pass Activity-On-Node (AON) graph analysis:
- * 1. Kahn's Algorithm topological sort with cycle detection
+ * 1. Topological order from the shared dependency graph (cycles are isolated, never followed)
  * 2. Forward Pass: Computes Earliest Start (ES) and Earliest Finish (EF)
  * 3. Backward Pass: Computes Latest Finish (LF) and Latest Start (LS)
  * 4. Float Metrics: Total Float (TF) and Free Float (FF)
  * 5. Critical & Near-Critical identification
  * 6. Driving critical dependency link detection and contiguous path assembly
+ *
+ * Honors FS/SS/FF/SF links with lead/lag exactly like the cascade (same lag/gap rule, same
+ * default gap), so the critical path matches the dates the cascade produced. Dates are handled
+ * as integer day numbers internally; durations are `end - start` days and milestones are 0.
  */
 
 import { Task, CriticalPathResult, CriticalPathOptions, TaskScheduleMetrics } from "./types";
-import { addDays, diffDays } from "./date-math";
+import { toEpochDay, fromEpochDay, parseISODate, isValidISODate } from "./date-math";
 import { getEffectiveGap } from "./utils";
-import { getTaskDependencyRelations } from "./dependencies";
+import { DEFAULT_GAP_DAYS } from "./constants";
+import {
+  DependencyType,
+  buildDependencyGraph,
+  getTaskDependencyRelations,
+  resolveRelationLag,
+  relationEarliestStartDay,
+  isStartAnchoredRelation,
+  isFinishConstrainedRelation
+} from "./dependencies";
+
+/** Upper bound on materialized critical paths (path counts can grow exponentially). */
+export const MAX_CRITICAL_PATHS = 25;
+
+const DAY_MS = 86400000;
 
 /**
- * Normalizes task dependencies into a clean string array.
+ * Normalizes task dependencies into a clean string array of predecessor ids.
  * Supports string, string[], comma-separated, or structured object formats.
+ *
+ * Read-only: the ids carry no link type or lag, so never rebuild `dependsOn` from this list.
+ * Use `filterDependsOn` / `appendDependency` (dependencies.ts) to remove or add links; they keep
+ * every other item exactly as written.
  */
 export function getTaskDependencies(task: Task | { dependsOn?: unknown }): string[] {
   return getTaskDependencyRelations(task).map((rel) => rel.id);
 }
 
+interface CpmEdge {
+  from: number;
+  to: number;
+  type: DependencyType;
+  lag: number;
+}
+
+/** Epoch day of an ISO date; invalid dates use the lenient parser so every task gets metrics. */
+function dayOf(iso: string, invalid: Set<string>, taskId: string): number {
+  const day = toEpochDay(iso);
+  if (!Number.isNaN(day)) return day;
+  invalid.add(taskId);
+  return Math.round(parseISODate(iso).getTime() / DAY_MS);
+}
+
 /**
  * Calculates the Critical Path of a task network using rigorous 2-Pass Activity-On-Node (AON)
- * operations research methodology:
+ * operations research methodology.
  *
  * @param tasks - The array of tasks to analyze.
- * @param options - Optional target completion date, near-critical float threshold, and gap days.
+ * @param options - Optional target completion date, near-critical float threshold, and gap days
+ *   (defaults to DEFAULT_GAP_DAYS, the same default the cascade uses).
  * @returns Complete CriticalPathResult with sets, metrics maps, and ordered paths.
  */
 export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptions): CriticalPathResult {
@@ -37,10 +75,13 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   const nearCriticalTaskIds = new Set<string>();
   const metrics = new Map<string, TaskScheduleMetrics>();
   const criticalPaths: string[][] = [];
+  const warnings: string[] = [];
 
-  const liveTasks = (tasks || []).filter((t) => !t._deleted);
+  const graph = buildDependencyGraph(tasks);
+  const ids = graph.order; // topological order: every edge goes from a lower to a higher index
+  const n = ids.length;
 
-  if (liveTasks.length === 0) {
+  if (n === 0) {
     return {
       criticalTaskIds,
       criticalDepKeys,
@@ -49,213 +90,122 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
       projectLateFinish: "",
       projectTotalFloat: 0,
       criticalPaths,
-      metrics
+      metrics,
+      warnings
     };
   }
 
-  const byId = new Map<string, Task>();
-  const predMap = new Map<string, string[]>();
-  const succMap = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-  const durationMap = new Map<string, number>();
+  const rawGap = options?.defaultGapDays;
+  const defaultGap = typeof rawGap === "number" && Number.isFinite(rawGap) ? rawGap : DEFAULT_GAP_DAYS;
+  const position = new Map<string, number>();
+  ids.forEach((id, i) => position.set(id, i));
 
-  liveTasks.forEach((t) => {
-    byId.set(t.id, t);
-    predMap.set(t.id, []);
-    succMap.set(t.id, []);
-    inDegree.set(t.id, 0);
-    const dur = Math.max(0, diffDays(t.start, t.end));
-    durationMap.set(t.id, dur);
-  });
+  const start = new Float64Array(n);
+  const dur = new Float64Array(n);
+  const invalidDates = new Set<string>();
+  const incoming: CpmEdge[][] = [];
+  const outgoing: CpmEdge[][] = ids.map(() => []);
 
-  // Build clean graph edges
-  liveTasks.forEach((t) => {
-    const rawDeps = getTaskDependencies(t);
-    const validDeps = rawDeps.filter((depId) => byId.has(depId) && depId !== t.id);
-    predMap.set(t.id, validDeps);
-    inDegree.set(t.id, validDeps.length);
+  for (let i = 0; i < n; i++) {
+    const id = ids[i];
+    const task = graph.nodes.get(id)!;
+    const s = dayOf(task.start, invalidDates, id);
+    start[i] = s;
+    dur[i] = task.milestone ? 0 : Math.max(0, dayOf(task.end, invalidDates, id) - s);
 
-    validDeps.forEach((depId) => {
-      succMap.get(depId)!.push(t.id);
-    });
-  });
-
-  // 1. Topological Sort via Kahn's Algorithm
-  const queue: string[] = [];
-  inDegree.forEach((deg, id) => {
-    if (deg === 0) queue.push(id);
-  });
-
-  const topologicalOrder: string[] = [];
-  const inDegreeCopy = new Map(inDegree);
-
-  while (queue.length > 0) {
-    const currId = queue.shift()!;
-    topologicalOrder.push(currId);
-
-    const succs = succMap.get(currId) || [];
-    for (const sId of succs) {
-      const remaining = inDegreeCopy.get(sId)! - 1;
-      inDegreeCopy.set(sId, remaining);
-      if (remaining === 0) {
-        queue.push(sId);
-      }
-    }
-  }
-
-  // Graceful cycle recovery: if cycles exist, append remaining nodes to prevent crashes
-  if (topologicalOrder.length < liveTasks.length) {
-    const visited = new Set(topologicalOrder);
-    for (const t of liveTasks) {
-      if (!visited.has(t.id)) {
-        topologicalOrder.push(t.id);
-      }
-    }
-  }
-
-  // 2. Forward Pass: Compute ES and EF
-  const earlyStartMap = new Map<string, string>();
-  const earlyFinishMap = new Map<string, string>();
-  const drivingPredsMap = new Map<string, string[]>();
-
-  for (const taskId of topologicalOrder) {
-    const task = byId.get(taskId)!;
-    const preds = predMap.get(taskId) || [];
-    const dur = durationMap.get(taskId)!;
-    const defaultGap = options?.defaultGapDays ?? 0;
     const gap = getEffectiveGap(task, defaultGap);
-
-    let calculatedES = task.start;
-
-    if (preds.length > 0) {
-      let maxCandidateES: string | null = null;
-      for (const pId of preds) {
-        const predEF = earlyFinishMap.get(pId) || byId.get(pId)!.end;
-        const candidateES = addDays(predEF, gap);
-        if (!maxCandidateES || diffDays(maxCandidateES, candidateES) > 0) {
-          maxCandidateES = candidateES;
-        }
-      }
-      if (maxCandidateES && diffDays(calculatedES, maxCandidateES) > 0) {
-        calculatedES = maxCandidateES;
-      }
+    const edges: CpmEdge[] = [];
+    for (const rel of graph.predecessors.get(id)!) {
+      if (graph.isCyclicEdge(rel.id, id)) continue;
+      const edge: CpmEdge = { from: position.get(rel.id)!, to: i, type: rel.type, lag: resolveRelationLag(rel, gap) };
+      edges.push(edge);
+      outgoing[edge.from].push(edge);
     }
-
-    // Determine driving predecessors
-    const drivingPreds: string[] = [];
-    if (preds.length > 0) {
-      for (const pId of preds) {
-        const predEF = earlyFinishMap.get(pId) || byId.get(pId)!.end;
-        const expectedES = addDays(predEF, gap);
-        if (diffDays(expectedES, calculatedES) === 0) {
-          drivingPreds.push(pId);
-        }
-      }
-    }
-
-    earlyStartMap.set(taskId, calculatedES);
-    earlyFinishMap.set(taskId, addDays(calculatedES, dur));
-    drivingPredsMap.set(taskId, drivingPreds);
+    incoming.push(edges);
   }
 
-  // Determine Project Early Finish (T_E)
-  let projectEarlyFinish = liveTasks[0].end;
-  liveTasks.forEach((t) => {
-    const ef = earlyFinishMap.get(t.id) || t.end;
-    if (diffDays(projectEarlyFinish, ef) > 0) {
-      projectEarlyFinish = ef;
+  if (invalidDates.size > 0) {
+    warnings.push(`Tasks with invalid dates were analyzed using best-effort dates: ${Array.from(invalidDates).join(", ")}.`);
+  }
+  if (graph.cycles.length > 0) {
+    warnings.push(`Dependency links inside cycles were ignored: ${graph.cycles.map((c) => c.join(" <-> ")).join("; ")}.`);
+  }
+
+  // 1. Forward Pass: ES = max(own start, every link's earliest allowed start); EF = ES + duration
+  const es = new Float64Array(n);
+  const ef = new Float64Array(n);
+  const forwardCandidate = (e: CpmEdge) =>
+    relationEarliestStartDay(e.type, es[e.from], ef[e.from], dur[e.to], e.lag);
+  let projectEF = -Infinity;
+  for (let i = 0; i < n; i++) {
+    let value = start[i];
+    for (const e of incoming[i]) {
+      const candidate = forwardCandidate(e);
+      if (candidate > value) value = candidate;
     }
-  });
+    es[i] = value;
+    ef[i] = value + dur[i];
+    if (ef[i] > projectEF) projectEF = ef[i];
+  }
 
-  // 3. Backward Pass: Compute LF and LS
-  // Target date support (enables negative float when contractual deadline is breached)
-  const projectLateFinish = options?.targetDate && options.targetDate.trim() !== ""
-    ? options.targetDate.trim()
-    : projectEarlyFinish;
-
-  const lateFinishMap = new Map<string, string>();
-  const lateStartMap = new Map<string, string>();
-
-  // Process in reverse topological order
-  const reversedOrder = [...topologicalOrder].reverse();
-
-  for (const taskId of reversedOrder) {
-    const succs = succMap.get(taskId) || [];
-    const dur = durationMap.get(taskId)!;
-
-    if (succs.length === 0) {
-      // Terminal node (no successors)
-      lateFinishMap.set(taskId, projectLateFinish);
+  // 2. Backward Pass (target date support enables negative float when a deadline is breached)
+  let projectLF = projectEF;
+  const target = options?.targetDate;
+  if (target !== undefined && target !== null && target !== "") {
+    if (typeof target === "string" && isValidISODate(target)) {
+      projectLF = toEpochDay(target);
     } else {
-      let minCandidateLF: string | null = null;
-      for (const sId of succs) {
-        const succTask = byId.get(sId)!;
-        const succLS = lateStartMap.get(sId)!;
-        const defaultGap = options?.defaultGapDays ?? 0;
-        const gap = getEffectiveGap(succTask, defaultGap);
-        const candidateLF = addDays(succLS, -gap);
-
-        if (!minCandidateLF || diffDays(candidateLF, minCandidateLF) > 0) {
-          minCandidateLF = candidateLF;
-        }
-      }
-      lateFinishMap.set(taskId, minCandidateLF || projectLateFinish);
+      warnings.push(`Ignored invalid targetDate '${String(target)}' (expected YYYY-MM-DD).`);
     }
-
-    const lf = lateFinishMap.get(taskId)!;
-    lateStartMap.set(taskId, addDays(lf, -dur));
   }
 
-  // 4. Compute Total Float (TF) & Free Float (FF)
-  const totalFloatMap = new Map<string, number>();
-  const freeFloatMap = new Map<string, number>();
+  const lf = new Float64Array(n);
+  const ls = new Float64Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    let value = projectLF;
+    for (const e of outgoing[i]) {
+      const succAnchorLate = isFinishConstrainedRelation(e.type) ? lf[e.to] : ls[e.to];
+      const candidate = succAnchorLate - e.lag + (isStartAnchoredRelation(e.type) ? dur[i] : 0);
+      if (candidate < value) value = candidate;
+    }
+    lf[i] = value;
+    ls[i] = value - dur[i];
+  }
+
+  // 3. Total Float & Free Float
+  const totalFloat = new Float64Array(n);
   let minTotalFloat = Infinity;
-
-  liveTasks.forEach((t) => {
-    const es = earlyStartMap.get(t.id)!;
-    const ls = lateStartMap.get(t.id)!;
-    const ef = earlyFinishMap.get(t.id)!;
-    const tf = diffDays(es, ls);
-    totalFloatMap.set(t.id, tf);
-    if (tf < minTotalFloat) {
-      minTotalFloat = tf;
-    }
-
-    // Free Float: min_{s in succ}(s.ES - gap) - EF
-    const succs = succMap.get(t.id) || [];
-    if (succs.length === 0) {
-      freeFloatMap.set(t.id, tf);
-    } else {
-      let minSuccGap = Infinity;
-      for (const sId of succs) {
-        const succTask = byId.get(sId)!;
-        const succES = earlyStartMap.get(sId)!;
-        const defaultGap = options?.defaultGapDays ?? 0;
-        const gap = getEffectiveGap(succTask, defaultGap);
-        const earliestAllowed = addDays(succES, -gap);
-        const ffDelta = diffDays(ef, earliestAllowed);
-        if (ffDelta < minSuccGap) {
-          minSuccGap = ffDelta;
-        }
-      }
-      freeFloatMap.set(t.id, Math.max(0, Math.min(tf, minSuccGap)));
-    }
-  });
-
+  for (let i = 0; i < n; i++) {
+    totalFloat[i] = ls[i] - es[i];
+    if (totalFloat[i] < minTotalFloat) minTotalFloat = totalFloat[i];
+  }
   const projectTotalFloat = minTotalFloat === Infinity ? 0 : minTotalFloat;
 
-  // 5. Critical & Near-Critical Classification
+  // 4. Critical & Near-Critical Classification (near-critical is measured from the critical float)
   const nearCriticalThreshold = options?.nearCriticalThresholdDays ?? 3;
+  const criticalFloatRef = Math.max(minTotalFloat, 0);
+  const isCritical = new Uint8Array(n);
+  const isDriving = (e: CpmEdge) => forwardCandidate(e) === es[e.to];
 
-  liveTasks.forEach((t) => {
-    const tf = totalFloatMap.get(t.id)!;
-    const isCritical = tf <= 0 || tf === minTotalFloat;
-    const isNearCritical = !isCritical && tf - Math.min(0, minTotalFloat) <= nearCriticalThreshold;
+  graph.nodes.forEach((_task, id) => {
+    const i = position.get(id)!;
+    const tf = totalFloat[i];
+    const critical = tf <= 0 || tf === minTotalFloat;
+    const nearCritical = !critical && tf - criticalFloatRef <= nearCriticalThreshold;
+    isCritical[i] = critical ? 1 : 0;
+    if (critical) criticalTaskIds.add(id);
+    else if (nearCritical) nearCriticalTaskIds.add(id);
 
-    if (isCritical) {
-      criticalTaskIds.add(t.id);
-    } else if (isNearCritical) {
-      nearCriticalTaskIds.add(t.id);
+    let freeFloat = tf;
+    if (outgoing[i].length > 0) {
+      let minSlack = Infinity;
+      for (const e of outgoing[i]) {
+        const succAnchorEarly = isFinishConstrainedRelation(e.type) ? ef[e.to] : es[e.to];
+        const ownAnchorEarly = isStartAnchoredRelation(e.type) ? es[i] : ef[i];
+        const slack = succAnchorEarly - e.lag - ownAnchorEarly;
+        if (slack < minSlack) minSlack = slack;
+      }
+      freeFloat = Math.max(0, Math.min(tf, minSlack));
     }
 
     let slackLabel = `${tf}d buffer`;
@@ -263,91 +213,80 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
       slackLabel = `Overdue by ${Math.abs(tf)}d`;
     } else if (tf === 0) {
       slackLabel = "0d (Critical)";
+    } else if (critical) {
+      slackLabel = `Critical · ${tf}d to deadline`;
     }
 
-    metrics.set(t.id, {
-      taskId: t.id,
-      earlyStart: earlyStartMap.get(t.id)!,
-      earlyFinish: earlyFinishMap.get(t.id)!,
-      lateStart: lateStartMap.get(t.id)!,
-      lateFinish: lateFinishMap.get(t.id)!,
+    metrics.set(id, {
+      taskId: id,
+      earlyStart: fromEpochDay(es[i]),
+      earlyFinish: fromEpochDay(ef[i]),
+      lateStart: fromEpochDay(ls[i]),
+      lateFinish: fromEpochDay(lf[i]),
       totalFloat: tf,
-      freeFloat: freeFloatMap.get(t.id)!,
-      isCritical,
-      isNearCritical,
-      drivingPredecessors: drivingPredsMap.get(t.id) || [],
+      freeFloat,
+      isCritical: critical,
+      isNearCritical: nearCritical,
+      drivingPredecessors: incoming[i].filter(isDriving).map((e) => ids[e.from]),
       slackLabel
     });
   });
 
-  // 6. Identify Driving Critical Dependency Links (A -> B)
-  liveTasks.forEach((t) => {
-    if (!criticalTaskIds.has(t.id)) return;
-    const preds = predMap.get(t.id) || [];
-    const tES = earlyStartMap.get(t.id)!;
-    const defaultGap = options?.defaultGapDays ?? 0;
-    const gap = getEffectiveGap(t, defaultGap);
-
-    preds.forEach((pId) => {
-      if (criticalTaskIds.has(pId)) {
-        const pEF = earlyFinishMap.get(pId)!;
-        const drivingDate = addDays(pEF, gap);
-        if (diffDays(drivingDate, tES) === 0) {
-          criticalDepKeys.add(`${pId}->${t.id}`);
-        }
-      }
-    });
-  });
-
-  // 7. Assemble Contiguous Critical Path Sequences
-  const criticalIncoming = new Map<string, number>();
-  criticalTaskIds.forEach((id) => criticalIncoming.set(id, 0));
-  criticalDepKeys.forEach((key) => {
-    const [, to] = key.split("->");
-    if (criticalIncoming.has(to)) {
-      criticalIncoming.set(to, criticalIncoming.get(to)! + 1);
-    }
-  });
-
-  const criticalStartNodes: string[] = [];
-  criticalIncoming.forEach((count, id) => {
-    if (count === 0) criticalStartNodes.push(id);
-  });
-
-  const criticalAdj = new Map<string, string[]>();
-  criticalTaskIds.forEach((id) => criticalAdj.set(id, []));
-  criticalDepKeys.forEach((key) => {
-    const [from, to] = key.split("->");
-    if (criticalAdj.has(from)) {
-      criticalAdj.get(from)!.push(to);
-    }
-  });
-
-  function tracePath(curr: string, currentPath: string[]) {
-    const nexts = criticalAdj.get(curr) || [];
-    if (nexts.length === 0) {
-      criticalPaths.push([...currentPath]);
-      return;
-    }
-    for (const next of nexts) {
-      currentPath.push(next);
-      tracePath(next, currentPath);
-      currentPath.pop();
+  // 5. Driving Critical Dependency Links (A -> B): both ends critical and the link drives B's ES
+  const criticalNext: number[][] = ids.map(() => []);
+  const hasCriticalIncoming = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (!isCritical[i]) continue;
+    for (const e of incoming[i]) {
+      if (!isCritical[e.from] || !isDriving(e)) continue;
+      const key = `${ids[e.from]}->${ids[i]}`;
+      if (criticalDepKeys.has(key)) continue;
+      criticalDepKeys.add(key);
+      criticalNext[e.from].push(i);
+      hasCriticalIncoming[i] = 1;
     }
   }
 
-  for (const startId of criticalStartNodes) {
-    tracePath(startId, [startId]);
+  // 6. Contiguous Critical Path Sequences (iterative DFS over a DAG, capped)
+  let truncated = false;
+  for (const id of criticalTaskIds) {
+    const root = position.get(id)!;
+    if (hasCriticalIncoming[root]) continue;
+    const path: number[] = [root];
+    const cursors: number[] = [0];
+    while (path.length > 0) {
+      const top = path.length - 1;
+      const nexts = criticalNext[path[top]];
+      if (nexts.length === 0) {
+        if (criticalPaths.length >= MAX_CRITICAL_PATHS) {
+          truncated = true;
+          break;
+        }
+        criticalPaths.push(path.map((p) => ids[p]));
+      }
+      if (cursors[top] < nexts.length) {
+        path.push(nexts[cursors[top]++]);
+        cursors.push(0);
+      } else {
+        path.pop();
+        cursors.pop();
+      }
+    }
+    if (truncated) break;
+  }
+  if (truncated) {
+    warnings.push(`Critical path listing truncated to ${MAX_CRITICAL_PATHS} paths.`);
   }
 
   return {
     criticalTaskIds,
     criticalDepKeys,
     nearCriticalTaskIds,
-    projectEarlyFinish,
-    projectLateFinish,
+    projectEarlyFinish: fromEpochDay(projectEF),
+    projectLateFinish: fromEpochDay(projectLF),
     projectTotalFloat,
     criticalPaths,
-    metrics
+    metrics,
+    warnings
   };
 }

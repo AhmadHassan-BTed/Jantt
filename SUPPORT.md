@@ -15,15 +15,16 @@ To report bugs or unexpected behavior:
 1. Search existing [Issues](https://github.com/AhmadHassan-BTed/Jantt/issues) to check if already reported.
 2. Open a [Bug Report](https://github.com/AhmadHassan-BTed/Jantt/issues/new?template=bug_report.yml) with a minimal reproduction JSON payload.
 
-### 3. Security Inquiries
-For private security disclosures, please consult [SECURITY.md](file:///home/leech/Projects/JanntChart/SECURITY.md) or email [security@jantt.dev](mailto:security@jantt.dev).
+### 3. Security Vulnerabilities
+Please do **not** open a public issue. Report privately through [GitHub Security Advisories](https://github.com/AhmadHassan-BTed/Jantt/security/advisories/new); see [SECURITY.md](./SECURITY.md) for the full policy.
 
 ---
 
 ## Official Documentation & References
 
-- [Main README](file:///home/leech/Projects/JanntChart/README.md)
-- [Architecture & System Design](file:///home/leech/Projects/JanntChart/docs/architecture.md)
-- [JSON Schema Specification](file:///home/leech/Projects/JanntChart/docs/schema-spec.md)
-- [API Reference](file:///home/leech/Projects/JanntChart/docs/api-reference.md)
-- [Interactive Playground](http://localhost:5173/)
+- [Main README](./README.md)
+- [Architecture & System Design](./docs/architecture.md)
+- [JSON Schema Specification](./docs/schema-spec.md)
+- [JSON Cheatsheet](./docs/JANTT_JSON_CHEATSHEET.md)
+- [API Reference](./docs/api-reference.md)
+- [Interactive Playground](https://ahmadhassan-bted.github.io/Jantt/)

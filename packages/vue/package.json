@@ -2,6 +2,16 @@
   "name": "@jantt/vue",
   "version": "1.1.0",
   "description": "Vue 3 Composition API wrapper for Jantt JSON Gantt chart engine",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AhmadHassan-BTed/Jantt.git",
+    "directory": "packages/vue"
+  },
+  "homepage": "https://github.com/AhmadHassan-BTed/Jantt#readme",
+  "bugs": {
+    "url": "https://github.com/AhmadHassan-BTed/Jantt/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -32,7 +42,9 @@
   },
   "devDependencies": {
     "typescript": "^5.4.5",
-    "vitest": "^1.6.0",
     "vue": "^3.4.27"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

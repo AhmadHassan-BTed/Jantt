@@ -5,15 +5,25 @@ export interface SavedProject {
   name: string;
   updatedAt: string;
   data: JanttData;
-  source?: "local" | "linked" | "template" | "room";
-  sourceUrl?: string;
+  /** Where the plan lives: only on this device, or as the offline copy of a cloud room. */
+  source?: "local" | "room";
   roomId?: string;
   secretKey?: string;
   role?: "collaborator" | "viewer";
+  /**
+   * Sync base of a room copy: `calculatePlanHash` of the last state the room acknowledged.
+   * Written by room sync together with `revision` and the data, so after a reload it tells
+   * unsynced local edits apart from the acknowledged room state.
+   */
   etag?: string | null;
+  /** Room revision of the last acknowledged state (see `etag`). */
   revision?: number;
   lastSyncedAt?: string;
   syncError?: string;
+  /** Hash of the share-link payload this plan was imported from (dedupes re-opened links). */
+  importedFromHash?: string;
+  /** Room this local copy was made from; opening "Make a local copy" again reuses the copy. */
+  forkedFromRoomId?: string;
 }
 
 export type DateFilterMode = "all" | "today" | "week" | "date" | "range";

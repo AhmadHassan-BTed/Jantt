@@ -25,6 +25,7 @@ export class CriticalPathStage implements IPipelineStage<Task[], Task[]> {
 
     // Return tasks decorated with critical flag
     return tasks.map((task) => {
+      if (!task || typeof task !== "object") return task;
       const isCritical = cpmResult.criticalTaskIds.has(task.id);
       if (task.critical === isCritical) {
         return task;

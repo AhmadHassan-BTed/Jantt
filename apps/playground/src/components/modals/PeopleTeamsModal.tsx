@@ -1,25 +1,32 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Users,
-  X,
   Layers,
   Plus,
   Lightbulb,
   Trash2,
   Check,
   Search,
-  UserCheck
+  UserCheck,
+  AlertTriangle,
+  Eye
 } from "lucide-react";
+import { ConfirmDialog, Modal, ModalHeader } from "./ModalHost";
 import {
   type Person,
   type Team,
   type JanttData,
-  resolveTeamById
+  resolvePersonById,
+  resolveTeamById,
+  sanitizeCssColor
 } from "@jantt/core";
 import type { EffectivePerson } from "../../types";
-import { searchUsersByUsername, type UserProfile } from "../../firebase";
+import { auth, searchUsersByUsername, type UserProfile } from "../../firebase";
+import { getTrustedAvatarUrl } from "../../room-storage";
 
 interface PeopleTeamsModalProps {
+  /** View-only room (viewer, or an editor who has not signed in): every add/remove control is disabled. */
+  readOnly?: boolean;
   showPeopleModal: boolean;
   setShowPeopleModal: (show: boolean) => void;
   peopleModalTab: "people" | "teams";
@@ -49,7 +56,131 @@ interface PeopleTeamsModalProps {
   handleRemoveTeam: (id: string) => void;
 }
 
+const MIN_SEARCH_CHARS = 2;
+
+const ACCENT = "var(--jantt-accent)";
+
+/** Plan colors come from shared rooms and links: only plain CSS colors may reach a style (no url() beacons). */
+const safeColor = (value: unknown) => sanitizeCssColor(value, ACCENT);
+
+/** Plan text fields are untrusted JSON; anything but a non-empty string renders as absent. */
+const textOf = (value: unknown) => (typeof value === "string" && value.trim() ? value : undefined);
+
+const VIEW_ONLY_TITLE = "View only: make a local copy to edit";
+
+const getInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "?";
+
+/** Only GitHub-hosted avatars load (any other URL would leak each viewer's IP); otherwise initials. */
+const Avatar: React.FC<{ src?: unknown; name: string; size: number; background: string }> = ({ src, name, size, background }) => {
+  const safeSrc = getTrustedAvatarUrl(src);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (safeSrc && failedSrc !== safeSrc) {
+    return (
+      <img
+        src={safeSrc}
+        alt=""
+        referrerPolicy="no-referrer"
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailedSrc(safeSrc)}
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          borderRadius: "50%",
+          objectFit: "cover",
+          flexShrink: 0,
+          border: "1px solid var(--jantt-border)"
+        }}
+      />
+    );
+  }
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: "50%",
+        background: safeColor(background),
+        color: "#FFFFFF",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: size >= 30 ? "12px" : "11px",
+        fontWeight: 700,
+        flexShrink: 0
+      }}
+    >
+      {getInitials(name)}
+    </div>
+  );
+};
+
+const fieldStyle: React.CSSProperties = {
+  height: "38px",
+  padding: "8px 12px",
+  fontSize: "13px",
+  fontFamily: "var(--jantt-font-sans)",
+  borderRadius: "8px",
+  border: "1px solid var(--jantt-border)",
+  boxSizing: "border-box"
+};
+
+const sectionLabelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "11px",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  margin: 0,
+  color: "var(--jantt-text-muted)"
+};
+
+const segmentButtonStyle = (active: boolean): React.CSSProperties => ({
+  padding: "4px 9px",
+  fontSize: "11px",
+  fontWeight: 600,
+  borderRadius: "4px",
+  border: "none",
+  cursor: "pointer",
+  background: active ? "var(--jantt-surface)" : "transparent",
+  color: active ? "var(--jantt-accent)" : "var(--jantt-text-muted)",
+  boxShadow: active ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
+  transition: "all 0.15s ease"
+});
+
+const iconButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "var(--jantt-text-muted)",
+  cursor: "pointer",
+  padding: "4px",
+  borderRadius: "4px",
+  display: "flex",
+  alignItems: "center"
+};
+
+/** `.btn-nav` has no disabled styling of its own. */
+const disabledLook = (disabled: boolean): React.CSSProperties => (disabled ? { opacity: 0.5, cursor: "not-allowed" } : {});
+
+const normalizeKey = (value: unknown) => (typeof value === "string" ? value.trim().toLowerCase() : "");
+
+const pluralize = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** "a", "a and b", "a, b and c". */
+const joinList = (items: string[]) =>
+  items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+
+type PendingRemoval = { kind: "person"; person: EffectivePerson } | { kind: "team"; team: Team } | null;
+
 export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
+  readOnly = false,
   showPeopleModal,
   setShowPeopleModal,
   peopleModalTab,
@@ -82,327 +213,470 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval>(null);
   const searchSeqRef = useRef(0);
 
+  const searchTerm = searchQuery.trim().replace(/^@+/, "");
+
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    // Every query change (including clearing it) invalidates any in-flight request.
+    const seq = ++searchSeqRef.current;
+    setSearchError(false);
+    if (searchTerm.length < MIN_SEARCH_CHARS) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
-    const currentSeq = ++searchSeqRef.current;
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
+    setIsSearching(true);
+    const timer = window.setTimeout(async () => {
       try {
-        const results = await searchUsersByUsername(searchQuery);
-        if (currentSeq === searchSeqRef.current) {
-          setSearchResults(results);
+        const results = await searchUsersByUsername(searchTerm, auth.currentUser?.uid);
+        if (seq === searchSeqRef.current) setSearchResults(results);
+      } catch (err) {
+        console.error("Teammate search failed:", err);
+        if (seq === searchSeqRef.current) {
+          setSearchResults([]);
+          setSearchError(true);
         }
       } finally {
-        if (currentSeq === searchSeqRef.current) {
-          setIsSearching(false);
-        }
+        if (seq === searchSeqRef.current) setIsSearching(false);
       }
     }, 250);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm, searchAttempt]);
+
+  // Closing the dialog discards transient search and confirmation state.
+  useEffect(() => {
+    if (!showPeopleModal) {
+      setSearchQuery("");
+      setPendingRemoval(null);
+    }
+  }, [showPeopleModal]);
+
+  // Assignee text -> member id, resolved like the chart does (saved members first: id, then
+  // '@'-insensitive username, then case-insensitive name), then members detected from the plan.
+  const resolveMemberId = useMemo(() => {
+    const cache = new Map<string, string | undefined>();
+    return (value: unknown): string | undefined => {
+      const raw = typeof value === "string" ? value : typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+      if (!raw.trim()) return undefined;
+      if (!cache.has(raw)) {
+        cache.set(raw, (resolvePersonById(people, raw) ?? resolvePersonById(effectivePeople, raw))?.id);
+      }
+      return cache.get(raw);
+    };
+  }, [people, effectivePeople]);
+
+  // Member id -> live task count, so each member row is an O(1) lookup.
+  const assignedCountById = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!showPeopleModal) return counts;
+    for (const t of parsedData?.tasks || []) {
+      if (!t || t._deleted) continue;
+      const id = resolveMemberId(t.assignee);
+      if (id) counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    return counts;
+  }, [showPeopleModal, parsedData, resolveMemberId]);
+
+  const existingHandles = useMemo(
+    () => new Set(people.flatMap((p) => [normalizeKey(p.username), normalizeKey(p.id)]).filter(Boolean)),
+    [people]
+  );
 
   if (!showPeopleModal) return null;
 
+  const close = () => setShowPeopleModal(false);
+
+  const countAssignedTasks = (p: Person) => assignedCountById.get(p.id) || 0;
+
+  const describeOtherReferences = (p: Person) => {
+    const parts: string[] = [];
+    if (resolveMemberId(parsedData?.meta?.person) === p.id) parts.push("the project lead");
+    const docCount = (parsedData?.documents || []).filter((d) => d && resolveMemberId(d.owner) === p.id).length;
+    if (docCount > 0) parts.push(`the owner of ${pluralize(docCount, "document")}`);
+    return parts;
+  };
+
+  const trimmedPersonName = newPersonName.trim();
+  const personNameTaken =
+    trimmedPersonName.length > 0 &&
+    effectivePeople.some((p) => normalizeKey(p.name) === trimmedPersonName.toLowerCase());
+  const canAddPerson = !readOnly && trimmedPersonName.length > 0 && !personNameTaken;
+  const submitPerson = () => {
+    if (canAddPerson) handleAddPerson();
+  };
+
+  const trimmedTeamName = newTeamName.trim();
+  const teamNameTaken =
+    trimmedTeamName.length > 0 && teams.some((tm) => normalizeKey(tm.name) === trimmedTeamName.toLowerCase());
+  const canAddTeam = !readOnly && trimmedTeamName.length > 0 && !teamNameTaken;
+  const submitTeam = () => {
+    if (canAddTeam) handleAddTeam();
+  };
+
+  const readOnlyNotice = readOnly && (
+    <div
+      role="note"
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: "8px",
+        padding: "10px 12px",
+        background: "rgba(245, 158, 11, 0.08)",
+        border: "1px solid rgba(245, 158, 11, 0.3)",
+        borderRadius: "8px",
+        fontSize: "12px",
+        lineHeight: 1.45,
+        color: "var(--jantt-text)"
+      }}
+    >
+      <Eye size={14} aria-hidden="true" style={{ color: "#F59E0B", flexShrink: 0, marginTop: "2px" }} />
+      <span>
+        <strong>View only.</strong> Members and teams of this room can&apos;t be changed here. Make a local copy to
+        edit your own version.
+      </span>
+    </div>
+  );
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const next = peopleModalTab === "people" ? "teams" : "people";
+    setPeopleModalTab(next);
+    document.getElementById(`people-tab-${next}`)?.focus();
+  };
+
+  const removalConfirm = (() => {
+    // A role downgrade while the confirmation is open must not let the removal through.
+    if (readOnly) return null;
+    if (pendingRemoval?.kind === "person") {
+      const { person } = pendingRemoval;
+      const assignedCount = countAssignedTasks(person);
+      // handleRemovePerson unassigns the person's tasks in the same commit; other references stay.
+      const otherRefs = describeOtherReferences(person);
+      return {
+        title: `Remove ${person.name}?`,
+        message: (
+          <>
+            <strong>{person.name}</strong> will be removed from this plan&apos;s members
+            {assignedCount > 0 ? ` and unassigned from ${pluralize(assignedCount, "task")}` : ""}.
+            {otherRefs.length > 0 &&
+              ` They stay listed as "Detected" while they are still ${joinList(otherRefs)}; change that to remove them completely.`}
+          </>
+        ),
+        confirmLabel: assignedCount > 0 ? `Unassign ${pluralize(assignedCount, "Task")} & Remove` : "Remove Member",
+        onConfirm: () => handleRemovePerson(person.id)
+      };
+    }
+    if (pendingRemoval?.kind === "team") {
+      const { team } = pendingRemoval;
+      const memberCount = effectivePeople.filter((p) => p.teamId === team.id).length;
+      const taskCount = (parsedData?.tasks || []).filter((t) => t && !t._deleted && t.teamId === team.id).length;
+      const detached = [
+        ...(memberCount > 0 ? [pluralize(memberCount, "member")] : []),
+        ...(taskCount > 0 ? [pluralize(taskCount, "task")] : [])
+      ];
+      return {
+        title: `Delete team ${team.name}?`,
+        message: (
+          <>
+            The team <strong>{team.name}</strong> will be deleted.
+            {detached.length > 0 ? ` Its ${joinList(detached)} stay in the plan without a team.` : ""}
+          </>
+        ),
+        confirmLabel: "Delete Team",
+        onConfirm: () => handleRemoveTeam(team.id)
+      };
+    }
+    return null;
+  })();
+
+  const showNoMatch =
+    searchTerm.length >= MIN_SEARCH_CHARS && !isSearching && !searchError && searchResults.length === 0;
+
   return (
-    <div className="prompt-modal-backdrop" onClick={() => setShowPeopleModal(false)}>
-      <div className="prompt-modal-card" style={{ maxWidth: "620px" }} onClick={(e) => e.stopPropagation()}>
-        <div className="prompt-modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Users size={18} color="var(--jantt-accent)" />
-            <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
-              Team &amp; Assignee Management
-            </h3>
-          </div>
-          <button
-            className="prompt-modal-close-btn"
-            onClick={() => setShowPeopleModal(false)}
-            title="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <>
+      <Modal onClose={close} maxWidth={620}>
+        <ModalHeader icon={<Users size={18} />} title="People & Teams" />
 
         {/* Modal Tabs (Members vs Teams) */}
-        <div className="prompt-modal-tabs">
+        <div
+          className="prompt-modal-tabs"
+          role="tablist"
+          aria-label="People and teams"
+          onKeyDown={handleTabKeyDown}
+          style={{ overflowX: "auto" }}
+        >
           <button
+            type="button"
+            role="tab"
+            id="people-tab-people"
+            aria-selected={peopleModalTab === "people"}
+            aria-controls="people-tabpanel"
+            tabIndex={peopleModalTab === "people" ? 0 : -1}
             className={`prompt-tab-btn ${peopleModalTab === "people" ? "is-active" : ""}`}
             onClick={() => setPeopleModalTab("people")}
           >
             <Users size={13} />
-            <span>Team Members ({effectivePeople.length})</span>
+            <span>Members ({effectivePeople.length})</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            id="people-tab-teams"
+            aria-selected={peopleModalTab === "teams"}
+            aria-controls="people-tabpanel"
+            tabIndex={peopleModalTab === "teams" ? 0 : -1}
             className={`prompt-tab-btn ${peopleModalTab === "teams" ? "is-active" : ""}`}
             onClick={() => setPeopleModalTab("teams")}
           >
             <Layers size={13} />
-            <span>Teams &amp; Squads ({teams.length})</span>
+            <span>Teams ({teams.length})</span>
           </button>
         </div>
 
-        <div className="prompt-modal-body" style={{ gap: "18px", padding: "20px" }}>
+        <div
+          className="prompt-modal-body"
+          id="people-tabpanel"
+          role="tabpanel"
+          aria-labelledby={`people-tab-${peopleModalTab}`}
+          style={{ gap: "18px", padding: "20px" }}
+        >
           {peopleModalTab === "people" ? (
             <>
-              {/* Add New Member Section (Search Registered Teammates vs Offline Persona) */}
-              <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-                  <label style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", margin: 0, color: "var(--jantt-text-muted)" }}>
-                    Add Team Member
-                  </label>
-                  <div style={{ display: "flex", background: "var(--jantt-bg)", borderRadius: "6px", padding: "2px", border: "1px solid var(--jantt-border)" }}>
-                    <button
-                      type="button"
-                      onClick={() => setMemberMode("search")}
-                      style={{
-                        padding: "4px 9px",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        borderRadius: "4px",
-                        border: "none",
-                        cursor: "pointer",
-                        background: memberMode === "search" ? "var(--jantt-surface)" : "transparent",
-                        color: memberMode === "search" ? "var(--jantt-accent)" : "var(--jantt-text-muted)",
-                        boxShadow: memberMode === "search" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-                        transition: "all 0.15s ease"
-                      }}
+              {/* Add New Member Section (Search Registered Teammates vs Offline Persona); view-only rooms get the notice instead */}
+              {readOnlyNotice || (
+                <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                    <span style={sectionLabelStyle}>Add Member</span>
+                    <div
+                      role="group"
+                      aria-label="Member type"
+                      style={{ display: "flex", background: "var(--jantt-bg)", borderRadius: "6px", padding: "2px", border: "1px solid var(--jantt-border)" }}
                     >
-                      Search GitHub Account
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMemberMode("custom")}
-                      style={{
-                        padding: "4px 9px",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        borderRadius: "4px",
-                        border: "none",
-                        cursor: "pointer",
-                        background: memberMode === "custom" ? "var(--jantt-surface)" : "transparent",
-                        color: memberMode === "custom" ? "var(--jantt-accent)" : "var(--jantt-text-muted)",
-                        boxShadow: memberMode === "custom" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-                        transition: "all 0.15s ease"
-                      }}
-                    >
-                      Offline / Persona
-                    </button>
-                  </div>
-                </div>
-
-                {memberMode === "search" ? (
-                  <div>
-                    <div style={{ position: "relative" }}>
-                      <Search size={14} style={{ position: "absolute", left: "12px", top: "12px", color: "var(--jantt-text-muted)", pointerEvents: "none" }} />
-                      <input
-                        type="text"
-                        className="code-textarea"
-                        style={{
-                          width: "100%",
-                          height: "38px",
-                          padding: "8px 12px 8px 34px",
-                          fontSize: "13px",
-                          fontFamily: "var(--jantt-font-sans)",
-                          borderRadius: "8px",
-                          border: "1px solid var(--jantt-border)",
-                          boxSizing: "border-box"
-                        }}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search registered users by @username..."
-                      />
-                    </div>
-
-                    {isSearching && (
-                      <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "6px" }}>
-                        Searching registered accounts...
-                      </div>
-                    )}
-
-                    {searchResults.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: "8px",
-                          border: "1px solid var(--jantt-border)",
-                          borderRadius: "8px",
-                          background: "var(--jantt-bg)",
-                          maxHeight: "180px",
-                          overflowY: "auto",
-                          padding: "6px"
-                        }}
+                      <button
+                        type="button"
+                        aria-pressed={memberMode === "search"}
+                        onClick={() => setMemberMode("search")}
+                        style={segmentButtonStyle(memberMode === "search")}
                       >
-                        {searchResults.map((usr) => (
-                          <div
-                            key={usr.uid}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              padding: "7px 10px",
-                              borderRadius: "6px",
-                              background: "var(--jantt-surface)",
-                              border: "1px solid var(--jantt-border-subtle)",
-                              marginBottom: "4px"
-                            }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              {usr.photoURL ? (
-                                <img
-                                  src={usr.photoURL}
-                                  alt={usr.username}
-                                  style={{ width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover" }}
-                                />
-                              ) : (
-                                <div
-                                  style={{
-                                    width: "26px",
-                                    height: "26px",
-                                    borderRadius: "50%",
-                                    background: "var(--jantt-accent)",
-                                    color: "#fff",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontSize: "11px",
-                                    fontWeight: 700
-                                  }}
-                                >
-                                  {usr.username[0]?.toUpperCase()}
-                                </div>
-                              )}
-                              <div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                  <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
-                                    {usr.displayName || usr.username}
-                                  </span>
-                                  <span style={{ fontSize: "11px", color: "var(--jantt-accent)", fontFamily: "var(--jantt-font-mono)", fontWeight: 600 }}>
-                                    @{usr.username}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
+                        Jantt Account
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={memberMode === "custom"}
+                        onClick={() => setMemberMode("custom")}
+                        style={segmentButtonStyle(memberMode === "custom")}
+                      >
+                        Name Only (No Account)
+                      </button>
+                    </div>
+                  </div>
+
+                  {memberMode === "search" ? (
+                    <div>
+                      <div style={{ position: "relative" }}>
+                        <Search size={14} style={{ position: "absolute", left: "12px", top: "12px", color: "var(--jantt-text-muted)", pointerEvents: "none" }} />
+                        <input
+                          type="text"
+                          inputMode="search"
+                          className="code-textarea"
+                          style={{ ...fieldStyle, width: "100%", padding: "8px 12px 8px 34px" }}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Search Jantt users by @username"
+                          aria-label="Search Jantt users by username"
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </div>
+
+                      <div aria-live="polite" style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "6px" }}>
+                        {searchQuery.trim().length > 0 && searchTerm.length < MIN_SEARCH_CHARS && (
+                          <span>Type at least {MIN_SEARCH_CHARS} characters to search.</span>
+                        )}
+                        {isSearching && <span>Searching registered accounts...</span>}
+                        {showNoMatch && (
+                          <span>
+                            No Jantt account found for &quot;{searchTerm}&quot;. Use &quot;Name Only&quot; to add someone without an account.
+                          </span>
+                        )}
+                        {searchError && !isSearching && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#EF4444" }}>
+                            <AlertTriangle size={12} />
+                            <span>Search is unavailable right now.</span>
                             <button
                               type="button"
-                              className="btn-nav btn-nav-primary"
-                              style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
-                              onClick={() => {
-                                if (onAddRealTeammate) {
-                                  onAddRealTeammate(usr);
-                                  setSearchQuery("");
-                                  setSearchResults([]);
-                                }
-                              }}
+                              className="btn-nav"
+                              style={{ height: "22px", padding: "0 8px", fontSize: "11px" }}
+                              onClick={() => setSearchAttempt((n) => n + 1)}
                             >
-                              <Plus size={12} />
-                              <span>Add Teammate</span>
+                              Retry
                             </button>
-                          </div>
-                        ))}
+                          </span>
+                        )}
                       </div>
-                    )}
-                    {searchQuery.trim().length > 0 && !isSearching && searchResults.length === 0 && (
-                      <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "6px" }}>
-                        No registered GitHub account found with username matching "{searchQuery}". Switch to "Offline / Persona" to add an external member.
+
+                      {searchResults.length > 0 && (
+                        <ul
+                          aria-label="Matching accounts"
+                          style={{
+                            listStyle: "none",
+                            margin: "8px 0 0 0",
+                            border: "1px solid var(--jantt-border)",
+                            borderRadius: "8px",
+                            background: "var(--jantt-bg)",
+                            maxHeight: "180px",
+                            overflowY: "auto",
+                            padding: "6px"
+                          }}
+                        >
+                          {searchResults.map((usr) => {
+                            const alreadyAdded =
+                              existingHandles.has(normalizeKey(`@${usr.username}`)) ||
+                              existingHandles.has(normalizeKey(usr.username));
+                            return (
+                              <li
+                                key={usr.uid}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
+                                  padding: "7px 10px",
+                                  borderRadius: "6px",
+                                  background: "var(--jantt-surface)",
+                                  border: "1px solid var(--jantt-border-subtle)",
+                                  marginBottom: "4px"
+                                }}
+                              >
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                                  <Avatar src={usr.photoURL} name={usr.displayName || usr.username} size={26} background="var(--jantt-accent)" />
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", minWidth: 0 }}>
+                                    <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                                      {usr.displayName || usr.username}
+                                    </span>
+                                    <span style={{ fontSize: "11px", color: "var(--jantt-accent)", fontFamily: "var(--jantt-font-mono)", fontWeight: 600 }}>
+                                      @{usr.username}
+                                    </span>
+                                  </div>
+                                </div>
+                                {alreadyAdded ? (
+                                  <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", display: "inline-flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                                    <Check size={12} />
+                                    Already a member
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn-nav btn-nav-primary"
+                                    style={{ height: "26px", padding: "0 8px", fontSize: "11px" }}
+                                    disabled={!onAddRealTeammate}
+                                    onClick={() => {
+                                      if (!onAddRealTeammate) return;
+                                      onAddRealTeammate({ ...usr, photoURL: getTrustedAvatarUrl(usr.photoURL) ?? undefined });
+                                      setSearchQuery("");
+                                    }}
+                                    aria-label={`Add @${usr.username} to this plan`}
+                                  >
+                                    <Plus size={12} />
+                                    <span>Add</span>
+                                  </button>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <input
+                          type="text"
+                          className="code-textarea"
+                          style={{ ...fieldStyle, flex: "1 1 160px" }}
+                          value={newPersonName}
+                          onChange={(e) => setNewPersonName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") submitPerson();
+                          }}
+                          placeholder="Full name (e.g. Alex Morgan)"
+                          aria-label="Member name"
+                          aria-invalid={personNameTaken}
+                          aria-describedby={personNameTaken ? "people-name-taken" : undefined}
+                        />
+                        <input
+                          type="text"
+                          className="code-textarea"
+                          style={{ ...fieldStyle, flex: "1 1 130px" }}
+                          value={newPersonRole}
+                          onChange={(e) => setNewPersonRole(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") submitPerson();
+                          }}
+                          placeholder="Role (optional)"
+                          aria-label="Member role (optional)"
+                        />
+                        {teams.length > 0 && (
+                          <select
+                            className="code-textarea"
+                            style={{
+                              ...fieldStyle,
+                              flex: "1 1 120px",
+                              padding: "6px 10px",
+                              fontSize: "12px",
+                              background: "var(--jantt-surface-solid)",
+                              color: "var(--jantt-text)"
+                            }}
+                            value={newPersonTeamId}
+                            onChange={(e) => setNewPersonTeamId(e.target.value)}
+                            aria-label="Member team"
+                          >
+                            <option value="">No team</option>
+                            {teams.map((tm) => (
+                              <option key={tm.id} value={tm.id}>Team: {tm.name}</option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          className="btn-nav btn-nav-primary"
+                          style={{ height: "38px", padding: "0 14px", flexShrink: 0, opacity: canAddPerson ? 1 : 0.5 }}
+                          onClick={submitPerson}
+                          disabled={!canAddPerson}
+                        >
+                          <Plus size={14} />
+                          <span>Add Member</span>
+                        </button>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <input
-                      type="text"
-                      className="code-textarea"
-                      style={{
-                        flex: "1 1 160px",
-                        height: "38px",
-                        padding: "8px 12px",
-                        fontSize: "13px",
-                        fontFamily: "var(--jantt-font-sans)",
-                        borderRadius: "8px",
-                        border: "1px solid var(--jantt-border)",
-                        boxSizing: "border-box"
-                      }}
-                      value={newPersonName}
-                      onChange={(e) => setNewPersonName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleAddPerson();
-                      }}
-                      placeholder="Full Name (e.g. Alex Morgan)"
-                    />
-                    <input
-                      type="text"
-                      className="code-textarea"
-                      style={{
-                        flex: "1 1 130px",
-                        height: "38px",
-                        padding: "8px 12px",
-                        fontSize: "13px",
-                        fontFamily: "var(--jantt-font-sans)",
-                        borderRadius: "8px",
-                        border: "1px solid var(--jantt-border)",
-                        boxSizing: "border-box"
-                      }}
-                      value={newPersonRole}
-                      onChange={(e) => setNewPersonRole(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleAddPerson();
-                      }}
-                      placeholder="Role (e.g. Contractor)"
-                    />
-                    {teams.length > 0 && (
-                      <select
-                        className="code-textarea"
-                        style={{
-                          flex: "1 1 120px",
-                          height: "38px",
-                          padding: "6px 10px",
-                          fontSize: "12px",
-                          fontFamily: "var(--jantt-font-sans)",
-                          borderRadius: "8px",
-                          border: "1px solid var(--jantt-border)",
-                          boxSizing: "border-box",
-                          background: "var(--jantt-surface-solid)",
-                          color: "var(--jantt-text)"
-                        }}
-                        value={newPersonTeamId}
-                        onChange={(e) => setNewPersonTeamId(e.target.value)}
-                      >
-                        <option value="">No Team Assigned</option>
-                        {teams.map((tm) => (
-                          <option key={tm.id} value={tm.id}>Team: {tm.name}</option>
-                        ))}
-                      </select>
-                    )}
-                    <button
-                      className="btn-nav btn-nav-primary"
-                      style={{ height: "38px", padding: "0 14px", flexShrink: 0 }}
-                      onClick={handleAddPerson}
-                      disabled={!newPersonName.trim()}
-                    >
-                      <Plus size={14} />
-                      <span>Add Persona</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+                      {personNameTaken && (
+                        <div id="people-name-taken" style={{ fontSize: "11.5px", color: "#F59E0B", marginTop: "6px" }}>
+                          A member named &quot;{trimmedPersonName}&quot; already exists in this plan.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* People List */}
               <div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                  <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", margin: 0, color: "var(--jantt-text-muted)" }}>
-                    Current Members ({effectivePeople.length})
-                  </label>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
+                  <span style={sectionLabelStyle}>Current Members ({effectivePeople.length})</span>
                   {effectivePeople.length > people.length && (
                     <button
+                      type="button"
                       className="btn-nav btn-nav-primary"
-                      style={{ height: "24px", padding: "0 10px", fontSize: "10.5px" }}
+                      style={{ height: "24px", padding: "0 10px", fontSize: "10.5px", ...disabledLook(readOnly) }}
                       onClick={handlePersistAllPeople}
-                      title="Save all detected schedule assignees into the project JSON 'people' array"
+                      disabled={readOnly}
+                      title={readOnly ? VIEW_ONLY_TITLE : "Save every detected assignee into the plan's member list"}
                     >
-                      Save All to JSON
+                      Save All Detected
                     </button>
                   )}
                 </div>
@@ -413,6 +687,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: "6px",
                       padding: "8px 12px",
                       background: "rgba(56, 189, 248, 0.08)",
                       border: "1px solid rgba(56, 189, 248, 0.2)",
@@ -425,88 +701,58 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                     <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                       <Lightbulb size={14} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
                       <span>
-                        <strong>{effectivePeople.length - people.length} assignee{effectivePeople.length - people.length === 1 ? "" : "s"}</strong> detected from schedule &amp; meta ({parsedData?.meta?.person ? `${parsedData.meta.person}, etc.` : "tasks"}).
+                        <strong>{pluralize(effectivePeople.length - people.length, "assignee")}</strong> detected from task
+                        assignees, the project lead and document owners.
                       </span>
                     </span>
-                    <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                      Visible across all views &amp; filters
-                    </span>
+                    {!readOnly && (
+                      <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                        Save them to keep a role, team and avatar.
+                      </span>
+                    )}
                   </div>
                 )}
 
                 {effectivePeople.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "28px 16px", background: "var(--jantt-surface)", border: "1px dashed var(--jantt-border)", borderRadius: "10px", color: "var(--jantt-text-muted)" }}>
                     <Users size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
-                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No team members defined yet.</p>
-                    <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Add members above to assign tasks and filter in the Today view.</p>
+                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No members yet.</p>
+                    {!readOnly && (
+                      <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Add members above to assign tasks and filter views by person.</p>
+                    )}
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
+                  <ul style={{ display: "flex", flexDirection: "column", gap: "8px", listStyle: "none", margin: 0, padding: 0 }}>
                     {effectivePeople.map((p) => {
-                      const assignedCount = parsedData?.tasks.filter(
-                        (t) => t.assignee === p.name || t.assignee === p.id || (p.username && t.assignee === p.username)
-                      ).length || 0;
-                      const initials = p.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .substring(0, 2)
-                        .toUpperCase();
-                      const avatarBg = p.color || "var(--jantt-accent)";
+                      const assignedCount = countAssignedTasks(p);
                       const memberTeam = resolveTeamById(teams, p.teamId);
+                      const teamColor = safeColor(memberTeam?.color);
+                      const username = textOf(p.username);
+                      const role = textOf(p.role);
 
                       return (
-                        <div
+                        <li
                           key={p.id}
                           style={{
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "space-between",
+                            flexWrap: "wrap",
+                            gap: "8px",
                             padding: "10px 14px",
                             background: "var(--jantt-surface)",
                             border: "1px solid var(--jantt-border)",
                             borderRadius: "8px"
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            {p.avatar ? (
-                              <img
-                                src={p.avatar}
-                                alt={p.name}
-                                style={{
-                                  width: "32px",
-                                  height: "32px",
-                                  borderRadius: "50%",
-                                  objectFit: "cover",
-                                  flexShrink: 0,
-                                  border: "1px solid var(--jantt-border)"
-                                }}
-                              />
-                            ) : (
-                              <div
-                                style={{
-                                  width: "32px",
-                                  height: "32px",
-                                  borderRadius: "50%",
-                                  background: avatarBg,
-                                  color: "#FFFFFF",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  fontSize: "12px",
-                                  fontWeight: 700,
-                                  flexShrink: 0
-                                }}
-                              >
-                                {initials}
-                              </div>
-                            )}
-                            <div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                            <Avatar src={p.avatar} name={p.name} size={32} background={safeColor(p.color)} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)", overflowWrap: "anywhere" }}>
                                   {p.name}
                                 </span>
-                                {p.username ? (
+                                {username ? (
                                   <span
                                     style={{
                                       fontSize: "10.5px",
@@ -521,10 +767,10 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                       alignItems: "center",
                                       gap: "3px"
                                     }}
-                                    title="Verified Registered GitHub Account"
+                                    title="Linked Jantt account"
                                   >
                                     <UserCheck size={10} />
-                                    {p.username.startsWith("@") ? p.username : `@${p.username}`}
+                                    {username.startsWith("@") ? username : `@${username}`}
                                   </span>
                                 ) : (
                                   <span
@@ -535,9 +781,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                       padding: "1px 5px",
                                       borderRadius: "4px"
                                     }}
-                                    title="Offline / Non-Account Persona"
+                                    title="Name only, not linked to a Jantt account"
                                   >
-                                    Offline
+                                    No account
                                   </span>
                                 )}
                                 {p.isInferred && (
@@ -551,9 +797,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                       borderRadius: "100px",
                                       border: "1px solid rgba(56, 189, 248, 0.25)"
                                     }}
-                                    title="Automatically discovered from schedule assignees & metadata"
+                                    title="Detected from task assignees, the project lead or document owners; not saved as a member yet"
                                   >
-                                    Inferred
+                                    Detected
                                   </span>
                                 )}
                                 {memberTeam && (
@@ -561,8 +807,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                     style={{
                                       fontSize: "10px",
                                       fontWeight: 600,
-                                      background: `${memberTeam.color || "var(--jantt-accent)"}1F`,
-                                      color: memberTeam.color || "var(--jantt-accent)",
+                                      // Works for every CSS color format, unlike appending a hex alpha.
+                                      background: `color-mix(in srgb, ${teamColor} 12%, transparent)`,
+                                      color: teamColor,
                                       padding: "1px 6px",
                                       borderRadius: "100px"
                                     }}
@@ -571,15 +818,15 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                   </span>
                                 )}
                               </div>
-                              {p.role && (
+                              {role && (
                                 <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
-                                  {p.role}
+                                  {role}
                                 </div>
                               )}
                             </div>
                           </div>
 
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginLeft: "auto" }}>
                             <span
                               style={{
                                 fontSize: "11px",
@@ -590,11 +837,13 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                 color: assignedCount > 0 ? "var(--jantt-accent)" : "var(--jantt-text-muted)"
                               }}
                             >
-                              {assignedCount} {assignedCount === 1 ? "task" : "tasks"}
+                              {pluralize(assignedCount, "task")}
                             </span>
                             {p.isInferred ? (
                               <button
+                                type="button"
                                 onClick={() => handlePersistPerson(p)}
+                                disabled={readOnly}
                                 className="btn-nav"
                                 style={{
                                   padding: "3px 8px",
@@ -602,171 +851,163 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                   fontSize: "11px",
                                   display: "flex",
                                   alignItems: "center",
-                                  gap: "4px"
+                                  gap: "4px",
+                                  ...disabledLook(readOnly)
                                 }}
-                                title={`Add ${p.name} permanently to project JSON "people" array`}
+                                title={readOnly ? VIEW_ONLY_TITLE : `Save ${p.name} as a member of this plan`}
                               >
                                 <Plus size={11} />
-                                <span>Save to JSON</span>
+                                <span>Save as Member</span>
                               </button>
                             ) : (
                               <button
-                                onClick={() => handleRemovePerson(p.id)}
-                                style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  color: "var(--jantt-text-muted)",
-                                  cursor: "pointer",
-                                  padding: "4px",
-                                  borderRadius: "4px",
-                                  display: "flex",
-                                  alignItems: "center"
-                                }}
-                                title={`Remove ${p.name}`}
+                                type="button"
+                                onClick={() => setPendingRemoval({ kind: "person", person: p })}
+                                disabled={readOnly}
+                                style={{ ...iconButtonStyle, ...disabledLook(readOnly) }}
+                                title={readOnly ? VIEW_ONLY_TITLE : `Remove ${p.name}`}
+                                aria-label={`Remove ${p.name}`}
                               >
                                 <Trash2 size={14} />
                               </button>
                             )}
                           </div>
-                        </div>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 )}
               </div>
             </>
           ) : (
             <>
-              {/* Add New Team / Squad Box */}
-              <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
-                <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", color: "var(--jantt-text-muted)" }}>
-                  Add New Team / Squad
-                </label>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                  <input
-                    type="text"
-                    className="code-textarea"
-                    style={{
-                      flex: "1 1 160px",
-                      height: "38px",
-                      padding: "8px 12px",
-                      fontSize: "13px",
-                      fontFamily: "var(--jantt-font-sans)",
-                      borderRadius: "8px",
-                      border: "1px solid var(--jantt-border)",
-                      boxSizing: "border-box"
-                    }}
-                    value={newTeamName}
-                    onChange={(e) => setNewTeamName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleAddTeam();
-                    }}
-                    placeholder="Team Name (e.g. Core Engineering)"
-                  />
-                  <input
-                    type="color"
-                    style={{
-                      width: "38px",
-                      height: "38px",
-                      border: "1px solid var(--jantt-border)",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      padding: "2px",
-                      background: "var(--jantt-surface-solid)"
-                    }}
-                    value={newTeamColor}
-                    onChange={(e) => setNewTeamColor(e.target.value)}
-                    title="Pick Team Color"
-                  />
-                  <input
-                    type="text"
-                    className="code-textarea"
-                    style={{
-                      flex: "1 1 180px",
-                      height: "38px",
-                      padding: "8px 12px",
-                      fontSize: "13px",
-                      fontFamily: "var(--jantt-font-sans)",
-                      borderRadius: "8px",
-                      border: "1px solid var(--jantt-border)",
-                      boxSizing: "border-box"
-                    }}
-                    value={newTeamDesc}
-                    onChange={(e) => setNewTeamDesc(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleAddTeam();
-                    }}
-                    placeholder="Description / Mission"
-                  />
-                  <button
-                    className="btn-nav btn-nav-primary"
-                    style={{ height: "38px", padding: "0 14px", flexShrink: 0 }}
-                    onClick={handleAddTeam}
-                    disabled={!newTeamName.trim()}
-                  >
-                    <Plus size={14} />
-                    <span>Add Team</span>
-                  </button>
+              {/* Add New Team Box; view-only rooms get the notice instead */}
+              {readOnlyNotice || (
+                <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
+                  <span style={{ ...sectionLabelStyle, marginBottom: "8px" }}>Add Team</span>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                    <input
+                      type="text"
+                      className="code-textarea"
+                      style={{ ...fieldStyle, flex: "1 1 160px" }}
+                      value={newTeamName}
+                      onChange={(e) => setNewTeamName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitTeam();
+                      }}
+                      placeholder="Team name (e.g. Core Engineering)"
+                      aria-label="Team name"
+                      aria-invalid={teamNameTaken}
+                      aria-describedby={teamNameTaken ? "team-name-taken" : undefined}
+                    />
+                    <input
+                      type="color"
+                      style={{
+                        width: "38px",
+                        height: "38px",
+                        border: "1px solid var(--jantt-border)",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        padding: "2px",
+                        background: "var(--jantt-surface-solid)"
+                      }}
+                      value={newTeamColor}
+                      onChange={(e) => setNewTeamColor(e.target.value)}
+                      title="Team color"
+                      aria-label="Team color"
+                    />
+                    <input
+                      type="text"
+                      className="code-textarea"
+                      style={{ ...fieldStyle, flex: "1 1 180px" }}
+                      value={newTeamDesc}
+                      onChange={(e) => setNewTeamDesc(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitTeam();
+                      }}
+                      placeholder="Description (optional)"
+                      aria-label="Team description (optional)"
+                    />
+                    <button
+                      type="button"
+                      className="btn-nav btn-nav-primary"
+                      style={{ height: "38px", padding: "0 14px", flexShrink: 0, opacity: canAddTeam ? 1 : 0.5 }}
+                      onClick={submitTeam}
+                      disabled={!canAddTeam}
+                    >
+                      <Plus size={14} />
+                      <span>Add Team</span>
+                    </button>
+                  </div>
+                  {teamNameTaken && (
+                    <div id="team-name-taken" style={{ fontSize: "11.5px", color: "#F59E0B", marginTop: "6px" }}>
+                      A team named &quot;{trimmedTeamName}&quot; already exists.
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               {/* Teams List */}
               <div>
-                <label style={{ display: "block", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", color: "var(--jantt-text-muted)" }}>
-                  Current Teams ({teams.length})
-                </label>
+                <span style={{ ...sectionLabelStyle, marginBottom: "8px" }}>Current Teams ({teams.length})</span>
                 {teams.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "28px 16px", background: "var(--jantt-surface)", border: "1px dashed var(--jantt-border)", borderRadius: "10px", color: "var(--jantt-text-muted)" }}>
                     <Layers size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
-                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No teams defined yet.</p>
-                    <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Create teams above to organize members and filter schedules by squad.</p>
+                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No teams yet.</p>
+                    {!readOnly && (
+                      <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Create teams above to group members and filter schedules by team.</p>
+                    )}
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
+                  <ul style={{ display: "flex", flexDirection: "column", gap: "8px", listStyle: "none", margin: 0, padding: 0 }}>
                     {teams.map((tm) => {
                       const memberCount = effectivePeople.filter((p) => p.teamId === tm.id).length;
+                      const description = textOf(tm.description);
                       return (
-                        <div
+                        <li
                           key={tm.id}
                           style={{
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "space-between",
+                            flexWrap: "wrap",
+                            gap: "8px",
                             padding: "10px 14px",
                             background: "var(--jantt-surface)",
                             border: "1px solid var(--jantt-border)",
                             borderRadius: "8px"
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
                             <span
+                              aria-hidden="true"
                               style={{
                                 width: "14px",
                                 height: "14px",
                                 borderRadius: "50%",
-                                background: tm.color || "var(--jantt-accent)",
+                                background: safeColor(tm.color),
                                 display: "inline-block",
                                 flexShrink: 0
                               }}
                             />
-                            <div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)", overflowWrap: "anywhere" }}>
                                   {tm.name}
                                 </span>
                                 <span style={{ fontSize: "10px", fontFamily: "var(--jantt-font-mono)", color: "var(--jantt-text-muted)" }}>
                                   #{tm.id}
                                 </span>
                               </div>
-                              {tm.description && (
+                              {description && (
                                 <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
-                                  {tm.description}
+                                  {description}
                                 </div>
                               )}
                             </div>
                           </div>
 
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginLeft: "auto" }}>
                             <span
                               style={{
                                 fontSize: "11px",
@@ -777,48 +1018,53 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                 color: "var(--jantt-accent)"
                               }}
                             >
-                              {memberCount} {memberCount === 1 ? "member" : "members"}
+                              {pluralize(memberCount, "member")}
                             </span>
                             <button
-                              onClick={() => handleRemoveTeam(tm.id)}
-                              style={{
-                                background: "transparent",
-                                border: "none",
-                                color: "var(--jantt-text-muted)",
-                                cursor: "pointer",
-                                padding: "4px",
-                                borderRadius: "4px",
-                                display: "flex",
-                                alignItems: "center"
-                              }}
-                              title={`Remove ${tm.name}`}
+                              type="button"
+                              onClick={() => setPendingRemoval({ kind: "team", team: tm })}
+                              disabled={readOnly}
+                              style={{ ...iconButtonStyle, ...disabledLook(readOnly) }}
+                              title={readOnly ? VIEW_ONLY_TITLE : `Delete team ${tm.name}`}
+                              aria-label={`Delete team ${tm.name}`}
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
-                        </div>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 )}
               </div>
             </>
           )}
         </div>
 
-        <div className="prompt-modal-footer">
+        <div className="prompt-modal-footer" style={{ flexWrap: "wrap" }}>
           <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
-            Teams and members are referenced by ID across your schedule.
+            {readOnly ? "View only: changes can't be saved to this room." : "Changes apply to this plan immediately."}
           </span>
-          <button
-            className="btn-nav btn-nav-primary"
-            onClick={() => setShowPeopleModal(false)}
-          >
+          <button type="button" className="btn-nav btn-nav-primary" onClick={close}>
             <Check size={14} />
             <span>Done</span>
           </button>
         </div>
-      </div>
-    </div>
+      </Modal>
+
+      {removalConfirm && (
+        <ConfirmDialog
+          tone="danger"
+          title={removalConfirm.title}
+          message={removalConfirm.message}
+          confirmLabel={removalConfirm.confirmLabel}
+          onConfirm={() => {
+            removalConfirm.onConfirm();
+            setPendingRemoval(null);
+          }}
+          onCancel={() => setPendingRemoval(null)}
+        />
+      )}
+    </>
   );
 };

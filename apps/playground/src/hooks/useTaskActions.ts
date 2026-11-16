@@ -18,6 +18,7 @@ import type {
   EffectivePerson
 } from "../types";
 import { PRIORITY_ORDER, STORAGE_KEYS } from "../constants";
+import { generateId, isAutoCascadeEnabled } from "../utils";
 
 interface UseTaskActionsOptions {
   parsedData: JanttData | null;
@@ -31,6 +32,13 @@ interface UseTaskActionsOptions {
   teams: Team[];
   initialKanbanSort: KanbanSortRule[];
   handleChartCommit?: (data: JanttData) => void;
+  /**
+   * Tasks the Summary table lists, already filtered exactly like the KPI tiles (date, person,
+   * team and completed filters). When omitted, only the date filter is applied.
+   */
+  summaryBaseTasks?: Task[];
+  /** Auto-Cascade toggle. When omitted, the persisted preference is used. */
+  autoCascade?: boolean;
 }
 
 export function useTaskActions({
@@ -44,7 +52,9 @@ export function useTaskActions({
   effectivePeople,
   teams,
   initialKanbanSort,
-  handleChartCommit
+  handleChartCommit,
+  summaryBaseTasks,
+  autoCascade
 }: UseTaskActionsOptions) {
   const [tasksViewMode, setTasksViewMode] = useState<"cards" | "todo">("cards");
   const [tasksSearchQuery, setTasksSearchQuery] = useState<string>("");
@@ -59,9 +69,14 @@ export function useTaskActions({
 
   const sortedSummaryTasks = useMemo(() => {
     if (!parsedData) return [];
-    let baseTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
-    if (dateFilterMode !== "all" && dateFilterBehavior === "hide") {
-      baseTasks = baseTasks.filter(isTaskMatchingDateFilter);
+    let baseTasks: Task[];
+    if (summaryBaseTasks) {
+      baseTasks = summaryBaseTasks;
+    } else {
+      baseTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
+      if (dateFilterMode !== "all" && dateFilterBehavior === "hide") {
+        baseTasks = baseTasks.filter(isTaskMatchingDateFilter);
+      }
     }
     // Apply universal status <-> progress auto-sync
     let tasks = baseTasks.map((t) => {
@@ -94,7 +109,7 @@ export function useTaskActions({
       if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
       return String(va).localeCompare(String(vb)) * dir;
     });
-  }, [parsedData, dateFilterMode, dateFilterBehavior, isTaskMatchingDateFilter, summarySortConfig, effectivePeople, teams]);
+  }, [parsedData, summaryBaseTasks, dateFilterMode, dateFilterBehavior, isTaskMatchingDateFilter, summarySortConfig, effectivePeople, teams]);
 
   const handleSummarySort = useCallback((column: string) => {
     setSummarySortConfig((prev) => {
@@ -143,7 +158,8 @@ export function useTaskActions({
 
   const handleAddNewTask = useCallback(() => {
     if (!parsedData) return;
-    const activeTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
+    const allTasks = parsedData.tasks || [];
+    const activeTasks = allTasks.filter((t) => !t._deleted);
     const today = getTodayISODate();
     let lastEnd = today;
     if (activeTasks.length > 0) {
@@ -152,22 +168,10 @@ export function useTaskActions({
     const catKeys = Object.keys(parsedData.categories || {});
     const defaultCat = catKeys.length > 0 ? catKeys[0] : "general";
     const nextIdx = activeTasks.length + 1;
-    const nowIso = new Date().toISOString();
-    const peerId = (() => {
-      try {
-        let id = localStorage.getItem("jantt_peer_id");
-        if (!id) {
-          id = `peer-${Math.random().toString(36).slice(2, 8)}`;
-          localStorage.setItem("jantt_peer_id", id);
-        }
-        return id;
-      } catch {
-        return "peer-serverless";
-      }
-    })();
-    const compositeTs = `${nowIso}#${peerId}`;
+    // Placed after the last task but not linked to it: dependencies are always explicit.
+    // Field stamps are applied by the commit pipeline.
     const newTask: Task = {
-      id: `task-${Date.now().toString(36)}`,
+      id: generateId("task"),
       wbs: `${nextIdx}.0`,
       label: `New Task ${nextIdx}`,
       category: defaultCat,
@@ -175,30 +179,16 @@ export function useTaskActions({
       end: addDays(lastEnd, 7),
       progress: 0,
       status: "not-started",
-      dependsOn: activeTasks.length > 0 ? activeTasks[activeTasks.length - 1].id : null,
-      gapDays: parsedData.meta?.defaultGapDays ?? 2,
-      fieldTimestamps: {
-        label: compositeTs,
-        start: compositeTs,
-        end: compositeTs,
-        progress: compositeTs,
-        status: compositeTs,
-        category: compositeTs,
-        dependsOn: compositeTs
-      },
-      updatedAt: nowIso,
-      updatedBy: peerId
+      gapDays: parsedData.meta?.defaultGapDays ?? 2
     };
 
-    const nextTasks = [...activeTasks, newTask];
-    const resolved = resolveSchedule(nextTasks, parsedData.meta?.defaultGapDays ?? 2);
-    const updated = {
+    // Soft-deleted tombstone tasks are kept so the deletion keeps propagating to collaborators
+    const cascade = autoCascade ?? isAutoCascadeEnabled();
+    const liveTasks = [...activeTasks, newTask];
+    const scheduled = cascade ? resolveSchedule(liveTasks, parsedData.meta?.defaultGapDays ?? 2) : liveTasks;
+    const updated: JanttData = {
       ...parsedData,
-      meta: {
-        ...parsedData.meta,
-        updatedAt: nowIso
-      },
-      tasks: resolved
+      tasks: [...scheduled, ...allTasks.filter((t) => t._deleted)]
     };
     if (handleChartCommit) {
       handleChartCommit(updated);
@@ -207,7 +197,7 @@ export function useTaskActions({
       setJsonText(JSON.stringify(updated, null, 2));
       setValidationResult(validate(updated));
     }
-  }, [parsedData, setParsedData, setJsonText, setValidationResult, handleChartCommit]);
+  }, [parsedData, autoCascade, setParsedData, setJsonText, setValidationResult, handleChartCommit]);
 
   return {
     tasksViewMode,

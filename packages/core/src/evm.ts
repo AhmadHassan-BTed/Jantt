@@ -3,16 +3,62 @@
  *
  * Implements standard project cost/schedule performance measurement
  * along with intuitive plain-English executive summaries and health metrics.
+ *
+ * Measurement rules:
+ * - Planned Value is time-phased against each task's baseline (the Performance Measurement
+ *   Baseline) and falls back to current dates only for tasks without one.
+ * - Missing `actualCost` is unknown, not "on budget": AC, CV and CPI use only tasks that
+ *   report an actual cost (see `costCoverage`).
+ * - Plans without any `estimatedCost` measure schedule performance on duration-weighted
+ *   value; cost indices are then neutral placeholders (`costDataAvailable: false`).
  */
 
 import { Task, EVMResult, TaskEVMMetrics } from "./types";
-import { diffDays } from "./date-math";
-import { getTaskDependencies } from "./cpm";
+import { diffDays, getTodayISODate, isValidISODate } from "./date-math";
+import { getTaskDependencyRelations } from "./dependencies";
 import { isTaskDone } from "./utils";
+import { isDependencySatisfied } from "./schedule-health";
 
 export interface EVMOptions {
-  statusDate?: string; // YYYY-MM-DD (defaults to today or latest task start)
+  /**
+   * Status (data) date, YYYY-MM-DD. Defaults to today's local date (the chart's "today" line);
+   * an invalid value also falls back to today. The date actually used is returned as `statusDate`.
+   */
+  statusDate?: string;
+  /** @deprecated Ignored: earned value does not depend on dependency gap spacing. */
   defaultGapDays?: number;
+}
+
+/** EVM metrics plus the context needed to interpret them honestly. */
+export interface EVMAnalysis extends EVMResult {
+  /** Status date the metrics were measured at (YYYY-MM-DD). */
+  statusDate: string;
+  /** Dates planned value was time-phased against: task baselines, current dates, or both. */
+  pvBasis: "baseline" | "current" | "mixed";
+  /**
+   * False when no task has an estimatedCost. SPI, SV% and progress are then duration-weighted,
+   * monetary PV/EV/SV are 0, and CPI/EAC/TCPI are neutral placeholders rather than measurements.
+   */
+  costDataAvailable: boolean;
+  /**
+   * Share of BAC (0-1) held by tasks that report an actualCost. AC, CV and CPI are measured over
+   * those tasks only; when no task reports one, cost performance is unknown and CPI/TCPI stay at
+   * the neutral 1.0.
+   */
+  costCoverage: number;
+}
+
+const round = (value: number, decimals: number): number => {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+};
+
+/** Fraction (0-1) of a task's planned window [start, end] elapsed at the status date. */
+function plannedFraction(start: string, end: string, statusDate: string): number {
+  if (diffDays(statusDate, start) > 0) return 0; // status date before start
+  if (diffDays(end, statusDate) >= 0) return 1; // status date at or after end
+  const totalDuration = Math.max(1, diffDays(start, end));
+  return Math.min(1, Math.max(0, diffDays(start, statusDate) / totalDuration));
 }
 
 /**
@@ -21,12 +67,16 @@ export interface EVMOptions {
  *
  * @param tasks - The array of tasks with estimatedCost, actualCost, progress, start, end dates.
  * @param options - Optional status date.
- * @returns Comprehensive EVMResult with mathematical metrics and executive status.
+ * @returns Comprehensive EVM metrics with executive status and data-quality context.
  */
-export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
+export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMAnalysis {
   const taskMetrics = new Map<string, TaskEVMMetrics>();
 
-  const liveTasks = (tasks || []).filter((t) => !t._deleted);
+  const liveTasks = (Array.isArray(tasks) ? tasks : []).filter((t) => t && !t._deleted);
+
+  // 1. Determine Status Date (T_status)
+  const requestedDate = typeof options?.statusDate === "string" ? options.statusDate.trim() : "";
+  const statusDate = requestedDate && isValidISODate(requestedDate) ? requestedDate.split("T")[0] : getTodayISODate();
 
   if (liveTasks.length === 0) {
     return {
@@ -57,19 +107,12 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
       daysRemaining: 0,
       projectProgressPercent: 0,
       projectPaceLabel: "No active tasks",
-      taskMetrics
+      taskMetrics,
+      statusDate,
+      pvBasis: "current",
+      costDataAvailable: false,
+      costCoverage: 0
     };
-  }
-
-  // 1. Determine Status Date (T_status)
-  let statusDate = options?.statusDate;
-  if (!statusDate || statusDate.trim() === "") {
-    // Default to today's date formatted as YYYY-MM-DD in UTC
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const m = String(now.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(now.getUTCDate()).padStart(2, "0");
-    statusDate = `${y}-${m}-${d}`;
   }
 
   const byId = new Map<string, Task>();
@@ -83,11 +126,20 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
     }
   });
 
+  // Monetary values
   let bac = 0;
   let pv = 0;
   let ev = 0;
   let ac = 0;
+  let evReported = 0; // EV of tasks that report an actual cost
+  let bacReported = 0; // BAC of tasks that report an actual cost
+  let reportedCount = 0; // tasks that report an actual cost
+  // Duration-weighted values (schedule measurement for plans without budgets)
+  let bacWeighted = 0;
+  let pvWeighted = 0;
+  let evWeighted = 0;
 
+  let baselinedCount = 0;
   let completedCount = 0;
   let inProgressCount = 0;
   let notStartedCount = 0;
@@ -95,11 +147,11 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
 
   for (const t of liveTasks) {
     const isDone = isTaskDone(t);
-    const rawProgress = t.progress ?? 0;
+    const rawProgress = typeof t.progress === "number" && Number.isFinite(t.progress) ? t.progress : 0;
     const actualProgress = isDone ? 1.0 : Math.min(1.0, Math.max(0, rawProgress));
 
     // Update status counts
-    if (isDone || actualProgress >= 1.0) {
+    if (actualProgress >= 1.0) {
       completedCount++;
     } else if (actualProgress > 0) {
       inProgressCount++;
@@ -107,83 +159,111 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
       notStartedCount++;
     }
 
-    // Check if task is blocked (any prerequisite is not completed)
-    const depIds = getTaskDependencies(t);
+    // Blocked: a predecessor has not progressed far enough for this task to start (FS/SS links)
     let isBlocked = false;
-    for (const depId of depIds) {
-      const prereq = byId.get(depId);
-      if (prereq && !isTaskDone(prereq)) {
-        isBlocked = true;
-        break;
+    if (!isDone) {
+      for (const rel of getTaskDependencyRelations(t, byId)) {
+        const prereq = rel.id !== t.id ? byId.get(rel.id) : undefined;
+        if (prereq && !isDependencySatisfied(rel, prereq, "start")) {
+          isBlocked = true;
+          break;
+        }
       }
     }
-    if (isBlocked && !isDone) {
+    if (isBlocked) {
       blockedCount++;
     }
 
-    // Planned Progress (Schedule completion up to status date)
-    let plannedProgress = 0;
-    const totalDuration = Math.max(1, diffDays(t.start, t.end));
-    if (diffDays(statusDate, t.start) > 0) {
-      // statusDate is before start
-      plannedProgress = 0;
-    } else if (diffDays(t.end, statusDate) >= 0) {
-      // statusDate is at or after end
-      plannedProgress = 1.0;
-    } else {
-      // statusDate is mid-task
-      const elapsed = Math.max(0, diffDays(t.start, statusDate));
-      plannedProgress = Math.min(1.0, Math.max(0, elapsed / totalDuration));
-    }
+    // Planned Progress against the Performance Measurement Baseline
+    const baseline = t.baseline;
+    const hasBaseline = Boolean(baseline && isValidISODate(baseline.start) && isValidISODate(baseline.end));
+    const plannedStart = hasBaseline ? baseline!.start : t.start;
+    const plannedEnd = hasBaseline ? baseline!.end : t.end;
+    if (hasBaseline) baselinedCount++;
+    const plannedProgress = plannedFraction(plannedStart, plannedEnd, statusDate);
 
     // Budget & Cost allocations
-    const taskBudget = t.estimatedCost !== undefined && t.estimatedCost !== null ? Math.max(0, t.estimatedCost) : 0;
+    const taskBudget = typeof t.estimatedCost === "number" && Number.isFinite(t.estimatedCost) ? Math.max(0, t.estimatedCost) : 0;
+    const reportsActual = typeof t.actualCost === "number" && Number.isFinite(t.actualCost);
     const taskPv = taskBudget * plannedProgress;
     const taskEv = taskBudget * actualProgress;
-    const taskAc = t.actualCost !== undefined && t.actualCost !== null
-      ? Math.max(0, t.actualCost)
-      : (taskBudget > 0 ? taskBudget * actualProgress : 0);
+    const taskAc = reportsActual ? Math.max(0, t.actualCost as number) : 0;
 
     const taskSv = taskEv - taskPv;
-    const taskCv = taskEv - taskAc;
+    const taskCv = reportsActual ? taskEv - taskAc : 0;
 
     bac += taskBudget;
     pv += taskPv;
     ev += taskEv;
-    ac += taskAc;
+    if (reportsActual) {
+      reportedCount++;
+      ac += taskAc;
+      evReported += taskEv;
+      bacReported += taskBudget;
+    }
+
+    const weight = Math.max(1, diffDays(plannedStart, plannedEnd));
+    bacWeighted += weight;
+    pvWeighted += weight * plannedProgress;
+    evWeighted += weight * actualProgress;
 
     taskMetrics.set(t.id, {
       taskId: t.id,
-      plannedValue: Math.round(taskPv * 100) / 100,
-      earnedValue: Math.round(taskEv * 100) / 100,
-      actualCost: Math.round(taskAc * 100) / 100,
-      scheduleVariance: Math.round(taskSv * 100) / 100,
-      costVariance: Math.round(taskCv * 100) / 100,
-      plannedProgress: Math.round(plannedProgress * 1000) / 1000,
-      actualProgress: Math.round(actualProgress * 1000) / 1000,
+      plannedValue: round(taskPv, 2),
+      earnedValue: round(taskEv, 2),
+      actualCost: round(taskAc, 2),
+      scheduleVariance: round(taskSv, 2),
+      costVariance: round(taskCv, 2),
+      plannedProgress: round(plannedProgress, 3),
+      actualProgress: round(actualProgress, 3),
       isBlocked
     });
   }
 
-  // 2. Classical EVM Variances and Indices
-  const sv = ev - pv;
-  const cv = ev - ac;
-  const svPercent = pv > 0 ? (sv / pv) * 100 : 0;
-  const cvPercent = ev > 0 ? (cv / ev) * 100 : 0;
+  const costDataAvailable = bac > 0;
+  const costCoverage = costDataAvailable ? bacReported / bac : 0;
 
-  const spi = pv > 0 ? Math.round((ev / pv) * 1000) / 1000 : 1.0;
-  const cpi = ac > 0 ? Math.round((ev / ac) * 1000) / 1000 : 1.0;
-  const criticalRatio = Math.round(spi * cpi * 1000) / 1000;
+  // 2. Classical EVM Variances and Indices (unrounded for derived forecasts)
+  const schedulePv = costDataAvailable ? pv : pvWeighted;
+  const scheduleEv = costDataAvailable ? ev : evWeighted;
+  const rawSpi = schedulePv > 0 ? scheduleEv / schedulePv : 1.0;
+  const svPercent = schedulePv > 0 ? ((scheduleEv - schedulePv) / schedulePv) * 100 : 0;
+  const sv = ev - pv;
+
+  const cv = evReported - ac;
+  const cvPercent = evReported > 0 ? (cv / evReported) * 100 : 0;
+  // Without budgets there is no earned value in money, so cost indices stay neutral
+  const rawCpi = costDataAvailable && ac > 0 ? evReported / ac : 1.0;
 
   // 3. Forecasting (EAC, ETC, VAC, TCPI)
-  const eac = cpi > 0 ? Math.round(bac / cpi) : bac;
-  const etc = Math.max(0, eac - Math.round(ac));
-  const vac = Math.round(bac - eac);
-  const tcpi = (bac - ac) > 0
-    ? Math.round(((bac - ev) / (bac - ac)) * 1000) / 1000
-    : (eac - ac) > 0
-    ? Math.round(((bac - ev) / (eac - ac)) * 1000) / 1000
-    : 1.0;
+  let eac: number;
+  if (!costDataAvailable || ac <= 0) {
+    eac = bac; // no budget, or nothing spent yet (or not reported): no evidence of a variance
+  } else if (rawCpi > 0) {
+    eac = bac / rawCpi;
+  } else {
+    eac = ac + (bac - ev); // money spent without earned value: ANSI "atypical" forecast
+  }
+  const etc = Math.max(0, eac - ac);
+  const vac = bac - eac;
+
+  const remainingWork = bac - ev;
+  const remainingFunds = bac - ac;
+  let tcpi: number;
+  if (!costDataAvailable) {
+    tcpi = 1.0;
+  } else if (remainingWork <= 0) {
+    tcpi = 0; // no work left to perform
+  } else if (reportedCount === 0) {
+    tcpi = 1.0; // spend unknown: neutral, like CPI (not "remaining work / full budget")
+  } else if (remainingFunds > 0) {
+    tcpi = remainingWork / remainingFunds;
+  } else {
+    tcpi = Infinity; // budget exhausted with work remaining: unachievable within BAC
+  }
+
+  const spi = round(rawSpi, 3);
+  const cpi = round(rawCpi, 3);
 
   // 4. Intuitive Executive Summaries
   let scheduleStatus: "ahead" | "on-track" | "behind" = "on-track";
@@ -215,15 +295,20 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
   healthScore = Math.max(10, Math.min(100, healthScore));
 
   const daysRemaining = Math.max(0, diffDays(statusDate, maxProjectEnd));
-  const projectProgressPercent = bac > 0
+  const projectProgressPercent = costDataAvailable
     ? Math.round((ev / bac) * 100)
-    : Math.round((completedCount / Math.max(liveTasks.length, 1)) * 100);
+    : Math.round((evWeighted / Math.max(bacWeighted, 1)) * 100);
 
   let projectPaceLabel = "Schedule on track";
+  const pacePercent = Math.abs(Math.round(svPercent));
   if (scheduleStatus === "ahead") {
-    projectPaceLabel = `Tracking ${Math.abs(Math.round(svPercent))}% ahead of schedule (+${Math.round(sv).toLocaleString()} EV)`;
+    projectPaceLabel = costDataAvailable
+      ? `Tracking ${pacePercent}% ahead of schedule (+${Math.round(sv).toLocaleString()} EV)`
+      : `Tracking ${pacePercent}% ahead of schedule (duration-weighted)`;
   } else if (scheduleStatus === "behind") {
-    projectPaceLabel = `Running ${Math.abs(Math.round(svPercent))}% behind schedule (-${Math.abs(Math.round(sv)).toLocaleString()} EV)`;
+    projectPaceLabel = costDataAvailable
+      ? `Running ${pacePercent}% behind schedule (-${Math.abs(Math.round(sv)).toLocaleString()} EV)`
+      : `Running ${pacePercent}% behind schedule (duration-weighted)`;
   }
 
   return {
@@ -233,15 +318,15 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
     ac: Math.round(ac),
     sv: Math.round(sv),
     cv: Math.round(cv),
-    svPercent: Math.round(svPercent * 10) / 10,
-    cvPercent: Math.round(cvPercent * 10) / 10,
+    svPercent: round(svPercent, 1),
+    cvPercent: round(cvPercent, 1),
     spi,
     cpi,
-    criticalRatio,
-    eac,
-    etc,
-    vac,
-    tcpi,
+    criticalRatio: round(rawSpi * rawCpi, 3),
+    eac: Math.round(eac),
+    etc: Math.round(etc),
+    vac: Math.round(vac),
+    tcpi: Number.isFinite(tcpi) ? round(tcpi, 3) : tcpi,
     scheduleStatus,
     costStatus,
     overallHealth,
@@ -254,6 +339,10 @@ export function calculateEVM(tasks: Task[], options?: EVMOptions): EVMResult {
     daysRemaining,
     projectProgressPercent,
     projectPaceLabel,
-    taskMetrics
+    taskMetrics,
+    statusDate,
+    pvBasis: baselinedCount === 0 ? "current" : baselinedCount === liveTasks.length ? "baseline" : "mixed",
+    costDataAvailable,
+    costCoverage: round(costCoverage, 3)
   };
 }

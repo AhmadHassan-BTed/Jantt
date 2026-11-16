@@ -1,6 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { calculatePlanHash, reconcilePlans, purgeTombstones, maintainPlanData } from "../src/reconciler";
-import { JanttData } from "../src/types";
+import {
+  calculatePlanHash,
+  reconcilePlans,
+  mergePlansCommutative,
+  purgeTombstones,
+  maintainPlanData,
+  compareCompositeTimestamps,
+  areTasksIdentical,
+  stampTaskFieldTimestamps
+} from "../src/reconciliation";
+import { getTaskDependencyRelations } from "../src/dependencies";
+import { cleanPlanForSharing, sanitizePlanForJson } from "../src/share-coder";
+import { JanttData, Task } from "../src/types";
 
 describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
   const basePlan: JanttData = {
@@ -611,9 +622,9 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
     const t2 = res.mergedData.tasks.find((t) => t.id === "t2");
     expect(t2?.dependsOn).toBeNull();
 
-    // t3 had dependsOn: ["t1", "t2"] -> should now be "t2"
+    // t3 had dependsOn: ["t1", "t2"] -> only the link to t2 remains
     const t3 = res.mergedData.tasks.find((t) => t.id === "t3");
-    expect(t3?.dependsOn).toBe("t2");
+    expect(getTaskDependencyRelations(t3).map((rel) => rel.id)).toEqual(["t2"]);
   });
 
   it("performs autonomous JSON maintenance: prunes expired tombstones, caps bloat, strips empty timestamps", () => {
@@ -651,5 +662,487 @@ describe("Deterministic Plan Hash & 3-Way Reconciler Engine", () => {
     // Canonical hash computed
     expect(maintained.meta?.contentHash).toBeDefined();
     expect(maintained.meta?.contentHash?.length).toBe(16);
+  });
+});
+
+// ─── Regression coverage for the merge, hash and tombstone rules ──────────────
+
+const T0 = "2026-09-01T09:00:00.000Z";
+const T1 = "2026-09-02T09:00:00.000Z";
+const T2 = "2026-09-03T09:00:00.000Z";
+
+function task(id: string, extra: Partial<Task> = {}): Task {
+  return { id, label: `Task ${id}`, category: "dev", start: "2026-09-01", end: "2026-09-05", ...extra };
+}
+
+function plan(tasks: Task[], extra: Partial<JanttData> = {}): JanttData {
+  return { meta: { title: "Plan" }, categories: { dev: { label: "Dev", color: "#38BDF8" } }, tasks, ...extra };
+}
+
+const byId = (data: JanttData, id: string) => data.tasks.find((t) => t.id === id);
+
+describe("calculatePlanHash covers every persisted field", () => {
+  const base = plan([task("t1", { dependsOn: null }), task("t2", { dependsOn: "t1" })], {
+    notes: [{ id: "n1", title: "Note", content: "Body" }],
+    people: [{ id: "p1", name: "Ana", username: "@ana" }]
+  });
+  const baseHash = calculatePlanHash(base);
+  const edit = (mutate: (copy: JanttData) => void) => {
+    const copy: JanttData = JSON.parse(JSON.stringify(base));
+    mutate(copy);
+    return calculatePlanHash(copy);
+  };
+
+  it.each([
+    ["task priority", (p: JanttData) => (p.tasks[0].priority = "high")],
+    ["task milestone", (p: JanttData) => (p.tasks[0].milestone = true)],
+    ["task baseline", (p: JanttData) => (p.tasks[0].baseline = { start: "2026-09-01", end: "2026-09-02" })],
+    ["task teamId", (p: JanttData) => (p.tasks[0].teamId = "team-a")],
+    ["task custom fields", (p: JanttData) => (p.tasks[0].fields = { risk: "high" })],
+    ["dependency type", (p: JanttData) => (p.tasks[1].dependsOn = [{ id: "t1", type: "SS" }])],
+    ["dependency lag", (p: JanttData) => (p.tasks[1].dependsOn = "t1:FS+2d")],
+    ["meta.showCriticalPath", (p: JanttData) => (p.meta!.showCriticalPath = true)],
+    ["note pinned", (p: JanttData) => (p.notes![0].pinned = true)],
+    ["note tags", (p: JanttData) => (p.notes![0].tags = ["ops"])],
+    ["person role", (p: JanttData) => (p.people![0].role = "Lead")],
+    ["documents", (p: JanttData) => (p.documents = [{ id: "d1", label: "Spec" }])]
+  ])("changes when only the %s changes", (_name, mutate) => {
+    expect(edit(mutate)).not.toBe(baseHash);
+  });
+
+  it("ignores CRDT bookkeeping, key order and values the Realtime Database drops", () => {
+    expect(
+      edit((p) => {
+        p.meta!.revision = 9;
+        p.meta!.updatedAt = T2;
+        p.meta!.sync = { revision: 9, contentHash: "x", updatedAt: T2 };
+        p.meta!.tombstones = { gone: { deletedAt: T1, entityType: "task" } };
+        p.tasks[0].fieldTimestamps = { label: `${T1}#peer` };
+        p.tasks[0].updatedAt = T1;
+        p.tasks[0].updatedBy = "peer";
+        p.tasks[1].dependsOn = ["t1"];
+        p.tasks.push(task("old", { _deleted: true, deletedAt: T0 }));
+        p.teams = [];
+        (p.tasks[0] as any).assignees = [];
+        p.categories = { dev: { color: "#38BDF8", label: "Dev" } };
+      })
+    ).toBe(baseHash);
+  });
+
+  it("matches the shared-link and sanitized copies of the same plan", () => {
+    const withDefaults = plan([task("t1", { progress: 0, status: "not-started", milestone: false, notes: "" })], {
+      people: [{ id: "p1", name: "Ana", username: "ana" }]
+    });
+    const hash = calculatePlanHash(withDefaults);
+    expect(calculatePlanHash(cleanPlanForSharing(withDefaults))).toBe(hash);
+    expect(calculatePlanHash(sanitizePlanForJson(withDefaults))).toBe(hash);
+  });
+});
+
+describe("field-level 3-way merge", () => {
+  it("keeps a remote edit of a field the local side never touched, even with a newer local updatedAt", () => {
+    const base = plan([task("t1", { progress: 0.1 })]);
+    const remote = plan([
+      task("t1", { progress: 0.1, assignee: "ana", updatedAt: T1, fieldTimestamps: { assignee: `${T1}#r` } })
+    ]);
+    const local = plan([task("t1", { progress: 0.5, updatedAt: T2, fieldTimestamps: { progress: `${T2}#l` } })]);
+
+    const merged = reconcilePlans(base, local, remote).mergedData;
+    expect(byId(merged, "t1")?.assignee).toBe("ana");
+    expect(byId(merged, "t1")?.progress).toBe(0.5);
+  });
+
+  it("merges every task key, not just the PM field list", () => {
+    const base = plan([task("t1")]);
+    const remote = plan([
+      task("t1", {
+        priority: "high",
+        teamId: "t-a",
+        description: "Spec",
+        fields: { risk: 3 },
+        baseline: { start: "2026-09-01", end: "2026-09-04" }
+      })
+    ]);
+    const local = plan([task("t1", { label: "Renamed" })]);
+
+    const ab = reconcilePlans(base, local, remote).mergedData;
+    const ba = reconcilePlans(base, remote, local).mergedData;
+    expect(byId(ab, "t1")).toMatchObject({
+      label: "Renamed",
+      priority: "high",
+      teamId: "t-a",
+      description: "Spec",
+      fields: { risk: 3 }
+    });
+    expect(calculatePlanHash(ab)).toBe(calculatePlanHash(ba));
+  });
+
+  it("records a conflict when both sides change the same field and keeps the newer stamp", () => {
+    const base = plan([task("t1", { priority: "low" })]);
+    const local = plan([task("t1", { priority: "medium", fieldTimestamps: { priority: `${T1}#l` } })]);
+    const remote = plan([task("t1", { priority: "high", fieldTimestamps: { priority: `${T2}#r` } })]);
+
+    const result = reconcilePlans(base, local, remote);
+    expect(byId(result.mergedData, "t1")?.priority).toBe("high");
+    expect(result.hasConflicts).toBe(true);
+    expect(result.conflicts[0]).toMatchObject({
+      type: "task_field",
+      field: "priority",
+      localValue: "medium",
+      resolution: "remote"
+    });
+  });
+
+  it("lets an unassignment stick and keeps concurrent additions from both sides", () => {
+    const base = plan([task("t1", { assignees: ["ana", "bob"] })]);
+    const unassigned = reconcilePlans(base, plan([task("t1", { assignees: ["ana"] })]), base).mergedData;
+    expect(byId(unassigned, "t1")?.assignees).toEqual(["ana"]);
+
+    const local = plan([task("t1", { assignees: ["ana", "bob", "cy"] })]);
+    const remote = plan([task("t1", { assignees: ["bob", "dee"] })]);
+    expect(byId(reconcilePlans(base, local, remote).mergedData, "t1")?.assignees).toEqual(["bob", "cy", "dee"]);
+  });
+
+  it("converges on ties and on edits without timestamps, whichever side is local", () => {
+    const base = plan([task("t1", { label: "Base" })]);
+    const a = plan([task("t1", { label: "Alpha", fieldTimestamps: { label: `${T1}#same` } })]);
+    const b = plan([task("t1", { label: "Beta", fieldTimestamps: { label: `${T1}#same` } })]);
+    const ab = reconcilePlans(base, a, b).mergedData;
+    const ba = reconcilePlans(base, b, a).mergedData;
+    expect(byId(ab, "t1")?.label).toBe(byId(ba, "t1")?.label);
+    expect(calculatePlanHash(ab)).toBe(calculatePlanHash(ba));
+
+    const c = plan([task("t1", { label: "Gamma" })]);
+    const d = plan([task("t1", { label: "Delta" })]);
+    expect(calculatePlanHash(mergePlansCommutative(c, d).mergedData)).toBe(
+      calculatePlanHash(mergePlansCommutative(d, c).mergedData)
+    );
+  });
+
+  it("is commutative and keeps every edit only one side made, across random concurrent edits", () => {
+    let seed = 42;
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const fields = ["label", "priority", "progress", "status", "notes", "color", "wbs", "phase"] as const;
+    const base = plan(Array.from({ length: 8 }, (_, i) => task(`t${i}`, { wbs: `${i}` })));
+
+    for (let round = 0; round < 40; round++) {
+      const a: JanttData = JSON.parse(JSON.stringify(base));
+      const b: JanttData = JSON.parse(JSON.stringify(base));
+      for (let i = 0; i < 6; i++) {
+        const target = Math.floor(random() * base.tasks.length);
+        const field = fields[Math.floor(random() * fields.length)];
+        const side = random() < 0.5 ? a : b;
+        const value = field === "progress" ? Math.round(random() * 100) / 100 : `v${round}-${i}`;
+        (side.tasks[target] as any)[field] = value;
+        const ts = `2026-09-${String(10 + i).padStart(2, "0")}T00:00:00.000Z#${side === a ? "a" : "b"}`;
+        side.tasks[target].fieldTimestamps = { ...(side.tasks[target].fieldTimestamps || {}), [field]: ts };
+      }
+
+      const ab = reconcilePlans(base, a, b).mergedData;
+      const ba = reconcilePlans(base, b, a).mergedData;
+      expect(calculatePlanHash(ab)).toBe(calculatePlanHash(ba));
+
+      for (let t = 0; t < base.tasks.length; t++) {
+        for (const field of fields) {
+          const aTouched = Boolean(a.tasks[t].fieldTimestamps?.[field]);
+          const bTouched = Boolean(b.tasks[t].fieldTimestamps?.[field]);
+          if (aTouched === bTouched) continue;
+          const expected = (aTouched ? a : b).tasks[t][field];
+          expect((byId(ab, base.tasks[t].id) as any)[field]).toEqual(expected);
+        }
+      }
+    }
+  });
+});
+
+describe("collections and meta merge 3-way", () => {
+  const base = plan([task("t1")], {
+    meta: { title: "Roadmap", scale: "day" },
+    people: [
+      { id: "p1", name: "Ana" },
+      { id: "p2", name: "Bob" }
+    ],
+    teams: [{ id: "team-a", name: "Alpha" }],
+    categories: { dev: { label: "Dev", color: "#38BDF8" }, ops: { label: "Ops", color: "#10B981" } },
+    documents: [{ id: "d1", label: "Spec" }]
+  });
+
+  it("keeps a local title rename and a remote scale change", () => {
+    const local = { ...base, meta: { ...base.meta, title: "Roadmap v2" } };
+    const remote = { ...base, meta: { ...base.meta, scale: "week" as const, showCriticalPath: true } };
+    const merged = reconcilePlans(base, local, remote).mergedData;
+    expect(merged.meta).toMatchObject({ title: "Roadmap v2", scale: "week", showCriticalPath: true });
+  });
+
+  it("keeps renames and lets deletions of people, teams, categories and documents stick", () => {
+    const local: JanttData = {
+      ...base,
+      people: [{ id: "p1", name: "Ana Maria" }],
+      teams: [],
+      categories: { dev: base.categories!.dev },
+      documents: [
+        { id: "d1", label: "Spec" },
+        { id: "d2", label: "Notes" }
+      ]
+    };
+    const merged = reconcilePlans(base, local, base).mergedData;
+    expect(merged.people).toEqual([{ id: "p1", name: "Ana Maria" }]);
+    expect(merged.teams).toEqual([]);
+    expect(Object.keys(merged.categories!)).toEqual(["dev"]);
+    expect(merged.documents?.map((d) => d.id)).toEqual(["d1", "d2"]);
+  });
+
+  it("keeps a person edited on one side and removed on the other, with a conflict", () => {
+    const local: JanttData = { ...base, people: [{ id: "p1", name: "Ana" }] };
+    const remote: JanttData = {
+      ...base,
+      people: [
+        { id: "p1", name: "Ana" },
+        { id: "p2", name: "Bob", role: "QA" }
+      ]
+    };
+    const result = reconcilePlans(base, local, remote);
+    expect(result.mergedData.people?.find((p) => p.id === "p2")?.role).toBe("QA");
+    expect(result.conflicts.some((c) => c.entityId === "people/p2")).toBe(true);
+  });
+
+  it("merges notes field by field", () => {
+    const withNote = (note: Record<string, unknown>) =>
+      ({ ...base, notes: [{ id: "n1", title: "Kickoff", content: "Agenda", ...note }] }) as JanttData;
+    const noteBase = withNote({});
+    const local = withNote({ pinned: true, tags: ["ops"], title: "Kickoff (final)" });
+    const remote = withNote({ content: "Agenda + budget", color: "#EF4444" });
+    const note = reconcilePlans(noteBase, local, remote).mergedData.notes?.[0];
+    expect(note).toMatchObject({
+      title: "Kickoff (final)",
+      content: "Agenda + budget",
+      pinned: true,
+      tags: ["ops"],
+      color: "#EF4444"
+    });
+  });
+});
+
+describe("tombstones and deletions", () => {
+  it("does not resurrect a deleted task from a stale peer in a 2-way merge", () => {
+    // Recent times: tombstones older than 30 days are purged by design.
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60000).toISOString();
+    const deleted = plan([task("t2")], {
+      meta: { title: "Plan", tombstones: { t1: { deletedAt: `${minutesAgo(30)}#a`, entityType: "task" } } }
+    });
+    const stale = plan([task("t1", { updatedAt: minutesAgo(60) }), task("t2")]);
+    const ab = mergePlansCommutative(deleted, stale).mergedData;
+    const ba = mergePlansCommutative(stale, deleted).mergedData;
+    expect(byId(ab, "t1")).toBeUndefined();
+    expect(byId(ba, "t1")).toBeUndefined();
+    expect(ab.meta?.tombstones?.t1).toBeDefined();
+
+    const editedLater = plan([
+      task("t1", { label: "Revived", fieldTimestamps: { label: `${minutesAgo(5)}#b` } }),
+      task("t2")
+    ]);
+    const revived = mergePlansCommutative(deleted, editedLater).mergedData;
+    expect(byId(revived, "t1")?.label).toBe("Revived");
+    expect(revived.meta?.tombstones?.t1).toBeUndefined();
+  });
+
+  it("lets a delete beat an untouched copy but keeps a concurrent edit of priority", () => {
+    const base = plan([task("t1"), task("t2")]);
+    const remote = plan([task("t2")]);
+    expect(byId(reconcilePlans(base, base, remote).mergedData, "t1")).toBeUndefined();
+
+    const local = plan([task("t1", { priority: "urgent" }), task("t2")]);
+    const result = reconcilePlans(base, local, remote);
+    expect(byId(result.mergedData, "t1")?.priority).toBe("urgent");
+    expect(result.conflicts[0].type).toBe("task_deletion");
+  });
+
+  it("keeps a task that a merge kept over a deletion when the deleter merges again", () => {
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60000).toISOString();
+    const base = plan([task("t1"), task("t2")]);
+    // Deleted at -10 min; a collaborator edited t1 concurrently at -20 min (before the deletion).
+    const deleter = plan([task("t2")], {
+      meta: { title: "Plan", tombstones: { t1: { deletedAt: `${minutesAgo(10)}#a`, entityType: "task" } } }
+    });
+    const editor = plan([task("t1", { priority: "high", updatedAt: minutesAgo(20) }), task("t2")]);
+    const server = reconcilePlans(base, editor, deleter).mergedData;
+    expect(byId(server, "t1")?.priority).toBe("high");
+
+    // The deleter made another edit meanwhile and merges the server copy against its last save.
+    const deleterLater = { ...deleter, tasks: [task("t2", { label: "Renamed" })] };
+    for (const merged of [
+      reconcilePlans(deleter, deleterLater, server).mergedData,
+      reconcilePlans(deleter, server, deleterLater).mergedData
+    ]) {
+      expect(byId(merged, "t1")?.priority).toBe("high");
+      expect(byId(merged, "t2")?.label).toBe("Renamed");
+      expect(merged.meta?.tombstones?.t1).toBeUndefined();
+    }
+
+    // Deleting it again after that still wins.
+    const deletedAgain = plan([task("t2")], {
+      meta: { title: "Plan", tombstones: { t1: { deletedAt: `${minutesAgo(1)}#a`, entityType: "task" } } }
+    });
+    expect(byId(reconcilePlans(deleter, deletedAgain, server).mergedData, "t1")).toBeUndefined();
+
+    // A task undone on one side (live again, stale tombstone left behind) is not dropped while both sides have it.
+    const undone = plan([task("t1"), task("t2")], {
+      meta: { title: "Plan", tombstones: { t1: { deletedAt: `${minutesAgo(5)}#a`, entityType: "task" } } }
+    });
+    expect(byId(reconcilePlans(base, undone, base).mergedData, "t1")).toBeDefined();
+  });
+
+  it("dates an undated soft delete by its plan's last save, so later edits elsewhere survive", () => {
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60000).toISOString();
+    const deleter = plan([task("t1", { _deleted: true })], { meta: { title: "Plan", updatedAt: minutesAgo(60) } });
+    const editedLater = plan([task("t1", { label: "Edited", updatedAt: minutesAgo(1) })]);
+    const staleEdit = plan([task("t1", { label: "Edited", updatedAt: minutesAgo(90) })]);
+    expect(byId(mergePlansCommutative(deleter, editedLater).mergedData, "t1")?.label).toBe("Edited");
+    expect(byId(mergePlansCommutative(deleter, staleEdit).mergedData, "t1")).toBeUndefined();
+
+    // Against a base holding the same undated soft delete, a copy brought back on one side stays.
+    const savedLater = { ...deleter, meta: { title: "Plan", updatedAt: minutesAgo(30) } };
+    expect(byId(reconcilePlans(deleter, savedLater, staleEdit).mergedData, "t1")?.label).toBe("Edited");
+    expect(byId(reconcilePlans(deleter, staleEdit, savedLater).mergedData, "t1")?.label).toBe("Edited");
+  });
+
+  it("reuses the recorded deletion time and keeps more than 50 tombstones", () => {
+    const ids = Array.from({ length: 120 }, (_, i) => `t${i}`);
+    const base = plan(ids.map((id) => task(id)));
+    const tombstones = Object.fromEntries(ids.map((id) => [id, { deletedAt: `${T1}#a`, entityType: "task" }]));
+    const local = plan([], { meta: { title: "Plan", tombstones } });
+    const merged = reconcilePlans(base, local, base, { tombstoneMaxAgeDays: 100000 }).mergedData;
+    expect(merged.tasks).toHaveLength(0);
+    expect(Object.keys(merged.meta?.tombstones || {})).toHaveLength(120);
+    expect(merged.meta?.tombstones?.t0.deletedAt).toBe(`${T1}#a`);
+  });
+
+  it("prunes links to deleted tasks in every syntax and keeps object links", () => {
+    const base = plan([
+      task("gone"),
+      task("keep"),
+      task("a", {
+        dependsOn: [
+          { id: "keep", type: "SS", lag: 1 },
+          { id: "gone", type: "FF" }
+        ]
+      }),
+      task("b", { dependsOn: "gone:FS+2d; keep" }),
+      task("c", { dependsOn: [{ id: "keep", type: "SF" }] })
+    ]);
+    // A collaborator deleted "gone" (the app records a tombstone) while this side added a task.
+    const remote = plan(
+      base.tasks.filter((t) => t.id !== "gone"),
+      { meta: { title: "Plan", tombstones: { gone: { deletedAt: new Date().toISOString(), entityType: "task" } } } }
+    );
+    const local = { ...base, tasks: [...base.tasks, task("new")] };
+    const merged = reconcilePlans(base, local, remote).mergedData;
+    expect(byId(merged, "gone")).toBeUndefined();
+    expect(byId(merged, "new")).toBeDefined();
+    expect(getTaskDependencyRelations(byId(merged, "a"))).toEqual([
+      expect.objectContaining({ id: "keep", type: "SS", lagDays: 1 })
+    ]);
+    expect(getTaskDependencyRelations(byId(merged, "b")).map((r) => r.id)).toEqual(["keep"]);
+    expect(byId(merged, "c")?.dependsOn).toEqual([{ id: "keep", type: "SF" }]);
+  });
+
+  it("survives malformed tombstones and timestamps from untrusted plans", () => {
+    const poisoned: any = plan([task("t1", { fieldTimestamps: { label: true as any }, updatedAt: 42 as any })], {
+      meta: { title: "Plan", tombstones: { t9: { deletedAt: 123 }, t8: null, t7: "x" } as any }
+    });
+    poisoned.notes = [{ id: "n1", title: "N", content: "C", _deleted: true, deletedAt: { at: 1 } }];
+    const other = plan([task("t1", { label: "Edited" })]);
+    expect(() => reconcilePlans(poisoned, poisoned, other)).not.toThrow();
+    expect(() => reconcilePlans(null, other, poisoned)).not.toThrow();
+    expect(() => purgeTombstones(poisoned)).not.toThrow();
+    expect(() => maintainPlanData(poisoned)).not.toThrow();
+  });
+
+  it("maintainPlanData keeps links between ids containing '-' and records note tombstones", () => {
+    const data = plan(
+      [task("task-1"), task("task-2", { dependsOn: "task-1" }), task("task-3", { dependsOn: ["task-3", "missing"] })],
+      { notes: [{ id: "n1", title: "Old", content: "x", _deleted: true, deletedAt: new Date().toISOString() }] }
+    );
+    const maintained = maintainPlanData(data);
+    expect(byId(maintained, "task-2")?.dependsOn).toBe("task-1");
+    expect(byId(maintained, "task-3")?.dependsOn).toBeNull();
+    expect(maintained.notes).toEqual([]);
+    expect(maintained.meta?.tombstones?.n1?.entityType).toBe("note");
+  });
+
+  it("purgeTombstones and maintainPlanData agree on unparseable dates (kept as fresh)", () => {
+    const data = plan([task("t1")], {
+      meta: {
+        title: "Plan",
+        tombstones: { x: { deletedAt: "not-a-date" }, y: { deletedAt: "2020-01-01T00:00:00.000Z" } }
+      }
+    });
+    expect(Object.keys(purgeTombstones(data).meta?.tombstones || {})).toEqual(["x"]);
+    expect(Object.keys(maintainPlanData(data).meta?.tombstones || {})).toEqual(["x"]);
+  });
+});
+
+describe("timestamp ordering", () => {
+  it("compares instants, not strings, and ignores locale", () => {
+    expect(compareCompositeTimestamps("2026-09-01T12:00:00.900Z", "2026-09-01T12:00:00Z")).toBeGreaterThan(0);
+    expect(compareCompositeTimestamps("2026-09-01T14:00:00+02:00", "2026-09-01T12:30:00Z")).toBeLessThan(0);
+    expect(compareCompositeTimestamps(`${T1}#b`, `${T1}#a`)).toBeGreaterThan(0);
+    expect(compareCompositeTimestamps(`${T1}#a`, `${T1}#a`)).toBe(0);
+  });
+
+  it("treats missing, malformed and far-future stamps as older than any valid one", () => {
+    expect(compareCompositeTimestamps(T0, undefined)).toBeGreaterThan(0);
+    expect(compareCompositeTimestamps(T0, 123 as any)).toBeGreaterThan(0);
+    expect(compareCompositeTimestamps(T0, "garbage")).toBeGreaterThan(0);
+    expect(compareCompositeTimestamps(T0, "9999-12-31T00:00:00.000Z#attacker")).toBeGreaterThan(0);
+  });
+});
+
+describe("task helpers", () => {
+  it("areTasksIdentical compares every content key and normalizes dependsOn", () => {
+    expect(areTasksIdentical(task("t1", { teamId: "a" }), task("t1", { teamId: "b" }))).toBe(false);
+    expect(areTasksIdentical(task("t1", { priority: "high" }), task("t1"))).toBe(false);
+    expect(
+      areTasksIdentical(task("t1", { dependsOn: [{ id: "t0", type: "SS" }] }), task("t1", { dependsOn: "t0" }))
+    ).toBe(false);
+    expect(areTasksIdentical(task("t1", { dependsOn: ["t0"] }), task("t1", { dependsOn: "t0", updatedAt: T2 }))).toBe(true);
+  });
+
+  it("never equates an id that looks like lag shorthand with a typed link", () => {
+    // "render-3d" may be the id of a task; "render:FS-3d" is a link to "render" with a 3-day lead.
+    const byShorthand = task("t1", { dependsOn: "render-3d" });
+    const byTypedLink = task("t1", { dependsOn: "render:FS-3d" });
+    expect(areTasksIdentical(byShorthand, byTypedLink)).toBe(false);
+    expect(calculatePlanHash(plan([byShorthand]))).not.toBe(calculatePlanHash(plan([byTypedLink])));
+    // Spelling-only differences of unambiguous links still compare equal
+    expect(areTasksIdentical(task("t1", { dependsOn: "render:FS-3d" }), task("t1", { dependsOn: [{ id: "render", type: "FS", lag: -3 }] }))).toBe(true);
+
+    // A local relink from task "render-3d" to "render" with a lead is not mistaken for "no change"
+    const base = plan([task("render"), task("render-3d"), byShorthand]);
+    const local = plan([task("render"), task("render-3d"), byTypedLink]);
+    const remote: JanttData = JSON.parse(JSON.stringify(base));
+    expect(byId(reconcilePlans(base, local, remote).mergedData, "t1")?.dependsOn).toBe("render:FS-3d");
+  });
+
+  it("stampTaskFieldTimestamps never moves a stamp backwards when next carries stale stamps", () => {
+    const prev = task("t1", { fieldTimestamps: { label: `${T2}#a`, start: `${T0}#a` } });
+    const staleCopy = { ...prev, fieldTimestamps: { label: `${T0}#b`, start: `${T1}#b` } };
+    const restamped = stampTaskFieldTimestamps(prev, staleCopy, `${T2}#peer`);
+    expect(restamped.fieldTimestamps).toEqual({ label: `${T2}#a`, start: `${T1}#b` });
+    expect(restamped.updatedAt).toBe(staleCopy.updatedAt); // no field changed
+
+    const edited = stampTaskFieldTimestamps(prev, { ...staleCopy, progress: 0.5 }, `${T2}#peer`);
+    expect(edited.fieldTimestamps).toEqual({ label: `${T2}#a`, start: `${T1}#b`, progress: `${T2}#peer` });
+  });
+
+  it("stampTaskFieldTimestamps stamps every changed key, including milestone and costs", () => {
+    const prev = task("t1", { fieldTimestamps: { label: `${T0}#p` } });
+    const next = { ...prev, milestone: true, actualCost: 10 };
+    const stamped = stampTaskFieldTimestamps(prev, next, `${T2}#peer`);
+    expect(stamped.fieldTimestamps).toEqual({ label: `${T0}#p`, milestone: `${T2}#peer`, actualCost: `${T2}#peer` });
+    expect(stamped.updatedAt).toBe(T2);
+    expect(stamped.updatedBy).toBe("peer");
+    const unchanged = { ...prev };
+    expect(stampTaskFieldTimestamps(prev, unchanged, `${T2}#peer`)).toBe(unchanged);
   });
 });

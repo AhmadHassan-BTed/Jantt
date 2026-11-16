@@ -1,23 +1,25 @@
 import React, { useState } from "react";
-import { FolderKanban, MoreVertical, Plus, Share2, Eye, KeyRound } from "lucide-react";
+import { FolderKanban, MoreVertical, Plus, Share2, Eye, KeyRound, ChevronDown } from "lucide-react";
 import { JanttLogo } from "../common/JanttLogo";
-import type { SavedProject } from "../../types";
-import type { UserRoomPointer, RoomPresence, UserProfile } from "../../firebase/types";
+import type { RoomPresence, UserProfile } from "../../firebase/types";
 import type { User as FirebaseUser } from "firebase/auth";
-import { DEFAULT_TEMPLATE } from "../../constants";
+import type { ActiveView } from "../../types";
 import { MobileActionMenuSheet } from "./MobileActionMenuSheet";
+import type { PanelSlot } from "./Navbar";
 
 interface MobileNavbarProps {
-  activeProjectId: string;
-  customProjects: SavedProject[];
-  handleSelectProject?: (id: string) => void;
+  /**
+   * "bar": regular top bar. "floating": a single menu button floating over the chart, used in
+   * immersive landscape where the bars are hidden; its menu then also offers the view switcher.
+   */
+  variant?: "bar" | "floating";
+  activePlanName: string;
   handleOpenAddPlanModal: () => void;
   onOpenPlanManager: () => void;
   activeRoomId?: string | null;
-  activeRoomTitle?: string;
   onlineUsers?: RoomPresence[];
-  onOpenShareRoom?: (roomId: string) => void;
-  setShowShareModal: (show: boolean) => void;
+  /** Opens the right share flow for the active plan (room invite or link share). */
+  onOpenShare: () => void;
   setShowPeopleModal: (show: boolean) => void;
   saveStatus: "saved" | "saving" | "pending";
   autoSaveLabel: string;
@@ -28,30 +30,34 @@ interface MobileNavbarProps {
   setSelectedThemeId: (id: string) => void;
   onOpenPromptModal: () => void;
   onOpenJsonEditor: () => void;
+  onImportFile?: () => void;
   currentUser?: FirebaseUser | null;
   userProfile?: UserProfile | null;
   isGitHubVerified?: boolean;
   onLogin?: () => void;
+  /** A GitHub sign-in popup is open (disables the sign-in button). */
+  isSigningIn?: boolean;
   onLogout?: () => void;
   onOpenVerificationModal?: () => void;
-  ownedRooms?: UserRoomPointer[];
-  sharedRooms?: UserRoomPointer[];
   isViewer?: boolean;
   onPromptFork?: () => void;
   isPendingLoginEditor?: boolean;
   onOpenEditorLogin?: () => void;
+  /** Cloud panel shown in the menu sheet; a function receives `close` (closes the sheet). */
+  cloudPanel?: PanelSlot;
+  cloudStatusLabel?: string;
+  activeView: ActiveView;
+  setActiveView: (view: ActiveView) => void;
 }
 
 export const MobileNavbar: React.FC<MobileNavbarProps> = ({
-  activeProjectId,
-  customProjects,
+  variant = "bar",
+  activePlanName,
   handleOpenAddPlanModal,
   onOpenPlanManager,
   activeRoomId,
-  activeRoomTitle,
   onlineUsers = [],
-  onOpenShareRoom,
-  setShowShareModal,
+  onOpenShare,
   setShowPeopleModal,
   saveStatus,
   autoSaveLabel,
@@ -62,106 +68,130 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   setSelectedThemeId,
   onOpenPromptModal,
   onOpenJsonEditor,
+  onImportFile,
   currentUser,
   userProfile,
   isGitHubVerified = false,
   onLogin,
+  isSigningIn = false,
   onLogout,
   onOpenVerificationModal,
-  ownedRooms = [],
-  sharedRooms = [],
   isViewer = false,
   onPromptFork,
   isPendingLoginEditor = false,
-  onOpenEditorLogin
+  onOpenEditorLogin,
+  cloudPanel,
+  cloudStatusLabel,
+  activeView,
+  setActiveView
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const isRoomActive = Boolean(activeRoomId);
+  const isFloating = variant === "floating";
 
-  // Derive display title for current plan
-  const activePlanName = (() => {
-    if (activeProjectId === "default") return DEFAULT_TEMPLATE.name;
-    const custom = customProjects.find((p) => p.id === activeProjectId);
-    if (custom) return custom.name;
-    const owned = ownedRooms.find((r) => `room-${r.roomId}` === activeProjectId);
-    if (owned) return owned.title;
-    const shared = sharedRooms.find((s) => `room-${s.roomId}` === activeProjectId);
-    if (shared) return shared.title;
-    return activeRoomTitle || "Active Plan";
-  })();
+  const sheet = (
+    <MobileActionMenuSheet
+      isOpen={isMenuOpen}
+      onClose={() => setIsMenuOpen(false)}
+      selectedThemeId={selectedThemeId}
+      setSelectedThemeId={setSelectedThemeId}
+      saveStatus={saveStatus}
+      autoSaveLabel={autoSaveLabel}
+      onOpenAutoSave={onOpenAutoSave}
+      snapshotsCount={snapshotsCount}
+      onOpenVersionHistory={onOpenVersionHistory}
+      onOpenPromptModal={onOpenPromptModal}
+      onOpenPlanManager={onOpenPlanManager}
+      onOpenPeopleModal={() => setShowPeopleModal(true)}
+      onOpenJsonEditor={onOpenJsonEditor}
+      onImportFile={onImportFile}
+      currentUser={currentUser}
+      userProfile={userProfile}
+      isGitHubVerified={isGitHubVerified}
+      onLogin={onLogin}
+      isSigningIn={isSigningIn}
+      onLogout={onLogout}
+      onOpenVerificationModal={onOpenVerificationModal}
+      cloudPanel={cloudPanel}
+      cloudStatusLabel={cloudStatusLabel}
+      activeView={isFloating ? activeView : undefined}
+      setActiveView={isFloating ? setActiveView : undefined}
+    />
+  );
+
+  if (isFloating) {
+    return (
+      <>
+        <button
+          type="button"
+          className="mobile-immersive-fab"
+          onClick={() => setIsMenuOpen(true)}
+          aria-label={`Open menu: views, plans and settings (current plan: ${activePlanName})`}
+          aria-haspopup="dialog"
+          aria-expanded={isMenuOpen}
+        >
+          <MoreVertical size={18} aria-hidden="true" />
+          {isRoomActive && <span className="mobile-room-pulse-dot" aria-hidden="true" />}
+        </button>
+        {sheet}
+      </>
+    );
+  }
 
   return (
     <>
       <header className="mobile-navbar">
         {/* Left: Brand + Plan Title Pill */}
         <div className="mobile-nav-left">
-          <div className="mobile-logo-wrap" onClick={onOpenPlanManager} title="Jantt Home">
+          <button
+            type="button"
+            className="mobile-logo-wrap"
+            onClick={onOpenPlanManager}
+            title="Open plans"
+            aria-label="Open plan manager"
+          >
             <JanttLogo size={24} />
-          </div>
+          </button>
 
-          <div className="mobile-plan-selector-pill" onClick={onOpenPlanManager}>
-            <FolderKanban size={13} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} />
+          <button
+            type="button"
+            className="mobile-plan-selector-pill"
+            onClick={onOpenPlanManager}
+            title={`Current plan: ${activePlanName}. Tap to switch or manage plans.`}
+            aria-label={`Current plan: ${activePlanName}${isRoomActive ? " (live cloud room)" : ""}. Switch or manage plans`}
+          >
+            <FolderKanban size={13} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} aria-hidden="true" />
             <span className="mobile-plan-name">{activePlanName}</span>
             {isRoomActive && (
               <span
                 className="mobile-room-indicator"
-                title={`Room #${activeRoomId}${onlineUsers.length > 0 ? ` (${onlineUsers.length} online)` : ""}`}
+                title={`Live room${onlineUsers.length > 0 ? ` (${onlineUsers.length} online)` : ""}`}
+                aria-hidden="true"
               >
                 <span className="mobile-room-pulse-dot" />
               </span>
             )}
-          </div>
+            <ChevronDown size={12} style={{ opacity: 0.6, flexShrink: 0 }} aria-hidden="true" />
+          </button>
 
           {isPendingLoginEditor ? (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenEditorLogin?.();
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "3px",
-                padding: "3px 7px",
-                fontSize: "10px",
-                fontWeight: 700,
-                borderRadius: "6px",
-                background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
-                color: "#ffffff",
-                border: "none",
-                cursor: "pointer",
-                flexShrink: 0
-              }}
-              title="Editor Invite. Tap to sign in and edit live."
+              className="mobile-role-chip is-pending-editor"
+              onClick={() => onOpenEditorLogin?.()}
+              title="Editor invite. Tap to sign in and edit live."
             >
-              <KeyRound size={10} />
+              <KeyRound size={10} aria-hidden="true" />
               <span>Sign in to Edit</span>
             </button>
           ) : isViewer ? (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPromptFork?.();
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "3px",
-                padding: "3px 7px",
-                fontSize: "10px",
-                fontWeight: 700,
-                borderRadius: "6px",
-                background: "rgba(245, 158, 11, 0.2)",
-                border: "1px solid rgba(245, 158, 11, 0.4)",
-                color: "#f59e0b",
-                cursor: "pointer",
-                flexShrink: 0
-              }}
-              title="Read-Only Room. Tap to make a local copy to edit."
+              className="mobile-role-chip is-viewer"
+              onClick={() => onPromptFork?.()}
+              title="Read-only room. Tap to make a local copy to edit."
             >
-              <Eye size={10} />
+              <Eye size={10} aria-hidden="true" />
               <span>Viewer</span>
             </button>
           ) : null}
@@ -169,68 +199,41 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
 
         {/* Right: Quick Action Buttons & Menu Trigger */}
         <div className="mobile-nav-right">
-          {/* Quick Share Button */}
           <button
             type="button"
             className="mobile-nav-icon-btn"
-            onClick={() => {
-              if (activeRoomId && onOpenShareRoom) {
-                onOpenShareRoom(activeRoomId);
-              } else {
-                setShowShareModal(true);
-              }
-            }}
-            title="Share Plan"
-            aria-label="Share active project plan"
+            onClick={onOpenShare}
+            title={isRoomActive ? "Invite & share room" : "Share plan"}
+            aria-label={isRoomActive ? "Invite people and share this room" : "Share this plan"}
           >
-            <Share2 size={16} />
+            <Share2 size={16} aria-hidden="true" />
           </button>
 
-          {/* Quick Add Plan Button */}
           <button
             type="button"
             className="mobile-nav-icon-btn"
             onClick={handleOpenAddPlanModal}
             title="Create New Plan"
-            aria-label="Add new plan"
+            aria-label="Create a new plan"
           >
-            <Plus size={16} />
+            <Plus size={16} aria-hidden="true" />
           </button>
 
-          {/* Menu Trigger */}
           <button
             type="button"
             className="mobile-nav-icon-btn is-menu-trigger"
             onClick={() => setIsMenuOpen(true)}
             title="Tools & Settings Menu"
             aria-label="Open tools and settings menu"
+            aria-haspopup="dialog"
+            aria-expanded={isMenuOpen}
           >
-            <MoreVertical size={17} />
+            <MoreVertical size={17} aria-hidden="true" />
           </button>
         </div>
       </header>
 
-      <MobileActionMenuSheet
-        isOpen={isMenuOpen}
-        onClose={() => setIsMenuOpen(false)}
-        selectedThemeId={selectedThemeId}
-        setSelectedThemeId={setSelectedThemeId}
-        saveStatus={saveStatus}
-        autoSaveLabel={autoSaveLabel}
-        onOpenAutoSave={onOpenAutoSave}
-        snapshotsCount={snapshotsCount}
-        onOpenVersionHistory={onOpenVersionHistory}
-        onOpenPromptModal={onOpenPromptModal}
-        onOpenPlanManager={onOpenPlanManager}
-        onOpenPeopleModal={() => setShowPeopleModal(true)}
-        onOpenJsonEditor={onOpenJsonEditor}
-        currentUser={currentUser}
-        userProfile={userProfile}
-        isGitHubVerified={isGitHubVerified}
-        onLogin={onLogin}
-        onLogout={onLogout}
-        onOpenVerificationModal={onOpenVerificationModal}
-      />
+      {sheet}
     </>
   );
 };

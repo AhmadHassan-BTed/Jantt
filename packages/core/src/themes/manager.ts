@@ -7,6 +7,35 @@ import { sunsetCrimsonTheme } from "./sunset-crimson";
 import { nordicFrostTheme } from "./nordic-frost";
 import { beenieTheme } from "./beenie";
 
+/** CSS custom properties last written to each element by {@link applyThemeVariables}. */
+const appliedThemeVars = new WeakMap<HTMLElement, string[]>();
+
+/**
+ * Writes a theme's CSS custom properties inline on `el` (keys may omit the `--jantt-` prefix) and
+ * removes any property a previous call set that the new map lacks, so switching themes never
+ * leaves stale tokens behind (e.g. a 14px bar radius surviving a switch away from Pink Beenie).
+ * Passing no map clears everything previously applied.
+ */
+export function applyThemeVariables(el: HTMLElement, vars?: Record<string, string> | null): void {
+  const next: string[] = [];
+  if (vars) {
+    Object.entries(vars).forEach(([k, v]) => {
+      if (v === undefined || v === null) return;
+      const varName = k.startsWith("--") ? k : `--jantt-${k}`;
+      el.style.setProperty(varName, String(v));
+      next.push(varName);
+    });
+  }
+  const previous = appliedThemeVars.get(el);
+  if (previous) {
+    const keep = new Set(next);
+    previous.forEach((name) => {
+      if (!keep.has(name)) el.style.removeProperty(name);
+    });
+  }
+  appliedThemeVars.set(el, next);
+}
+
 /**
  * Enterprise Theme Manager for Jantt.
  * Manages theme registrations, style token routing, and whole-software theme application.
@@ -49,6 +78,19 @@ export class ThemeManager {
     if (id === "noir") return this.themes.get("noir") || this.themes.get("swiss-dark");
     if (id === "swiss-dark") return this.themes.get("swiss-dark") || this.themes.get("noir");
     return this.themes.get(id);
+  }
+
+  /**
+   * Finds the registered theme whose `className` appears in `classNames`
+   * (a single class or a space-separated list, e.g. a chart's `themeClassName`).
+   */
+  public getThemeByClassName(classNames: string | undefined | null): ThemeDefinition | undefined {
+    if (!classNames) return undefined;
+    const wanted = new Set(classNames.split(/\s+/).filter(Boolean));
+    for (const theme of this.themes.values()) {
+      if (theme.className && wanted.has(theme.className)) return theme;
+    }
+    return undefined;
   }
 
   /**
@@ -119,13 +161,8 @@ export class ThemeManager {
         targetEl.classList.add(theme.className);
       }
 
-      // 3. Inject CSS custom properties
-      if (theme.vars) {
-        Object.entries(theme.vars).forEach(([k, v]) => {
-          const varName = k.startsWith("--") ? k : `--jantt-${k}`;
-          targetEl!.style.setProperty(varName, v);
-        });
-      }
+      // 3. Inject CSS custom properties (dropping tokens left over from the previous theme)
+      applyThemeVariables(targetEl, theme.vars);
 
       // 4. Update data-theme attribute
       targetEl.setAttribute("data-theme", theme.id);

@@ -1,27 +1,48 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import type { Person, Team, JanttData } from "@jantt/core";
-import { getEffectivePeople } from "../utils";
+import type { Person, Team, JanttData, Task } from "@jantt/core";
+import { getEffectivePeople, generateId, sanitizeRegistry } from "../utils";
 import { PERSON_COLORS, STORAGE_KEYS } from "../constants";
 
 interface UsePeopleTeamsOptions {
-  initialPeople: Person[];
-  initialTeams: Team[];
+  /** @deprecated People are derived from `parsedData`; kept for API compatibility. */
+  initialPeople?: Person[];
+  /** @deprecated Teams are derived from `parsedData`; kept for API compatibility. */
+  initialTeams?: Team[];
   initialPersonFilter: string;
   parsedData: JanttData | null;
   handleChartCommit: (data: JanttData) => void;
   showToast: (msg: string, isErr?: boolean) => void;
 }
 
+const NO_OP_SETTER = () => {};
+
+/** Clears every reference a task holds to a removed person. Returns null when untouched. */
+function unassignPerson(task: Task, person: { id: string; name?: string }): Task | null {
+  const matches = (value: unknown) => value === person.id || (Boolean(person.name) && value === person.name);
+  const original: unknown[] | null = Array.isArray(task.assignees) ? task.assignees : null;
+  const kept = original ? original.filter((a) => !matches(a)) : null;
+  const assigneeHit = matches(task.assignee);
+  const personHit = matches(task.person);
+  const assigneesHit = original !== null && kept !== null && kept.length !== original.length;
+  if (!assigneeHit && !personHit && !assigneesHit) return null;
+  const next: Task = { ...task };
+  if (assigneeHit) delete next.assignee;
+  if (personHit) delete next.person;
+  if (assigneesHit) next.assignees = kept as Task["assignees"];
+  return next;
+}
+
 export function usePeopleTeams({
-  initialPeople,
-  initialTeams,
   initialPersonFilter,
   parsedData,
   handleChartCommit,
   showToast
 }: UsePeopleTeamsOptions) {
-  const [people, setPeople] = useState<Person[]>(initialPeople);
-  const [teams, setTeams] = useState<Team[]>(initialTeams);
+  // The plan is the single source of truth for people and teams (no drifting local copy)
+  const rawPeople = parsedData?.people;
+  const rawTeams = parsedData?.teams;
+  const people = useMemo(() => sanitizeRegistry<Person>(rawPeople), [rawPeople]);
+  const teams = useMemo(() => sanitizeRegistry<Team>(rawTeams), [rawTeams]);
   const [selectedPersonFilter, setSelectedPersonFilter] = useState<string>(initialPersonFilter);
 
   const effectivePeople = useMemo(() => {
@@ -43,19 +64,28 @@ export function usePeopleTeams({
     } catch {}
   }, [selectedPersonFilter]);
 
+  // A filter for a person or team that does not exist in this plan (other plan, removed
+  // member) would silently hide every task: fall back to "all"
+  useEffect(() => {
+    if (!parsedData) return;
+    const filter = selectedPersonFilter;
+    if (!filter || filter === "all" || filter.startsWith("sort:")) return;
+    const exists = filter.startsWith("team:")
+      ? teams.some((t) => t.id === filter.slice(5))
+      : effectivePeople.some((p) => p.id === filter || p.name === filter);
+    if (!exists) setSelectedPersonFilter("all");
+  }, [parsedData, selectedPersonFilter, teams, effectivePeople]);
+
   const handleAddPerson = useCallback(() => {
     if (!newPersonName.trim() || !parsedData) return;
     const newPerson: Person = {
-      id: `person-${Date.now().toString(36)}`,
+      id: generateId("person"),
       name: newPersonName.trim(),
       role: newPersonRole.trim() || undefined,
       teamId: newPersonTeamId || undefined,
       color: PERSON_COLORS[effectivePeople.length % PERSON_COLORS.length]
     };
-    const updated = [...people, newPerson];
-    setPeople(updated);
-    const updatedData = { ...parsedData, people: updated };
-    handleChartCommit(updatedData);
+    handleChartCommit({ ...parsedData, people: [...people, newPerson] });
     setNewPersonName("");
     setNewPersonRole("");
     setNewPersonTeamId("");
@@ -80,10 +110,7 @@ export function usePeopleTeams({
         color: PERSON_COLORS[effectivePeople.length % PERSON_COLORS.length]
       };
 
-      const updated = [...people, realPerson];
-      setPeople(updated);
-      const updatedData = { ...parsedData, people: updated };
-      handleChartCommit(updatedData);
+      handleChartCommit({ ...parsedData, people: [...people, realPerson] });
       showToast(`Added ${mentionHandle} to project!`);
     },
     [parsedData, people, effectivePeople.length, handleChartCommit, showToast]
@@ -101,10 +128,9 @@ export function usePeopleTeams({
         teamId: personToPersist.teamId,
         color: personToPersist.color || PERSON_COLORS[people.length % PERSON_COLORS.length]
       };
-      const updated = [...people, cleanPerson];
-      setPeople(updated);
-      const updatedData = { ...parsedData, people: updated };
-      handleChartCommit(updatedData);
+      const exists = people.some((p) => p.id === cleanPerson.id);
+      const updated = exists ? people.map((p) => (p.id === cleanPerson.id ? cleanPerson : p)) : [...people, cleanPerson];
+      handleChartCommit({ ...parsedData, people: updated });
       showToast(`Saved ${personToPersist.name} to project JSON!`);
     },
     [parsedData, people, handleChartCommit, showToast]
@@ -121,35 +147,42 @@ export function usePeopleTeams({
       teamId: p.teamId,
       color: p.color
     }));
-    setPeople(cleanPeople);
-    const updatedData = { ...parsedData, people: cleanPeople };
-    handleChartCommit(updatedData);
+    handleChartCommit({ ...parsedData, people: cleanPeople });
     showToast(`Saved all ${cleanPeople.length} members to project JSON!`);
   }, [parsedData, effectivePeople, handleChartCommit, showToast]);
 
   const handleRemovePerson = useCallback(
     (personId: string) => {
       if (!parsedData) return;
-      const updated = people.filter((p) => p.id !== personId);
-      setPeople(updated);
-      const updatedData = { ...parsedData, people: updated };
-      handleChartCommit(updatedData);
+      const person = effectivePeople.find((p) => p.id === personId) || { id: personId };
+      // Unassign the person everywhere, otherwise they are re-inferred from task assignees
+      let unassigned = 0;
+      const tasks = (parsedData.tasks || []).map((t) => {
+        const next = unassignPerson(t, person);
+        if (!next) return t;
+        unassigned++;
+        return next;
+      });
+      handleChartCommit({ ...parsedData, tasks, people: people.filter((p) => p.id !== personId) });
+      const name = "name" in person && person.name ? person.name : personId;
+      showToast(
+        unassigned > 0
+          ? `Removed ${name} and unassigned ${unassigned} task${unassigned === 1 ? "" : "s"}. Press Ctrl+Z to undo.`
+          : `Removed ${name}.`
+      );
     },
-    [parsedData, people, handleChartCommit]
+    [parsedData, people, effectivePeople, handleChartCommit, showToast]
   );
 
   const handleAddTeam = useCallback(() => {
     if (!newTeamName.trim() || !parsedData) return;
     const newTeam: Team = {
-      id: `team-${Date.now().toString(36)}`,
+      id: generateId("team"),
       name: newTeamName.trim(),
       color: newTeamColor || "#38BDF8",
       description: newTeamDesc.trim() || undefined
     };
-    const updated = [...teams, newTeam];
-    setTeams(updated);
-    const updatedData = { ...parsedData, teams: updated };
-    handleChartCommit(updatedData);
+    handleChartCommit({ ...parsedData, teams: [...teams, newTeam] });
     setNewTeamName("");
     setNewTeamDesc("");
   }, [newTeamName, newTeamColor, newTeamDesc, parsedData, teams, handleChartCommit]);
@@ -159,19 +192,24 @@ export function usePeopleTeams({
       if (!parsedData) return;
       const updatedTeams = teams.filter((t) => t.id !== teamId);
       const updatedPeople = people.map((p) => (p.teamId === teamId ? { ...p, teamId: undefined } : p));
-      setTeams(updatedTeams);
-      setPeople(updatedPeople);
-      const updatedData = { ...parsedData, teams: updatedTeams, people: updatedPeople };
-      handleChartCommit(updatedData);
+      const tasks = (parsedData.tasks || []).map((t) => {
+        if (t.teamId !== teamId) return t;
+        const next = { ...t };
+        delete next.teamId;
+        return next;
+      });
+      handleChartCommit({ ...parsedData, tasks, teams: updatedTeams, people: updatedPeople });
     },
     [parsedData, teams, people, handleChartCommit]
   );
 
   return {
     people,
-    setPeople,
+    /** @deprecated No-op: people are derived from the plan. Commit plan changes instead. */
+    setPeople: NO_OP_SETTER as (people: Person[]) => void,
     teams,
-    setTeams,
+    /** @deprecated No-op: teams are derived from the plan. Commit plan changes instead. */
+    setTeams: NO_OP_SETTER as (teams: Team[]) => void,
     effectivePeople,
     selectedPersonFilter,
     setSelectedPersonFilter,

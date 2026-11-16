@@ -8,11 +8,11 @@
 **Where human intuition meets declarative AI planning.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-38BDF8.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![TypeScript 5.4](https://img.shields.io/badge/TypeScript-5.4-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Zero Runtime Dependencies](https://img.shields.io/badge/Dependencies-0%20Runtime-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
-[![Tests Passing](https://img.shields.io/badge/Tests-456%20Passing-brightgreen?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/actions)
+[![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![One Runtime Dependency](https://img.shields.io/badge/Dependencies-1%20Runtime%20(fflate)-10B981?style=flat-square)](https://www.npmjs.com/package/@jantt/core)
+[![CI Pipeline](https://github.com/AhmadHassan-BTed/Jantt/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AhmadHassan-BTed/Jantt/actions/workflows/ci.yml)
 [![npm organization](https://img.shields.io/badge/npm-%40jantt-cb3837.svg?style=flat-square&logo=npm)](https://www.npmjs.com/org/jantt)
-[![Node.js Support](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js Support](https://img.shields.io/badge/Node.js-%5E20.19%20%7C%7C%20%3E%3D22.12-68A063?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-F59E0B.svg?style=flat-square)](https://github.com/AhmadHassan-BTed/Jantt/blob/main/CONTRIBUTING.md)
 
 <br />
@@ -24,7 +24,7 @@
 </p>
 
 Turn any declarative JSON document into a high-performance, interactive, draggable Gantt chart.  
-**Zero runtime dependencies.** **100% pure TypeScript.**  
+**One tiny runtime dependency** (`fflate`, for compressed share links). **100% TypeScript.**  
 Runs everywhere: Plain HTML, React, Next.js, Node.js CLI, and autonomous AI toolchains.
 
 Designed from the ground up for:
@@ -54,7 +54,7 @@ Traditional project management and timeline tools force an impossible choice:
 
 ### The 4 Superpowers of Jantt
 
-* **Zero Runtime Dependencies**: The core math and layout engine (`@jantt/core`) is pure, zero-dependency TypeScript weighing under 14 KB gzipped.
+* **Lean Runtime**: The core engine (`@jantt/core`) is pure TypeScript with a single small dependency (`fflate`): about 63 KB gzipped JavaScript plus 8 KB gzipped CSS for the full interactive chart, scheduler and analytics.
 * **AI-Native & 10x Fewer Tokens**: Declarative JSON schema contract eliminates UI hallucinations; models generate timeline data with 10x fewer tokens than fragile JSX code.
 * **Swiss Modernism 2.0 Aesthetics**: Deep OLED Swiss Noir (`#080D18`), 90-degree CAD orthogonal routing, glassmorphic HUD cards, and high-contrast typography.
 * **Defense-Grade Operations Research**: Built-in topological DAG solver, Critical Path Method (CPM), Earned Value Management (EVM - ANSI/EIA-748), DCMA-14 schedule health audits, and multi-user CRDT cloud rooms.
@@ -112,7 +112,7 @@ Jantt features a fully reactive, CSS variable-driven theming architecture with o
 
 | Capability | Jantt Engine (`@jantt/core`) | DHTMLX Gantt | Frappe Gantt | Mermaid.js |
 |---|:---:|:---:|:---:|:---:|
-| **Runtime Dependencies** | **0 (Zero)** | Multiple | Multiple | Multiple |
+| **Runtime Dependencies** | **1 (`fflate`)** | Multiple | Multiple | Multiple |
 | **State Paradigm** | **100% Declarative JSON** | Imperative JS API | Imperative JS API | Text-based DSL |
 | **Interactive Drag-to-Link** | **90° Orthogonal Step** | Supported | Not Supported | Static only |
 | **Timeline Zoom Scales** | **5 (Day to Year)** | Supported | Limited | Not Supported |
@@ -120,7 +120,7 @@ Jantt features a fully reactive, CSS variable-driven theming architecture with o
 | **Milestones & Baselines** | **Native in Schema** | Commercial tier | Not Supported | Milestones only |
 | **Inline Progress Dragging** | **Interactive Handle** | Supported | Read-only | Not Supported |
 | **Bi-directional CLI Sync** | **Built-in** | Not Supported | Not Supported | Not Supported |
-| **Bundle Size (gzip)** | **< 14 KB** | ~200 KB | ~35 KB | ~800 KB |
+| **Bundle Size (gzip)** | **~63 KB JS + 8 KB CSS** | ~200 KB | ~35 KB | ~800 KB |
 
 ---
 
@@ -134,7 +134,7 @@ npm install @jantt/react @jantt/core
 
 ```tsx
 import { Jantt } from "@jantt/react";
-import "@jantt/react/dist/index.css";
+import "@jantt/core/theme.css";
 
 const projectData = {
   tasks: [
@@ -147,7 +147,7 @@ const projectData = {
 };
 
 export default function Timeline() {
-  return <Jantt data={projectData} theme="swiss-dark" onCommit={(next) => console.log(next)} />;
+  return <Jantt data={projectData} themeClassName="jantt-theme-dark" onCommit={(next) => console.log(next)} />;
 }
 ```
 
@@ -160,14 +160,14 @@ npm install @jantt/vue @jantt/core
 ```vue
 <script setup>
 import { JanttTimeline } from "@jantt/vue";
-import "@jantt/core/dist/theme.css";
+import "@jantt/core/theme.css";
 
 const props = defineProps(["plan"]);
 const handleCommit = (updatedPlan) => console.log("Committed:", updatedPlan);
 </script>
 
 <template>
-  <JanttTimeline :data="props.plan" theme="swiss-dark" @commit="handleCommit" />
+  <JanttTimeline :data="props.plan" theme-class-name="jantt-theme-dark" @commit="handleCommit" />
 </template>
 ```
 
@@ -180,15 +180,16 @@ npm install @jantt/svelte @jantt/core
 ```svelte
 <script>
   import { janttAction } from "@jantt/svelte";
-  import "@jantt/core/dist/theme.css";
+  import "@jantt/core/theme.css";
   export let plan;
+
+  const options = {
+    themeClassName: "jantt-theme-dark",
+    onCommit: (next) => (plan = next)
+  };
 </script>
 
-<div
-  use:janttAction={{ data: plan, theme: "swiss-dark" }}
-  on:commit={(e) => console.log("Committed:", e.detail)}
-  style="width: 100%; height: 600px;"
-/>
+<div use:janttAction={{ data: plan, options }} style="width: 100%; height: 600px;" />
 ```
 
 ### 4. Framework-Agnostic Web Component (`@jantt/elements`)
@@ -196,7 +197,8 @@ npm install @jantt/svelte @jantt/core
 Drop directly into PHP, Ruby on Rails, Django, Laravel, WordPress, or static HTML:
 
 ```html
-<script type="module" src="https://unpkg.com/@jantt/elements/dist/index.js"></script>
+<!-- Self-contained ES module build (bundles @jantt/core); bundler users import "@jantt/elements" -->
+<script type="module" src="https://unpkg.com/@jantt/elements/dist/jantt-elements.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/@jantt/core/dist/theme.css" />
 
 <jantt-timeline
@@ -219,7 +221,7 @@ df = pd.DataFrame([
 ])
 
 # Inside Jupyter Notebook:
-jantt.show(df, theme="swiss-dark")
+jantt.show(df, theme="dark")
 
 # Inside Streamlit app:
 # jantt.streamlit(df)
@@ -312,22 +314,24 @@ renderer.render(ctx, { scrollX, scrollY, width, height });
 
 ### 10. Enterprise Terminal CLI Tool (`@jantt/cli`)
 
+Always invoke it through the scoped name: a bare `npx jantt` downloads an unrelated package called `jantt`. After `npm install -g @jantt/cli` the binary is simply `jantt`.
+
 ```bash
 # Open interactive viewer with 2-way live sync back to disk
-npx jantt open ./project.json --port 3000
+npx @jantt/cli open ./project.json --port 3000
 
 # Run DCMA-14 schedule health & EVM scorecard audit
-npx jantt audit ./project.json
+npx @jantt/cli audit ./project.json
 
 # Run 5,000 Monte Carlo probabilistic risk iterations
-npx jantt monte-carlo ./project.json --runs 5000
+npx @jantt/cli monte-carlo ./project.json --runs 5000
 
 # Export to MS Project XML, Primavera P6, CSV, or Executive PDF
-npx jantt export ./project.json --format xml --out ./project.xml
-npx jantt export ./project.json --format html --out ./executive-report.html
+npx @jantt/cli export ./project.json --format xml --out ./project.xml
+npx @jantt/cli export ./project.json --format html --out ./executive-report.html
 
 # Import enterprise schedules back into Jantt JSON
-npx jantt import ./schedule.xer --out ./project.json
+npx @jantt/cli import ./schedule.xer --out ./project.json
 ```
 
 ### 11. Plain HTML / Script Tag (`@jantt/standalone`)
@@ -339,7 +343,7 @@ npx jantt import ./schedule.xer --out ./project.json
 <div id="timeline" style="width: 100vw; height: 100vh;"></div>
 
 <script>
-  Jantt.mount("#timeline", projectData, { theme: "swiss-dark" });
+  Jantt.mount("#timeline", projectData, { themeClassName: "jantt-theme-dark" });
 </script>
 ```
 
@@ -353,11 +357,11 @@ Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and ca
 
 <div align="center">
 
-| 10× | 0 | 100% | 2-Way |
+| 10× | 1 | 100% | 2-Way |
 | :---: | :---: | :---: | :---: |
-| **Fewer LLM Tokens vs JSX** | **Runtime Dependencies** | **Deterministic DAG Solver** | **Bidirectional State Sync** |
+| **Fewer LLM Tokens vs JSX** | **Runtime Dependency** | **Deterministic DAG Solver** | **Bidirectional State Sync** |
 
-*Schema Contract: [`https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json`](https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json) (v1.4.0)*
+*Schema Contract: [`https://ahmadhassan-bted.github.io/Jantt/schema/v1.json`](https://ahmadhassan-bted.github.io/Jantt/schema/v1.json) (schema v1, published copy of [`schema/jantt.schema.json`](./schema/jantt.schema.json))*
 
 </div>
 
@@ -382,13 +386,13 @@ Hand this prompt to ChatGPT, Claude, Gemini, Cursor, or your autonomous AI agent
 
 ```text
 You are a precision project management schedule generator.
-Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json).
+Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://ahmadhassan-bted.github.io/Jantt/schema/v1.json).
 
 # JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET (v1.4.0)
 
 ## 1. Top-Level Root Structure
 {
-  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {
     "title": "<Project Title>",
     "description": "<Project narrative and objectives>",
@@ -508,7 +512,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
    - "dependsOn" can be a single task ID string, an array of strings ["t1", "t2"], or null.
    - All referenced dependency IDs must exist in the "tasks" list (no dangling references).
    - Strict Directed Acyclic Graph: NO circular dependency loops (e.g. A -> B -> C -> A).
-   - Timing Sanity: A task's "start" must be on or after prerequisite "end" + gapDays.
+   - Timing: Prefer a "start" on or after the prerequisite "end" + gapDays. This is not rejected: Jantt's scheduler moves unlocked dependents forward automatically.
 4. MILESTONES: For zero-duration milestone gates, set "milestone": true and "start" equal to "end".
 5. PROGRESS: Must be a decimal float from 0.0 (0%) to 1.0 (100%).
 6. BASELINES: Optional planned timeframe object { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } for baseline variance tracking.
@@ -528,7 +532,7 @@ Provide this minimal benchmark template directly to any code or LLM pipeline:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {
     "title": "Master Delivery Plan",
     "person": "@ahmadhassan",
@@ -598,9 +602,9 @@ flowchart TD
 
     JSON["Declarative JSON Document<br/>(Jantt v1 Schema)"]:::input
     
-    subgraph CoreEngine ["@jantt/core (Zero Runtime Dependencies)"]
+    subgraph CoreEngine ["@jantt/core (one runtime dependency: fflate)"]
         VAL["1. Schema & Graph Validator<br/>(Cycle & Integrity Diagnostics)"]:::core
-        RES["2. Topological Schedule Resolver<br/>(Constraint Relaxation & Critical Path)"]:::algo
+        RES["2. Schedule Resolver & CPM<br/>(Dependency Cascade, Critical Path)"]:::algo
         LAY["3. Multi-Scale Layout Engine<br/>(90° Orthogonal Line Routing)"]:::algo
         
         subgraph Renderers ["Modular Presentation Layer"]
@@ -624,9 +628,10 @@ flowchart TD
     CTRL -- "Immutable Commit" --> JSON
 
     subgraph Targets ["Deployment Surfaces"]
-        T_REACT["@jantt/react<br/>(<Jantt /> Component)"]:::target
+        T_REACT["@jantt/react · vue · svelte<br/>(Framework Wrappers)"]:::target
+        T_ELEM["@jantt/elements<br/>(&lt;jantt-timeline&gt;)"]:::target
         T_STAND["@jantt/standalone<br/>(UMD / IIFE Script Tag)"]:::target
-        T_CLI["jantt CLI<br/>(Two-Way Live Sync)"]:::target
+        T_CLI["@jantt/cli · @jantt/mcp<br/>(Two-Way Sync, AI Tools)"]:::target
     end
 
     Renderers --> Targets
@@ -702,10 +707,10 @@ Jantt bridges the gap between declarative machine data and human project intuiti
 | Enterprise & Developer Tooling | Description |
 | :--- | :--- |
 | **Client-Side Exporters** | 1-click RFC-4180 CSV spreadsheet export, high-resolution vector SVG extraction, and raw JSON export. |
-| **Cloud Remote URL Sync** | Bidirectional synchronization with remote JSON endpoints, ETag caching, background polling, and conflict warnings. |
-| **Split Monaco Editor** | Built-in VS Code-grade Monaco code editor with real-time JSON schema validation and error diagnostic squiggles. |
-| **Bidirectional CLI (`jantt`)** | CLI runner (`npx jantt open <file.json>`) providing live file-watching and bidirectional browser-to-disk synchronization. |
-| **Zero Runtime Dependencies** | `@jantt/core` is 100% pure TypeScript with zero external packages (<14 KB gzip). |
+| **Remote JSON Loading** | `parseCloudUrl` / `fetchRemotePlan` load plans from GitHub, Dropbox or any HTTPS URL with request timeouts and size limits. |
+| **Split JSON Editor** | Plain-text JSON editor pane beside the chart, validated live by `validate()` with a diagnostics panel listing each issue and a suggested fix. |
+| **Bidirectional CLI (`jantt`)** | CLI runner (`npx @jantt/cli open <file.json>`) providing live file-watching and bidirectional browser-to-disk synchronization. |
+| **Lean Runtime** | `@jantt/core` is TypeScript with one small dependency (`fflate`); about 63 KB gzipped JS plus 8 KB gzipped CSS. |
 
 ---
 
@@ -714,23 +719,35 @@ Jantt bridges the gap between declarative machine data and human project intuiti
 ```
 Jantt/
 ├── packages/
-│   ├── core/                  # Pure TypeScript engine (ZERO runtime dependencies)
+│   ├── core/                  # TypeScript engine (one runtime dependency: fflate)
 │   │   ├── src/
-│   │   │   ├── date-math.ts   # Pure UTC date math & calendar functions
+│   │   │   ├── date-math.ts   # Pure UTC date math
+│   │   │   ├── calendar.ts    # Working calendars & statutory holidays
 │   │   │   ├── validator.ts   # Schema, cycle, and integrity validator
-│   │   │   ├── resolver.ts    # Topological solver & Critical Path analysis
+│   │   │   ├── dependencies.ts# FS/SS/FF/SF links with lead/lag
+│   │   │   ├── resolver.ts    # Dependency cascade (schedule resolver)
+│   │   │   ├── cpm.ts         # Critical Path Method & float
+│   │   │   ├── evm.ts, pert.ts, monte-carlo.ts, schedule-health.ts, resource-leveler.ts
 │   │   │   ├── layout.ts      # Multi-scale coordinate engine & 90° line router
-│   │   │   ├── controller.ts  # Pointer event interaction state machine
-│   │   │   ├── detail-modal.ts# Accessible task detail modal subsystem
-│   │   │   ├── exporter.ts    # Client-side CSV, SVG, and JSON exporters
-│   │   │   ├── renderers/     # Modular DOM presentation subsystems
+│   │   │   ├── controller/    # Pointer gesture strategies (move, resize, link, ...)
+│   │   │   ├── rendering/, renderers/ # DOM/SVG presentation subsystems
+│   │   │   ├── reconciliation/, firebase-sync.ts, share-coder.ts # Sync & sharing
 │   │   │   └── index.ts       # Public package exports
-│   │   └── tests/             # Vitest test suites (339/339 tests passing across 22 suites)
-│   ├── react/                 # Official React component (<Jantt />)
-│   └── standalone/            # UMD & IIFE script-tag bundles for plain HTML
-├── cli/                       # Standalone Node.js CLI runner (npx jantt open)
+│   │   └── tests/             # Vitest suites
+│   ├── react/                 # React component (<Jantt />)
+│   ├── vue/                   # Vue 3 component (<JanttTimeline />)
+│   ├── svelte/                # Svelte action (use:janttAction)
+│   ├── elements/              # Web Component (<jantt-timeline>)
+│   ├── standalone/            # UMD & IIFE script-tag bundles for plain HTML
+│   ├── yjs/                   # Yjs CRDT collaboration binding
+│   ├── interop/               # MS Project XML, Primavera XER, CSV, executive reports
+│   ├── render-canvas/         # 2D canvas renderer for very large plans
+│   └── mcp/                   # Model Context Protocol server for AI agents
+├── cli/                       # Node.js CLI (@jantt/cli, binary `jantt`)
 ├── apps/
-│   └── playground/            # Split-view interactive documentation sandbox
+│   └── playground/            # Interactive playground (GitHub Pages)
+├── worker/                    # Cloudflare Worker CORS proxy for remote plans
+├── python/                    # Python bridge (pip install jantt)
 ├── assets/                    # Official vector logos & curated screenshot gallery
 ├── schema/
 │   └── jantt.schema.json      # Formal JSON Schema v1 specification
@@ -751,10 +768,10 @@ npm install @jantt/react @jantt/core
 ```tsx
 import React, { useState } from "react";
 import { Jantt } from "@jantt/react";
-import "@jantt/core/dist/theme.css";
+import "@jantt/core/theme.css";
 
 const initialPlan = {
-  "$schema": "https://jantt.dev/schema/v1.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {
     "title": "High-Rise Construction",
     "scale": "week",
@@ -827,10 +844,10 @@ Open and edit any JSON file with automatic real-time saving back to disk:
 
 ```bash
 # Open interactive browser chart with auto-save to file
-npx jantt open ./examples/construction-enterprise.json
+npx @jantt/cli open ./examples/construction-enterprise.json
 
 # Validate JSON file against schema from terminal
-npx jantt validate ./examples/basic.json
+npx @jantt/cli validate ./examples/basic.json
 ```
 
 ---
@@ -866,7 +883,7 @@ Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/
 
 ```json
 {
-  "$schema": "https://jantt.dev/schema/v1.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {
     "title": "Metropolis High-Rise Construction",
     "start": "2026-09-01",
@@ -912,9 +929,9 @@ Every Jantt document conforms strictly to [`schema/jantt.schema.json`](./schema/
 Jantt features a dedicated, enterprise-grade multi-user collaboration engine backed by Firebase Realtime Database and Cloudflare Workers:
 
 ### 1. GitHub-Only Authentication (Zero Google Auth)
-- **Strict Single Provider**: Google login and generic password forms are completely removed. Authentication is restricted to **GitHub OAuth 2.0** (`read:user`, `user:follow`, `public_repo`).
+- **Strict Single Provider**: Google login and generic password forms are completely removed. Authentication is restricted to **GitHub OAuth 2.0** with the read-only `read:user` scope.
 - **Zero Manual Username Typing**: Jantt automatically claims the user's verified GitHub handle (`@username`) directly into `/usernames/{username}` upon first sign-in.
-- **Creator Follow & Star Gate**: Collaborators unlock free cloud collaboration rooms by supporting the project - following [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed) and starring developer repositories. Creator `@AhmadHassan-BTed` is automatically verified across all checks.
+- **Optional Follow & Star Gate**: When enabled (`ENABLE_GITHUB_VERIFICATION_GATE` in `apps/playground/src/firebase/githubVerificationService.ts`, currently off), cloud rooms unlock after following [@AhmadHassan-BTed](https://github.com/AhmadHassan-BTed) and starring the project repositories. The check queries GitHub's public follower and stargazer data and needs no OAuth scope beyond `read:user`.
 
 ### 2. Single Source of Truth & Zero Internal Database IDs in JSON
 - **No Database Leakage**: Private database UIDs, owner UIDs, internal room secrets, and authentication tokens are strictly stripped and **never exposed in JSON**.
@@ -940,7 +957,7 @@ The complete ruleset governs authorization across all paths:
 Use this system prompt with ChatGPT, Claude, Gemini, or local LLMs to generate valid Jantt timelines:
 
 ```markdown
-You are a project timeline generator. Output only raw, valid JSON conforming strictly to the Jantt Schema (https://jantt.dev/schema/v1.json).
+You are a project timeline generator. Output only raw, valid JSON conforming strictly to the Jantt Schema (https://ahmadhassan-bted.github.io/Jantt/schema/v1.json).
 
 Rules:
 1. Root must contain: "tasks": [{ "id", "label", "category", "start", "end", "dependsOn", "progress", "milestone", "baseline" }]
@@ -992,18 +1009,25 @@ New contributors are welcomed. Please review [`CONTRIBUTING.md`](./CONTRIBUTING.
 git clone https://github.com/AhmadHassan-BTed/Jantt.git
 cd Jantt
 
-# Install dependencies
-npm install
+# Use the pinned toolchain (Node 22 LTS; see .nvmrc) and install exactly what is locked
+nvm use
+npm ci
 
-# Run verification test suite (339/339 passing across 22 test suites)
+# Build first: the typecheck and several test suites consume the built @jantt/core
+npm run build
+
+# Typecheck all packages and syntax-check the CLIs
+npm run lint
+
+# Run the test suites of every workspace
 npm test
-
-# Typecheck all packages
-npm run typecheck
 
 # Launch local interactive development playground
 npm run dev
 ```
+
+Contributors need Node.js `^22.22.2 || ^24.15.0 || >=26` (the Vite 8, Vitest 5 and jsdom toolchain);
+the published packages themselves run on Node.js `^20.19.0 || >=22.12.0`.
 
 ---
 

@@ -7,6 +7,7 @@ export const DEFAULT_ROW_HEIGHT = 46;
 export const MIN_ROW_HEIGHT = 26;
 export const MAX_ROW_HEIGHT = 140;
 
+/** Task-table (label column) width in px: the default and the bounds the splitter clamps to. */
 export const DEFAULT_LABEL_WIDTH = 340;
 export const MIN_LABEL_WIDTH = 180;
 export const MAX_LABEL_WIDTH = 600;

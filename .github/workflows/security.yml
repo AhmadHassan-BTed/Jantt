@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: "0 0 * * 0"
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: CodeQL Security Scan
@@ -20,28 +23,39 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   audit:
     name: NPM Dependency Audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version-file: .nvmrc
 
-      - name: Audit Dependencies
+      # Blocking: high/critical advisories in anything that ships to users.
+      - name: Audit Runtime Dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # Informational: the full tree, including build and test tooling.
+      - name: Audit All Dependencies (report only)
         run: npm audit --audit-level=high
         continue-on-error: true

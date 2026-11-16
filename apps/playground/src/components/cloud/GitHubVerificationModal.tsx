@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useId } from "react";
 import {
   Star,
   CheckCircle2,
@@ -13,7 +13,19 @@ import {
   ShieldCheck,
   Check
 } from "lucide-react";
-import type { VerificationStatus, RepoItem } from "../../firebase";
+import { ALL_TARGET_REPOS, type VerificationStatus, type RepoItem } from "../../firebase";
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** GitHub allows 60 unauthenticated / 5,000 token requests per hour; one check costs a few. */
+const POLL_INTERVAL_MS = 45000;
+const RECHECK_DELAY_MS = 1500;
+const POPUP_BLOCKED_NOTICE = "Your browser blocked the new tab. Use the GitHub links in this list instead.";
+
+/** Checks report failures through `verificationStatus.error`; a rejection is unexpected. */
+function warnVerifyFailure(err: unknown): void {
+  console.warn("[GitHubVerificationModal] GitHub check failed:", err);
+}
 
 interface GitHubVerificationModalProps {
   show: boolean;
@@ -25,9 +37,14 @@ interface GitHubVerificationModalProps {
   onFollowOrg?: () => Promise<boolean>;
   onStarRepo: (repoFullName: string) => Promise<boolean>;
   onStarAll: () => Promise<{ success: number; failed: number }>;
+  /** Resumes the action that required verification (e.g. creating a room). */
+  onContinue?: () => void;
+  /** @deprecated Unused; verification runs through `onVerify`. */
   onAutoVerify?: () => Promise<boolean>;
+  /** GitHub login being verified, shown for context. */
   githubUsername?: string;
-  hasGithubToken: boolean;
+  /** @deprecated Unused. */
+  hasGithubToken?: boolean;
 }
 
 export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = ({
@@ -39,98 +56,163 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
   onFollowCreator,
   onFollowOrg,
   onStarRepo,
-  onStarAll
+  onStarAll,
+  onContinue,
+  githubUsername
 }) => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [justOpenedRepo, setJustOpenedRepo] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const timersRef = useRef<number[]>([]);
+  const titleId = useId();
+  const descriptionId = useId();
+  const onVerifyRef = useRef(onVerify);
+  onVerifyRef.current = onVerify;
+  const setShowRef = useRef(setShow);
+  setShowRef.current = setShow;
 
-  // Auto-check on modal open, and automatically when the user returns to this browser tab from GitHub
+  // Check on open, when the user comes back to this tab from GitHub, and on a slow poll while
+  // the tab is visible. Pending re-checks are cancelled when the modal closes.
   useEffect(() => {
     if (!show) return;
-
-    // 1. Immediate status check
-    onVerify().catch(() => {});
-
-    // 2. Auto-check whenever user switches back to this tab after starring/following on GitHub
-    const handleFocus = () => {
-      onVerify().catch(() => {});
+    const verify = () => {
+      if (document.visibilityState === "visible") onVerifyRef.current().catch(warnVerifyFailure);
     };
-    window.addEventListener("focus", handleFocus);
+    verify();
 
-    // 3. Periodic background poll every 4s while modal is open
-    const pollInterval = window.setInterval(() => {
-      onVerify().catch(() => {});
-    }, 4000);
+    window.addEventListener("focus", verify);
+    document.addEventListener("visibilitychange", verify);
+    const pollInterval = window.setInterval(verify, POLL_INTERVAL_MS);
 
     return () => {
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("focus", verify);
+      document.removeEventListener("visibilitychange", verify);
       window.clearInterval(pollInterval);
+      timersRef.current.forEach((id) => window.clearTimeout(id));
+      timersRef.current = [];
     };
-  }, [show, onVerify]);
+  }, [show]);
+
+  // Dialog behaviour: initial focus, Escape to close, focus trap, focus restored on close.
+  useEffect(() => {
+    if (!show) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    cardRef.current?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const card = cardRef.current;
+      if (!card) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowRef.current(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusables = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === card || !card.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !card.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus();
+    };
+  }, [show]);
 
   if (!show) return null;
 
   const isUserFollowed = Boolean(verificationStatus?.isFollowingCreator);
   const isOrgFollowed = Boolean(verificationStatus?.isFollowingOrg);
+  const verificationError = verificationStatus?.error || null;
 
-  const missingRepos = verificationStatus?.missingRepos || [];
-  const totalRepos = verificationStatus?.totalRepos || 38;
-  const starredCount = Math.max(0, totalRepos - missingRepos.length);
+  const missingRepos = verificationError ? [] : verificationStatus?.missingRepos || [];
+  const totalRepos = verificationStatus?.totalRepos || ALL_TARGET_REPOS.length;
+  const starredCount = Math.max(0, totalRepos - (verificationStatus?.missingRepos?.length ?? totalRepos));
 
-  const isVerified = Boolean(
-    verificationStatus?.isVerified || (isUserFollowed && missingRepos.length === 0)
-  );
+  const isVerified = verificationStatus?.isVerified === true;
+
+  const close = () => setShow(false);
+
+  const scheduleRecheck = (then?: () => void) => {
+    const id = window.setTimeout(() => {
+      timersRef.current = timersRef.current.filter((t) => t !== id);
+      then?.();
+      onVerifyRef.current().catch(warnVerifyFailure);
+    }, RECHECK_DELAY_MS);
+    timersRef.current.push(id);
+  };
 
   const handleManualFollowCreator = async () => {
-    setActionNotice("Opened @AhmadHassan-BTed profile. Click Follow on GitHub, then return here!");
-    await onFollowCreator();
-    // Prompt a re-check shortly after opening
-    setTimeout(() => {
-      onVerify().catch(() => {});
-    }, 1200);
+    const opened = await onFollowCreator();
+    setActionNotice(
+      opened ? "Opened @AhmadHassan-BTed on GitHub. Click Follow there, then come back here." : POPUP_BLOCKED_NOTICE
+    );
+    if (opened) scheduleRecheck();
   };
 
   const handleManualFollowOrg = async () => {
-    setActionNotice("Opened Fractal-Compute-Orchestrations page. Click Follow on GitHub, then return here!");
-    if (onFollowOrg) {
-      await onFollowOrg();
-    } else {
-      window.open("https://github.com/Fractal-Compute-Orchestrations", "_blank", "noopener,noreferrer");
-    }
-    setTimeout(() => {
-      onVerify().catch(() => {});
-    }, 1200);
+    const opened = onFollowOrg
+      ? await onFollowOrg()
+      : window.open("https://github.com/Fractal-Compute-Orchestrations", "_blank", "noopener,noreferrer") !== null;
+    setActionNotice(
+      opened
+        ? "Opened Fractal-Compute-Orchestrations on GitHub. Click Follow there, then come back here."
+        : POPUP_BLOCKED_NOTICE
+    );
+    if (opened) scheduleRecheck();
   };
 
   const handleManualStarRepo = async (repo: RepoItem) => {
+    const opened = await onStarRepo(repo.fullName);
+    if (!opened) {
+      setActionNotice(POPUP_BLOCKED_NOTICE);
+      return;
+    }
     setJustOpenedRepo(repo.fullName);
-    setActionNotice(`Opened ${repo.name || repo.fullName} on GitHub. Click Star on GitHub, then return here!`);
-    await onStarRepo(repo.fullName);
-    setTimeout(() => {
-      setJustOpenedRepo(null);
-      onVerify().catch(() => {});
-    }, 1500);
+    setActionNotice(`Opened ${repo.name || repo.fullName} on GitHub. Click Star there, then come back here.`);
+    scheduleRecheck(() => setJustOpenedRepo(null));
   };
 
-  const handleManualOpenMissingRepos = async () => {
-    if (!missingRepos.length) return;
-    setActionNotice(`Opened unstarred repositories in new tabs. Click Star on each GitHub tab, then return here!`);
-    await onStarAll();
-    setTimeout(() => {
-      onVerify().catch(() => {});
-    }, 1500);
+  const handleOpenNextMissingRepo = async () => {
+    const next = missingRepos[0];
+    if (!next) return;
+    const { success } = await onStarAll();
+    if (!success) {
+      setActionNotice(POPUP_BLOCKED_NOTICE);
+      return;
+    }
+    const remaining = missingRepos.length - 1;
+    setActionNotice(
+      `Opened ${next.name || next.fullName} on GitHub. Star it, then come back${
+        remaining > 0 ? ` and open the next one (${remaining} left)` : ""
+      }.`
+    );
+    scheduleRecheck();
+  };
+
+  const handleContinue = () => {
+    close();
+    onContinue?.();
   };
 
   return (
     <div
       className="modal-backdrop"
-      onClick={() => {
-        if (isVerified) setShow(false);
-      }}
+      onClick={close}
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 10000,
+        zIndex: "var(--z-modal)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -140,7 +222,13 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
       }}
     >
       <div
+        ref={cardRef}
         className="modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
@@ -172,20 +260,24 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 flexShrink: 0
               }}
             >
-              {isVerified ? <ShieldCheck size={24} /> : <Unlock size={22} />}
+              {isVerified ? <ShieldCheck size={24} aria-hidden="true" /> : <Unlock size={22} aria-hidden="true" />}
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: "#f8fafc" }}>
+              <h2 id={titleId} style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: "#f8fafc" }}>
                 {isVerified ? "Cloud Collaboration Unlocked" : "Support Creator & Unlock Cloud"}
               </h2>
-              <p style={{ margin: "2px 0 0 0", fontSize: "0.82rem", color: "#94a3b8" }}>
-                Star repositories &amp; follow creator directly on GitHub
+              <p id={descriptionId} style={{ margin: "2px 0 0 0", fontSize: "0.82rem", color: "#94a3b8" }}>
+                {githubUsername
+                  ? `Checking GitHub account @${githubUsername}`
+                  : "Star repositories & follow creator directly on GitHub"}
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => setShow(false)}
+            onClick={close}
+            aria-label="Close"
+            title="Close"
             style={{
               background: "transparent",
               border: "none",
@@ -195,9 +287,30 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               borderRadius: "6px"
             }}
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
+
+        {verificationError && (
+          <div
+            role="alert"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "8px",
+              padding: "10px 12px",
+              marginBottom: "16px",
+              borderRadius: "8px",
+              background: "rgba(245, 158, 11, 0.12)",
+              border: "1px solid rgba(245, 158, 11, 0.35)",
+              color: "#fbbf24",
+              fontSize: "0.8rem"
+            }}
+          >
+            <Info size={15} style={{ flexShrink: 0, marginTop: "1px" }} aria-hidden="true" />
+            <span>Couldn&apos;t check your GitHub status: {verificationError}</span>
+          </div>
+        )}
 
         {/* Verification Success Celebration Banner */}
         {isVerified ? (
@@ -296,6 +409,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
         {/* Action Notice toast */}
         {actionNotice && (
           <div
+            role="status"
             style={{
               display: "flex",
               alignItems: "center",
@@ -317,6 +431,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             <button
               type="button"
               onClick={() => setActionNotice(null)}
+              aria-label="Dismiss notice"
               style={{
                 background: "transparent",
                 border: "none",
@@ -325,7 +440,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 padding: "2px"
               }}
             >
-              <X size={14} />
+              <X size={14} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -513,7 +628,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               {missingRepos.length > 0 && (
                 <button
                   type="button"
-                  onClick={handleManualOpenMissingRepos}
+                  onClick={handleOpenNextMissingRepo}
                   style={{
                     background: "linear-gradient(135deg, #0284c7, #6366f1)",
                     color: "#ffffff",
@@ -528,16 +643,20 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     gap: "5px",
                     boxShadow: "0 2px 8px rgba(2, 132, 199, 0.3)"
                   }}
-                  title="Opens remaining repositories in browser tabs for you to star on GitHub"
+                  title="Opens the next unstarred repository on GitHub (browsers allow one new tab per click)"
                 >
-                  <ExternalLink size={12} />
-                  <span>Open Unstarred ({missingRepos.length}) ↗</span>
+                  <ExternalLink size={12} aria-hidden="true" />
+                  <span>Open next unstarred ({missingRepos.length} left) ↗</span>
                 </button>
               )}
             </div>
 
             {/* List of Repositories */}
-            {missingRepos.length === 0 ? (
+            {verificationError ? (
+              <div style={{ fontSize: "0.8rem", color: "#94a3b8", padding: "6px 2px" }}>
+                Repository status is unavailable until the check succeeds. Use &quot;Recheck Status&quot; in a moment.
+              </div>
+            ) : missingRepos.length === 0 ? (
               <div
                 style={{
                   display: "flex",
@@ -633,7 +752,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
           <button
             type="button"
-            onClick={() => onVerify().catch(() => {})}
+            onClick={() => onVerify().catch(warnVerifyFailure)}
             disabled={isVerifying}
             style={{
               background: "rgba(255, 255, 255, 0.08)",
@@ -656,7 +775,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
           {isVerified ? (
             <button
               type="button"
-              onClick={() => setShow(false)}
+              onClick={handleContinue}
               style={{
                 background: "#22c55e",
                 color: "#0f172a",
@@ -669,12 +788,12 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 boxShadow: "0 2px 10px rgba(34, 197, 94, 0.4)"
               }}
             >
-              Continue to Cloud Room
+              {onContinue ? "Continue" : "Done"}
             </button>
           ) : (
             <button
               type="button"
-              onClick={() => setShow(false)}
+              onClick={close}
               style={{
                 background: "transparent",
                 color: "#94a3b8",
@@ -684,7 +803,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 cursor: "pointer"
               }}
             >
-              Close
+              Not now
             </button>
           )}
         </div>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Cloud,
   Radio,
@@ -6,18 +6,23 @@ import {
   Copy,
   Check,
   Sparkles,
-  Shield,
   Eye,
   Edit3,
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
+  WifiOff,
   FolderKanban,
   LogIn,
-  ArrowRight
+  LogOut,
+  BookmarkPlus,
+  GitFork,
+  Loader2,
+  RotateCcw
 } from "lucide-react";
 import type { RoomPresence } from "../../firebase/types";
 import type { RoomSyncStatus } from "../../hooks/useRoomSync";
+import { buildRoomViewerUrl, getTrustedAvatarUrl } from "../../room-storage";
 
 export interface CloudBarProps {
   activeRoomId?: string | null;
@@ -29,233 +34,488 @@ export interface CloudBarProps {
   isProcessing?: boolean;
   onStartCloudRoom?: () => void;
   onOpenShareRoom?: (roomId: string) => void;
-  onOpenRoomModal?: () => void; // Join Room modal
-  onOpenUserHub?: () => void;   // My Rooms modal
+  /** Opens the "Join a room" dialog. */
+  onOpenRoomModal?: () => void;
+  /** Opens the user's rooms (plan manager / hub). */
+  onOpenUserHub?: () => void;
+  /** Time of the last confirmed sync, shown next to the status. */
+  lastSyncTime?: Date;
+  /** Shown as "Retry" while the status is an error or offline. */
+  onRetrySync?: () => void;
+  /** An editor of the room who is signed out. */
+  isPendingLoginEditor?: boolean;
+  onOpenEditorLogin?: () => void;
+  /** "Make a local copy" for view-only rooms. */
+  onPromptFork?: () => void;
+  /** When false, room creation is replaced by a sign-in prompt. Unknown (undefined) allows it. */
+  isSignedIn?: boolean;
+  onSignIn?: () => void;
+  isRoomOwner?: boolean;
+  /** Whether the signed-in user is on the room's member list ("Save to my rooms" is hidden then). */
+  isRoomMember?: boolean;
+  onSaveRoomToMyRooms?: () => void;
+  /** "Leave room" for members who are not the owner (asks for a second click). */
+  onLeaveRoom?: (roomId: string) => void;
+  /** Included in the copied room link when provided. */
+  activeView?: string;
+  selectedThemeId?: string;
+  /** Called after an action that opens another surface, so a host popover can close itself. */
+  onRequestClose?: () => void;
+  /** Edits of this user that merges with teammates' changes replaced (useRoomSync `syncConflicts`). */
+  syncConflicts?: ReadonlyArray<{ description: string }>;
+  /** "Restore my edits" for `syncConflicts` (shown to editors only). */
+  onRestoreConflicts?: () => void;
+  /** "Keep teammates' versions": dismisses `syncConflicts`. */
+  onDismissConflicts?: () => void;
 }
 
+/** Replaced edits listed by name; the rest are counted. */
+const MAX_LISTED_CONFLICTS = 4;
+
+const panelStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  color: "var(--jantt-text, #F8FAFC)",
+  fontSize: "13px",
+  lineHeight: 1.4
+};
+
+const mutedStyle: React.CSSProperties = { color: "var(--jantt-text-muted, #94A3B8)", fontSize: "12px" };
+
+const sectionStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
+  padding: "10px 12px",
+  borderRadius: "10px",
+  border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.12))",
+  background: "var(--jantt-surface, rgba(255, 255, 255, 0.04))"
+};
+
+const actionButtonStyle: React.CSSProperties = { width: "100%", justifyContent: "flex-start" };
+
+const STATUS_TONE: Record<RoomSyncStatus, { color: string; icon: React.ReactNode }> = {
+  idle: { color: "var(--jantt-text-muted, #94A3B8)", icon: <CheckCircle2 size={14} aria-hidden="true" /> },
+  "in-sync": { color: "#22C55E", icon: <CheckCircle2 size={14} aria-hidden="true" /> },
+  merged: { color: "#10B981", icon: <Sparkles size={14} aria-hidden="true" /> },
+  syncing: { color: "var(--jantt-accent, #38BDF8)", icon: <RefreshCw size={14} className="spin-sync-icon" aria-hidden="true" /> },
+  conflict: { color: "#F59E0B", icon: <AlertTriangle size={14} aria-hidden="true" /> },
+  error: { color: "#F59E0B", icon: <AlertTriangle size={14} aria-hidden="true" /> },
+  offline: { color: "#F59E0B", icon: <WifiOff size={14} aria-hidden="true" /> }
+};
+
+function initialsOf(user: RoomPresence): string {
+  return (user.displayName?.trim()?.[0] || user.username?.[0] || "?").toUpperCase();
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Cloud room panel: the active room's identity, access, sync state and people, or (for local
+ * plans) how to start or join a room. Renders as vertical panel content for a popover or menu;
+ * it has no positioning or full-width strip styling of its own.
+ */
 export const CloudBar: React.FC<CloudBarProps> = ({
   activeRoomId,
   activeRoomRole = "none",
   activeRoomTitle,
   onlineUsers = [],
-  syncStatus = "in-sync",
-  syncMessage = "In sync",
+  syncStatus = "idle",
+  syncMessage = "",
   isProcessing = false,
   onStartCloudRoom,
   onOpenShareRoom,
   onOpenRoomModal,
-  onOpenUserHub
+  onOpenUserHub,
+  lastSyncTime,
+  onRetrySync,
+  isPendingLoginEditor = false,
+  onOpenEditorLogin,
+  onPromptFork,
+  isSignedIn,
+  onSignIn,
+  isRoomOwner = false,
+  isRoomMember,
+  onSaveRoomToMyRooms,
+  onLeaveRoom,
+  activeView,
+  selectedThemeId,
+  onRequestClose,
+  syncConflicts = [],
+  onRestoreConflicts,
+  onDismissConflicts
 }) => {
-  const [copiedLink, setCopiedLink] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
-  const isRoomActive = Boolean(activeRoomId);
+  useEffect(() => {
+    setCopyState("idle");
+    setConfirmLeave(false);
+  }, [activeRoomId]);
 
-  const handleCopyLink = async () => {
-    if (!activeRoomId || typeof window === "undefined") return;
-    try {
-      const origin = window.location.origin + window.location.pathname;
-      const link = `${origin}?room=${encodeURIComponent(activeRoomId)}`;
-      await navigator.clipboard.writeText(link);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2200);
-    } catch {}
+  useEffect(() => {
+    if (copyState !== "copied") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 2200);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  useEffect(() => {
+    if (!confirmLeave) return;
+    const timer = window.setTimeout(() => setConfirmLeave(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [confirmLeave]);
+
+  const run = (action?: () => void) => () => {
+    if (!action) return;
+    action();
+    onRequestClose?.();
   };
 
+  const roomLink = activeRoomId ? buildRoomViewerUrl(activeRoomId, activeView, selectedThemeId) : "";
+
+  const handleCopyLink = async () => {
+    if (!roomLink) return;
+    setCopyState((await copyToClipboard(roomLink)) ? "copied" : "failed");
+  };
+
+  // ─── Local plan ────────────────────────────────────────────────────────────
+  if (!activeRoomId) {
+    const needsSignIn = isSignedIn === false;
+    return (
+      <section className="cloud-panel" aria-label="Cloud collaboration" style={panelStyle}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+          <Cloud size={18} aria-hidden="true" style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0, marginTop: "1px" }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700 }}>This plan is local</div>
+            <div style={mutedStyle}>
+              It is saved only in this browser. Start a cloud room to work on it live with teammates: anyone with the
+              link can view it, and you choose who can edit.
+            </div>
+          </div>
+        </div>
+
+        {needsSignIn ? (
+          onSignIn && (
+            <button type="button" className="btn btn-primary" style={actionButtonStyle} onClick={run(onSignIn)}>
+              <LogIn size={15} aria-hidden="true" />
+              <span>Sign in with GitHub to start a room</span>
+            </button>
+          )
+        ) : (
+          onStartCloudRoom && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={actionButtonStyle}
+              onClick={run(onStartCloudRoom)}
+              disabled={isProcessing}
+              aria-busy={isProcessing}
+            >
+              {isProcessing ? (
+                <Loader2 size={15} className="spin-sync-icon" aria-hidden="true" />
+              ) : (
+                <Radio size={15} aria-hidden="true" />
+              )}
+              <span>{isProcessing ? "Starting room…" : "Start a cloud room from this plan"}</span>
+            </button>
+          )
+        )}
+
+        {onOpenRoomModal && (
+          <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenRoomModal)}>
+            <LogIn size={15} aria-hidden="true" />
+            <span>Join a room with a link or ID…</span>
+          </button>
+        )}
+
+        {onOpenUserHub && (
+          <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenUserHub)}>
+            <FolderKanban size={15} aria-hidden="true" />
+            <span>My rooms</span>
+          </button>
+        )}
+      </section>
+    );
+  }
+
+  // ─── Active cloud room ─────────────────────────────────────────────────────
+  const canEdit = activeRoomRole === "collaborator";
+  const tone = STATUS_TONE[syncStatus] ?? STATUS_TONE.idle;
+  const showRetry = Boolean(onRetrySync) && (syncStatus === "error" || syncStatus === "offline");
+  const lastSyncLabel =
+    lastSyncTime && (syncStatus === "in-sync" || syncStatus === "merged")
+      ? lastSyncTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : null;
+  const visibleUsers = onlineUsers.slice(0, 6);
+  const canSaveRoom = Boolean(onSaveRoomToMyRooms) && isSignedIn !== false && isRoomMember === false && !isRoomOwner;
+  const canLeave = Boolean(onLeaveRoom) && isRoomMember === true && !isRoomOwner;
+
   return (
-    <div className={`cloud-bar ${isRoomActive ? "is-live-room" : "is-local-mode"}`}>
-      {/* ─── State A: Active Live Cloud Room ─── */}
-      {isRoomActive ? (
-        <>
-          {/* Left: Live Room Identity & Status */}
-          <div className="cloud-bar-left">
-            <div className="cloud-bar-room-badge" title={`Active Cloud Room: ${activeRoomId}`}>
-              <span className="cloud-bar-pulse-dot" />
-              <Radio size={12} className="cloud-bar-radio-icon" />
-              <span className="cloud-bar-room-label">
-                Live Room: <strong>{activeRoomTitle || activeRoomId}</strong>
-              </span>
-              <span className="cloud-bar-room-id">#{activeRoomId}</span>
-            </div>
+    <section className="cloud-panel" aria-label={`Cloud room ${activeRoomTitle || activeRoomId}`} style={panelStyle}>
+      {/* Identity & role */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+        <span
+          aria-hidden="true"
+          style={{
+            width: "8px",
+            height: "8px",
+            marginTop: "6px",
+            borderRadius: "50%",
+            flexShrink: 0,
+            background: syncStatus === "offline" ? "#F59E0B" : "#22C55E",
+            boxShadow: syncStatus === "offline" ? "none" : "0 0 6px #22C55E"
+          }}
+        />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            title={activeRoomTitle || activeRoomId}
+          >
+            {activeRoomTitle || activeRoomId}
+          </div>
+          <div style={{ ...mutedStyle, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            <span>Cloud room</span>
+            <code style={{ fontSize: "11px", color: "var(--jantt-text-muted, #94A3B8)" }}>#{activeRoomId}</code>
+          </div>
+        </div>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            flexShrink: 0,
+            padding: "2px 8px",
+            borderRadius: "999px",
+            fontSize: "11px",
+            fontWeight: 700,
+            background: canEdit ? "rgba(56, 189, 248, 0.16)" : "rgba(245, 158, 11, 0.16)",
+            color: canEdit ? "var(--jantt-accent, #38BDF8)" : "#F59E0B"
+          }}
+        >
+          {canEdit ? <Edit3 size={11} aria-hidden="true" /> : <Eye size={11} aria-hidden="true" />}
+          {isRoomOwner ? "Owner" : canEdit ? "Editor" : "View only"}
+        </span>
+      </div>
 
-            {/* User Role Pill */}
-            <div
-              className={`cloud-bar-role-pill is-${activeRoomRole}`}
-              title={
-                activeRoomRole === "collaborator"
-                  ? "Editor: Full two-way live collaboration and auto-sync"
-                  : "Viewer: Read-only access to this cloud room"
-              }
-            >
-              {activeRoomRole === "collaborator" ? (
-                <>
-                  <Edit3 size={11} />
-                  <span>Editor</span>
-                </>
-              ) : (
-                <>
-                  <Eye size={11} />
-                  <span>Viewer</span>
-                </>
-              )}
-            </div>
+      {/* Sync status */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flex: 1 }}>
+          <span style={{ color: tone.color, display: "inline-flex", flexShrink: 0 }}>{tone.icon}</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{syncMessage || "Connected"}</span>
+          {lastSyncLabel && <span style={{ ...mutedStyle, flexShrink: 0 }}>· {lastSyncLabel}</span>}
+        </div>
+        {showRetry && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ padding: "4px 10px", fontSize: "12px", flexShrink: 0 }}
+            onClick={onRetrySync}
+          >
+            <RefreshCw size={12} aria-hidden="true" />
+            <span>Retry</span>
+          </button>
+        )}
+      </div>
 
-            {/* ACID OCC Sync Status */}
-            <div
-              className={`cloud-bar-sync-status is-${syncStatus}`}
-              title={`Real-Time Engine: ${syncMessage}`}
-            >
-              {syncStatus === "syncing" ? (
-                <RefreshCw size={11} className="spin-sync-icon" />
-              ) : syncStatus === "merged" ? (
-                <Sparkles size={11} style={{ color: "#10b981" }} />
-              ) : syncStatus === "error" || syncStatus === "conflict" ? (
-                <AlertTriangle size={11} style={{ color: "#f59e0b" }} />
-              ) : (
-                <CheckCircle2 size={11} style={{ color: "#22c55e" }} />
-              )}
-              <span>{syncMessage}</span>
+      {/* Own edits that a merge replaced */}
+      {syncConflicts.length > 0 && (
+        <div
+          role="group"
+          aria-label="Your edits replaced by teammates' changes"
+          style={{ ...sectionStyle, borderColor: "rgba(245, 158, 11, 0.45)" }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+            <AlertTriangle size={15} aria-hidden="true" style={{ color: "#F59E0B", flexShrink: 0, marginTop: "1px" }} />
+            <div style={{ fontWeight: 600 }}>
+              {syncConflicts.length === 1
+                ? "1 of your edits was replaced by a teammate's newer change"
+                : `${syncConflicts.length} of your edits were replaced by teammates' newer changes`}
             </div>
           </div>
-
-          {/* Center: Live Online Collaborators Stack */}
-          <div className="cloud-bar-center">
-            {onlineUsers.length > 0 ? (
-              <div
-                className="cloud-bar-presence-group"
-                onClick={() => activeRoomId && onOpenShareRoom?.(activeRoomId)}
-                title={`${onlineUsers.length} collaborator${onlineUsers.length > 1 ? "s" : ""} online now. Click to view roster & manage.`}
-              >
-                <div className="cloud-bar-avatar-stack">
-                  {onlineUsers.slice(0, 5).map((user, idx) => (
-                    <div
-                      key={user.uid || idx}
-                      className="cloud-bar-avatar-pill"
-                      style={{ zIndex: 5 - idx }}
-                      title={`${user.displayName || user.username || "Collaborator"}${user.isOwner ? " (Owner)" : ""}`}
-                    >
-                      {user.photoURL ? (
-                        <img src={user.photoURL} alt={user.displayName || "User"} />
-                      ) : (
-                        <span>{(user.displayName?.[0] || user.username?.[0] || "P").toUpperCase()}</span>
-                      )}
-                    </div>
-                  ))}
-                  {onlineUsers.length > 5 && (
-                    <div className="cloud-bar-avatar-more" style={{ zIndex: 0 }}>
-                      +{onlineUsers.length - 5}
-                    </div>
-                  )}
-                </div>
-                <div className="cloud-bar-presence-text">
-                  <span className="cloud-bar-live-dot" />
-                  <span>{onlineUsers.length} online</span>
-                </div>
-              </div>
-            ) : (
-              <div className="cloud-bar-presence-empty">
-                <Users size={12} style={{ opacity: 0.6 }} />
-                <span>You are the only one in this room</span>
-              </div>
+          <ul style={{ ...mutedStyle, margin: 0, paddingLeft: "18px", overflowWrap: "anywhere" }}>
+            {syncConflicts.slice(0, MAX_LISTED_CONFLICTS).map((conflict, idx) => (
+              <li key={idx}>{conflict.description}</li>
+            ))}
+          </ul>
+          {syncConflicts.length > MAX_LISTED_CONFLICTS && (
+            <div style={mutedStyle}>and {syncConflicts.length - MAX_LISTED_CONFLICTS} more</div>
+          )}
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            {canEdit && onRestoreConflicts && (
+              <button type="button" className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "12px" }} onClick={onRestoreConflicts}>
+                <RotateCcw size={12} aria-hidden="true" />
+                <span>Restore my edits</span>
+              </button>
             )}
-          </div>
-
-          {/* Right: Room Actions (Invite Teammates & Teams, Copy Link, Room Hub) */}
-          <div className="cloud-bar-right">
-            <button
-              type="button"
-              className="cloud-bar-btn is-primary"
-              onClick={() => activeRoomId && onOpenShareRoom?.(activeRoomId)}
-              title="Add individuals by username, bulk-invite entire teams, or generate invite links"
-            >
-              <Users size={13} />
-              <span>Invite &amp; Teams</span>
-            </button>
-
-            <button
-              type="button"
-              className="cloud-bar-btn is-secondary"
-              onClick={handleCopyLink}
-              title="Copy direct join link to clipboard"
-            >
-              {copiedLink ? <Check size={13} style={{ color: "#22c55e" }} /> : <Copy size={13} />}
-              <span>{copiedLink ? "Link Copied!" : "Copy Link"}</span>
-            </button>
-
-            {onOpenUserHub && (
-              <button
-                type="button"
-                className="cloud-bar-btn is-ghost"
-                onClick={onOpenUserHub}
-                title="Open your Personal Cloud Rooms & Hub"
-              >
-                <FolderKanban size={13} />
-                <span>My Rooms</span>
+            {onDismissConflicts && (
+              <button type="button" className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "12px" }} onClick={onDismissConflicts}>
+                <span>Keep teammates' versions</span>
               </button>
             )}
           </div>
-        </>
-      ) : (
-        /* ─── State B: Local Plan / Template (Offline Mode) ─── */
-        <>
-          {/* Left: Local Mode Indicator */}
-          <div className="cloud-bar-left">
-            <div className="cloud-bar-local-pill" title="This plan is stored locally in your browser">
-              <Shield size={12} style={{ color: "var(--jantt-accent, #38bdf8)" }} />
-              <span>Local Plan</span>
-              <span className="cloud-bar-local-sub">(Private / Offline)</span>
-            </div>
-          </div>
-
-          {/* Center: Value Proposition Micro-copy */}
-          <div className="cloud-bar-center">
-            <div className="cloud-bar-local-hint">
-              <Cloud size={13} style={{ color: "var(--jantt-accent, #38bdf8)", flexShrink: 0 }} />
-              <span>Real-time cloud collaboration available: 100+ concurrent editors, live presence &amp; 0 conflicts.</span>
-            </div>
-          </div>
-
-          {/* Right: Cloud Onboarding Actions */}
-          <div className="cloud-bar-right">
-            {onStartCloudRoom && (
-              <button
-                type="button"
-                className="cloud-bar-btn is-primary is-glowing"
-                onClick={onStartCloudRoom}
-                disabled={isProcessing}
-                title="Start a live Cloud Room from this plan and invite teammates"
-              >
-                <Sparkles size={13} />
-                <span>Start Cloud Room</span>
-                <ArrowRight size={12} />
-              </button>
-            )}
-
-            {onOpenRoomModal && (
-              <button
-                type="button"
-                className="cloud-bar-btn is-secondary"
-                onClick={onOpenRoomModal}
-                title="Join an existing Cloud Room via Room ID or Secret Key"
-              >
-                <LogIn size={13} />
-                <span>Join Room</span>
-              </button>
-            )}
-
-            {onOpenUserHub && (
-              <button
-                type="button"
-                className="cloud-bar-btn is-ghost"
-                onClick={onOpenUserHub}
-                title="View your saved Cloud Rooms & Collaboration Hub"
-              >
-                <FolderKanban size={13} />
-                <span>My Rooms</span>
-              </button>
-            )}
-          </div>
-        </>
+        </div>
       )}
-    </div>
+
+      {/* What this user can do */}
+      {isPendingLoginEditor ? (
+        <div style={sectionStyle}>
+          <div style={mutedStyle}>You are an editor of this room. Sign in to edit it live.</div>
+          {onOpenEditorLogin && (
+            <button type="button" className="btn btn-primary" style={actionButtonStyle} onClick={run(onOpenEditorLogin)}>
+              <LogIn size={15} aria-hidden="true" />
+              <span>Sign in to edit</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        !canEdit && (
+          <div style={sectionStyle}>
+            <div style={mutedStyle}>
+              View only. You see teammates' changes live; ask the owner for edit access, or edit a copy.
+            </div>
+            {onPromptFork && (
+              <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onPromptFork)}>
+                <GitFork size={15} aria-hidden="true" />
+                <span>Make a local copy</span>
+              </button>
+            )}
+            {canSaveRoom && (
+              <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={onSaveRoomToMyRooms}>
+                <BookmarkPlus size={15} aria-hidden="true" />
+                <span>Save to my rooms</span>
+              </button>
+            )}
+          </div>
+        )
+      )}
+
+      {/* People here now */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", minHeight: "24px" }}>
+        {visibleUsers.length > 0 ? (
+          <span aria-hidden="true" style={{ display: "inline-flex" }}>
+            {visibleUsers.map((user, idx) => {
+              const avatar = getTrustedAvatarUrl(user.photoURL);
+              return (
+                <span
+                  key={user.uid || idx}
+                  title={user.displayName || user.username || "Collaborator"}
+                  style={{
+                    width: "22px",
+                    height: "22px",
+                    marginLeft: idx === 0 ? 0 : "-6px",
+                    borderRadius: "50%",
+                    border: "2px solid var(--jantt-surface-solid, #0F172A)",
+                    background: "var(--jantt-accent, #38BDF8)",
+                    color: "var(--jantt-accent-contrast, #000000)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    overflow: "hidden"
+                  }}
+                >
+                  {avatar ? (
+                    <img src={avatar} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%" }} />
+                  ) : (
+                    initialsOf(user)
+                  )}
+                </span>
+              );
+            })}
+          </span>
+        ) : (
+          <Users size={15} aria-hidden="true" style={{ color: "var(--jantt-text-muted, #94A3B8)" }} />
+        )}
+        <span style={mutedStyle}>
+          {onlineUsers.length === 0
+            ? "No one is online in this room right now"
+            : `${onlineUsers.length} online now${
+                onlineUsers.length > visibleUsers.length ? ` (+${onlineUsers.length - visibleUsers.length} more)` : ""
+              }`}
+        </span>
+      </div>
+
+      {/* Room actions */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {onOpenShareRoom && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={actionButtonStyle}
+            onClick={run(() => onOpenShareRoom(activeRoomId))}
+          >
+            <Users size={15} aria-hidden="true" />
+            <span>{isRoomOwner ? "Invite people & manage access" : "Share & see members"}</span>
+          </button>
+        )}
+
+        <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={handleCopyLink}>
+          {copyState === "copied" ? <Check size={15} aria-hidden="true" style={{ color: "#22C55E" }} /> : <Copy size={15} aria-hidden="true" />}
+          <span>{copyState === "copied" ? "Link copied" : "Copy room link (view access)"}</span>
+        </button>
+        {copyState === "failed" && (
+          <input
+            readOnly
+            value={roomLink}
+            aria-label="Room link"
+            onFocus={(e) => e.currentTarget.select()}
+            autoFocus
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "6px 8px",
+              borderRadius: "6px",
+              border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.12))",
+              background: "var(--jantt-bg, rgba(15, 23, 42, 0.6))",
+              color: "var(--jantt-text, #F8FAFC)",
+              fontFamily: "var(--jantt-font-mono, monospace)",
+              fontSize: "11px"
+            }}
+          />
+        )}
+
+        {onOpenUserHub && (
+          <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenUserHub)}>
+            <FolderKanban size={15} aria-hidden="true" />
+            <span>My rooms</span>
+          </button>
+        )}
+
+        {canLeave && onLeaveRoom && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ ...actionButtonStyle, color: "#EF4444" }}
+            onClick={() => {
+              if (!confirmLeave) {
+                setConfirmLeave(true);
+                return;
+              }
+              setConfirmLeave(false);
+              onLeaveRoom(activeRoomId);
+              onRequestClose?.();
+            }}
+          >
+            <LogOut size={15} aria-hidden="true" />
+            <span>{confirmLeave ? "Click again to leave this room" : "Leave room"}</span>
+          </button>
+        )}
+      </div>
+    </section>
   );
 };

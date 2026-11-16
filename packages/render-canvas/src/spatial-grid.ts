@@ -3,7 +3,7 @@
  */
 
 import type { Task } from "@jantt/core";
-import { diffDays } from "@jantt/core";
+import { diffDays, isValidISODate } from "@jantt/core";
 
 export type HitTestType = "bar" | "handle-start" | "handle-end" | "progress" | "none";
 
@@ -47,7 +47,7 @@ export class SpatialGanttGrid {
     if (rowIndex < 0 || rowIndex >= this.tasks.length) return null;
 
     const task = this.tasks[rowIndex];
-    if (!task || !task.start || !task.end) return null;
+    if (!hasValidDates(task)) return null;
 
     const startOffsetDays = diffDays(this.timelineStart, task.start);
     const durationDays = Math.max(1, diffDays(task.start, task.end) + 1);
@@ -88,7 +88,7 @@ export class SpatialGanttGrid {
   public getTaskBounds(index: number): { x: number; y: number; width: number; height: number } | null {
     if (index < 0 || index >= this.tasks.length) return null;
     const task = this.tasks[index];
-    if (!task || !task.start || !task.end) return null;
+    if (!hasValidDates(task)) return null;
 
     const startOffsetDays = diffDays(this.timelineStart, task.start);
     const durationDays = Math.max(1, diffDays(task.start, task.end) + 1);
@@ -100,4 +100,9 @@ export class SpatialGanttGrid {
       height: this.rowHeight
     };
   }
+}
+
+/** Malformed dates would otherwise fall back to an arbitrary day and hit the wrong column. */
+function hasValidDates(task: Task | undefined): task is Task {
+  return Boolean(task) && isValidISODate(task!.start) && isValidISODate(task!.end);
 }

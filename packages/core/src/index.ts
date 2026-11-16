@@ -1,6 +1,12 @@
 /**
  * Jantt Core
- * The dependency-free, enterprise JSON Gantt chart engine
+ * Framework-agnostic JSON Gantt chart engine: scheduling, analytics, DOM renderer and sync.
+ *
+ * Public API: every name re-exported below. The 1.x surface only grows (names, signatures and
+ * `Jantt` keys stay backward compatible). The DOM building blocks (`renderers/*`) and the gesture
+ * types are exported for typing and composition, not as extension points. Replacing `export *`
+ * with an explicit list, removing `createDetailModal` and moving the Firebase/remote sync helpers
+ * out of core are deferred to the next major release.
  */
 
 import "./theme.css";
@@ -119,7 +125,8 @@ export const Jantt = {
   decodeRtdbKey,
   encodePlanForRtdb,
   decodePlanFromRtdb,
-  version: "1.3.0"
+  /** Keep in sync with package.json "version" (guarded by tests/exporter.test.ts). */
+  version: "1.1.0"
 };
 
 

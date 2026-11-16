@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 export type DeviceOrientation = "portrait" | "landscape";
 
@@ -13,66 +13,88 @@ export interface MobileDetectionState {
   viewportHeight: number;
 }
 
+/**
+ * Breakpoints shared with index.css. Keep the CSS `@media` rules for the mobile layout in sync:
+ * narrow screens, plus landscape phones (short, touch-first) that are wider than 768px.
+ */
+export const MOBILE_MEDIA_QUERY =
+  "(max-width: 768px), (max-height: 500px) and (max-width: 950px) and (pointer: coarse)";
+const TABLET_MEDIA_QUERY = "(max-width: 1024px)";
+const LANDSCAPE_MEDIA_QUERY = "(orientation: landscape)";
+/** Full-bleed chart without chrome: only for touch phones held sideways, never for small desktop windows. */
+const IMMERSIVE_MEDIA_QUERY = "(orientation: landscape) and (max-height: 519px) and (pointer: coarse)";
+
+const SSR_STATE: MobileDetectionState = {
+  isMobile: false,
+  isTablet: false,
+  orientation: "landscape",
+  isLandscape: true,
+  isPortrait: false,
+  isImmersiveLandscape: false,
+  viewportWidth: 1280,
+  viewportHeight: 800
+};
+
+function canMatchMedia(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function";
+}
+
+function readState(): MobileDetectionState {
+  if (!canMatchMedia()) return SSR_STATE;
+  const isMobile = window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+  const isLandscape = window.matchMedia(LANDSCAPE_MEDIA_QUERY).matches;
+  return {
+    isMobile,
+    isTablet: !isMobile && window.matchMedia(TABLET_MEDIA_QUERY).matches,
+    orientation: isLandscape ? "landscape" : "portrait",
+    isLandscape,
+    isPortrait: !isLandscape,
+    isImmersiveLandscape: isMobile && window.matchMedia(IMMERSIVE_MEDIA_QUERY).matches,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight
+  };
+}
+
+/** Compares only the layout-driving flags, so pure size changes do not re-render the app. */
+function sameLayout(a: MobileDetectionState, b: MobileDetectionState): boolean {
+  return (
+    a.isMobile === b.isMobile &&
+    a.isTablet === b.isTablet &&
+    a.isLandscape === b.isLandscape &&
+    a.isImmersiveLandscape === b.isImmersiveLandscape
+  );
+}
+
+/**
+ * Device-class detection driven by `matchMedia`, so JS layout decisions and CSS breakpoints agree.
+ * Updates only when a breakpoint flips; `viewportWidth`/`viewportHeight` are a snapshot from that moment.
+ */
 export function useMobileDetection(): MobileDetectionState {
-  const getMetrics = useCallback((): MobileDetectionState => {
-    if (typeof window === "undefined") {
-      return {
-        isMobile: false,
-        isTablet: false,
-        orientation: "landscape",
-        isLandscape: true,
-        isPortrait: false,
-        isImmersiveLandscape: false,
-        viewportWidth: 1280,
-        viewportHeight: 800
-      };
-    }
-
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const isMobile = w <= 768 || (h <= 500 && w <= 950);
-    const isTablet = !isMobile && w <= 1024;
-    const orientation: DeviceOrientation = h >= w ? "portrait" : "landscape";
-    const isLandscape = orientation === "landscape";
-    const isPortrait = orientation === "portrait";
-    // Immersive landscape on phone: landscape orientation on a mobile-sized device
-    const isImmersiveLandscape = isMobile && isLandscape && h < 520;
-
-    return {
-      isMobile,
-      isTablet,
-      orientation,
-      isLandscape,
-      isPortrait,
-      isImmersiveLandscape,
-      viewportWidth: w,
-      viewportHeight: h
-    };
-  }, []);
-
-  const [state, setState] = useState<MobileDetectionState>(getMetrics);
+  const [state, setState] = useState<MobileDetectionState>(readState);
 
   useEffect(() => {
-    let timeoutId: number | null = null;
-    const handleResize = () => {
-      if (timeoutId !== null) window.cancelAnimationFrame(timeoutId);
-      timeoutId = window.requestAnimationFrame(() => {
-        setState(getMetrics());
+    if (!canMatchMedia()) return;
+    const update = () => {
+      setState((prev) => {
+        const next = readState();
+        return sameLayout(prev, next) ? prev : next;
       });
     };
-
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-
-    // Initial check
-    setState(getMetrics());
-
+    const queries = [MOBILE_MEDIA_QUERY, TABLET_MEDIA_QUERY, LANDSCAPE_MEDIA_QUERY, IMMERSIVE_MEDIA_QUERY].map(
+      (q) => window.matchMedia(q)
+    );
+    queries.forEach((mql) => {
+      if (typeof mql.addEventListener === "function") mql.addEventListener("change", update);
+      else mql.addListener(update);
+    });
+    update();
     return () => {
-      if (timeoutId !== null) window.cancelAnimationFrame(timeoutId);
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
+      queries.forEach((mql) => {
+        if (typeof mql.removeEventListener === "function") mql.removeEventListener("change", update);
+        else mql.removeListener(update);
+      });
     };
-  }, [getMetrics]);
+  }, []);
 
   return state;
 }

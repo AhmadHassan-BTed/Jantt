@@ -1,8 +1,24 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from "vitest";
-import { createApp, nextTick, ref } from "vue";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { createApp, nextTick, ref, h } from "vue";
+import { renderJantt } from "@jantt/core";
+import type { JanttData, JanttInstance, JanttOptions } from "@jantt/core";
 import { JanttTimeline } from "../src/index";
-import type { JanttData } from "@jantt/core";
+
+// Wrap the real engine so tests can inspect the options it receives and count updates.
+vi.mock("@jantt/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@jantt/core")>();
+  return {
+    ...actual,
+    renderJantt: vi.fn((...args: Parameters<typeof actual.renderJantt>) => {
+      const instance = actual.renderJantt(...args);
+      instance.update = vi.fn(instance.update);
+      return instance;
+    })
+  };
+});
+
+const renderJanttMock = vi.mocked(renderJantt);
 
 describe("JanttTimeline Vue 3 Component", () => {
   const samplePlan: JanttData = {
@@ -12,9 +28,39 @@ describe("JanttTimeline Vue 3 Component", () => {
     ]
   };
 
+  const otherPlan: JanttData = {
+    tasks: [{ id: "x1", label: "Other", category: "dev", start: "2026-12-01", end: "2026-12-03" }]
+  };
+
   beforeEach(() => {
     document.body.innerHTML = '<div id="app"></div>';
+    renderJanttMock.mockClear();
   });
+
+  /** Mounts the component with reactive props; returns the app plus the ready instance. */
+  function mountTimeline(initialProps: Record<string, unknown>, listeners: Record<string, unknown> = {}) {
+    const props = ref<Record<string, unknown>>(initialProps);
+    let instance: JanttInstance | null = null;
+    const app = createApp({
+      setup: () => () =>
+        h(JanttTimeline as any, {
+          ...props.value,
+          ...listeners,
+          onReady: (inst: JanttInstance) => {
+            instance = inst;
+          }
+        })
+    });
+    app.mount("#app");
+    return {
+      app,
+      props,
+      get instance() {
+        return instance as unknown as JanttInstance & { update: ReturnType<typeof vi.fn> };
+      },
+      lastOptions: () => renderJanttMock.mock.calls[renderJanttMock.mock.calls.length - 1][2] as JanttOptions
+    };
+  }
 
   it("mounts and renders DOM container elements properly", async () => {
     let readyInstance: any = null;
@@ -66,7 +112,7 @@ describe("JanttTimeline Vue 3 Component", () => {
 
     expect(instance).not.toBeNull();
 
-    // Mutate plan
+    // Replace the plan
     planRef.value = {
       tasks: [
         ...samplePlan.tasks,
@@ -74,8 +120,119 @@ describe("JanttTimeline Vue 3 Component", () => {
       ]
     };
     await nextTick();
+    expect(instance.getData().tasks).toHaveLength(3);
 
-    expect(instance).toBeDefined();
+    // Mutate the plan in place
+    planRef.value.tasks.push({ id: "t4", label: "Ship", category: "qa", start: "2026-11-17", end: "2026-11-18" });
+    await nextTick();
+    expect(instance.getData().tasks).toHaveLength(4);
+
     app.unmount();
+  });
+
+  it("leaves absent optional booleans and selectedDate to the engine defaults", () => {
+    const t = mountTimeline({ data: samplePlan });
+    const options = t.lastOptions();
+    for (const key of ["autoCascade", "selectedDate", "showDateFilterBadge", "filterTasksByDate", "disableDragOnTouch", "isMobile"]) {
+      expect(options[key as keyof JanttOptions]).toBeUndefined();
+    }
+    expect(options.className).toBeUndefined();
+    t.app.unmount();
+  });
+
+  it("keeps the user's zoom when only data changes", async () => {
+    const t = mountTimeline({ data: samplePlan, viewport: { scale: "week" } });
+    t.instance.setDayWidth(80); // e.g. wheel zoom inside the chart
+
+    t.props.value = { ...t.props.value, data: { tasks: [...samplePlan.tasks] } };
+    await nextTick();
+
+    expect(t.instance.update).toHaveBeenCalledTimes(1);
+    expect(t.instance.update.mock.calls[0][1]).not.toHaveProperty("viewport");
+    expect(t.instance.getDayWidth()).toBe(80);
+    t.app.unmount();
+  });
+
+  it("forwards changed viewport keys only", async () => {
+    const t = mountTimeline({ data: samplePlan, viewport: { scale: "week", showCriticalPath: false } });
+
+    t.props.value = { ...t.props.value, viewport: { scale: "week", showCriticalPath: true } };
+    await nextTick();
+
+    const forwarded = t.instance.update.mock.calls[0][1].viewport;
+    expect(forwarded).toEqual({ showCriticalPath: true });
+    t.app.unmount();
+  });
+
+  it("reacts to selectedDate, isMobile and className changes", async () => {
+    const t = mountTimeline({ data: samplePlan });
+
+    t.props.value = { ...t.props.value, selectedDate: "2026-11-03" };
+    await nextTick();
+    expect(t.instance.getSelectedDate()).toBe("2026-11-03");
+
+    t.props.value = { ...t.props.value, isMobile: true };
+    await nextTick();
+    expect(t.instance.update).toHaveBeenCalledTimes(2);
+    expect(t.instance.update.mock.calls[1][1]).toMatchObject({ isMobile: true });
+
+    t.props.value = { ...t.props.value, className: "my-chart" };
+    await nextTick();
+    expect(document.querySelector(".jantt-vue-timeline-container.my-chart")).not.toBeNull();
+    t.app.unmount();
+  });
+
+  it("does not re-render when the engine's own commit is passed back as data", async () => {
+    const onCommit = vi.fn();
+    const t = mountTimeline({ data: samplePlan }, { onCommit });
+
+    const committed = t.instance.getData();
+    t.lastOptions().onCommit!(committed);
+    expect(onCommit).toHaveBeenCalledWith(committed);
+
+    t.props.value = { ...t.props.value, data: committed };
+    await nextTick();
+    expect(t.instance.update).not.toHaveBeenCalled();
+
+    // Undo to an older plan, then redo back to the committed one: both must be applied.
+    t.props.value = { ...t.props.value, data: otherPlan };
+    await nextTick();
+    t.props.value = { ...t.props.value, data: committed };
+    await nextTick();
+    expect(t.instance.update).toHaveBeenCalledTimes(2);
+    expect(t.instance.getData().tasks).toHaveLength(2);
+    t.app.unmount();
+  });
+
+  it("forwards toolbar data actions only for events that have a listener", () => {
+    const onExportJson = vi.fn();
+    const t = mountTimeline({ data: samplePlan }, { onExportJson });
+
+    const options = t.lastOptions();
+    expect(options.onExportJson).toBeTypeOf("function");
+    expect(options.onImportJson).toBeUndefined();
+    expect(options.onExportCsv).toBeUndefined();
+    expect(options.onOpenAutoSave).toBeUndefined();
+
+    options.onExportJson!();
+    expect(onExportJson).toHaveBeenCalledTimes(1);
+    t.app.unmount();
+  });
+
+  it("emits mount errors and retries once the data changes", async () => {
+    renderJanttMock.mockImplementationOnce(() => {
+      throw new Error("bad plan");
+    });
+    const onError = vi.fn();
+    const t = mountTimeline({ data: samplePlan }, { onError });
+
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "bad plan" }));
+    expect(t.instance).toBeNull();
+
+    t.props.value = { ...t.props.value, data: { tasks: [...samplePlan.tasks] } };
+    await nextTick();
+    expect(t.instance).not.toBeNull();
+    expect(t.instance.getData().tasks).toHaveLength(2);
+    t.app.unmount();
   });
 });

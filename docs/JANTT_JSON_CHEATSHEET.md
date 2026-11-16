@@ -1,9 +1,8 @@
 # Jantt JSON Specification & Benchmark Cheatsheet
 
 > **Version**: 1.4.0  
-> **Schema Identifier**: `https://jantt.dev/schema/v1.json`  
-> **Live Resolving Schema**: [`schema/jantt.schema.json`](https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json)  
-> **Web Endpoint**: [`https://ahmadhassan-bted.github.io/Jantt/schema/v1.json`](https://ahmadhassan-bted.github.io/Jantt/schema/v1.json)  
+> **Schema URL (use as `$schema`)**: [`https://ahmadhassan-bted.github.io/Jantt/schema/v1.json`](https://ahmadhassan-bted.github.io/Jantt/schema/v1.json)  
+> **Source**: [`schema/jantt.schema.json`](../schema/jantt.schema.json)  
 > **Target Standard**: Swiss Modernism 2.0 / Enterprise Project Management Standard
 
 This document is the official, comprehensive specification and prompt benchmark for authoring, validating, and generating **Jantt JSON** datasets. It includes psychological design rationale, a 10-second instant starter, and concrete copy-pasteable samples for every single engine capability.
@@ -24,11 +23,11 @@ Traditional project management tools force an unacceptable compromise:
 
 Jantt flips the paradigm: **The timeline is pure declarative data. The UI is deterministic execution.**
 
-| 10x Fewer Tokens | 0 Runtime Dependencies | 100% Deterministic DAG | 2-Way State Sync |
+| 10x Fewer Tokens | 1 Runtime Dependency | 100% Deterministic DAG | 2-Way State Sync |
 | :---: | :---: | :---: | :---: |
-| **Vs Fragile React JSX** | **Sub-14 KB Core Bundle** | **Topological Constraint Solver** | **Visual Drag <-> Clean JSON** |
+| **Vs Fragile React JSX** | **`fflate`, for share links** | **Topological Constraint Solver** | **Visual Drag <-> Clean JSON** |
 
-* **Zero Runtime Dependencies**: The core math and layout engine (`@jantt/core`) is pure, zero-dependency TypeScript weighing less than 14 KB gzipped.
+* **Lean Runtime**: The core engine (`@jantt/core`) is TypeScript with a single small dependency (`fflate`), about 63 KB gzipped JavaScript plus 8 KB gzipped CSS.
 * **10x Fewer Tokens for AI**: Models output pure, structured JSON. Zero UI hallucinations, machine-verifiable constraints, and instant interactive execution.
 * **Swiss Modernism 2.0 Aesthetics**: Deep OLED Swiss Noir (`#080D18`), 90-degree CAD orthogonal routing, glassmorphic HUD cards, and high-contrast typography.
 * **Operations Research Power**: Built-in Critical Path Method (CPM), ANSI/EIA-748 Earned Value Management (EVM), DCMA-14 schedule health audits, and PERT risk bounds.
@@ -42,7 +41,7 @@ Want to see Jantt run right now? Copy this minimal, 100% valid JSON payload and 
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {
     "title": "Autonomous Launch Schedule",
     "person": "@ahmadhassan",
@@ -127,13 +126,13 @@ Hand this prompt directly to ChatGPT, Claude, Gemini, Cursor, or your autonomous
 
 ```text
 You are a precision project management schedule generator.
-Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json).
+Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https://ahmadhassan-bted.github.io/Jantt/schema/v1.json).
 
 # JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET (v1.4.0)
 
 ## 1. Top-Level Root Structure
 {
-  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {
     "title": "<Project Title>",
     "description": "<Project narrative and objectives>",
@@ -253,7 +252,7 @@ Output ONLY raw, valid JSON conforming strictly to the Jantt JSON Schema (https:
    - "dependsOn" can be a single task ID string, an array of strings ["t1", "t2"], or null.
    - All referenced dependency IDs must exist in the "tasks" list (no dangling references).
    - Strict Directed Acyclic Graph: NO circular dependency loops (e.g. A -> B -> C -> A).
-   - Timing Sanity: A task's "start" must be on or after prerequisite "end" + gapDays.
+   - Timing: Prefer a "start" on or after the prerequisite "end" + gapDays. This is not rejected: Jantt's scheduler moves unlocked dependents forward automatically.
 4. MILESTONES: For zero-duration milestone gates, set "milestone": true and "start" equal to "end".
 5. PROGRESS: Must be a decimal float from 0.0 (0%) to 1.0 (100%).
 6. BASELINES: Optional planned timeframe object { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } for baseline variance tracking.
@@ -273,7 +272,7 @@ Below is an exhaustive, production-grade Jantt dataset showcasing **every suppor
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {
     "title": "Autonomous Edge OS & Quantum Crypto Mesh",
     "description": "High-assurance distributed operating platform with real-time verification and zero-trust orchestration.",
@@ -604,7 +603,7 @@ Below is an exhaustive, production-grade Jantt dataset showcasing **every suppor
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/schema/jantt.schema.json",
+  "$schema": "https://ahmadhassan-bted.github.io/Jantt/schema/v1.json",
   "meta": {},
   "categories": {},
   "people": [],
@@ -617,9 +616,9 @@ Below is an exhaustive, production-grade Jantt dataset showcasing **every suppor
 
 | Key | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
-| `$schema` | `string` | No | Schema URI identifier. Points to live raw schema for automated IDE IntelliSense |
+| `$schema` | `string` | No | Schema URL (`https://ahmadhassan-bted.github.io/Jantt/schema/v1.json`) for IDE IntelliSense |
 | `meta` | `object` | No | Project-wide parameters, scale, wire routing, budget, and rendering options |
-| `categories` | `object` | Yes | Map of category IDs to display labels, brand hex colors, soft tints, and icons |
+| `categories` | `object` | No (recommended) | Map of category IDs to display labels, brand hex colors, soft tints, and icons. When present, every task `category` must be one of its keys |
 | `people` | `array` | No | Team members with avatar colors, contact emails, and squad mappings |
 | `teams` | `array` | No | Department or squad registries with distinct theme badge colors |
 | `notes` | `array` | No | Collaborative project documentation, architecture RFCs, meeting notes, and task attachments |
@@ -671,10 +670,10 @@ Use `meta` to declare the high-level boundaries of your project. Setting explici
 | `linkRouting` | `string` | `"orthogonal"` | `"orthogonal"`, `"curved"`, `"direct"` | Dependency wire connector geometry |
 | `showCriticalPath` | `boolean` | `false` | `true`, `false` | Highlight critical path tasks & connection lines |
 | `showBaselines` | `boolean` | `true` | `true`, `false` | Render planned vs actual ghost bars |
-| `autoCascade` | `boolean` | `false` | `true`, `false` | Automatically shift downstream tasks when upstream slips |
-| `currency` | `string` | `"USD"` | `"USD"`, `"EUR"`, `"GBP"`, etc. | Currency symbol for EVM & cost metrics |
-| `budget` | `number` | `0` | Number e.g. `650000` | Total approved project baseline budget |
-| `version` | `string` | `"1.4.0"` | String | Schema specification version |
+| `autoCascade` | `boolean` | `true` | `true`, `false` | Automatically shift downstream tasks when an upstream task moves; `false` leaves dependents where they are |
+| `currency` | `string` | `"USD"` | ISO 4217 code: `"USD"`, `"EUR"`, `"GBP"`, etc. | Currency used to format cost metrics in the playground |
+| `budget` | `number` | none | Number e.g. `650000` | Informational only. EVM's budget at completion (BAC) is the sum of task `estimatedCost` values |
+| `version` | `string` | none | String | Informational plan/spec version label |
 
 ---
 
@@ -1089,10 +1088,12 @@ The Jantt core engine runs classical project management algorithms directly in t
 
 1. **ISO 8601 Date Format**: Dates must be `YYYY-MM-DD`.
 2. **Chronological Validity**: `end` must be greater than or equal to `start`.
-3. **Category Integrity**: Every task `category` must exist in `categories`.
+3. **Category Integrity**: Every task needs a `category` string; when a `categories` map is declared, the category must be one of its keys.
 4. **Task ID Uniqueness**: Duplicate task IDs are strictly rejected.
 5. **DAG Dependency Validation**:
    - No dangling dependencies pointing to nonexistent tasks.
    - Zero circular cycles (`A -> B -> C -> A`).
-   - Timing sanity: Dependent tasks cannot start before prerequisite completion + `gapDays`.
 6. **Progress Constraints**: Must be a float between `0.0` and `1.0`.
+7. **Baselines**: Baseline dates must be valid ISO dates with `start <= end`.
+
+Not a validation error: a dependent task that starts before its prerequisite finishes (plus `gapDays`). The scheduler resolves it by moving the unlocked dependent forward; locked tasks are left in place.

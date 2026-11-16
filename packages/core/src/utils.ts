@@ -1,8 +1,8 @@
 import { Task, ViewportOptions, TimeScale, LinkRoutingStyle, RowHeightMode } from "./types";
-import { DAY_WIDTH_MIN, DAY_WIDTH_MAX, DEFAULT_GAP_DAYS } from "./constants";
+import { DAY_WIDTH_MIN, DAY_WIDTH_MAX, DEFAULT_GAP_DAYS, SCALE_DAY_WIDTHS } from "./constants";
 
 /**
- * Escapes HTML characters to prevent XSS.
+ * Escapes HTML characters to prevent XSS. Safe for element text and quoted attribute values.
  */
 export function escapeHtml(str: unknown): string {
   return String(str ?? "")
@@ -11,6 +11,28 @@ export function escapeHtml(str: unknown): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+/**
+ * Plain CSS colors only: hex (3/4/6/8 digits), a color function whose arguments hold no nested
+ * parentheses, quotes, `;`, `<` or `\` (rgb/hsl/hwb/lab/lch/oklab/oklch), a `var(--token)`, or a
+ * named color. `url(...)`, `image-set(...)` and attribute or declaration break-outs cannot match.
+ */
+const SAFE_CSS_COLOR =
+  /^(?:#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\([-+0-9a-z.,%\s/]{1,80}\)|var\(--[a-z0-9-]{1,64}\)|[a-z]{3,32})$/i;
+
+/**
+ * Returns the trimmed `value` when it is a plain CSS color (see grammar above), otherwise
+ * `fallback` (or `undefined` when no fallback is given). Plan colors (categories, people, teams,
+ * tasks, notes) are user-controlled and may arrive from shared rooms or links, so every sink that
+ * puts one into `style` or markup must pass it through this single allow-list first.
+ */
+export function sanitizeCssColor(value: unknown): string | undefined;
+export function sanitizeCssColor(value: unknown, fallback: string): string;
+export function sanitizeCssColor(value: unknown, fallback?: string): string | undefined {
+  if (typeof value !== "string") return fallback;
+  const color = value.trim();
+  return color.length <= 100 && SAFE_CSS_COLOR.test(color) ? color : fallback;
 }
 
 /**
@@ -24,21 +46,25 @@ export function getTaskDisplayName(task: Task | { id: string; label?: string; na
 /**
  * Derives the effective gap days for a task, respecting explicit task-level gap,
  * backwards-compatible minGapDays, or project-level default gap.
+ * Non-numeric or non-finite values (e.g. a hand-edited `"gapDays": "2"`) are ignored, so they
+ * can never leak into day arithmetic as string concatenation or NaN.
  */
 export function getEffectiveGap(
   task: { gapDays?: number | null; minGapDays?: number | null },
   defaultGapDays: number = DEFAULT_GAP_DAYS
 ): number {
-  if (task.gapDays !== undefined && task.gapDays !== null) return task.gapDays;
-  if (task.minGapDays !== undefined && task.minGapDays !== null) return task.minGapDays;
+  if (typeof task.gapDays === "number" && Number.isFinite(task.gapDays)) return task.gapDays;
+  if (typeof task.minGapDays === "number" && Number.isFinite(task.minGapDays)) return task.minGapDays;
   return defaultGapDays;
 }
 
 /**
  * Clamps day width to the supported continuous zoom range with 1-decimal precision.
+ * Non-finite input (NaN, undefined from a bad persisted zoom) yields `fallback` (day-scale width).
  */
-export function clampDayWidth(width: number): number {
-  return Math.max(DAY_WIDTH_MIN, Math.min(DAY_WIDTH_MAX, Math.round(width * 10) / 10));
+export function clampDayWidth(width: number, fallback: number = SCALE_DAY_WIDTHS.day): number {
+  const safe = Number.isFinite(width) ? width : Number.isFinite(fallback) ? fallback : SCALE_DAY_WIDTHS.day;
+  return Math.max(DAY_WIDTH_MIN, Math.min(DAY_WIDTH_MAX, Math.round(safe * 10) / 10));
 }
 
 export interface ViewportSnapshotState {
@@ -78,20 +104,31 @@ export function buildViewportSnapshot(state: ViewportSnapshotState): ViewportOpt
   };
 }
 
+/** Clamps a progress value to [0, 1] with 2-decimal precision; non-finite input yields undefined. */
+function normalizeProgress(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.min(1, Math.round(value * 100) / 100));
+}
+
 /**
  * Smartly synchronizes status and progress for a task patch in a bidirectional,
  * idempotent, and robust manner.
+ *
+ * The result never contradicts itself: "in-progress" and "submitted" stay below 100%
+ * (so isTaskDone() agrees with the status), "submitted" is at least 75%, and a non-finite
+ * progress in the patch is dropped instead of being written to the task.
  */
 export function syncTaskProgressAndStatus(
   patch: Partial<Task>,
   currentTask?: Partial<Task>
 ): Partial<Task> {
   const result: Partial<Task> = { ...patch };
+  const patchProg = normalizeProgress(patch.progress);
+  if (patch.progress !== undefined && patch.progress !== null && patchProg === undefined) {
+    delete result.progress;
+  }
 
-  const currentProg =
-    patch.progress !== undefined && patch.progress !== null
-      ? patch.progress
-      : currentTask?.progress ?? 0;
+  const currentProg = patchProg ?? normalizeProgress(currentTask?.progress) ?? 0;
 
   const currentStatus =
     patch.status !== undefined
@@ -105,20 +142,20 @@ export function syncTaskProgressAndStatus(
     } else if (patch.status === "not-started") {
       result.progress = 0.0;
     } else if (patch.status === "submitted") {
-      result.progress = Math.max(0.75, (patch.progress !== undefined ? patch.progress : currentProg) || 0.75);
+      result.progress = Math.min(0.99, Math.max(0.75, currentProg || 0.75));
     } else if (patch.status === "in-progress") {
-      if (patch.progress === undefined) {
-        if (currentProg <= 0 || currentProg >= 1.0) {
-          result.progress = 0.25;
-        } else {
-          result.progress = currentProg;
-        }
+      if (patchProg === undefined) {
+        result.progress = currentProg <= 0 || currentProg >= 1.0 ? 0.25 : currentProg;
+      } else {
+        result.progress = Math.min(0.99, patchProg);
       }
+    } else if (patchProg !== undefined) {
+      result.progress = patchProg;
     }
   }
   // Case 2: Progress explicitly provided in patch (and status was not explicitly updated)
-  else if (patch.progress !== undefined && patch.progress !== null) {
-    const p = Math.max(0, Math.min(1, Math.round(patch.progress * 100) / 100));
+  else if (patchProg !== undefined) {
+    const p = patchProg;
     result.progress = p;
 
     if (p >= 1.0) {

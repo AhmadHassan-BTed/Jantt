@@ -33,6 +33,12 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
   const isDuo = variant === "duotone";
   const isSolid = variant === "solid";
 
+  // Gradient ids must be unique per instance: several logos are mounted at once and a duplicate id
+  // makes every instance resolve to the first one (which breaks fills when that one is hidden).
+  const uid = React.useId().replace(/:/g, "");
+  const gid = (name: string) => `${name}-${uid}`;
+  const gradientUrl = (name: string) => `url(#${gid(name)})`;
+
   const primaryColor = color || (isMono ? "currentColor" : "var(--jantt-accent, #38BDF8)");
   const subColor = secondaryColor || (isDuo ? "var(--jantt-text-muted, #94A3B8)" : isMono ? "currentColor" : "#3B82F6");
   const connectorColor = isMono ? "currentColor" : isDuo ? subColor : "var(--jantt-text-muted, #94A3B8)";
@@ -41,7 +47,7 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
     ? "transparent"
     : isSolid
     ? "var(--jantt-accent, #38BDF8)"
-    : "url(#jantt-badge-bg)";
+    : gradientUrl("jantt-badge-bg");
 
   const badgeBorder = isOutline
     ? "transparent"
@@ -57,7 +63,7 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
     ? "currentColor"
     : isDuo
     ? subColor
-    : "url(#jantt-accent-grad)";
+    : gradientUrl("jantt-accent-grad");
 
   const bar1Fill = isSolid
     ? "rgba(255, 255, 255, 0.95)"
@@ -65,7 +71,7 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
     ? "currentColor"
     : isDuo
     ? primaryColor
-    : "url(#jantt-bar1)";
+    : gradientUrl("jantt-bar1");
 
   const bar2Fill = isSolid
     ? "rgba(255, 255, 255, 0.85)"
@@ -73,7 +79,7 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
     ? "currentColor"
     : isDuo
     ? primaryColor
-    : "url(#jantt-bar2)";
+    : gradientUrl("jantt-bar2");
 
   const bar3Fill = isSolid
     ? "rgba(255, 255, 255, 0.75)"
@@ -81,7 +87,7 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
     ? "currentColor"
     : isDuo
     ? subColor
-    : "url(#jantt-bar3)";
+    : gradientUrl("jantt-bar3");
 
   const milestoneFill = isSolid
     ? "#FFFFFF"
@@ -100,27 +106,28 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
       xmlns="http://www.w3.org/2000/svg"
       className={`jantt-logo-svg jantt-logo-${variant} ${className}`}
       style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }}
+      role="img"
       aria-label="Jantt Logo"
     >
       {!isMono && !isSolid && (
         <defs>
-          <linearGradient id="jantt-badge-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id={gid("jantt-badge-bg")} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="var(--jantt-surface-solid, #10192A)" />
             <stop offset="100%" stopColor="var(--jantt-surface, #0A0F1D)" />
           </linearGradient>
-          <linearGradient id="jantt-accent-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id={gid("jantt-accent-grad")} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="var(--jantt-accent, #38BDF8)" />
             <stop offset="100%" stopColor="#3B82F6" />
           </linearGradient>
-          <linearGradient id="jantt-bar1" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id={gid("jantt-bar1")} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="var(--jantt-accent, #38BDF8)" />
             <stop offset="100%" stopColor="#60A5FA" />
           </linearGradient>
-          <linearGradient id="jantt-bar2" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id={gid("jantt-bar2")} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#3B82F6" />
             <stop offset="100%" stopColor="#818CF8" />
           </linearGradient>
-          <linearGradient id="jantt-bar3" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id={gid("jantt-bar3")} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#10B981" />
             <stop offset="100%" stopColor="#34D399" />
           </linearGradient>
@@ -221,7 +228,6 @@ export const JanttLogo: React.FC<JanttLogoProps> = ({
         gap: "10px",
         fontFamily: "'Space Grotesk', -apple-system, sans-serif",
         userSelect: "none",
-        cursor: "pointer",
         ...style
       }}
     >

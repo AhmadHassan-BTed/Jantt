@@ -4,9 +4,14 @@ export interface PlaygroundEventMap {
   PEOPLE_CHANGED: Person[];
   TEAMS_CHANGED: Team[];
   FLUSH_SAVE: void;
-  SHOW_TOAST: { message: string; isError?: boolean };
-  SNAPSHOT_RESTORED: { data: JanttData; reason: string };
-  PLAN_RESET: void;
+  /** The active plan changed (any path: select, create, import, room open, fork...). */
+  ACTIVE_PROJECT_CHANGED: { projectId: string; previousId: string | null };
+  /**
+   * A local, undoable edit of the active plan was applied (editor commit pipeline, plan reset).
+   * `before` is the plan right before the edit, `after` the resulting plan.
+   * Remote merges and project loads are never reported here.
+   */
+  LOCAL_COMMIT: { before: JanttData; after: JanttData };
 }
 
 export type EventKey = keyof PlaygroundEventMap;

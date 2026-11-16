@@ -1,4 +1,4 @@
-import { Task, getTodayISODate, isTaskOnDate, addDays } from "@jantt/core";
+import { Task, getTodayISODate, isTaskOnDate } from "@jantt/core";
 import { ITaskFilterStage, TaskQueryContext } from "../contracts";
 
 export class DateFilterStage implements ITaskFilterStage {
@@ -33,8 +33,9 @@ export class DateFilterStage implements ITaskFilterStage {
     if (mode === "range") {
       const { dateFilterRangeStart, dateFilterRangeEnd } = context;
       if (!dateFilterRangeStart && !dateFilterRangeEnd) return true;
-      const start = dateFilterRangeStart || (dateFilterRangeEnd ? addDays(dateFilterRangeEnd, -30) : "0000-01-01");
-      const end = dateFilterRangeEnd || (dateFilterRangeStart ? addDays(dateFilterRangeStart, 30) : "9999-12-31");
+      // A missing bound is open-ended, exactly as the "Start" / "End" placeholders suggest
+      const start = dateFilterRangeStart || "0000-01-01";
+      const end = dateFilterRangeEnd || "9999-12-31";
       return task.start <= end && task.end >= start;
     }
 

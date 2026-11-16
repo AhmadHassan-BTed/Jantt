@@ -10,6 +10,39 @@ import {
 import type { DateFilterMode, CompletedFilterMode, ActiveView, EffectivePerson } from "../types";
 import { STORAGE_KEYS } from "../constants";
 import { sortTasksByAssignee } from "../utils";
+import { storageService } from "../services/storage";
+
+/** Date value, range and Dim/Hide behaviour (the mode itself is persisted under STORAGE_KEYS.DATE_FILTER_MODE). */
+const DATE_FILTER_DETAILS_KEY = "jantt_date_filter_details";
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+interface DateFilterDetails {
+  value: string;
+  rangeStart: string;
+  rangeEnd: string;
+  behavior: "dim" | "hide";
+}
+
+function loadDateFilterDetails(): DateFilterDetails {
+  const fallback: DateFilterDetails = { value: getTodayISODate(), rangeStart: "", rangeEnd: "", behavior: "dim" };
+  try {
+    const parsed = storageService.getItem<Partial<DateFilterDetails>>(DATE_FILTER_DETAILS_KEY);
+    if (!parsed || typeof parsed !== "object") return fallback;
+    const date = (v: unknown, def: string) => (typeof v === "string" && (v === "" || ISO_DATE.test(v)) ? v : def);
+    return {
+      value: date(parsed.value, fallback.value) || fallback.value,
+      rangeStart: date(parsed.rangeStart, ""),
+      rangeEnd: date(parsed.rangeEnd, ""),
+      behavior: parsed.behavior === "hide" ? "hide" : "dim"
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/** Gantt elements that carry a task id (bars, label rows, grid rows). */
+const TASK_ELEMENT_SELECTOR = "[data-task-id], [data-row-id], [data-grid-row-id]";
+const DIMMED_CLASS = "jantt-task-dimmed";
 
 interface UseDateFilterOptions {
   initialMode: DateFilterMode;
@@ -39,11 +72,12 @@ export function useDateFilter({
   effectivePeople = [],
   teams = []
 }: UseDateFilterOptions) {
+  const [initialDetails] = useState(loadDateFilterDetails);
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>(initialMode);
-  const [dateFilterValue, setDateFilterValue] = useState<string>(getTodayISODate());
-  const [dateFilterRangeStart, setDateFilterRangeStart] = useState<string>("");
-  const [dateFilterRangeEnd, setDateFilterRangeEnd] = useState<string>("");
-  const [dateFilterBehavior, setDateFilterBehavior] = useState<"dim" | "hide">("dim");
+  const [dateFilterValue, setDateFilterValue] = useState<string>(initialDetails.value);
+  const [dateFilterRangeStart, setDateFilterRangeStart] = useState<string>(initialDetails.rangeStart);
+  const [dateFilterRangeEnd, setDateFilterRangeEnd] = useState<string>(initialDetails.rangeEnd);
+  const [dateFilterBehavior, setDateFilterBehavior] = useState<"dim" | "hide">(initialDetails.behavior);
   const [completedFilterMode, setCompletedFilterMode] = useState<CompletedFilterMode>(initialCompletedMode);
 
   const handleSetRangeStart = useCallback((newStart: string) => {
@@ -61,16 +95,22 @@ export function useDateFilter({
   }, [dateFilterRangeStart]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.DATE_FILTER_MODE, dateFilterMode);
-    } catch {}
+    storageService.setItem(STORAGE_KEYS.DATE_FILTER_MODE, dateFilterMode);
   }, [dateFilterMode]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.COMPLETED_FILTER_MODE, completedFilterMode);
-    } catch {}
+    storageService.setItem(STORAGE_KEYS.COMPLETED_FILTER_MODE, completedFilterMode);
   }, [completedFilterMode]);
+
+  useEffect(() => {
+    const details: DateFilterDetails = {
+      value: dateFilterValue,
+      rangeStart: dateFilterRangeStart,
+      rangeEnd: dateFilterRangeEnd,
+      behavior: dateFilterBehavior
+    };
+    storageService.setItem(DATE_FILTER_DETAILS_KEY, details);
+  }, [dateFilterValue, dateFilterRangeStart, dateFilterRangeEnd, dateFilterBehavior]);
 
   const dateFilterActiveDate = useMemo(() => {
     if (dateFilterMode === "today") return getTodayISODate();
@@ -198,72 +238,77 @@ export function useDateFilter({
     effectivePeople
   ]);
 
-  // Apply Gantt date & person filter and completed dimming via DOM after render
+  const tasksById = useMemo(() => {
+    const map = new Map<string, Task>();
+    for (const task of parsedData?.tasks || []) map.set(task.id, task);
+    return map;
+  }, [parsedData]);
+
+  // Apply Gantt date/person dimming and completed dimming to the rendered chart.
+  // Scoped to the chart container, O(elements) per pass, and re-applied when the engine
+  // re-renders rows (virtualisation, zoom, edits) instead of relying on timers.
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root: ParentNode = document.querySelector(".chart-container-card") || document;
+    const isDateDimActive = hasActiveFilter && dateFilterBehavior === "dim";
+    const isCompletedDimActive = completedFilterMode === "dim";
+
+    if (activeView !== "gantt" || (!isDateDimActive && !isCompletedDimActive)) {
+      root.querySelectorAll(`.${DIMMED_CLASS}`).forEach((el) => el.classList.remove(DIMMED_CLASS));
+      return;
+    }
+
+    const dimCache = new Map<string, boolean>();
+    const isDimmed = (taskId: string | null | undefined): boolean => {
+      if (!taskId) return false;
+      const cached = dimCache.get(taskId);
+      if (cached !== undefined) return cached;
+      const task = tasksById.get(taskId);
+      const result = Boolean(
+        task &&
+          ((isDateDimActive && !isTaskMatchingActiveFilter(task)) || (isCompletedDimActive && isTaskDone(task)))
+      );
+      dimCache.set(taskId, result);
+      return result;
+    };
+
     const applyGanttDimming = () => {
-      const isDateDimActive = hasActiveFilter && dateFilterBehavior === "dim";
-      const isCompletedDimActive = completedFilterMode === "dim";
-
-      if (activeView !== "gantt" || (!isDateDimActive && !isCompletedDimActive)) {
-        document.querySelectorAll<HTMLElement | SVGElement>("[data-task-id], [data-row-id], [data-grid-row-id], .jantt-dep-path").forEach((el) => {
-          el.classList.remove("jantt-task-dimmed");
-        });
-        return;
-      }
-
-      document.querySelectorAll<HTMLElement>("[data-task-id], [data-row-id], [data-grid-row-id]").forEach((el) => {
+      root.querySelectorAll<HTMLElement>(TASK_ELEMENT_SELECTOR).forEach((el) => {
         const taskId = el.dataset.taskId || el.dataset.rowId || el.dataset.gridRowId;
-        const task = parsedData?.tasks.find((t) => t.id === taskId);
-        if (!task) return;
-
-        const isDateMismatch = isDateDimActive && !isTaskMatchingActiveFilter(task);
-        const isCompletedDim = isCompletedDimActive && isTaskDone(task);
-
-        if (isDateMismatch || isCompletedDim) {
-          el.classList.add("jantt-task-dimmed");
-        } else {
-          el.classList.remove("jantt-task-dimmed");
-        }
+        el.classList.toggle(DIMMED_CLASS, isDimmed(taskId));
       });
-
-      document.querySelectorAll<SVGElement>(".jantt-dep-path").forEach((path) => {
-        const fromId = path.getAttribute("data-from");
-        const toId = path.getAttribute("data-to");
-        const fromTask = parsedData?.tasks.find((t) => t.id === fromId);
-        const toTask = parsedData?.tasks.find((t) => t.id === toId);
-
-        const isFromMismatch = isDateDimActive && fromTask && !isTaskMatchingActiveFilter(fromTask);
-        const isToMismatch = isDateDimActive && toTask && !isTaskMatchingActiveFilter(toTask);
-        const isFromCompletedDim = isCompletedDimActive && fromTask && isTaskDone(fromTask);
-        const isToCompletedDim = isCompletedDimActive && toTask && isTaskDone(toTask);
-
-        if (isFromMismatch || isToMismatch || isFromCompletedDim || isToCompletedDim) {
-          path.classList.add("jantt-task-dimmed");
-        } else {
-          path.classList.remove("jantt-task-dimmed");
-        }
+      root.querySelectorAll<SVGElement>(".jantt-dep-path").forEach((path) => {
+        const dim = isDimmed(path.getAttribute("data-from")) || isDimmed(path.getAttribute("data-to"));
+        path.classList.toggle(DIMMED_CLASS, dim);
       });
     };
 
-    const handle = requestAnimationFrame(applyGanttDimming);
-    const timer = window.setTimeout(applyGanttDimming, 60);
+    let frame = 0;
+    const schedule = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        applyGanttDimming();
+      });
+    };
+    schedule();
+    // childList only: our own class toggles are attribute mutations and cannot retrigger this.
+    const observer =
+      typeof MutationObserver !== "undefined" && root !== document ? new MutationObserver(schedule) : null;
+    observer?.observe(root as Node, { childList: true, subtree: true });
+
     return () => {
-      cancelAnimationFrame(handle);
-      window.clearTimeout(timer);
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
     };
   }, [
     activeView,
     currentScale,
     currentDayWidth,
-    dateFilterMode,
-    dateFilterValue,
-    dateFilterBehavior,
     completedFilterMode,
-    dateFilterRangeStart,
-    dateFilterRangeEnd,
-    selectedPersonFilter,
+    dateFilterBehavior,
     hasActiveFilter,
-    parsedData,
+    tasksById,
     isTaskMatchingActiveFilter
   ]);
 

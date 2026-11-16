@@ -20,11 +20,14 @@ Briefly describe the changes introduced by this pull request.
 
 ## Testing Checklist
 
-- [ ] All unit and integration tests pass (`npm test`)
-- [ ] TypeScript types compile without errors (`npm run typecheck`)
+Run these in order: the typecheck and several test suites consume the built `@jantt/core`.
+
 - [ ] Monorepo packages build cleanly (`npm run build`)
+- [ ] Lint passes: TypeScript typecheck and CLI syntax (`npm run lint`)
+- [ ] All unit and integration tests pass (`npm test`)
+- [ ] Published package contents are valid (`npm run check:packages`)
 - [ ] Added new unit tests covering the modified behavior
-- [ ] Zero runtime dependencies added to `@jantt/core`
+- [ ] No new runtime dependency added to `@jantt/core` (it ships with exactly one: `fflate`)
 
 ---
 

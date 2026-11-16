@@ -1,3 +1,21 @@
 name = "jantt-cors-proxy"
 main = "src/worker.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Accept http://localhost and http://127.0.0.1 origins. Keep "false" in production; for
+# `wrangler dev`, put ALLOW_DEV_ORIGINS=true in a local .dev.vars file instead.
+ALLOW_DEV_ORIGINS = "false"
+# Comma-separated extra origins allowed to call the proxy (e.g. "https://plans.example.com").
+EXTRA_ALLOWED_ORIGINS = ""
+# Comma-separated extra upstream host suffixes the proxy may fetch from (e.g. "files.example.com").
+EXTRA_ALLOWED_HOSTS = ""
+
+# Optional per-client rate limiting (Workers Rate Limiting binding). Uncomment to enable:
+# [[ratelimits]]
+# name = "RATE_LIMITER"
+# namespace_id = "1001"
+#
+#   [ratelimits.simple]
+#   limit = 60
+#   period = 60

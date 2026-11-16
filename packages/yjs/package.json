@@ -2,6 +2,16 @@
   "name": "@jantt/yjs",
   "version": "1.1.0",
   "description": "Real-time multiplayer CRDT Yjs binding for Jantt JSON Gantt chart engine",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AhmadHassan-BTed/Jantt.git",
+    "directory": "packages/yjs"
+  },
+  "homepage": "https://github.com/AhmadHassan-BTed/Jantt#readme",
+  "bugs": {
+    "url": "https://github.com/AhmadHassan-BTed/Jantt/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -33,7 +43,9 @@
   },
   "devDependencies": {
     "typescript": "^5.4.5",
-    "vitest": "^1.6.0",
     "yjs": "^13.6.14"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

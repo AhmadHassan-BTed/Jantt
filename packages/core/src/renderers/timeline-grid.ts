@@ -10,8 +10,18 @@ export interface TimelineGridProps {
   selectedDate?: string | null;
 }
 
+function appendColumn(gridLayer: HTMLElement, className: string, x: number, width: number): void {
+  const col = document.createElement("div");
+  col.className = className;
+  col.style.left = `${x}px`;
+  col.style.width = `${width}px`;
+  gridLayer.appendChild(col);
+}
+
 /**
- * Renders the background grid lines, vertical day columns, horizontal row lines, and today marker.
+ * Renders the background grid lines, vertical columns, horizontal row lines, and today marker.
+ * Vertical columns follow the lowest rendered header tier (days at day/week scale, weeks at month
+ * scale, months beyond), so zoomed-out charts do not draw one node per 1-5px day.
  */
 export function renderTimelineGrid(props: TimelineGridProps): {
   gridLayer: HTMLElement;
@@ -19,18 +29,25 @@ export function renderTimelineGrid(props: TimelineGridProps): {
 } {
   const gridLayer = document.createElement("div");
   gridLayer.className = "jantt-grid-layer";
+  const scale = props.header.scale;
 
-  // 1. Vertical day column boundary grid lines extending from header day cells
-  props.header.days.forEach((d) => {
-    const col = document.createElement("div");
-    const isSelected = props.selectedDate === d.dateStr;
-    col.className = `jantt-grid-day-col ${d.isWeekend ? "is-weekend" : ""} ${
-      isSelected ? "is-selected-date-col" : ""
-    }`.trim();
-    col.style.left = `${d.x}px`;
-    col.style.width = `${d.width}px`;
-    gridLayer.appendChild(col);
-  });
+  // 1. Vertical column boundary grid lines extending from the header's lowest tier
+  if (scale === "month" || scale === "quarter" || scale === "year") {
+    const columns = scale === "month" ? props.header.weeks : props.header.months;
+    columns.forEach((c) => appendColumn(gridLayer, "jantt-grid-day-col", c.x, c.width));
+    const selected = props.selectedDate ? props.header.days.find((d) => d.dateStr === props.selectedDate) : undefined;
+    if (selected) {
+      appendColumn(gridLayer, "jantt-grid-day-col is-selected-date-col", selected.x, selected.width);
+    }
+  } else {
+    props.header.days.forEach((d) => {
+      const isSelected = props.selectedDate === d.dateStr;
+      const className = `jantt-grid-day-col ${d.isWeekend ? "is-weekend" : ""} ${
+        isSelected ? "is-selected-date-col" : ""
+      }`.trim();
+      appendColumn(gridLayer, className, d.x, d.width);
+    });
+  }
 
   // 2. Low-opacity horizontal row boundary lines extending across the timeline
   props.taskLayouts.forEach((item) => {

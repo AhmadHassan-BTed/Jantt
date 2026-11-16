@@ -6,5 +6,4 @@
 export * from "./UserDto";
 export * from "./RoomDto";
 export * from "./PresenceDto";
-export * from "./TransactionDto";
 export * from "./RtdbCodec";

@@ -124,4 +124,11 @@ describe("Notes Schema & Integration", () => {
     expect(res.valid).toBe(false);
     expect(res.errors.some((e) => e.path === "notes[0].task_ids")).toBe(true);
   });
+
+  // Pending validator support (validator.ts): notes with wrong field types currently pass
+  // validate() and then crash the Notes view.
+  it.todo("rejects notes whose title or content is not a string");
+  it.todo("rejects notes whose tags are not a string array");
+  it.todo("rejects notes with invalid createdAt/updatedAt ISO timestamps or non-hex colors");
+  it.todo("warns about task_ids that reference tasks missing from the plan");
 });

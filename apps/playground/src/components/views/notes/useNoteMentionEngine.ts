@@ -1,77 +1,67 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import type { Task } from "@jantt/core";
 import type { EffectivePerson } from "../../../types";
 import {
   getCaretCoordinates,
-  insertPillAtRange
+  getTaskTitle,
+  insertPillAtCurrentCaret,
+  insertPillAtRange,
+  toText,
+  type PopupCoords
 } from "./note-markdown";
 
-function insertPillAtCurrentCaret(
-  editorEl: HTMLElement,
-  pillData: { type: "person" | "task"; id: string; label: string; color?: string }
-) {
-  const sel = window.getSelection();
-  let range: Range | null = null;
-  if (sel && sel.rangeCount > 0) {
-    range = sel.getRangeAt(0);
-  }
+/** Upper bound on rendered suggestions so large plans stay responsive while typing. */
+const MAX_SUGGESTIONS = 50;
 
-  const pill = document.createElement("span");
-  pill.className = `note-mention-pill ${pillData.type === "person" ? "is-person" : "is-task"}`;
-  pill.setAttribute("contenteditable", "false");
-  pill.setAttribute("data-mention-type", pillData.type);
-  pill.setAttribute("data-mention-id", pillData.id);
-  pill.setAttribute("data-mention-label", pillData.label);
-
-  if (pillData.type === "person") {
-    pill.innerHTML = `
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="4"></circle>
-        <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
-      </svg>
-      <span class="note-pill-text">@${pillData.label}</span>
-    `;
-  } else {
-    pill.innerHTML = `
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="9 11 12 14 22 4"></polyline>
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-      </svg>
-      <span class="note-pill-text">${pillData.id}: ${pillData.label}</span>
-    `;
-  }
-
-  const trailingSpace = document.createTextNode("\u00A0");
-
-  if (range && editorEl.contains(range.commonAncestorContainer)) {
-    range.deleteContents();
-    range.insertNode(trailingSpace);
-    range.insertNode(pill);
-
-    sel?.removeAllRanges();
-    const newRange = document.createRange();
-    newRange.setStart(trailingSpace, 1);
-    newRange.setEnd(trailingSpace, 1);
-    sel?.addRange(newRange);
-  } else {
-    editorEl.appendChild(pill);
-    editorEl.appendChild(trailingSpace);
-    sel?.removeAllRanges();
-    const newRange = document.createRange();
-    newRange.setStart(trailingSpace, 1);
-    newRange.setEnd(trailingSpace, 1);
-    sel?.addRange(newRange);
-  }
-
-  editorEl.focus();
-}
+const PERSON_TRIGGER_RE = /(?:^|\s)@([\p{L}\p{N}_.\-]*)$/u;
+const TASK_TRIGGER_RE = /(?:^|\s)\/([\p{L}\p{N}_.\-]*)$/u;
 
 export interface MentionPopupState {
   isOpen: boolean;
   type: "person" | "task";
   query: string;
-  coords: { top: number; left: number };
+  coords: PopupCoords;
   selectedIndex: number;
+}
+
+interface PopupRange {
+  textNode: Text;
+  startIndex: number;
+  endIndex: number;
+}
+
+/**
+ * Closes a popover on an outside pointer press or Escape, returning focus to its trigger.
+ * `containerRef` must wrap both the trigger and the popover.
+ */
+export function usePopoverDismiss(
+  open: boolean,
+  onDismiss: () => void,
+  containerRef: React.RefObject<HTMLElement>,
+  triggerRef?: React.RefObject<HTMLElement>
+) {
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const container = containerRef.current;
+      if (container && !container.contains(e.target as Node)) onDismissRef.current();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onDismissRef.current();
+      triggerRef?.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, containerRef, triggerRef]);
 }
 
 export function useNoteMentionEngine(
@@ -80,200 +70,178 @@ export function useNoteMentionEngine(
   allTasks: Task[],
   onContentChange: () => void
 ) {
-  const popupRangeRef = useRef<{ textNode: Text; startIndex: number; endIndex: number } | null>(null);
+  const popupRangeRef = useRef<PopupRange | null>(null);
 
   const [mentionPopup, setMentionPopup] = useState<MentionPopupState>({
     isOpen: false,
     type: "person",
     query: "",
-    coords: { top: 0, left: 0 },
+    coords: { left: 0, top: 0, maxHeight: 260 },
     selectedIndex: 0
   });
 
-  const insertPersonPill = useCallback(
-    (person: EffectivePerson) => {
+  const closeMentionPopup = useCallback(() => {
+    popupRangeRef.current = null;
+    setMentionPopup((prev) => (prev.isOpen ? { ...prev, isOpen: false } : prev));
+  }, []);
+
+  const insertPill = useCallback(
+    (pillData: { type: "person" | "task"; id: string; label: string; color?: string }) => {
       const editorEl = contentEditableRef.current;
       if (!editorEl) return;
-
       const targetRange = popupRangeRef.current;
       if (targetRange && targetRange.textNode.parentNode && editorEl.contains(targetRange.textNode)) {
-        insertPillAtRange(editorEl, targetRange, {
-          type: "person",
-          id: person.id,
-          label: person.name,
-          color: person.color
-        });
+        insertPillAtRange(editorEl, targetRange, pillData);
       } else {
-        insertPillAtCurrentCaret(editorEl, {
-          type: "person",
-          id: person.id,
-          label: person.name,
-          color: person.color
-        });
+        insertPillAtCurrentCaret(editorEl, pillData);
       }
-
-      popupRangeRef.current = null;
-      setMentionPopup((prev) => ({ ...prev, isOpen: false }));
+      closeMentionPopup();
       onContentChange();
     },
-    [contentEditableRef, onContentChange]
+    [contentEditableRef, onContentChange, closeMentionPopup]
+  );
+
+  const insertPersonPill = useCallback(
+    (person: EffectivePerson) =>
+      insertPill({ type: "person", id: person.id, label: toText(person.name) || person.id, color: person.color }),
+    [insertPill]
   );
 
   const insertTaskPill = useCallback(
-    (task: Task) => {
-      const editorEl = contentEditableRef.current;
-      if (!editorEl) return;
-
-      const targetRange = popupRangeRef.current;
-      const label = task.label || task.name || task.id;
-      if (targetRange && targetRange.textNode.parentNode && editorEl.contains(targetRange.textNode)) {
-        insertPillAtRange(editorEl, targetRange, {
-          type: "task",
-          id: task.id,
-          label
-        });
-      } else {
-        insertPillAtCurrentCaret(editorEl, {
-          type: "task",
-          id: task.id,
-          label
-        });
-      }
-
-      popupRangeRef.current = null;
-      setMentionPopup((prev) => ({ ...prev, isOpen: false }));
-      onContentChange();
-    },
-    [contentEditableRef, onContentChange]
+    (task: Task) => insertPill({ type: "task", id: task.id, label: getTaskTitle(task) }),
+    [insertPill]
   );
 
   const autocompletePeople = useMemo(() => {
     if (!mentionPopup.isOpen || mentionPopup.type !== "person") return [];
     const q = mentionPopup.query.trim().toLowerCase();
-    if (!q) return effectivePeople;
-    return effectivePeople.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q) ||
-        p.name.toLowerCase().replace(/\s+/g, "").includes(q)
-    );
+    const matches = q
+      ? effectivePeople.filter((p) => {
+          const name = toText(p.name).toLowerCase();
+          return name.includes(q) || toText(p.id).toLowerCase().includes(q) || name.replace(/\s+/g, "").includes(q);
+        })
+      : effectivePeople;
+    return matches.slice(0, MAX_SUGGESTIONS);
   }, [mentionPopup.isOpen, mentionPopup.type, mentionPopup.query, effectivePeople]);
 
   const autocompleteTasks = useMemo(() => {
     if (!mentionPopup.isOpen || mentionPopup.type !== "task") return [];
     const q = mentionPopup.query.trim().toLowerCase();
-    if (!q) return allTasks;
-    return allTasks.filter((t) => {
-      const title = t.label || t.name || "";
-      return t.id.toLowerCase().includes(q) || title.toLowerCase().includes(q);
-    });
+    const results: Task[] = [];
+    for (const t of allTasks) {
+      if (t._deleted) continue;
+      if (!q || toText(t.id).toLowerCase().includes(q) || getTaskTitle(t).toLowerCase().includes(q)) {
+        results.push(t);
+        if (results.length >= MAX_SUGGESTIONS) break;
+      }
+    }
+    return results;
   }, [mentionPopup.isOpen, mentionPopup.type, mentionPopup.query, allTasks]);
 
   const handleEditorInput = useCallback(() => {
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) {
+    const anchorNode = sel && sel.rangeCount > 0 ? sel.anchorNode : null;
+    if (!sel || !anchorNode || anchorNode.nodeType !== Node.TEXT_NODE) {
+      closeMentionPopup();
       onContentChange();
       return;
     }
 
-    const anchorNode = sel.anchorNode;
-    if (!anchorNode || anchorNode.nodeType !== Node.TEXT_NODE) {
-      if (mentionPopup.isOpen) {
-        setMentionPopup((prev) => ({ ...prev, isOpen: false }));
-        popupRangeRef.current = null;
-      }
-      onContentChange();
-      return;
-    }
-
-    const text = anchorNode.nodeValue || "";
     const caretPos = sel.anchorOffset;
-    const textBeforeCaret = text.slice(0, caretPos);
+    const textBeforeCaret = (anchorNode.nodeValue || "").slice(0, caretPos);
+    const atMatch = PERSON_TRIGGER_RE.exec(textBeforeCaret);
+    const slashMatch = atMatch ? null : TASK_TRIGGER_RE.exec(textBeforeCaret);
+    const match = atMatch ?? slashMatch;
 
-    const atMatch = textBeforeCaret.match(/(?:^|\s)@([a-zA-Z0-9_.-]*)$/);
-    const slashMatch = textBeforeCaret.match(/(?:^|\s)\/([a-zA-Z0-9_-]*)$/);
-
-    if (atMatch) {
-      const query = atMatch[1];
-      const atIndex = textBeforeCaret.lastIndexOf("@");
-      const coords = getCaretCoordinates() || { top: 120, left: 120 };
+    if (match) {
+      const type = atMatch ? "person" : "task";
       popupRangeRef.current = {
         textNode: anchorNode as Text,
-        startIndex: atIndex,
+        startIndex: textBeforeCaret.lastIndexOf(atMatch ? "@" : "/"),
         endIndex: caretPos
       };
-      setMentionPopup({
+      const coords =
+        getCaretCoordinates(null, contentEditableRef.current) ?? { left: 16, top: 16, maxHeight: 260 };
+      setMentionPopup((prev) => ({
         isOpen: true,
-        type: "person",
-        query,
+        type,
+        query: match[1],
         coords,
-        selectedIndex: 0
-      });
-    } else if (slashMatch) {
-      const query = slashMatch[1];
-      const slashIndex = textBeforeCaret.lastIndexOf("/");
-      const coords = getCaretCoordinates() || { top: 120, left: 120 };
-      popupRangeRef.current = {
-        textNode: anchorNode as Text,
-        startIndex: slashIndex,
-        endIndex: caretPos
-      };
-      setMentionPopup({
-        isOpen: true,
-        type: "task",
-        query,
-        coords,
-        selectedIndex: 0
-      });
+        // Keep the highlighted row while the query is unchanged (e.g. caret re-entry).
+        selectedIndex: prev.isOpen && prev.type === type && prev.query === match[1] ? prev.selectedIndex : 0
+      }));
     } else {
-      if (mentionPopup.isOpen) {
-        setMentionPopup((prev) => ({ ...prev, isOpen: false }));
-        popupRangeRef.current = null;
-      }
+      closeMentionPopup();
     }
 
     onContentChange();
-  }, [mentionPopup.isOpen, onContentChange]);
+  }, [contentEditableRef, onContentChange, closeMentionPopup]);
 
   const handleEditorKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!mentionPopup.isOpen) return;
 
-      const itemsCount =
-        mentionPopup.type === "person" ? autocompletePeople.length : autocompleteTasks.length;
+      const items = mentionPopup.type === "person" ? autocompletePeople : autocompleteTasks;
+      const itemsCount = items.length;
 
-      if (e.key === "ArrowDown") {
+      if (e.key === "ArrowDown" && itemsCount > 0) {
         e.preventDefault();
-        setMentionPopup((prev) => ({
-          ...prev,
-          selectedIndex: (prev.selectedIndex + 1) % Math.max(1, itemsCount)
-        }));
-      } else if (e.key === "ArrowUp") {
+        setMentionPopup((prev) => ({ ...prev, selectedIndex: (prev.selectedIndex + 1) % itemsCount }));
+      } else if (e.key === "ArrowUp" && itemsCount > 0) {
         e.preventDefault();
-        setMentionPopup((prev) => ({
-          ...prev,
-          selectedIndex: (prev.selectedIndex - 1 + itemsCount) % Math.max(1, itemsCount)
-        }));
+        setMentionPopup((prev) => ({ ...prev, selectedIndex: (prev.selectedIndex - 1 + itemsCount) % itemsCount }));
       } else if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        if (mentionPopup.type === "person" && autocompletePeople[mentionPopup.selectedIndex]) {
-          insertPersonPill(autocompletePeople[mentionPopup.selectedIndex]);
-        } else if (mentionPopup.type === "task" && autocompleteTasks[mentionPopup.selectedIndex]) {
-          insertTaskPill(autocompleteTasks[mentionPopup.selectedIndex]);
+        if (itemsCount === 0) {
+          // Nothing to pick: let the key behave normally (newline / focus move).
+          closeMentionPopup();
+          return;
         }
+        e.preventDefault();
+        const index = Math.min(mentionPopup.selectedIndex, itemsCount - 1);
+        if (mentionPopup.type === "person") insertPersonPill(autocompletePeople[index]);
+        else insertTaskPill(autocompleteTasks[index]);
       } else if (e.key === "Escape") {
         e.preventDefault();
-        setMentionPopup((prev) => ({ ...prev, isOpen: false }));
-        popupRangeRef.current = null;
+        e.stopPropagation();
+        closeMentionPopup();
       }
     },
-    [mentionPopup, autocompletePeople, autocompleteTasks, insertPersonPill, insertTaskPill]
+    [mentionPopup, autocompletePeople, autocompleteTasks, insertPersonPill, insertTaskPill, closeMentionPopup]
   );
 
-  const closeMentionPopup = useCallback(() => {
-    setMentionPopup((prev) => ({ ...prev, isOpen: false }));
-    popupRangeRef.current = null;
-  }, []);
+  // While open: close when the caret leaves the trigger text, follow the caret on scroll/resize.
+  useEffect(() => {
+    if (!mentionPopup.isOpen) return;
+
+    const onSelectionChange = () => {
+      const target = popupRangeRef.current;
+      const sel = window.getSelection();
+      if (!target || !sel || sel.rangeCount === 0) return closeMentionPopup();
+      if (sel.anchorNode !== target.textNode || sel.anchorOffset <= target.startIndex) closeMentionPopup();
+    };
+
+    const reposition = (e?: Event) => {
+      const el = e?.target;
+      if (el instanceof Element && el.closest(".note-mention-dropdown")) return;
+      const target = popupRangeRef.current;
+      if (!target || !target.textNode.isConnected) return closeMentionPopup();
+      const range = document.createRange();
+      const len = target.textNode.data.length;
+      range.setStart(target.textNode, Math.min(target.startIndex, len));
+      range.setEnd(target.textNode, Math.min(target.endIndex, len));
+      const coords = getCaretCoordinates(range, contentEditableRef.current);
+      if (coords) setMentionPopup((prev) => (prev.isOpen ? { ...prev, coords } : prev));
+    };
+
+    document.addEventListener("selectionchange", onSelectionChange);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [mentionPopup.isOpen, contentEditableRef, closeMentionPopup]);
 
   return {
     mentionPopup,

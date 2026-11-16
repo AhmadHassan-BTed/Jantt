@@ -19,6 +19,8 @@ export interface ToolbarProps {
   criticalCount: number;
   searchQuery: string;
   autoCascade: boolean;
+  /** View-only charts show the Auto-Cascade rule but cannot change it. */
+  readOnly?: boolean;
   selectedDate?: string | null;
   showDateFilterBadge?: boolean;
   dayWidth: number;
@@ -41,6 +43,48 @@ export interface ToolbarProps {
   onExportCsv?: () => void;
 }
 
+type ToolbarPropsRef = { current: ToolbarProps };
+
+let popoverIdCounter = 0;
+
+/** Reflects the Auto-Cascade state, and whether it may be changed (not in read-only charts), on its switch. */
+function syncCascadeSwitch(scope: ParentNode, props: ToolbarProps): void {
+  const btn = scope.querySelector<HTMLButtonElement>('[data-switch="auto-cascade"]');
+  const row = scope.querySelector<HTMLElement>('[data-action="toggle-cascade"]');
+  if (!btn || !row) return;
+  const locked = Boolean(props.readOnly);
+  btn.classList.toggle("is-active", props.autoCascade);
+  btn.setAttribute("aria-checked", String(props.autoCascade));
+  btn.setAttribute("aria-disabled", String(locked));
+  row.classList.toggle("is-disabled", locked);
+  row.title = locked
+    ? "View only: the scheduling rule cannot be changed"
+    : "Click to toggle auto-cascading dependencies";
+}
+
+/** Identifies which Data & Persistence actions are available, to rebuild that section on change. */
+function dataActionsKey(props: ToolbarProps): string {
+  return [props.onOpenAutoSave, props.onImportJson, props.onExportJson, props.onExportCsv]
+    .map((cb) => (cb ? "1" : "0"))
+    .join("");
+}
+
+function createAddTaskButton(propsRef: ToolbarPropsRef): HTMLButtonElement {
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "jantt-add-task-btn";
+  addBtn.title = "Add a new task to this schedule";
+  addBtn.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+      <line x1="12" y1="5" x2="12" y2="19"></line>
+      <line x1="5" y1="12" x2="19" y2="12"></line>
+    </svg>
+    <span>Add Task</span>
+  `;
+  addBtn.addEventListener("click", () => propsRef.current.onAddTask?.());
+  return addBtn;
+}
+
 /**
  * Renders the top chart toolbar organized into 3 intuitive zones:
  * - Left Zone: Schedule Title and Task count badge.
@@ -51,8 +95,9 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   const toolbar = document.createElement("div");
   toolbar.className = "jantt-toolbar";
 
-  const propsRef = { current: props };
+  const propsRef: ToolbarPropsRef = { current: props };
   (toolbar as any).__propsRef = propsRef;
+  (toolbar as any).__dataActionsKey = dataActionsKey(props);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // ZONE 1: LEFT (Schedule Title & Task Count)
@@ -88,7 +133,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
     </button>
-    <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" />
+    <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" aria-label="Timeline zoom (pixels per day)" />
     <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -128,6 +173,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     btn.className = `jantt-scale-btn ${s === props.currentScale ? "is-active" : ""}`;
     btn.textContent = s;
     btn.title = `Switch to ${s} scale view`;
+    btn.setAttribute("aria-pressed", String(s === props.currentScale));
     btn.addEventListener("click", () => propsRef.current.onScaleChange(s));
     scaleGroup.appendChild(btn);
   });
@@ -145,7 +191,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         <path d="M12 3v18M8 6l4-3 4 3M8 18l4 3 4-3"></path>
       </svg>
     </span>
-    <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="Drag to adjust task row height (${props.rowHeight}px)" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
+    <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="Drag to adjust task row height (${props.rowHeight}px)" aria-label="Task row height (pixels)" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
     <span class="jantt-rowheight-label">${props.rowHeightMode === "fit" ? "Fit" : `${props.rowHeight}px`}</span>
     <span class="jantt-zoom-strip-divider"></span>
     <div class="jantt-scale-group">
@@ -185,8 +231,9 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   critBtn.type = "button";
   critBtn.className = `jantt-critical-btn ${props.showCritical ? "is-active" : ""}`;
   critBtn.title = "Highlight the critical chain of dependent tasks controlling project duration";
+  critBtn.setAttribute("aria-pressed", String(props.showCritical));
   critBtn.innerHTML = `
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
     </svg>
     <span>Critical Path (${props.criticalCount})</span>
@@ -238,7 +285,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
       </svg>
     </span>
-    <input type="text" class="jantt-search-input" placeholder="Search tasks..." value="${escapeHtml(props.searchQuery)}" />
+    <input type="text" class="jantt-search-input" placeholder="Search tasks..." aria-label="Search tasks" value="${escapeHtml(props.searchQuery)}" />
   `;
   const sInput = searchBox.querySelector<HTMLInputElement>(".jantt-search-input")!;
   sInput.addEventListener("input", (e) => {
@@ -248,30 +295,22 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 
   // 3b. Add Task Primary Button
   if (props.onAddTask) {
-    const addBtn = document.createElement("button");
-    addBtn.type = "button";
-    addBtn.className = "jantt-add-task-btn";
-    addBtn.title = "Add a new task to this schedule";
-    addBtn.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-      <span>Add Task</span>
-    `;
-    addBtn.addEventListener("click", () => propsRef.current.onAddTask?.());
-    rightZone.appendChild(addBtn);
+    rightZone.appendChild(createAddTaskButton(propsRef));
   }
 
   // 3c. Settings Trigger Button & Popover
   const settingsWrap = document.createElement("div");
   settingsWrap.className = "jantt-settings-wrap";
 
+  const popoverId = `jantt-settings-popover-${++popoverIdCounter}`;
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";
   settingsBtn.className = "jantt-settings-btn";
   settingsBtn.title = "Chart Settings (Link routing, auto-cascade engine, baselines)";
   settingsBtn.setAttribute("aria-label", "Chart Settings");
+  settingsBtn.setAttribute("aria-haspopup", "dialog");
+  settingsBtn.setAttribute("aria-controls", popoverId);
+  settingsBtn.setAttribute("aria-expanded", "false");
   settingsBtn.innerHTML = `
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="3"></circle>
@@ -282,7 +321,8 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   settingsWrap.appendChild(settingsBtn);
 
   // Settings Popover Panel
-  const popover = renderSettingsPopover(propsRef, () => togglePopover(false));
+  const popover = renderSettingsPopover(propsRef, () => togglePopover(false, true));
+  popover.id = popoverId;
   settingsWrap.appendChild(popover);
 
   const onDocClick = (e: MouseEvent) => {
@@ -303,30 +343,43 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
       return;
     }
     if (e.key === "Escape" && popover.classList.contains("is-open")) {
-      togglePopover(false);
+      togglePopover(false, true);
     }
   };
 
-  const togglePopover = (open?: boolean) => {
-    const isOpen = open !== undefined ? open : !popover.classList.contains("is-open");
+  /**
+   * Places the panel directly under its trigger and fits it inside the chart and the viewport:
+   * the chart root clips overflow, so the panel never flips above the toolbar; instead its height
+   * is capped to the space below (it scrolls internally) and it is left-aligned when right-aligning
+   * would push it past the chart's left edge. Phones get a bottom sheet from CSS instead.
+   */
+  const positionPopover = () => {
+    const root = toolbar.closest<HTMLElement>(".jantt-container");
+    const triggerRect = settingsWrap.getBoundingClientRect();
+    const rootRect = root?.getBoundingClientRect();
+    const bottomLimit = Math.min(window.innerHeight, rootRect && rootRect.height > 0 ? rootRect.bottom : window.innerHeight);
+    const available = Math.floor(bottomLimit - triggerRect.bottom - 16);
+    popover.style.setProperty("--jantt-popover-max-h", `${Math.max(160, available)}px`);
+    const leftLimit = (rootRect ? rootRect.left : 0) + 8;
+    const width = popover.offsetWidth || 310;
+    popover.classList.toggle("is-align-left", triggerRect.width > 0 && triggerRect.right - width < leftLimit);
+  };
+
+  const togglePopover = (open?: boolean, restoreFocus = false) => {
+    const wasOpen = popover.classList.contains("is-open");
+    const isOpen = open !== undefined ? open : !wasOpen;
+    if (isOpen) positionPopover();
     popover.classList.toggle("is-open", isOpen);
     settingsBtn.classList.toggle("is-active", isOpen);
+    settingsBtn.setAttribute("aria-expanded", String(isOpen));
     if (isOpen) {
-      const rect = settingsWrap.getBoundingClientRect();
-      const popoverH = 260;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      if (spaceBelow < popoverH && rect.top > popoverH) {
-        popover.style.top = "auto";
-        popover.style.bottom = "calc(100% + 8px)";
-      } else {
-        popover.style.top = "calc(100% + 8px)";
-        popover.style.bottom = "auto";
-      }
       document.addEventListener("pointerdown", onDocClick);
       document.addEventListener("keydown", onDocKeydown);
+      if (!wasOpen) popover.focus({ preventScroll: true });
     } else {
       document.removeEventListener("pointerdown", onDocClick);
       document.removeEventListener("keydown", onDocKeydown);
+      if (wasOpen && restoreFocus) settingsBtn.focus({ preventScroll: true });
     }
     propsRef.current.onSettingsOpenChange?.(isOpen);
   };
@@ -334,6 +387,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   if (props.isSettingsOpen) {
     popover.classList.add("is-open");
     settingsBtn.classList.add("is-active");
+    settingsBtn.setAttribute("aria-expanded", "true");
     document.addEventListener("pointerdown", onDocClick);
     document.addEventListener("keydown", onDocKeydown);
   }
@@ -381,7 +435,9 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   if (zoomLabel) zoomLabel.textContent = `${Math.round(nextProps.dayWidth)}px`;
 
   toolbar.querySelectorAll<HTMLButtonElement>(".jantt-zoom-strip .jantt-scale-btn").forEach((btn) => {
-    btn.classList.toggle("is-active", btn.textContent === nextProps.currentScale);
+    const isActive = btn.textContent === nextProps.currentScale;
+    btn.classList.toggle("is-active", isActive);
+    btn.setAttribute("aria-pressed", String(isActive));
   });
 
   // 2b. Row Height Slider & Presets
@@ -410,6 +466,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   const critBtn = toolbar.querySelector<HTMLButtonElement>(".jantt-critical-btn");
   if (critBtn) {
     critBtn.classList.toggle("is-active", nextProps.showCritical);
+    critBtn.setAttribute("aria-pressed", String(nextProps.showCritical));
     const span = critBtn.querySelector("span");
     if (span) span.textContent = `Critical Path (${nextProps.criticalCount})`;
   }
@@ -457,16 +514,21 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
     sInput.value = nextProps.searchQuery;
   }
 
+  // 3b. Add Task button follows the current permissions (e.g. a viewer/editor role switch)
+  const addBtn = toolbar.querySelector<HTMLButtonElement>(".jantt-add-task-btn");
+  if (nextProps.onAddTask && !addBtn && propsRef) {
+    const settingsWrap = toolbar.querySelector<HTMLElement>(".jantt-settings-wrap");
+    settingsWrap?.parentElement?.insertBefore(createAddTaskButton(propsRef), settingsWrap);
+  } else if (!nextProps.onAddTask && addBtn) {
+    addBtn.remove();
+  }
+
   // 4. Settings Popover internal states
   toolbar.querySelectorAll<HTMLButtonElement>(".jantt-routing-group .jantt-scale-btn").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.routing === nextProps.currentRouting);
   });
 
-  const cascadeBtn = toolbar.querySelector<HTMLButtonElement>('[data-switch="auto-cascade"]');
-  if (cascadeBtn) {
-    cascadeBtn.classList.toggle("is-active", nextProps.autoCascade);
-    cascadeBtn.setAttribute("aria-checked", String(nextProps.autoCascade));
-  }
+  syncCascadeSwitch(toolbar, nextProps);
 
   const baselinesBtn = toolbar.querySelector<HTMLButtonElement>('[data-switch="baselines"]');
   if (baselinesBtn) {
@@ -479,7 +541,95 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   if (popover && settingsBtn && nextProps.isSettingsOpen !== undefined) {
     popover.classList.toggle("is-open", nextProps.isSettingsOpen);
     settingsBtn.classList.toggle("is-active", nextProps.isSettingsOpen);
+    settingsBtn.setAttribute("aria-expanded", String(nextProps.isSettingsOpen));
   }
+
+  // 5. Data & Persistence actions follow the callbacks currently provided
+  const nextDataKey = dataActionsKey(nextProps);
+  if (popover && propsRef && (toolbar as any).__dataActionsKey !== nextDataKey) {
+    (toolbar as any).__dataActionsKey = nextDataKey;
+    popover.querySelector(".jantt-settings-data-section")?.remove();
+    const closeBtn = popover.querySelector<HTMLButtonElement>(".jantt-settings-close-btn");
+    const section = renderDataSection(propsRef, () => closeBtn?.click());
+    if (section) popover.appendChild(section);
+  }
+}
+
+/**
+ * Builds the optional "Data & Persistence" section (divider included), or null when no data
+ * callbacks are provided.
+ */
+function renderDataSection(propsRef: ToolbarPropsRef, onClose: () => void): HTMLElement | null {
+  const props = propsRef.current;
+  if (!props.onOpenAutoSave && !props.onImportJson && !props.onExportJson && !props.onExportCsv) {
+    return null;
+  }
+
+  const section = document.createElement("div");
+  section.className = "jantt-settings-data-section";
+  section.innerHTML = `
+    <div class="jantt-settings-divider"></div>
+    <div class="jantt-settings-section">
+      <div class="jantt-settings-section-title">Data &amp; Persistence</div>
+      ${props.onOpenAutoSave ? `
+        <button type="button" class="jantt-settings-action-btn" data-action="open-autosave" title="Configure auto-save cadence and browser storage">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>Auto-Save &amp; Storage Settings</span>
+        </button>
+      ` : ""}
+      <div class="jantt-settings-action-grid">
+        ${props.onImportJson ? `
+          <button type="button" class="jantt-settings-action-btn" data-action="import-json" title="Upload and load a Jantt JSON file">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Import JSON</span>
+          </button>
+        ` : ""}
+        ${props.onExportJson ? `
+          <button type="button" class="jantt-settings-action-btn" data-action="export-json" title="Download project schedule as JSON">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Export JSON</span>
+          </button>
+        ` : ""}
+        ${props.onExportCsv ? `
+          <button type="button" class="jantt-settings-action-btn" data-action="export-csv" title="Download tasks as spreadsheet CSV">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            <span>Export CSV</span>
+          </button>
+        ` : ""}
+      </div>
+    </div>
+  `;
+
+  const bindAction = (action: string, run: () => void) => {
+    section.querySelector<HTMLElement>(`[data-action="${action}"]`)?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onClose();
+      run();
+    });
+  };
+  bindAction("open-autosave", () => propsRef.current.onOpenAutoSave?.());
+  bindAction("import-json", () => propsRef.current.onImportJson?.());
+  bindAction("export-json", () => propsRef.current.onExportJson?.());
+  bindAction("export-csv", () => propsRef.current.onExportCsv?.());
+
+  return section;
 }
 
 /**
@@ -489,9 +639,12 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
  * 2. Engine Auto-Cascade Rule
  * 3. Baseline Comparisons
  */
-function renderSettingsPopover(propsRef: { current: ToolbarProps }, onClose: () => void): HTMLElement {
+function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "jantt-settings-popover";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", "Chart Settings");
+  panel.tabIndex = -1;
 
   const props = propsRef.current;
 
@@ -554,57 +707,10 @@ function renderSettingsPopover(propsRef: { current: ToolbarProps }, onClose: () 
       </div>
     </div>
 
-    <!-- Section 3: Data, Persistence & Export -->
-    ${props.onOpenAutoSave || props.onImportJson || props.onExportJson || props.onExportCsv ? `
-      <div class="jantt-settings-divider"></div>
-      <div class="jantt-settings-section">
-        <div class="jantt-settings-section-title">Data &amp; Persistence</div>
-        ${props.onOpenAutoSave ? `
-          <button type="button" class="jantt-settings-action-btn" data-action="open-autosave" title="Configure auto-save cadence and browser storage">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-            <span>Auto-Save &amp; Storage Settings</span>
-          </button>
-        ` : ""}
-        <div class="jantt-settings-action-grid">
-          ${props.onImportJson ? `
-            <button type="button" class="jantt-settings-action-btn" data-action="import-json" title="Upload and load a Jantt JSON file">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <span>Import JSON</span>
-            </button>
-          ` : ""}
-          ${props.onExportJson ? `
-            <button type="button" class="jantt-settings-action-btn" data-action="export-json" title="Download project schedule as JSON">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              <span>Export JSON</span>
-            </button>
-          ` : ""}
-          ${props.onExportCsv ? `
-            <button type="button" class="jantt-settings-action-btn" data-action="export-csv" title="Download tasks as spreadsheet CSV">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-              </svg>
-              <span>Export CSV</span>
-            </button>
-          ` : ""}
-        </div>
-      </div>
-    ` : ""}
   `;
+
+  const dataSection = renderDataSection(propsRef, onClose);
+  if (dataSection) panel.appendChild(dataSection);
 
   // Prevent popover clicks from bubbling to document listener
   panel.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -627,10 +733,12 @@ function renderSettingsPopover(propsRef: { current: ToolbarProps }, onClose: () 
     });
   });
 
-  // Auto-cascade switch & row toggle
+  // Auto-cascade switch & row toggle (inert in read-only charts)
+  syncCascadeSwitch(panel, props);
   const cascadeRow = panel.querySelector<HTMLElement>('[data-action="toggle-cascade"]');
   cascadeRow?.addEventListener("click", (e) => {
     e.stopPropagation();
+    if (propsRef.current.readOnly) return;
     propsRef.current.onAutoCascadeToggle();
   });
 
@@ -639,38 +747,6 @@ function renderSettingsPopover(propsRef: { current: ToolbarProps }, onClose: () 
   baselinesRow?.addEventListener("click", (e) => {
     e.stopPropagation();
     propsRef.current.onBaselinesToggle?.();
-  });
-
-  // Action: Open Auto-Save Settings
-  const autoSaveBtn = panel.querySelector<HTMLElement>('[data-action="open-autosave"]');
-  autoSaveBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    onClose();
-    propsRef.current.onOpenAutoSave?.();
-  });
-
-  // Action: Import JSON
-  const importJsonBtn = panel.querySelector<HTMLElement>('[data-action="import-json"]');
-  importJsonBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    onClose();
-    propsRef.current.onImportJson?.();
-  });
-
-  // Action: Export JSON
-  const exportJsonBtn = panel.querySelector<HTMLElement>('[data-action="export-json"]');
-  exportJsonBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    onClose();
-    propsRef.current.onExportJson?.();
-  });
-
-  // Action: Export CSV
-  const exportCsvBtn = panel.querySelector<HTMLElement>('[data-action="export-csv"]');
-  exportCsvBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    onClose();
-    propsRef.current.onExportCsv?.();
   });
 
   return panel;

@@ -45,7 +45,12 @@ body:
         - Firefox
         - Safari
         - Node.js (CLI)
+        - Node.js (MCP server)
         - React / Next.js / Vite
+        - Vue / Svelte
+        - Web Component (<jantt-timeline>)
+        - Script tag (@jantt/standalone)
+        - Python / Jupyter / Streamlit
         - Other
     validations:
       required: true

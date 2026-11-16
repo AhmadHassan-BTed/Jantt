@@ -17,6 +17,7 @@ A valid Jantt JSON document is a single root object containing metadata, categor
   "$schema": "https://jantt.dev/schema/v1.json",
   "meta": { ... },
   "categories": { ... },
+  "calendars": { ... },
   "people": [ ... ],
   "teams": [ ... ],
   "notes": [ ... ],
@@ -34,6 +35,7 @@ A valid Jantt JSON document is a single root object containing metadata, categor
 | `$schema` | `string` | Optional | Schema URI (`https://jantt.dev/schema/v1.json`) |
 | `meta` | `object` | Optional | Global project metadata, default gap, scale, currency, and date bounds |
 | `categories` | `object` | Optional | Map of category IDs to visual styles (label, color, soft) |
+| `calendars` | `object` | Optional | Named working calendars (see [section 7](#7-working-calendars-calendars)) |
 | `people` | `array` | Optional | Registry of team members, roles, and avatar colors |
 | `teams` | `array` | Optional | Registry of organizational squads or departments |
 | `notes` | `array` | Optional | Shared project documentation, meeting minutes, specs, and checklists |
@@ -68,7 +70,11 @@ A valid Jantt JSON document is a single root object containing metadata, categor
 | `person` | `string` | `""` | Project lead or candidate name (automatically discovered) |
 | `start` | `string` | auto-computed | Earliest date shown on timeline (`YYYY-MM-DD`) |
 | `end` | `string` | auto-computed | Latest date shown on timeline (`YYYY-MM-DD`) |
-| `defaultGapDays` | `number` | `2` | Default spacing (in days) between dependent/sibling tasks |
+| `defaultGapDays` | `number` | `2` | Days between a predecessor's end and the start of a finish-to-start successor when neither the link nor the task sets its own lag/`gapDays`. Tasks without dependencies are never moved. |
+| `targetDate` | `string` | — | Contractual deadline (`YYYY-MM-DD`) for float (negative when breached) and PERT on-time probability |
+| `autoCascade` | `boolean` | `true` | When `false` (Strict mode), edits never move dependent tasks; violations are reported as validation warnings |
+| `calendar` | `string` \| `object` | — | Project working calendar: a preset (`"standard"`, `"continuous"`, `"compressed_4x10"`), an id from `calendars`, or an inline calendar |
+| `useWorkingDays` | `boolean` | `true` when `calendar` is set | Skip weekends and holidays when cascading dates |
 | `scale` | `string` | `"day"` | Default timeline zoom level: `"day"`, `"week"`, `"month"`, `"quarter"`, `"year"` |
 | `linkRouting` | `string` | `"orthogonal"` | Connector line routing style: `"orthogonal"`, `"curved"`, `"direct"` |
 | `showCriticalPath` | `boolean` | `false` | Whether critical path highlights are enabled by default |
@@ -141,6 +147,14 @@ Jantt defines a single source of truth for all human assignees and squads, clean
 | `avatar` | `string` | Optional | Avatar image URL or fallback initial indicator. |
 | `color` | `string` | Optional | Hex/RGB avatar accent color. |
 | `email` | `string` | Optional | Email address of the team member. |
+| `calendar` / `calendarId` | `string` \| `object` | Optional | Personal working calendar used for this person's tasks when working days are enabled. |
+
+| Field (`teams[]`) | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | **Yes** | Unique team identifier referenced by `people[].teamId` and `tasks[].teamId`. |
+| `name` | `string` | **Yes** | Display name. |
+| `color` | `string` | Optional | Badge color. |
+| `description` | `string` | Optional | Team summary or charter. |
 
 > **Single Source of Truth & Zero Internal Database IDs in JSON**:  
 > Internal database UIDs, owner UIDs, or private tokens are strictly forbidden from appearing in the plan JSON document. Tasks assigned to registered accounts reference the exact mention handle (`assignee: "@username"`). For offline dummy personas, tasks reference `assignee: "person-xxx"` or `name`. This ensures 100% coherence between the database and the JSON model.
@@ -160,8 +174,8 @@ Jantt defines a single source of truth for all human assignees and squads, clean
   "assignee": "Ahmad Hassan",
   "priority": "urgent",
   "status": "in-progress",
-  "cost": 1500,
-  "dependsOn": "ielts-exam",
+  "estimatedCost": 1500,
+  "dependsOn": ["ielts-exam", "transcripts:SS+2d"],
   "gapDays": 2,
   "progress": 0.4,
   "milestone": false,
@@ -181,28 +195,52 @@ Jantt defines a single source of truth for all human assignees and squads, clean
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | `string` | **Yes** | Unique identifier for the task |
-| `label` (or `name`) | `string` | **Yes** | Human-readable title displayed on the bar and table |
+| `label` (or `name`) | `string` | Optional (recommended) | Human-readable title displayed on the bar and table; falls back to `id` |
 | `category` | `string` | **Yes** | Category ID corresponding to a key in `categories` |
 | `start` | `string` | **Yes** | Start date in ISO format (`YYYY-MM-DD`) |
-| `end` | `string` | **Yes** | End date in ISO format (`YYYY-MM-DD`, `end >= start`) |
+| `end` | `string` | **Yes** | End date in ISO format (`YYYY-MM-DD`, `end >= start`). See [dates and durations](#dates-and-durations). |
 | `wbs` | `string` | Optional | Work Breakdown Structure hierarchical index (e.g. `"1.0"`, `"2.1"`) |
-| `assignee` | `string` | Optional | Responsible individual or role |
+| `assignee` | `string` | Optional | Responsible individual (`people[].id` or name) |
 | `priority` | `string` | Optional | `"low"`, `"medium"`, `"high"`, `"urgent"` |
-| `status` | `string` | Optional | `"pending"`, `"in-progress"`, `"completed"`, `"blocked"` |
-| `cost` / `estimatedCost` | `number` | Optional | Budget allocation or expected expenditure |
-| `dependsOn` | `string` \| `string[]` \| `null` | Optional | Single prerequisite ID or array of IDs |
-| `gapDays` (or `minGapDays`) | `number` | Optional | Spacing (in days) between prerequisite end and task start |
+| `status` | `string` | Optional | `"not-started"`, `"in-progress"`, `"submitted"`, `"completed"` (alias `"done"`), `"blocked"` |
+| `estimatedCost` / `actualCost` | `number` | Optional | Planned budget and actual expenditure |
+| `dependsOn` | `string` \| `array` \| `object` \| `null` | Optional | Prerequisite links; see [dependency syntax](#dependency-syntax) |
+| `gapDays` (or `minGapDays`) | `number` | Optional | Days between a predecessor's end and this task's start for finish-to-start links without an explicit lag (overrides `meta.defaultGapDays`; negative values allow overlap) |
 | `progress` | `number` | Optional | Completion ratio between `0.0` (0%) and `1.0` (100%) |
-| `milestone` | `boolean` | Optional | When `true` or duration is 0, renders as a 45° diamond pin |
-| `locked` | `boolean` | Optional | When `true`, task is fixed in place and skipped by the cascade solver |
+| `milestone` | `boolean` | Optional | When `true`, renders as a 45° diamond pin and is scheduled with zero duration (keep `end` equal to `start`). A task with `start = end` is also drawn as a diamond. |
+| `locked` | `boolean` | Optional | When `true`, the task is never moved by the cascade or by dragging; dependency violations are reported as warnings |
+| `calendar` / `calendarId` | `string` \| `object` | Optional | Task-specific working calendar (always uses working-day scheduling) |
 | `baseline` | `object` | Optional | Original planned dates (`{ start: "...", end: "..." }`) |
 | `urgent` | `boolean` | Optional | Displays high-priority pulse indicator |
 | `notes` | `string` | Optional | Markdown or text notes displayed in modal & tooltip |
-| `fields` | `object` | Optional | Custom domain-specific key-value pairs |
+| `color` | `string` | Optional | Bar color override; must be a plain CSS color (see [validation](#8-validation-results)), otherwise the category color is used |
+| `pert` | `object` | Optional | Three-point estimate in days (`{ optimistic, mostLikely, pessimistic }`) for PERT and Monte Carlo |
+| `fields` | `object` | Optional | Custom domain-specific key-value pairs (e.g. `optimisticDuration`, `mostLikelyDuration`, `pessimisticDuration` for PERT) |
+
+### Dates and durations
+
+- Dates are calendar days (`YYYY-MM-DD`); a well-formed time suffix such as `T09:00:00Z` is tolerated and ignored.
+- The bar is drawn through the `end` day, while scheduling measures a task's duration as `end - start` days. A milestone has `end = start` and zero duration.
+- A finish-to-start link with gap `g` therefore starts the successor `g` days after the predecessor's `end` date (the default gap of 2 leaves one free day between the bars).
+
+### Dependency syntax
+
+`dependsOn` accepts a single entry, a comma-separated string, or an array mixing strings and objects:
+
+| Form | Meaning |
+|---|---|
+| `"design"` | Finish-to-start, gap = `gapDays` / `meta.defaultGapDays` |
+| `"design:SS"` | Start-to-start with no lag (the gap is not applied to SS/FF/SF) |
+| `"design:FS+0"` | Finish-to-start with an explicit zero lag (overrides the gap) |
+| `"design:FF-1d"` | Finish-to-finish, successor may finish 1 day before the predecessor |
+| `"design+3d"` | Finish-to-start with a 3-day lag |
+| `{ "id": "design", "type": "SF", "lag": 2 }` | Object form (`lag` or `lagDays`, whole days within ±3650) |
+
+Types: `FS` finish-to-start (default), `SS` start-to-start, `FF` finish-to-finish, `SF` start-to-finish. An entry that exactly matches an existing task id is always read as that id, so ids such as `"render-3d"` are safe. Unknown types, non-numeric or out-of-range lags, and entries that are neither strings nor objects are reported as `INVALID_DEPENDENCY`.
 
 ---
 
-## 4. Notes Specification (`notes[]`)
+## 6. Notes Specification (`notes[]`)
 
 Shared project documentation, meeting minutes, architecture RFCs, and decision logs stored directly in the project JSON.
 
@@ -239,20 +277,41 @@ Shared project documentation, meeting minutes, architecture RFCs, and decision l
 
 ---
 
-## 5. People & Teams Specification (`people[]`, `teams[]`)
+## 7. Working Calendars (`calendars`)
+
+Working calendars make the cascade skip non-working days. A calendar is referenced by preset name (`"standard"` Mon-Fri, `"continuous"` 7 days, `"compressed_4x10"` Mon-Thu), by id from `calendars`, or written inline. A task uses its own calendar, then its assignee's, then `meta.calendar`, then Monday-Friday.
 
 ```json
 {
-  "teams": [
-    { "id": "eng", "name": "Engineering", "color": "#3B82F6", "description": "Core software team" }
-  ],
-  "people": [
-    { "id": "p-ahmad", "name": "Ahmad Hassan", "teamId": "eng", "role": "Lead Architect", "color": "#10B981" }
-  ]
+  "meta": { "calendar": "site", "useWorkingDays": true },
+  "calendars": {
+    "site": {
+      "workingDays": [1, 2, 3, 4, 5, 6],
+      "region": "UK",
+      "holidays": ["2026-08-14", { "date": "2026-12-24", "name": "Shutdown" }],
+      "exceptions": [{ "date": "2026-12-26", "isWorkingDay": true }]
+    }
+  }
 }
 ```
 
-| Entity | Fields | Description |
+| Field | Type | Description |
 |---|---|---|
-| **`teams[]`** | `id` (*required*), `name` (*required*), `color`, `description` | Workload squad group with color badges |
-| **`people[]`** | `id` (*required*), `name` (*required*), `teamId`, `role`, `color`, `avatar` | Registered team member with avatar initials and task allocations |
+| `workingDays` | `(number \| string)[]` | Weekdays `0` (Sun) - `6` (Sat) or names like `"Mon"`; invalid or empty lists fall back to Monday-Friday (with a validation warning) |
+| `region` | `string` | Statutory holidays with weekend substitute days: `US` (federal), `UK`/`GB` (England & Wales), `EU`, `CA` (federal), `AU` (national) |
+| `holidays` | `array` | Extra non-working dates (`"YYYY-MM-DD"` or `{ date, name }`) |
+| `exceptions` | `array` | `{ date, isWorkingDay }` overrides that win over weekends and holidays |
+
+---
+
+## 8. Validation Results
+
+`validate()` returns `{ valid, errors, warnings }`. **Errors** make the plan invalid: missing or duplicate ids, bad dates, unknown categories, dangling, circular or malformed dependencies, bad progress, `people`/`teams` entries without a string `id` and `name`, and notes whose `title`, `content` or `tags` have the wrong type. **Warnings** never block loading:
+
+- locked tasks (or any task in Strict mode) that violate a dependency (`DEP_TIMING_CONFLICT`) and milestones with a duration (`MILESTONE_HAS_DURATION`);
+- malformed calendars (`INVALID_CALENDAR`), an invalid `meta.targetDate` and dates outside the years 1900-2200 (`INVALID_DATE_RANGE`);
+- colors (category, task, person, team, note) that are not plain CSS colors (`INVALID_COLOR`). Accepted: hex (`#abc`, `#aabbcc`, with optional alpha), `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/`oklch()` with plain arguments, `var(--token)` and named colors. Renderers replace any other value with a default color;
+- non-numeric `estimatedCost`/`actualCost`/`gapDays`, non-string task text (`label`, `name`, `assignee`, `description`, `notes`), task ids longer than 256 characters, avatars that are neither initials nor an `https:` URL, and malformed `meta.baselines` snapshots (`SCHEMA_MISMATCH`);
+- notes attached to tasks that do not exist (`DANGLING_REFERENCE`) and invalid note timestamps.
+
+Validation is advisory for rendering safety: every renderer escapes text and sanitizes colors itself, so a plan that fails validation still cannot inject markup.

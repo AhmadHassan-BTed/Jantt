@@ -62,14 +62,19 @@ describe("2D Virtualization & Windowing Engine", () => {
     });
 
     it("handles extreme scale (100,000 tasks) with sub-millisecond execution", () => {
-      const start = performance.now();
       const win = computeVerticalVirtualWindow(100000, 42, 2100000, 1000, 10, 50);
-      const elapsed = performance.now() - start;
-
       expect(win.isVirtual).toBe(true);
       expect(win.totalHeight).toBe(4200000);
       expect(win.visibleCount).toBeLessThan(50);
-      expect(elapsed).toBeLessThan(5); // Sub-millisecond calculation
+
+      // Averaged over many calls so a single GC pause or busy CI worker cannot fail the O(1) claim
+      const iterations = 1000;
+      const start = performance.now();
+      for (let i = 0; i < iterations; i++) {
+        computeVerticalVirtualWindow(100000, 42, 2100000 + i, 1000, 10, 50);
+      }
+      const perCallMs = (performance.now() - start) / iterations;
+      expect(perCallMs).toBeLessThan(0.5); // Sub-millisecond calculation
     });
   });
 
@@ -136,6 +141,37 @@ describe("2D Virtualization & Windowing Engine", () => {
       // Outside horizontally (far right)
       const farRight = virtualizer.isVisible(5000, 100, 1100, 40, vp2d);
       expect(farRight).toBe(false);
+    });
+
+    it("culls exactly at the rendered window edges, in dayWidth/rowHeight units", () => {
+      // 85 days x 20px = 1700px wide timeline; viewport starts at day 50 with a 5-day overscan
+      const vp2d = virtualizer.getViewport2D(500, 40, 1000, 400, 85, 20, 1000, 600);
+      const maxX = vp2d.horizontal.endDayOffset * 20;
+      const maxY = vp2d.vertical.endIndex * 40;
+      expect(maxX).toBe(1700);
+
+      // Just inside / just outside the right edge (independent of the queried box width)
+      expect(virtualizer.isVisible(maxX - 10, 300, 1100, 40, vp2d)).toBe(true);
+      expect(virtualizer.isVisible(maxX + 1, 300, 1100, 40, vp2d)).toBe(false);
+
+      // Just inside / just outside the bottom edge (independent of the queried box height)
+      expect(virtualizer.isVisible(1100, 100, maxY - 5, 4, vp2d)).toBe(true);
+      expect(virtualizer.isVisible(1100, 100, maxY + 1, 4, vp2d)).toBe(false);
+    });
+
+    it("keeps zero-width milestones visible inside the window and culls them outside", () => {
+      const vp2d = virtualizer.getViewport2D(500, 40, 1000, 400, 200, 20, 1000, 600);
+      const maxX = vp2d.horizontal.endDayOffset * 20;
+      expect(virtualizer.isVisible(1200, 0, 1100, 18, vp2d)).toBe(true);
+      expect(virtualizer.isVisible(maxX + 5, 0, 1100, 18, vp2d)).toBe(false);
+      expect(virtualizer.isVisible(vp2d.horizontal.offsetX - 5, 0, 1100, 18, vp2d)).toBe(false);
+    });
+
+    it("treats non-virtual windows as fully visible", () => {
+      const small = new PlanVirtualizer({ virtualThreshold: 1000 });
+      const vp2d = small.getViewport2D(10, 40, 0, 400, 0, 20, 0, 600);
+      expect(vp2d.vertical.isVirtual).toBe(false);
+      expect(small.isVisible(0, 10, 360, 40, vp2d)).toBe(true);
     });
   });
 });

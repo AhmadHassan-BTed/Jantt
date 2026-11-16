@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from "react";
 
 export type ModalType =
   | "prompt"
@@ -11,7 +11,11 @@ export type ModalType =
   | "version_history"
   | "username_onboarding"
   | "share_room"
-  | "github_verification";
+  | "github_verification"
+  | "read_only_fork"
+  | "editor_login"
+  | "command_palette"
+  | "shortcuts";
 
 export interface ActiveModalState {
   type: ModalType;
@@ -20,8 +24,10 @@ export interface ActiveModalState {
 
 export interface ModalContextValue {
   activeModal: ActiveModalState | null;
+  /** Opens a dialog, replacing any dialog that is already open (exactly one at a time). */
   openModal: (type: ModalType, payload?: any) => void;
-  closeModal: () => void;
+  /** Closes the active dialog. With `type`, closes only if that dialog is the active one. */
+  closeModal: (type?: ModalType) => void;
   isModalOpen: (type: ModalType) => boolean;
 }
 
@@ -38,8 +44,8 @@ export const ModalProvider: React.FC<ModalProviderProps> = ({ children }) => {
     setActiveModal({ type, payload });
   }, []);
 
-  const closeModal = useCallback(() => {
-    setActiveModal(null);
+  const closeModal = useCallback((type?: ModalType) => {
+    setActiveModal((prev) => (!type || prev?.type === type ? null : prev));
   }, []);
 
   const isModalOpen = useCallback(
@@ -47,11 +53,12 @@ export const ModalProvider: React.FC<ModalProviderProps> = ({ children }) => {
     [activeModal]
   );
 
-  return (
-    <ModalContext.Provider value={{ activeModal, openModal, closeModal, isModalOpen }}>
-      {children}
-    </ModalContext.Provider>
+  const value = useMemo<ModalContextValue>(
+    () => ({ activeModal, openModal, closeModal, isModalOpen }),
+    [activeModal, openModal, closeModal, isModalOpen]
   );
+
+  return <ModalContext.Provider value={value}>{children}</ModalContext.Provider>;
 };
 
 export function useModalRegistry(): ModalContextValue {

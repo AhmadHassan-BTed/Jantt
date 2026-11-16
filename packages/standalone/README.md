@@ -82,10 +82,11 @@ Include the compiled CSS and JS script directly from your CDN or local assets di
 
 ## Global API (`window.Jantt`)
 
-* `Jantt.mount(target, data, options)`: Mounts a full interactive Gantt chart into an HTMLElement or query selector string.
+* `Jantt.mount(target, data, options)` (alias `Jantt.render`): Mounts a full interactive Gantt chart into an HTMLElement or query selector string and returns the chart instance (`update`, `destroy`, `getData`, ...).
 * `Jantt.validate(data)`: Validates a raw JSON payload against the schema contract and DAG constraints.
-* `Jantt.resolveSchedule(tasks, defaultGapDays)`: Resolves topological dates and dependencies headlessly.
-* `Jantt.layout(resolvedData, viewport, config)`: Computes coordinate geometries for custom renderers.
+* `Jantt.resolveSchedule(tasks, defaultGapDaysOrOptions)`: Resolves topological dates and dependencies headlessly.
+* `Jantt.layout(data, viewportOptions)`: Computes coordinate geometries for custom renderers.
+* `Jantt.version`: The package version of the loaded bundle.
 
 ---
 

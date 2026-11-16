@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_call:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,15 +16,19 @@ concurrency:
 
 jobs:
   validate:
-    name: Test & Typecheck (Node ${{ matrix.node-version }})
+    name: Build, Lint & Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [20.x, 22.x]
+        # Both active LTS lines; the floor is "engines" in the root package.json.
+        node-version: [22.x, 24.x]
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v6
@@ -31,14 +39,28 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      # Build first: typecheck and several test suites consume the built @jantt/core.
       - name: Build All Packages
         run: npm run build
 
-      - name: TypeScript Typecheck
-        run: npm run typecheck
+      - name: Lint (TypeScript Typecheck & CLI Syntax)
+        run: npm run lint
 
       - name: Run Test Suite
         run: npm test
+
+      - name: Verify Published Package Contents
+        run: npm run check:packages
+
+  python:
+    name: Python Bridge Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v7
@@ -46,4 +68,4 @@ jobs:
           python-version: "3.11"
 
       - name: Run Python Tests
-        run: npm run test:python
+        run: python -m unittest discover -s python/tests

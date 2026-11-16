@@ -1,91 +1,161 @@
-import React, { useState, useEffect } from "react";
-import { UserCheck, Check, AlertCircle, Loader2, Sparkles } from "lucide-react";
-import { checkUsernameAvailable, normalizeUsername } from "../../firebase";
+import React, { useState, useEffect, useRef, useId } from "react";
+import { UserCheck, Check, AlertCircle, Loader2, Sparkles, LogOut } from "lucide-react";
+import { checkUsernameAvailable, normalizeUsername, signOutUser } from "../../firebase";
 import type { User as FirebaseUser } from "firebase/auth";
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** GitHub's login length; the validator reports anything the rules would reject. */
+const MAX_INPUT_LENGTH = 39;
 
 interface UsernameOnboardingModalProps {
   show: boolean;
   currentUser: FirebaseUser | null;
   onClaimUsername: (username: string) => Promise<any>;
+  /** "Sign out" action; defaults to signing out directly (the auth listener resets the app state). */
+  onSignOut?: () => Promise<void> | void;
 }
 
+/**
+ * Blocking dialog shown to a signed-in account without a Jantt handle. There is no dismiss:
+ * the way out without choosing a handle is "Sign out", which keeps working locally.
+ */
 export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = ({
   show,
   currentUser,
-  onClaimUsername
+  onClaimUsername,
+  onSignOut
 }) => {
   const [usernameInput, setUsernameInput] = useState("");
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  // Suggest initial username based on email or display name
-  useEffect(() => {
-    if (show && currentUser) {
-      const emailPrefix = currentUser.email?.split("@")[0] || "";
-      const suggested = normalizeUsername(currentUser.displayName || emailPrefix);
-      if (suggested) {
-        setUsernameInput(suggested);
-      }
-    }
-  }, [show, currentUser]);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestedForUidRef = useRef<string | null>(null);
+  const checkIdRef = useRef(0);
+  const titleId = useId();
+  const descriptionId = useId();
+  const inputId = useId();
+  const statusId = useId();
 
-  // Debounced check for username availability
+  const isOpen = show && Boolean(currentUser);
+
+  // Suggest a handle once per account, when the dialog first opens for it (before any typing).
+  // A different account never inherits the previous account's input.
   useEffect(() => {
+    if (!isOpen || !currentUser || suggestedForUidRef.current === currentUser.uid) return;
+    suggestedForUidRef.current = currentUser.uid;
+    const emailPrefix = currentUser.email?.split("@")[0] || "";
+    setUsernameInput(normalizeUsername(currentUser.displayName || emailPrefix).slice(0, MAX_INPUT_LENGTH));
+  }, [isOpen, currentUser]);
+
+  // Debounced availability check; only the latest request may update the result.
+  useEffect(() => {
+    const requestId = ++checkIdRef.current;
+    setIsAvailable(null);
+    setErrorMessage(null);
     if (!usernameInput.trim()) {
-      setIsAvailable(null);
-      setErrorMessage(null);
       setIsChecking(false);
       return;
     }
 
+    setIsChecking(true);
     const timer = setTimeout(async () => {
-      setIsChecking(true);
       try {
         const res = await checkUsernameAvailable(usernameInput);
+        if (requestId !== checkIdRef.current) return;
         setIsAvailable(res.available);
         setErrorMessage(res.error || null);
-      } catch (err: any) {
+      } catch {
+        if (requestId !== checkIdRef.current) return;
         setIsAvailable(false);
-        setErrorMessage(err.message || "Failed to check availability");
+        setErrorMessage("Couldn't check availability. Please try again.");
       } finally {
-        setIsChecking(false);
+        if (requestId === checkIdRef.current) setIsChecking(false);
       }
     }, 350);
 
     return () => clearTimeout(timer);
   }, [usernameInput]);
 
-  if (!show || !currentUser) return null;
+  // Dialog behaviour: initial focus, focus trap, focus restored on close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    inputRef.current?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const card = cardRef.current;
+      if (!card || e.key !== "Tab") return;
+      const focusables = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !card.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !card.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused && previouslyFocused.isConnected) previouslyFocused.focus();
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !currentUser) return null;
+
+  const handle = normalizeUsername(usernameInput);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAvailable || isSubmitting) return;
+    if (!isAvailable || isChecking || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
       await onClaimUsername(usernameInput);
     } catch (err: any) {
-      const msg = String(err?.message || err || "");
-      if (msg.toLowerCase().includes("permission denied") || msg.toLowerCase().includes("permission_denied")) {
-        setErrorMessage("Database permission denied. Make sure database.rules.json is applied to your Firebase Realtime Database in the Firebase Console.");
-      } else {
-        setErrorMessage(err.message || "Could not claim username. Please try again.");
-      }
+      setIsAvailable(false);
+      setErrorMessage(err?.message || "Could not claim username. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await (onSignOut ? onSignOut() : signOutUser());
+    } catch {
+      setErrorMessage("Sign-out failed. Please try again.");
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
   return (
-    <div className="prompt-modal-backdrop" style={{ zIndex: 9999 }}>
+    <div className="prompt-modal-backdrop">
       <div
+        ref={cardRef}
         className="prompt-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         style={{ maxWidth: "480px", width: "92%", textAlign: "center", padding: "28px 24px" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
+          aria-hidden="true"
           style={{
             width: "56px",
             height: "56px",
@@ -102,10 +172,10 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
           <Sparkles size={28} />
         </div>
 
-        <h3 style={{ margin: "0 0 6px 0", fontSize: "1.3rem", fontWeight: 700, color: "var(--jantt-text)" }}>
+        <h3 id={titleId} style={{ margin: "0 0 6px 0", fontSize: "1.3rem", fontWeight: 700, color: "var(--jantt-text)" }}>
           Choose Your Unique Username
         </h3>
-        <p style={{ margin: "0 0 20px 0", fontSize: "0.86rem", color: "var(--jantt-muted)", lineHeight: 1.4 }}>
+        <p id={descriptionId} style={{ margin: "0 0 20px 0", fontSize: "0.86rem", color: "var(--jantt-muted)", lineHeight: 1.4 }}>
           Welcome to Jantt Cloud! Teammates will use your handle to invite you to collaboration rooms and share project plans.
         </p>
 
@@ -113,7 +183,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", marginBottom: "16px" }}>
             <img
               src={currentUser.photoURL}
-              alt="Avatar"
+              alt=""
               style={{ width: "32px", height: "32px", borderRadius: "50%", border: "2px solid var(--jantt-accent)" }}
             />
             <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--jantt-text)" }}>
@@ -122,9 +192,10 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div style={{ position: "relative", marginBottom: "10px", textAlign: "left" }}>
             <label
+              htmlFor={inputId}
               style={{
                 display: "block",
                 fontSize: "0.8rem",
@@ -133,10 +204,11 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
                 marginBottom: "6px"
               }}
             >
-              Username Handle
+              Username
             </label>
             <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
               <span
+                aria-hidden="true"
                 style={{
                   position: "absolute",
                   left: "12px",
@@ -149,17 +221,24 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
                 @
               </span>
               <input
+                ref={inputRef}
+                id={inputId}
                 type="text"
-                autoFocus
                 required
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={MAX_INPUT_LENGTH}
                 placeholder="username"
                 value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                aria-invalid={isAvailable === false}
+                aria-describedby={statusId}
+                onChange={(e) => setUsernameInput(e.target.value.replace(/\s+/g, "").replace(/^@+/, ""))}
                 style={{
                   width: "100%",
                   padding: "10px 38px 10px 30px",
                   borderRadius: "8px",
-                  background: "rgba(15, 23, 42, 0.7)",
+                  background: "var(--jantt-surface, transparent)",
                   border: isAvailable === true
                     ? "1px solid #10B981"
                     : isAvailable === false
@@ -171,25 +250,29 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
                   outline: "none"
                 }}
               />
-              <div style={{ position: "absolute", right: "12px" }}>
-                {isChecking && <Loader2 size={18} className="spin" style={{ color: "var(--jantt-muted)" }} />}
+              <div aria-hidden="true" style={{ position: "absolute", right: "12px" }}>
+                {isChecking && <Loader2 size={18} className="spin-icon" style={{ color: "var(--jantt-muted)" }} />}
                 {!isChecking && isAvailable === true && <Check size={18} style={{ color: "#10B981" }} />}
                 {!isChecking && isAvailable === false && <AlertCircle size={18} style={{ color: "#EF4444" }} />}
               </div>
             </div>
           </div>
 
-          {/* Validation Status message */}
-          <div style={{ minHeight: "22px", marginBottom: "16px", textAlign: "left", fontSize: "0.8rem" }}>
+          {/* Validation status message */}
+          <div
+            id={statusId}
+            aria-live="polite"
+            style={{ minHeight: "22px", marginBottom: "16px", textAlign: "left", fontSize: "0.8rem" }}
+          >
             {isChecking && <span style={{ color: "var(--jantt-muted)" }}>Checking availability...</span>}
             {!isChecking && isAvailable === true && (
               <span style={{ color: "#34D399", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
-                <Check size={14} /> @{normalizeUsername(usernameInput)} is available!
+                <Check size={14} aria-hidden="true" /> @{handle} is available!
               </span>
             )}
             {!isChecking && isAvailable === false && errorMessage && (
-              <span style={{ color: "#F87171", display: "flex", alignItems: "center", gap: "4px" }}>
-                <AlertCircle size={14} /> {errorMessage}
+              <span role="alert" style={{ color: "#F87171", display: "flex", alignItems: "center", gap: "4px" }}>
+                <AlertCircle size={14} aria-hidden="true" /> {errorMessage}
               </span>
             )}
           </div>
@@ -197,7 +280,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={!isAvailable || isChecking || isSubmitting}
+            disabled={!isAvailable || isChecking || isSubmitting || isSigningOut}
             style={{
               width: "100%",
               padding: "12px",
@@ -211,15 +294,34 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={16} className="spin" /> Claiming Handle...
+                <Loader2 size={16} className="spin-icon" aria-hidden="true" /> Claiming Handle...
               </>
             ) : (
               <>
-                <UserCheck size={16} /> Claim @{normalizeUsername(usernameInput) || "handle"} & Start
+                <UserCheck size={16} aria-hidden="true" /> Claim @{handle || "handle"} & Start
               </>
             )}
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={isSubmitting || isSigningOut}
+          className="btn btn-secondary"
+          style={{
+            width: "100%",
+            marginTop: "10px",
+            padding: "10px",
+            fontSize: "0.85rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px"
+          }}
+        >
+          <LogOut size={14} aria-hidden="true" /> {isSigningOut ? "Signing out..." : "Sign out and keep working locally"}
+        </button>
       </div>
     </div>
   );

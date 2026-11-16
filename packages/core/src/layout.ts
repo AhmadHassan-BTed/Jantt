@@ -1,4 +1,5 @@
 import {
+  Category,
   JanttData,
   ViewportOptions,
   TaskLayout,
@@ -18,6 +19,7 @@ import {
   diffDays,
   getTodayISODate,
   getTodayProgressFraction,
+  isValidISODate,
   isWeekend,
   maxISODate,
   minISODate,
@@ -25,9 +27,10 @@ import {
 } from "./date-math";
 import { calculateCriticalPath } from "./resolver";
 import { getTaskDependencyRelations } from "./dependencies";
-import { clampDayWidth, getTaskDisplayName } from "./utils";
+import { clampDayWidth, getTaskDisplayName, sanitizeCssColor } from "./utils";
 import {
   DEFAULT_CATEGORY,
+  DEFAULT_GAP_DAYS,
   SCALE_DAY_WIDTHS,
   DEFAULT_ROW_HEIGHT,
   DEFAULT_LABEL_WIDTH,
@@ -36,21 +39,140 @@ import {
 } from "./constants";
 
 export { SCALE_DAY_WIDTHS };
+/** @deprecated Import `sanitizeCssColor` from the utils module (the single color allow-list). */
+export { sanitizeCssColor };
 
 /**
  * Derives the optimal header scale tier from a continuous day width in pixels.
  * - dayWidth >= 28px: Day tier (detailed dates and day names)
- * - 12px <= dayWidth < 28px: Week tier (compact week grouping)
- * - 5px <= dayWidth < 12px: Month tier (month grouping with milestones)
- * - 2.2px <= dayWidth < 5px: Quarter tier (quarterly grouping)
- * - dayWidth < 2.2px: Year tier (multi-year high-level roadmap)
+ * - 12px <= dayWidth < 28px: Week tier (compact day numbers)
+ * - 5px <= dayWidth < 12px: Month tier (months over ISO weeks)
+ * - 2.2px < dayWidth < 5px: Quarter tier (quarters over months)
+ * - dayWidth <= 2.2px: Year tier (multi-year roadmap). The `year` preset width
+ *   (SCALE_DAY_WIDTHS.year) maps back to "year", so presets round-trip.
  */
 export function getScaleFromDayWidth(dayWidth: number): TimeScale {
   if (dayWidth >= 28) return "day";
   if (dayWidth >= 12) return "week";
   if (dayWidth >= 5) return "month";
-  if (dayWidth >= 2.2) return "quarter";
+  if (dayWidth > SCALE_DAY_WIDTHS.year) return "quarter";
   return "year";
+}
+
+/**
+ * Upper bound on the rendered timeline span (~10 years). Every rendered day costs header and grid
+ * work, so an absurd date (typo year, hostile shared plan) must never be able to freeze the tab.
+ */
+const MAX_TIMELINE_DAYS = 3660;
+
+/**
+ * Header height in px for the rendered tiers (multi-year spans add a year row).
+ * An explicit `viewport.headerHeight` acts as a minimum.
+ */
+export function resolveHeaderHeight(spansMultipleYears: boolean, minHeight?: number): number {
+  const tiersHeight = spansMultipleYears ? MULTI_YEAR_HEADER_HEIGHT : DEFAULT_HEADER_HEIGHT;
+  return Math.max(tiersHeight, minHeight || 0);
+}
+
+export interface ChartBounds {
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  spansMultipleYears: boolean;
+}
+
+function resolveScale(data: JanttData, viewportOptions: ViewportOptions): { scale: TimeScale; dayWidth: number } {
+  if (viewportOptions.dayWidth !== undefined) {
+    const dayWidth = clampDayWidth(viewportOptions.dayWidth);
+    return { scale: getScaleFromDayWidth(dayWidth), dayWidth };
+  }
+  // Unknown or empty scale names (e.g. hand-edited meta.scale) fall back to the day tier
+  const requested = viewportOptions.scale || data.meta?.scale;
+  const scale: TimeScale =
+    requested && Object.prototype.hasOwnProperty.call(SCALE_DAY_WIDTHS, requested) ? requested : "day";
+  return { scale, dayWidth: SCALE_DAY_WIDTHS[scale] };
+}
+
+/**
+ * Computes the timeline window exactly as {@link layout} does, so callers that need the header
+ * height before laying out (fit-to-container row sizing) always agree with the rendered chart.
+ */
+export function computeChartBounds(data: JanttData, viewportOptions: ViewportOptions = {}): ChartBounds {
+  const tasks = (data.tasks || []).filter((t) => !t._deleted);
+  const { scale } = resolveScale(data, viewportOptions);
+  const showToday = viewportOptions.showToday ?? true;
+  const todayStr = getTodayISODate(viewportOptions.currentTime);
+
+  // Only real calendar dates may influence the window: one bad value must not yield NaN bounds.
+  let minTaskStart = "";
+  let maxTaskEnd = "";
+  const include = (dateStr: unknown) => {
+    if (typeof dateStr !== "string" || !isValidISODate(dateStr)) return;
+    minTaskStart = minTaskStart ? minISODate(minTaskStart, dateStr) : dateStr;
+    maxTaskEnd = maxTaskEnd ? maxISODate(maxTaskEnd, dateStr) : dateStr;
+  };
+  tasks.forEach((t) => {
+    include(t.start);
+    include(t.end);
+    include(t.baseline?.start);
+    include(t.baseline?.end);
+  });
+  if (!minTaskStart) {
+    minTaskStart = todayStr;
+    maxTaskEnd = todayStr;
+  }
+
+  // Ensure selectedDate is always within calculated timeline runway
+  include(viewportOptions.selectedDate);
+
+  // Generous runway buffer (scale-dependent)
+  const bufferBefore = scale === "year" || scale === "quarter" ? 30 : scale === "month" ? 14 : 4;
+  const bufferAfter = scale === "year" || scale === "quarter" ? 90 : scale === "month" ? 30 : 14;
+
+  const firstValidDate = (...candidates: unknown[]): string =>
+    (candidates.find((c) => typeof c === "string" && isValidISODate(c)) as string | undefined) || "";
+  let chartStart = firstValidDate(viewportOptions.startDate, data.meta?.start, data.meta?.chartStart);
+  let chartEnd = firstValidDate(viewportOptions.endDate, data.meta?.end, data.meta?.chartEnd);
+
+  if (!chartStart) {
+    const effectiveStart = showToday ? minISODate(minTaskStart, todayStr) : minTaskStart;
+    chartStart = addDays(effectiveStart, -bufferBefore);
+  } else if (diffDays(chartStart, minTaskStart) < 0) {
+    // If a task was moved BEFORE the specified chartStart, dynamically expand chartStart
+    chartStart = addDays(minTaskStart, -bufferBefore);
+  }
+
+  if (!chartEnd) {
+    const effectiveEnd = showToday ? maxISODate(maxTaskEnd, todayStr) : maxTaskEnd;
+    chartEnd = addDays(effectiveEnd, bufferAfter);
+  } else if (diffDays(chartEnd, maxTaskEnd) > 0) {
+    // If a task was pushed forward PAST the specified chartEnd, dynamically expand chartEnd!
+    chartEnd = addDays(maxTaskEnd, bufferAfter);
+  }
+
+  // Ensure minimum span of at least 7 days
+  if (diffDays(chartStart, chartEnd) < 7) {
+    chartEnd = addDays(chartStart, 14);
+  }
+
+  // Bound the span: first drop extensions caused by explicit bounds or a distant "today", then
+  // hard-cap whatever is left so pathological plans stay renderable.
+  if (diffDays(chartStart, chartEnd) > MAX_TIMELINE_DAYS) {
+    const taskWindowStart = addDays(minTaskStart, -bufferBefore);
+    const taskWindowEnd = addDays(maxTaskEnd, bufferAfter);
+    if (diffDays(chartStart, taskWindowStart) > 0) chartStart = taskWindowStart;
+    if (diffDays(taskWindowEnd, chartEnd) > 0) chartEnd = taskWindowEnd;
+    if (diffDays(chartStart, chartEnd) > MAX_TIMELINE_DAYS) {
+      chartEnd = addDays(chartStart, MAX_TIMELINE_DAYS);
+    }
+  }
+
+  return {
+    startDate: chartStart,
+    endDate: chartEnd,
+    totalDays: Math.max(diffDays(chartStart, chartEnd), 1),
+    spansMultipleYears: parseISODate(chartStart).getUTCFullYear() !== parseISODate(chartEnd).getUTCFullYear()
+  };
 }
 
 const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> = {
@@ -81,23 +203,8 @@ export function layout(
   const tasks = (data.tasks || []).filter((t) => !t._deleted);
   const categories = data.categories || {};
 
-  // Auto-adjust scale tier based on continuous dayWidth
-  let scale: TimeScale;
-  let dayWidth: number;
-
-  if (viewportOptions.dayWidth !== undefined && viewportOptions.scale === undefined) {
-    dayWidth = clampDayWidth(viewportOptions.dayWidth);
-    scale = getScaleFromDayWidth(dayWidth);
-  } else if (viewportOptions.scale !== undefined && viewportOptions.dayWidth === undefined) {
-    scale = viewportOptions.scale;
-    dayWidth = SCALE_DAY_WIDTHS[scale] || 32;
-  } else if (viewportOptions.dayWidth !== undefined && viewportOptions.scale !== undefined) {
-    dayWidth = clampDayWidth(viewportOptions.dayWidth);
-    scale = getScaleFromDayWidth(dayWidth);
-  } else {
-    scale = data.meta?.scale || "day";
-    dayWidth = SCALE_DAY_WIDTHS[scale] || 32;
-  }
+  // Auto-adjust scale tier based on continuous dayWidth (an explicit dayWidth always wins)
+  const { scale, dayWidth } = resolveScale(data, viewportOptions);
 
   const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> & {
     columns?: ViewportOptions["columns"];
@@ -132,75 +239,67 @@ export function layout(
 
   // Determine overall timeline bounds dynamically based on active tasks
   const todayStr = getTodayISODate(viewport.currentTime);
-  let minTaskStart = tasks[0]?.start || todayStr;
-  let maxTaskEnd = tasks[0]?.end || minTaskStart;
-
-  if (tasks.length > 0) {
-    tasks.forEach((t) => {
-      if (t.start) minTaskStart = minISODate(minTaskStart, t.start);
-      if (t.end) maxTaskEnd = maxISODate(maxTaskEnd, t.end);
-      if (t.baseline?.start) minTaskStart = minISODate(minTaskStart, t.baseline.start);
-      if (t.baseline?.end) maxTaskEnd = maxISODate(maxTaskEnd, t.baseline.end);
-    });
-  }
-
-  // Ensure selectedDate is always within calculated timeline runway
-  if (viewport.selectedDate) {
-    minTaskStart = minISODate(minTaskStart, viewport.selectedDate);
-    maxTaskEnd = maxISODate(maxTaskEnd, viewport.selectedDate);
-  }
-
-  // Generous runway buffer (scale-dependent)
-  const bufferBefore = scale === "year" || scale === "quarter" ? 30 : scale === "month" ? 14 : 4;
-  const bufferAfter = scale === "year" || scale === "quarter" ? 90 : scale === "month" ? 30 : 14;
-
-  let chartStart = viewportOptions.startDate || data.meta?.start || data.meta?.chartStart;
-  let chartEnd = viewportOptions.endDate || data.meta?.end || data.meta?.chartEnd;
-
-  if (!chartStart) {
-    const effectiveStart = viewport.showToday ? minISODate(minTaskStart, todayStr) : minTaskStart;
-    chartStart = addDays(effectiveStart, -bufferBefore);
-  } else if (diffDays(chartStart, minTaskStart) < 0) {
-    // If a task was moved BEFORE the specified chartStart, dynamically expand chartStart
-    chartStart = addDays(minTaskStart, -bufferBefore);
-  }
-
-  if (!chartEnd) {
-    const effectiveEnd = viewport.showToday ? maxISODate(maxTaskEnd, todayStr) : maxTaskEnd;
-    chartEnd = addDays(effectiveEnd, bufferAfter);
-  } else if (diffDays(chartEnd, maxTaskEnd) > 0) {
-    // If a task was pushed forward PAST the specified chartEnd, dynamically expand chartEnd!
-    chartEnd = addDays(maxTaskEnd, bufferAfter);
-  }
-
-  // Ensure minimum span of at least 7 days
-  if (diffDays(chartStart, chartEnd) < 7) {
-    chartEnd = addDays(chartStart, 14);
-  }
+  const bounds = computeChartBounds(data, viewportOptions);
+  const chartStart = bounds.startDate;
+  const chartEnd = bounds.endDate;
+  const totalDays = bounds.totalDays;
 
   viewport.startDate = chartStart;
   viewport.endDate = chartEnd;
 
-  const totalDays = Math.max(diffDays(chartStart, chartEnd), 1);
   const canvasWidth = Math.max(totalDays * viewport.dayWidth, 600);
   const canvasHeight = Math.max(tasks.length * viewport.rowHeight, viewport.rowHeight);
 
-  // Critical path calculation (use pre-computed master critical path if provided, or compute on tasks)
+  // Critical path (the engine passes its master result; otherwise computed with the plan's gap and
+  // deadline so the highlighted chain matches the cascade that drew the bars)
   const criticalResult =
-    viewportOptions.criticalResult || calculateCriticalPath(tasks);
+    viewportOptions.criticalResult ||
+    calculateCriticalPath(tasks, {
+      defaultGapDays: data.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS,
+      targetDate: data.meta?.targetDate
+    });
   const { criticalTaskIds, criticalDepKeys } = criticalResult;
 
   // Compute TaskLayouts: Proportional bar height (~62% of row height) with vertical padding for dependency clearance
   const verticalPadding = Math.max(8, Math.round(viewport.rowHeight * 0.36));
   const barHeight = Math.max(18, Math.min(48, viewport.rowHeight - verticalPadding));
-  const barYOffset = (viewport.rowHeight - barHeight) / 2;
+  let barYOffset = (viewport.rowHeight - barHeight) / 2;
+
+  // Baseline ghost bars sit under the bar; when the row is too short for bar + baseline, lift the
+  // pair so the baseline never bleeds into the next row.
+  const BASELINE_GAP = 2;
+  const BASELINE_HEIGHT = 4;
+  if (viewport.showBaselines && tasks.some((t) => t.baseline)) {
+    const block = barHeight + BASELINE_GAP + BASELINE_HEIGHT;
+    if (barYOffset + block > viewport.rowHeight - 1) {
+      barYOffset = Math.max(1, (viewport.rowHeight - block) / 2);
+    }
+  }
+
+  // Resolve each category once: own keys only (no prototype lookups such as "constructor") and a
+  // sanitized color, so every layout consumer receives safe values.
+  const categoryCache = new Map<string, Category>();
+  const resolveCategory = (key: unknown): Category => {
+    const id = typeof key === "string" ? key : String(key ?? "");
+    let cat = categoryCache.get(id);
+    if (!cat) {
+      const raw = Object.prototype.hasOwnProperty.call(categories, id) ? categories[id] : undefined;
+      cat = raw && typeof raw === "object"
+        ? { ...raw, color: sanitizeCssColor(raw.color, DEFAULT_CATEGORY.color) }
+        : DEFAULT_CATEGORY;
+      categoryCache.set(id, cat);
+    }
+    return cat;
+  };
 
   const taskLayouts: TaskLayout[] = [];
   const layoutById = new Map<string, TaskLayout>();
 
   tasks.forEach((task, rowIndex) => {
     const rawDiff = diffDays(task.start, task.end);
-    const isMilestone = Boolean(task.milestone || rawDiff === 0);
+    // Only flagged tasks are milestones: a start === end task is a one-day bar, exactly as the
+    // cascade and the CPM schedule it.
+    const isMilestone = task.milestone === true;
     const durationDays = isMilestone ? 0 : Math.max(0, rawDiff) + 1;
 
     const centerY = rowIndex * viewport.rowHeight + viewport.rowHeight / 2;
@@ -237,13 +336,13 @@ export function layout(
       y = rowIndex * viewport.rowHeight + barYOffset;
       height = barHeight;
       anchorInX = x;
-      anchorInY = centerY;
+      anchorInY = y + height / 2;
       anchorOutX = x + width;
-      anchorOutY = centerY;
+      anchorOutY = anchorInY;
     }
 
-    const cat = categories[task.category] || DEFAULT_CATEGORY;
-    const displayLabel = getTaskDisplayName(task);
+    const cat = resolveCategory(task.category);
+    const displayLabel = String(getTaskDisplayName(task) ?? "");
     const isCritical = criticalTaskIds.has(task.id);
     const scheduleMetrics = criticalResult.metrics?.get(task.id);
 
@@ -255,11 +354,14 @@ export function layout(
       const bx = diffDays(chartStart, bEarlier) * viewport.dayWidth;
       const bColEnd = (diffDays(chartStart, bLater) + 1) * viewport.dayWidth;
       const bWidth = Math.max(bColEnd - bx, 12);
+      // Milestone y is the diamond center; bars use their top edge.
+      const visualBottom = isMilestone ? centerY + height / 2 : y + height;
+      const rowBottom = (rowIndex + 1) * viewport.rowHeight;
       baselineLayout = {
         x: bx,
-        y: y + barHeight + 2,
+        y: Math.min(visualBottom + BASELINE_GAP, rowBottom - BASELINE_HEIGHT - 1),
         width: bWidth,
-        height: 4,
+        height: BASELINE_HEIGHT,
         start: task.baseline.start,
         end: task.baseline.end,
         varianceDays: diffDays(task.baseline.end, task.end)
@@ -287,18 +389,20 @@ export function layout(
     };
 
     taskLayouts.push(item);
-    layoutById.set(task.id, item);
+    // Duplicate ids: links attach to the first occurrence, the one the cascade and CPM schedule
+    if (!layoutById.has(task.id)) layoutById.set(task.id, item);
   });
 
   // Compute SVG Dependency Lines
   const linkRouting: LinkRoutingStyle = viewport.linkRouting;
   const dependencies: DependencyLine[] = [];
 
-  tasks.forEach((task) => {
-    const relations = getTaskDependencyRelations(task);
+  tasks.forEach((task, rowIndex) => {
+    // Laid-out ids resolve ids that look like lag shorthand ("render-3d" is a task, not "render" - 3d)
+    const relations = getTaskDependencyRelations(task, layoutById);
     if (relations.length === 0) return;
     const curr = layoutById.get(task.id);
-    if (!curr) return;
+    if (!curr || curr.rowIndex !== rowIndex) return;
 
     relations.forEach((rel) => {
       const prereq = layoutById.get(rel.id);
@@ -312,7 +416,16 @@ export function layout(
       const toX = toEnd ? (curr.anchorOutX ?? (curr.x + curr.width)) : (curr.anchorInX ?? curr.x);
       const toY = toEnd ? (curr.anchorOutY ?? (curr.y + curr.height / 2)) : (curr.anchorInY ?? (curr.y + curr.height / 2));
 
-      const path = computeDependencyPath(fromX, fromY, toX, toY, viewport.rowHeight, linkRouting);
+      const path = computeDependencyPath(
+        fromX,
+        fromY,
+        toX,
+        toY,
+        viewport.rowHeight,
+        linkRouting,
+        fromStart ? "start" : "end",
+        toEnd ? "end" : "start"
+      );
       const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
 
       dependencies.push({
@@ -331,9 +444,7 @@ export function layout(
   });
 
   // Compute Header Ticks
-  const startYear = parseISODate(chartStart).getUTCFullYear();
-  const endYear = parseISODate(chartEnd).getUTCFullYear();
-  const spansMultipleYears = startYear !== endYear;
+  const spansMultipleYears = bounds.spansMultipleYears;
 
   // Collect all task start and end boundary dates across the project
   const taskBoundaryDates = new Set<string>();
@@ -465,7 +576,7 @@ export function layout(
     });
   }
 
-  const computedHeaderHeight = spansMultipleYears ? MULTI_YEAR_HEADER_HEIGHT : DEFAULT_HEADER_HEIGHT;
+  const computedHeaderHeight = resolveHeaderHeight(spansMultipleYears, viewportOptions.headerHeight);
 
   const header: GridHeader = {
     years,
@@ -501,10 +612,18 @@ function getWeekNumber(date: Date): number {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
+/** Which edge of a bar a dependency wire is attached to. */
+export type DependencyAnchorSide = "start" | "end";
+
 /**
  * Calculates the SVG path for a dependency connection wire.
  * Ensures a clean straight horizontal lead-in segment directly entering the target arrowhead
  * at 0 degrees so arrowheads align perfectly without angle skew.
+ *
+ * `fromSide`/`toSide` select the anchored bar edges (FS = end→start, the default; SS = start→start;
+ * FF = end→end; SF = start→end). Wires always leave a bar away from its body and enter the target
+ * edge from outside, so start-anchored links exit leftwards and end-anchored targets are entered
+ * from the right with a left-pointing arrow.
  */
 export function computeDependencyPath(
   fromX: number,
@@ -512,59 +631,78 @@ export function computeDependencyPath(
   toX: number,
   toY: number,
   rowHeight = 46,
-  style: LinkRoutingStyle = "orthogonal"
+  style: LinkRoutingStyle = "orthogonal",
+  fromSide: DependencyAnchorSide = "end",
+  toSide: DependencyAnchorSide = "start"
 ): string {
   if (Math.abs(toX - fromX) < 2 && Math.abs(toY - fromY) < 2) {
     return "";
   }
 
+  // Horizontal travel direction when leaving the predecessor and when arriving at the successor.
+  const outDir = fromSide === "end" ? 1 : -1;
+  const inDir = toSide === "start" ? 1 : -1;
+
+  // SS / FF: both anchors face the same way, so wrap around the outer edge on a vertical rail
+  // that clears both bars.
+  if (outDir !== inDir) {
+    const railX = outDir === 1 ? Math.max(fromX, toX) + 16 : Math.min(fromX, toX) - 16;
+    if (style === "curved") {
+      const endX = toX - inDir * 8;
+      return `M ${fromX} ${fromY} C ${railX} ${fromY}, ${railX} ${toY}, ${endX} ${toY} L ${toX} ${toY}`;
+    }
+    return `M ${fromX} ${fromY} L ${railX} ${fromY} L ${railX} ${toY} L ${toX} ${toY}`;
+  }
+
+  // FS (dir = 1) and SF (dir = -1) travel the same way at both ends: SF mirrors the FS routing.
+  const dir = outDir;
+
   // 1. Same row connection
   if (fromY === toY) {
-    if (toX >= fromX) {
+    if ((toX - fromX) * dir >= 0) {
       return `M ${fromX} ${fromY} L ${toX} ${toY}`;
     }
     const dropY = fromY + Math.round(rowHeight * 0.45);
-    const stepOutX = fromX + 8;
-    const stepInX = toX - 8;
+    const stepOutX = fromX + dir * 8;
+    const stepInX = toX - dir * 8;
     return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${dropY} L ${stepInX} ${dropY} L ${stepInX} ${toY} L ${toX} ${toY}`;
   }
 
-  const dx = toX - fromX;
+  // Forward distance along the travel direction
+  const dx = (toX - fromX) * dir;
 
   // 2. Standard forward dependency with space (dx >= 12)
   if (dx >= 12) {
     if (style === "curved") {
       const leadIn = 8;
-      const endX = toX - leadIn;
-      const cdx = Math.max(endX - fromX, 16);
-      const cp1X = fromX + cdx * 0.5;
-      const cp2X = endX - cdx * 0.5;
+      const endX = toX - dir * leadIn;
+      const cdx = Math.max((endX - fromX) * dir, 16);
+      const cp1X = fromX + dir * cdx * 0.5;
+      const cp2X = endX - dir * cdx * 0.5;
       return `M ${fromX} ${fromY} C ${cp1X} ${fromY}, ${cp2X} ${toY}, ${endX} ${toY} L ${toX} ${toY}`;
     }
 
     if (style === "direct") {
       const lead = Math.min(10, Math.floor(dx / 2));
-      return `M ${fromX} ${fromY} L ${fromX + lead} ${fromY} L ${toX - lead} ${toY} L ${toX} ${toY}`;
+      return `M ${fromX} ${fromY} L ${fromX + dir * lead} ${fromY} L ${toX - dir * lead} ${toY} L ${toX} ${toY}`;
     }
 
     // Default "orthogonal" (Clean 90-degree right angles with mid-split)
-    const midX = fromX + Math.round(dx / 2);
+    const midX = fromX + Math.round((toX - fromX) / 2);
     return `M ${fromX} ${fromY} L ${midX} ${fromY} L ${midX} ${toY} L ${toX} ${toY}`;
   }
 
   // 3. Tight gap / adjacent milestone / reverse overlap (dx < 12)
   // Route cleanly through the gutter between rows to avoid cutting through intermediate tasks:
-  const leadOut = 8;
-  const leadIn = 8;
-  const stepOutX = fromX + leadOut;
-  const stepInX = toX - leadIn;
+  const stepOutX = fromX + dir * 8;
+  const stepInX = toX - dir * 8;
   // Route through the boundary gutter directly below source row (or above if going upwards)
   const gutterY = fromY < toY
     ? fromY + Math.round(rowHeight * 0.5)
     : fromY - Math.round(rowHeight * 0.5);
 
   if (style === "curved") {
-    return `M ${fromX} ${fromY} C ${stepOutX + 6} ${fromY}, ${stepOutX + 6} ${gutterY}, ${stepOutX} ${gutterY} L ${stepInX} ${gutterY} C ${stepInX - 6} ${gutterY}, ${stepInX - 6} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
+    return `M ${fromX} ${fromY} C ${stepOutX + dir * 6} ${fromY}, ${stepOutX + dir * 6} ${gutterY}, ${stepOutX} ${gutterY} L ${stepInX} ${gutterY} C ${stepInX - dir * 6} ${gutterY}, ${stepInX - dir * 6} ${toY}, ${stepInX} ${toY} L ${toX} ${toY}`;
   }
 
   return `M ${fromX} ${fromY} L ${stepOutX} ${fromY} L ${stepOutX} ${gutterY} L ${stepInX} ${gutterY} L ${stepInX} ${toY} L ${toX} ${toY}`;

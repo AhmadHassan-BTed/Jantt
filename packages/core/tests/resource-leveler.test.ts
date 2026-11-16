@@ -47,11 +47,9 @@ describe("Autonomous Resource Leveling Heuristic Engine", () => {
       ];
       const result = detectOverAllocations(tasks);
       expect(result.length).toBeGreaterThan(0);
-      // Overlap days are 2026-11-04, 2026-11-05, 2026-11-06
+      // End dates are exclusive (t1 frees alice on 11-06), so the overlap days are 11-04 and 11-05
       const dates = result.map((r) => r.date);
-      expect(dates).toContain("2026-11-04");
-      expect(dates).toContain("2026-11-05");
-      expect(dates).toContain("2026-11-06");
+      expect(dates).toEqual(["2026-11-04", "2026-11-05"]);
       expect(result[0].resourceId).toBe("alice");
       expect(result[0].tasks).toEqual(["t1", "t2"]);
       expect(result[0].totalUnits).toBe(2.0);
@@ -74,6 +72,11 @@ describe("Autonomous Resource Leveling Heuristic Engine", () => {
       expect(result.length).toBeGreaterThan(0);
       expect(result[0].resourceId).toBe("charlie");
       expect(result[0].totalUnits).toBe(0.6);
+
+      // A single task above the part-time capacity is reported too, flagged as unfixable by shifting
+      const single = detectOverAllocations(tasks, { resourceCapacities: { Charlie: 0.5 } });
+      expect(single).toHaveLength(2);
+      expect(single[0].reason).toBe("single-task-exceeds-capacity");
     });
   });
 
@@ -220,6 +223,116 @@ describe("Autonomous Resource Leveling Heuristic Engine", () => {
       const t2 = result.tasks.find((t) => t.id === "t2")!;
       // t1 ends Friday Nov 6. +1 working day gap -> starts Monday Nov 9!
       expect(t2.start).toBe("2026-11-09");
+
+      // An explicit useWorkingDays: false wins over the calendar, exactly as in the cascade
+      const calendarDays = levelResources(tasks, { defaultGapDays: 1, useWorkingDays: false, calendar: CALENDAR_PRESETS.standard });
+      expect(calendarDays.tasks.find((t) => t.id === "t2")!.start).toBe("2026-11-07");
+    });
+
+    const t = (id: string, start: string, end: string, extra: Partial<Task> = {}): Task => ({
+      id,
+      category: "dev",
+      assignee: "alice",
+      start,
+      end,
+      ...extra
+    });
+
+    it("defers the lowest-priority task, only as far as capacity requires", () => {
+      const result = levelResources(
+        [
+          t("U", "2026-01-05", "2026-01-15", { priority: "urgent" }),
+          t("H", "2026-01-05", "2026-01-08", { priority: "high" }),
+          t("L", "2026-01-05", "2026-01-08", { priority: "low" })
+        ],
+        { defaultCapacity: 2, defaultGapDays: 0 }
+      );
+      expect(result.adjustments.map((a) => a.taskId)).toEqual(["L"]);
+      const low = result.tasks.find((x) => x.id === "L")!;
+      expect(low.start).toBe("2026-01-08"); // as soon as H frees capacity, not after U ends
+      expect(result.remainingOverallocations).toHaveLength(0);
+    });
+
+    it("never moves completed or started work", () => {
+      const result = levelResources(
+        [
+          t("Done", "2026-01-06", "2026-01-09", { progress: 1, priority: "low" }),
+          t("Started", "2026-01-06", "2026-01-12", { progress: 0.4, priority: "low" }),
+          t("Next", "2026-01-06", "2026-01-09", { priority: "high" })
+        ],
+        { defaultGapDays: 0 }
+      );
+      const byId = new Map(result.tasks.map((x) => [x.id, x]));
+      expect(byId.get("Done")!.start).toBe("2026-01-06");
+      expect(byId.get("Started")!.start).toBe("2026-01-06");
+      expect(byId.get("Next")!.start).toBe("2026-01-12");
+    });
+
+    it("preserves deleted tasks (tombstones) in its output", () => {
+      const tombstone = t("Z", "2026-01-01", "2026-01-02", { _deleted: true });
+      const leveled = levelResources([t("A", "2026-01-05", "2026-01-08"), t("B", "2026-01-06", "2026-01-09"), tombstone]);
+      expect(leveled.tasks.map((x) => x.id)).toEqual(["A", "B", "Z"]);
+      expect(leveled.tasks[2]._deleted).toBe(true);
+      const untouched = levelResources([t("A", "2026-01-05", "2026-01-08"), tombstone]);
+      expect(untouched.tasks.map((x) => x.id)).toEqual(["A", "Z"]);
+    });
+
+    it("gives milestones no load and does not flag same-day FS handoffs", () => {
+      expect(detectOverAllocations([t("M", "2026-01-06", "2026-01-06", { milestone: true }), t("T", "2026-01-05", "2026-01-10")])).toHaveLength(0);
+      expect(detectOverAllocations([t("A", "2026-01-05", "2026-01-08"), t("B", "2026-01-08", "2026-01-12", { dependsOn: "A" })])).toHaveLength(0);
+    });
+
+    it("leaves unrelated tasks alone when the plan's gap is passed, and reports cascade moves", () => {
+      const plan: Task[] = [
+        t("A", "2026-01-05", "2026-01-08", { priority: "high" }),
+        t("B", "2026-01-06", "2026-01-09", { priority: "low" }),
+        t("C", "2026-01-09", "2026-01-12", { assignee: "bob", dependsOn: "B" }),
+        t("X", "2026-01-05", "2026-01-07", { assignee: "carol" }),
+        t("Y", "2026-01-07", "2026-01-09", { assignee: "carol", dependsOn: "X" })
+      ];
+      const result = levelResources(plan, { defaultGapDays: 0 });
+      const byId = new Map(result.tasks.map((x) => [x.id, x]));
+      expect(byId.get("B")!.start).toBe("2026-01-08");
+      expect(byId.get("C")!.start).toBe("2026-01-11"); // cascaded after B
+      expect(byId.get("Y")!.start).toBe("2026-01-07"); // unrelated chain untouched
+      expect(result.adjustments.map((a) => a.taskId)).toEqual(["B", "C"]);
+      expect(result.adjustments[1].reason).toMatch(/cascade/i);
+    });
+
+    it("skips unresolvable conflicts and keeps leveling the rest", () => {
+      const result = levelResources(
+        [
+          t("L1", "2026-01-05", "2026-01-09", { locked: true }),
+          t("L2", "2026-01-06", "2026-01-10", { locked: true }),
+          t("B1", "2026-01-05", "2026-01-09", { assignee: "bob", priority: "high" }),
+          t("B2", "2026-01-06", "2026-01-10", { assignee: "bob", priority: "low" })
+        ],
+        { defaultGapDays: 0 }
+      );
+      expect(result.adjustments.map((a) => a.taskId)).toEqual(["B2"]);
+      expect(result.remainingOverallocations.every((o) => o.resourceId === "alice")).toBe(true);
+      expect(result.remainingOverallocations.length).toBeGreaterThan(0);
+    });
+
+    it("treats the same person by id, username and name as one resource", () => {
+      const people = [{ id: "person-alex", name: "Alex Morgan", username: "@alex" }];
+      const tasks = [
+        t("A", "2026-01-05", "2026-01-08", { assignee: "person-alex" }),
+        t("B", "2026-01-06", "2026-01-09", { assignee: "alex morgan" }),
+        t("C", "2026-01-07", "2026-01-10", { assignee: "alex" })
+      ];
+      const conflicts = detectOverAllocations(tasks, { people, resourceCapacities: { "Alex Morgan": 2 } });
+      expect(conflicts.map((c) => c.date)).toEqual(["2026-01-07"]);
+      expect(conflicts[0].resourceId).toBe("person-alex");
+      expect(conflicts[0].tasks).toEqual(["A", "B", "C"]);
+    });
+
+    it("stays fast and bounded with far-future dates", () => {
+      const started = Date.now();
+      const result = detectOverAllocations([t("A", "2026-01-01", "9999-12-31"), t("B", "2026-01-01", "9999-12-31")]);
+      expect(Date.now() - started).toBeLessThan(2000);
+      expect(result.length).toBeLessThanOrEqual(3660);
+      expect(result[0].date).toBe("2026-01-01");
     });
   });
 });

@@ -7,7 +7,7 @@ import type { DependencyType, DependencyItem, DependencyObject } from "./depende
 import type { WorkingCalendar, CalendarPreset } from "./calendar";
 import type { ProjectBaselineSnapshot } from "./baselines";
 
-export type { DependencyType, DependencyRelation, DependencyItem, DependencyObject } from "./dependencies";
+export type { DependencyType, DependencyRelation, DependencyItem, DependencyObject, DependsOnValue } from "./dependencies";
 export type { DayOfWeek, CalendarPreset, RegionCode, HolidayDefinition, WorkingCalendar } from "./calendar";
 export type { ProjectBaselineSnapshot, TaskBaselineEntry, TaskVarianceMetric, BaselineVarianceSummary } from "./baselines";
 
@@ -26,6 +26,8 @@ export interface JanttMeta {
   autoCascade?: boolean;
   calendar?: WorkingCalendar | CalendarPreset;
   useWorkingDays?: boolean;
+  /** Contractual completion deadline (YYYY-MM-DD) used for float and on-time probability. */
+  targetDate?: string;
   baselines?: ProjectBaselineSnapshot[];
   activeBaselineId?: string;
   generatedAt?: string;
@@ -170,6 +172,10 @@ export interface Task {
   calendarId?: string;
   wbs?: string;
   phase?: string;
+  /** Bar color override (a plain CSS color; values failing `sanitizeCssColor` are ignored). */
+  color?: string;
+  /** Three-point duration estimate in days, read by PERT and Monte Carlo (`getTaskPertBounds`). */
+  pert?: { optimistic: number; mostLikely?: number; pessimistic: number };
   estimatedCost?: number;
   actualCost?: number;
   notes?: string;
@@ -217,12 +223,24 @@ export interface ValidationError {
     | "CIRCULAR_DEPENDENCY"
     | "DEP_TIMING_CONFLICT"
     | "INVALID_PROGRESS"
+    | "INVALID_DEPENDENCY"
+    | "INVALID_CALENDAR"
+    | "MILESTONE_HAS_DURATION"
+    /** A color that fails the shared `sanitizeCssColor` allow-list (renderers fall back to a default). */
+    | "INVALID_COLOR"
+    /** A reference to an entity that does not exist (e.g. a note attached to a missing task). */
+    | "DANGLING_REFERENCE"
     | "SCHEMA_MISMATCH";
 }
 
 export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
+  /**
+   * Non-blocking findings (the plan still loads): e.g. locked tasks that violate their
+   * dependencies, milestones with a duration, malformed calendars or optional fields.
+   */
+  warnings?: ValidationError[];
 }
 
 export type TimeScale = "day" | "week" | "month" | "quarter" | "year";
@@ -241,7 +259,7 @@ export interface ViewportOptions {
   dayWidth?: number; // Override day pixel width (auto-calculated per scale if omitted)
   rowHeight?: number; // Default 46px (when in custom mode)
   rowHeightMode?: RowHeightMode; // "custom" (default) or "fit" (dynamically fits all rows in canvas)
-  labelWidth?: number; // Default 320px
+  labelWidth?: number; // Default DEFAULT_LABEL_WIDTH (340px), clamped to MIN/MAX_LABEL_WIDTH (180-600px)
   headerHeight?: number; // Default 58px
   startDate?: string;
   endDate?: string;
@@ -262,9 +280,9 @@ export interface ViewportOptions {
 }
 
 export interface CriticalPathOptions {
-  targetDate?: string; // Contractual completion deadline (causes negative float if project slips)
+  targetDate?: string; // Contractual completion deadline (causes negative float if project slips); invalid values are ignored
   nearCriticalThresholdDays?: number; // Default: 3 days
-  defaultGapDays?: number;
+  defaultGapDays?: number; // Default: DEFAULT_GAP_DAYS (same as resolveSchedule); pass meta.defaultGapDays
 }
 
 export interface TaskScheduleMetrics {
@@ -288,8 +306,9 @@ export interface CriticalPathResult {
   projectEarlyFinish: string;
   projectLateFinish: string;
   projectTotalFloat: number;
-  criticalPaths: string[][]; // Ordered sequences of task IDs along each critical path
+  criticalPaths: string[][]; // Ordered sequences of task IDs along each critical path (capped at MAX_CRITICAL_PATHS)
   metrics: Map<string, TaskScheduleMetrics>;
+  warnings?: string[]; // Non-fatal analysis notes (ignored targetDate, cycles, invalid dates, truncated paths)
 }
 
 export interface TaskEVMMetrics {
@@ -339,7 +358,19 @@ export interface EVMResult {
 }
 
 export interface ScheduleHealthIssue {
-  type: "missing-logic" | "high-float" | "negative-float" | "out-of-sequence" | "broken-chain";
+  type:
+    | "missing-logic"
+    | "missing-predecessor"
+    | "missing-successor"
+    | "high-float"
+    | "negative-float"
+    | "out-of-sequence"
+    | "broken-chain"
+    | "lead"
+    | "lag"
+    | "relationship-type"
+    | "hard-constraint"
+    | "high-duration";
   severity: "low" | "medium" | "high";
   taskId?: string;
   taskName?: string;
@@ -364,7 +395,7 @@ export interface PertRiskResult {
   varianceDays: number;
   confidencePercentages: {
     targetDate?: string;
-    onTimeProbability: number; // 0.0 - 1.0 (e.g. 0.85 = 85%)
+    onTimeProbability: number; // 0.0 - 1.0 (e.g. 0.85 = 85%); without a target, vs. the planned finish
   };
 }
 
@@ -484,7 +515,12 @@ export interface JanttOptions {
   filterTasksByDate?: boolean;
   autoCascade?: boolean;
   sidebarContainer?: HTMLElement | string;
+  /**
+   * Fired during live interactions (drag frames). The payload belongs to the caller: the engine
+   * never mutates it after the call, so it can be stored or diffed as-is.
+   */
   onChange?: (draft: JanttData) => void;
+  /** Fired once per completed edit. The payload belongs to the caller and is never mutated later. */
   onCommit?: (final: JanttData) => void;
   onViewportChange?: (viewport: ViewportOptions) => void;
   onTaskClick?: (task: Task) => void;
@@ -501,6 +537,10 @@ export interface JanttOptions {
     api: {
       updateTask: (patch: Partial<Task>) => void;
       close: () => void;
+      /** True when the chart is read-only: `updateTask` is then a no-op. */
+      readOnly: boolean;
+      /** True when the task is locked: schedule fields (dates, dependencies) cannot be changed. */
+      locked: boolean;
     }
   ) => void;
   onOpenAutoSave?: () => void;

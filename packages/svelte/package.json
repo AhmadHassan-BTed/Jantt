@@ -2,6 +2,16 @@
   "name": "@jantt/svelte",
   "version": "1.1.0",
   "description": "Svelte wrapper and action for Jantt JSON Gantt chart engine",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AhmadHassan-BTed/Jantt.git",
+    "directory": "packages/svelte"
+  },
+  "homepage": "https://github.com/AhmadHassan-BTed/Jantt#readme",
+  "bugs": {
+    "url": "https://github.com/AhmadHassan-BTed/Jantt/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -32,7 +42,9 @@
   },
   "devDependencies": {
     "svelte": "^4.2.18",
-    "typescript": "^5.4.5",
-    "vitest": "^1.6.0"
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

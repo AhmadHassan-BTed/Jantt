@@ -30,8 +30,11 @@
     <meta name="twitter:description" content="Zero-dependency JSON Gantt charts for AI agents, student admissions tracking, and personal productivity." />
     <meta name="twitter:image" content="https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/assets/screenshots/jantt-swiss-dark-overview.png" />
 
-    <!-- Favicon & Web Manifest -->
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="dark light" />
+    <!-- Content-Security-Policy: installed at runtime for production builds by src/main.tsx
+         (the Vite dev server needs an inline React Refresh preamble); see public/_headers. -->
 
     <!-- Typography Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -74,6 +77,7 @@
     </script>
   </head>
   <body>
+    <noscript>Jantt needs JavaScript to run. Please enable it and reload the page.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -5,6 +5,27 @@ All notable changes to the **Jantt** project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Production-readiness hardening pass.
+
+### Fixed
+- **Package entry points**: `@jantt/core` now emits `dist/theme.css`, the target of its `./theme.css` and `./style.css` exports (the build had been emitting `core.css`, so every documented stylesheet import failed). `@jantt/core/dist/theme.css` is exported too, so existing imports keep working.
+- **Standalone CDN stylesheet**: `@jantt/standalone` now emits `dist/style.css`, matching its `style` field, the README and the Python bridge (it had been emitting `standalone.css`, a 404 on unpkg). The UMD build is now `dist/jantt.standalone.umd.cjs` (the package `main`), so CommonJS loaders no longer parse it as an ES module; the IIFE script-tag file is unchanged.
+- **React typings**: `@jantt/react` declarations import the `@jantt/core` package instead of the unpublished `../../core/src` path, so `JanttProps.data` and friends are typed for consumers.
+- **Web Component CDN usage**: `@jantt/elements` ships `dist/jantt-elements.js`, a self-contained ES module (also its `unpkg`/`jsdelivr` entry and `@jantt/elements/browser` export); the previous CDN snippet failed on the bare `@jantt/core` import.
+- **Docker image**: copies every workspace manifest before `npm ci`, keeps host `node_modules`, `dist`, `.git` and `.env*` out of the image, builds before testing, and serves the playground from unprivileged nginx on port 8080 with gzip, cache and security headers.
+- **Documentation**: corrected the dependency and bundle-size claims, test counts, theme snippets (`themeClassName="jantt-theme-dark"`), CSS import paths, the scoped CLI invocation (`npx @jantt/cli`, never the unrelated `npx jantt`), the OAuth scope (`read:user` only), `autoCascade`'s default (`true`), validation rules, the scale widths and module map in the architecture guide, nonexistent API exports, and broken support links. All docs now use the resolvable schema URL `https://ahmadhassan-bted.github.io/Jantt/schema/v1.json`.
+
+### Changed
+- **Toolchain**: Vitest 5 (one Vite 8 install, no nested Vite 5) hoisted to the workspace root with a single jsdom 31; contributors need Node.js `^22.22.2 || ^24.15.0 || >=26` (`.nvmrc` pins 22, `.npmrc` enables `engine-strict`). Published packages declare `engines.node` `^20.19.0 || >=22.12.0`, the Vite 8 / rolldown floor.
+- **`@jantt/core` packaging**: `fflate` is no longer bundled into `dist`; it stays a regular dependency so applications dedupe it. Every published package now declares `license`, `repository`, `homepage` and `bugs`.
+- **Scripts**: `npm run lint` runs the TypeScript typecheck and a syntax check of the JavaScript CLIs (it used to only print a success message); `npm run check:packages` runs publint on every workspace; `npm run clean` works on Windows; the playground has a `test` script, so its suites run in `npm test`.
+- **Playground build**: workspace packages are bundled from source, vendor code is split into long-lived `vendor`, `vendor-react` and `vendor-firebase` chunks, and the dev server binds to `localhost` unless `PLAYGROUND_HOST` says otherwise. A root `.env` (see `.env.example`) configures the dev server and optional Firebase project.
+- **CI/CD**: least-privilege `permissions` everywhere and no persisted checkout credentials; CI tests Node 22 and 24, lints, and validates package contents. GitHub Pages deploys only commits that passed CI and never cancels a running deployment. Releases run the CI gate, refuse tags that do not match the package versions, build in a job without publish rights, publish with npm provenance (skipping versions already on the registry), and create the GitHub release with the `gh` CLI. High or critical advisories in runtime dependencies now fail the security workflow.
+
+---
+
 ## [1.4.0] - 2026-09-08
 
 ### Added
@@ -124,7 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed Settings popover premature closing caused by orphaned document pointerdown listeners during DOM re-renders.
 - Fixed Gantt chart Dim mode synchronization for date-filtered task bars and SVG dependency lines.
-- Fixed JSON Monaco editor synchronization when pasting plans with custom people and team entities.
+- Fixed JSON editor synchronization when pasting plans with custom people and team entities.
 
 ---
 

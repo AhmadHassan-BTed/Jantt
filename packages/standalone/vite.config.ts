@@ -1,22 +1,26 @@
 import { defineConfig } from "vite";
-import { resolve } from "path";
+import { resolve } from "node:path";
 
 export default defineConfig({
   resolve: {
     alias: {
-      "@jantt/core": resolve(__dirname, "../core/src")
+      "@jantt/core": resolve(import.meta.dirname, "../core/src")
     }
   },
   build: {
     lib: {
-      entry: resolve(__dirname, "src/standalone.ts"),
+      entry: resolve(import.meta.dirname, "src/standalone.ts"),
       name: "Jantt",
       formats: ["umd", "iife"],
-      fileName: (format) => `jantt.standalone.${format === "iife" ? "iife.js" : "js"}`
+      // UMD is CommonJS-compatible, so it takes .cjs in this "type": "module" package.
+      fileName: (format) => (format === "iife" ? "jantt.standalone.iife.js" : "jantt.standalone.umd.cjs"),
+      // Emitted as dist/style.css: package.json "style", the "./style.css" export and the CDN docs.
+      cssFileName: "style"
     },
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        extend: true
+        extend: true,
+        exports: "named"
       }
     }
   }

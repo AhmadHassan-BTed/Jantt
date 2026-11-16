@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   type TimeScale,
   type LinkRoutingStyle,
@@ -8,6 +8,12 @@ import {
 } from "@jantt/core";
 import type { ActiveView } from "../types";
 import { STORAGE_KEYS, AVAILABLE_THEMES } from "../constants";
+import { storageService } from "../services/storage";
+
+/** Theme ids reach share links, embed snippets and storage: only registered themes are accepted. */
+function isKnownThemeId(themeId: unknown): themeId is string {
+  return typeof themeId === "string" && Boolean(themeManager.getTheme(themeId));
+}
 
 interface UseGanttViewportOptions {
   initialTheme: string;
@@ -22,7 +28,13 @@ interface UseGanttViewportOptions {
 }
 
 export function useGanttViewport(options: UseGanttViewportOptions) {
-  const [selectedThemeId, setSelectedThemeId] = useState(options.initialTheme);
+  /** The user's own theme choice; the only theme that is persisted. */
+  const [personalThemeId, setPersonalThemeId] = useState(() =>
+    isKnownThemeId(options.initialTheme) ? options.initialTheme : AVAILABLE_THEMES[0].id
+  );
+  /** Session-only theme imposed by the open plan (e.g. a cloud room); never persisted. */
+  const [planThemeId, setPlanThemeId] = useState<string | null>(null);
+  const selectedThemeId = planThemeId ?? personalThemeId;
   const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
   const [currentScale, setCurrentScale] = useState<TimeScale>(options.initialScale);
   const [currentDayWidth, setCurrentDayWidth] = useState<number | undefined>(undefined);
@@ -34,32 +46,43 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
   const [autoCascade, setAutoCascade] = useState<boolean>(options.initialAutoCascade);
   const [activeView, setActiveViewState] = useState<ActiveView>(options.initialView);
 
+  /** Explicit user choice: becomes the personal theme and drops any plan override. Unknown ids are ignored. */
+  const setSelectedThemeId = useCallback((themeId: string) => {
+    if (!isKnownThemeId(themeId)) return;
+    setPersonalThemeId(themeId);
+    setPlanThemeId(null);
+  }, []);
+
+  /** Applies a plan-provided theme for this session only (pass null to restore the personal theme). */
+  const applyPlanTheme = useCallback((themeId: string | null) => {
+    setPlanThemeId(isKnownThemeId(themeId) ? themeId : null);
+  }, []);
+
   const setActiveView = useCallback((newView: ActiveView) => {
     setActiveViewState(newView);
+    storageService.setItem(STORAGE_KEYS.VIEW, newView);
     try {
-      localStorage.setItem(STORAGE_KEYS.VIEW, newView);
       if (typeof window !== "undefined") {
         const url = new URL(window.location.href);
         url.searchParams.set("view", newView);
-        window.history.replaceState(null, "", url.toString());
+        window.history.replaceState(window.history.state, "", url.toString());
       }
     } catch {}
   }, []);
 
+  // storageService never throws and keeps the newest value in memory when storage is full.
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.THEME, selectedThemeId);
-      localStorage.setItem(STORAGE_KEYS.SCALE, currentScale);
-      localStorage.setItem(STORAGE_KEYS.ROUTING, linkRouting);
-      localStorage.setItem(STORAGE_KEYS.ROW_HEIGHT_MODE, rowHeightMode);
-      localStorage.setItem(STORAGE_KEYS.ROW_HEIGHT, String(rowHeight));
-      localStorage.setItem(STORAGE_KEYS.CRITICAL, String(showCriticalPath));
-      localStorage.setItem(STORAGE_KEYS.BASELINES, String(showBaselines));
-      localStorage.setItem(STORAGE_KEYS.AUTO_CASCADE, String(autoCascade));
-      localStorage.setItem(STORAGE_KEYS.VIEW, activeView);
-    } catch {}
+    storageService.setItem(STORAGE_KEYS.THEME, personalThemeId);
+    storageService.setItem(STORAGE_KEYS.SCALE, currentScale);
+    storageService.setItem(STORAGE_KEYS.ROUTING, linkRouting);
+    storageService.setItem(STORAGE_KEYS.ROW_HEIGHT_MODE, rowHeightMode);
+    storageService.setItem(STORAGE_KEYS.ROW_HEIGHT, String(rowHeight));
+    storageService.setItem(STORAGE_KEYS.CRITICAL, String(showCriticalPath));
+    storageService.setItem(STORAGE_KEYS.BASELINES, String(showBaselines));
+    storageService.setItem(STORAGE_KEYS.AUTO_CASCADE, String(autoCascade));
+    storageService.setItem(STORAGE_KEYS.VIEW, activeView);
   }, [
-    selectedThemeId,
+    personalThemeId,
     currentScale,
     linkRouting,
     rowHeightMode,
@@ -70,27 +93,47 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
     activeView
   ]);
 
-  return {
-    selectedThemeId,
-    setSelectedThemeId,
-    activeTheme,
-    currentScale,
-    setCurrentScale,
-    currentDayWidth,
-    setCurrentDayWidth,
-    linkRouting,
-    setLinkRouting,
-    rowHeightMode,
-    setRowHeightMode,
-    rowHeight,
-    setRowHeight,
-    showCriticalPath,
-    setShowCriticalPath,
-    showBaselines,
-    setShowBaselines,
-    autoCascade,
-    setAutoCascade,
-    activeView,
-    setActiveView
-  };
+  // Stable identity while nothing changed, so consumers' effects and memos do not churn.
+  return useMemo(
+    () => ({
+      selectedThemeId,
+      setSelectedThemeId,
+      applyPlanTheme,
+      activeTheme,
+      currentScale,
+      setCurrentScale,
+      currentDayWidth,
+      setCurrentDayWidth,
+      linkRouting,
+      setLinkRouting,
+      rowHeightMode,
+      setRowHeightMode,
+      rowHeight,
+      setRowHeight,
+      showCriticalPath,
+      setShowCriticalPath,
+      showBaselines,
+      setShowBaselines,
+      autoCascade,
+      setAutoCascade,
+      activeView,
+      setActiveView
+    }),
+    [
+      selectedThemeId,
+      setSelectedThemeId,
+      applyPlanTheme,
+      activeTheme,
+      currentScale,
+      currentDayWidth,
+      linkRouting,
+      rowHeightMode,
+      rowHeight,
+      showCriticalPath,
+      showBaselines,
+      autoCascade,
+      activeView,
+      setActiveView
+    ]
+  );
 }

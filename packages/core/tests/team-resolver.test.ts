@@ -130,4 +130,55 @@ describe("Team & Member Resolver", () => {
       expect(resolved.displayName).toBe("Unassigned");
     });
   });
+
+  describe("hardening against untrusted plan data", () => {
+    const baseTask: Task = { id: "t", category: "dev", start: "2026-09-01", end: "2026-09-05" };
+
+    it("never returns an avatar color that could break out of a style attribute", () => {
+      const people = [
+        { id: "p1", name: "Mallory", color: 'red" onmouseover="alert(1)', teamId: "team-design" },
+        { id: "p2", name: "Eve", color: "url(javascript:alert(1))" }
+      ] as Person[];
+      expect(resolveTaskAssignee({ ...baseTask, assignee: "p1" }, people, sampleTeams).avatarColor).toBe("#F43F5E");
+      expect(resolveTaskAssignee({ ...baseTask, assignee: "p2" }, people, sampleTeams).avatarColor).toBe("#38BDF8");
+    });
+
+    it("falls back past hostile person and team colors to the default (markup, url(), declarations)", () => {
+      const payloads = ['red"><img src=x onerror=alert(1)>', "url(https://attacker.example/x)", "red; background: url(x)", "#12345", 42, null];
+      for (const color of payloads) {
+        const teams = [{ id: "tm", name: "Team", color }] as unknown as Team[];
+        const people = [{ id: "p", name: "P", teamId: "tm", color }] as unknown as Person[];
+        expect(resolveTaskAssignee({ ...baseTask, assignee: "p" }, people, teams).avatarColor).toBe("#38BDF8");
+      }
+    });
+
+    it("accepts hex, rgb()/hsl(), named colors and theme tokens", () => {
+      for (const color of ["#abc", "#A1B2C3", "#a1b2c3d4", "rgb(10, 20, 30)", "hsla(120deg 50% 50% / 0.5)", "teal", "var(--jantt-accent)"]) {
+        const people = [{ id: "p", name: "P", color }] as Person[];
+        expect(resolveTaskAssignee({ ...baseTask, assignee: "p" }, people).avatarColor).toBe(color);
+      }
+    });
+
+    it("tolerates null holes, nameless entries, object-form lists and non-string assignees", () => {
+      const people = [null, { id: "x" }, ...samplePeople] as unknown as Person[];
+      const teams = { a: null, b: { id: "y" }, c: sampleTeams[0] } as unknown as Team[];
+      expect(resolvePersonById(people, "sarah chen")?.id).toBe("person-sarah");
+      expect(resolveTeamById(teams, "core engineering")?.id).toBe("team-eng");
+      expect(() => resolveTaskAssignee({ ...baseTask, assignee: 42 as unknown as string }, people, teams)).not.toThrow();
+      expect(resolveTaskAssignee({ ...baseTask, assignee: 42 as unknown as string }, people, teams).displayName).toBe("42");
+    });
+
+    it("resolves people by username with or without '@'", () => {
+      const people = [{ id: "u-1", name: "Ahmad", username: "@ahmad" }] as Person[];
+      expect(resolvePersonById(people, "ahmad")?.id).toBe("u-1");
+      expect(resolvePersonById(people, "@Ahmad")?.id).toBe("u-1");
+    });
+
+    it("builds initials from code points and ignores '@' handle prefixes", () => {
+      const initials = (name: string) => resolveTaskAssignee({ ...baseTask, assignee: name }).initials;
+      expect(initials("@octocat")).toBe("O");
+      expect(initials("😀 Smile")).toBe("😀S");
+      expect(initials("𠮷野 家")).toBe("𠮷家");
+    });
+  });
 });

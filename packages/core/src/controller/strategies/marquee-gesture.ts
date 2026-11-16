@@ -20,29 +20,25 @@ export class MarqueeGestureStrategy implements IGestureStrategy {
     state.selectionBoxEl.style.width = `${width}px`;
     state.selectionBoxEl.style.height = `${height}px`;
 
-    // Calculate intersection with all task layouts
-    if (state.taskLayouts) {
-      state.taskLayouts.forEach((tl) => {
-        const taskRight = tl.x + tl.width;
-        const taskBottom = tl.y + tl.height;
-        const intersects =
-          tl.x < left + width && taskRight > left && tl.y < top + height && taskBottom > top;
+    if (!state.taskLayouts) return;
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    let changed = false;
+    state.taskLayouts.forEach((tl) => {
+      const intersects = tl.x < left + width && tl.x + tl.width > left && tl.y < top + height && tl.y + tl.height > top;
+      const id = tl.task.id;
+      if (intersects && !ctx.selectedTaskIds.has(id)) {
+        ctx.selectedTaskIds.add(id);
+        changed = true;
+      } else if (!intersects && !additive && ctx.selectedTaskIds.has(id)) {
+        ctx.selectedTaskIds.delete(id);
+        changed = true;
+      }
+    });
 
-        if (intersects) {
-          ctx.selectedTaskIds.add(tl.task.id);
-        } else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-          ctx.selectedTaskIds.delete(tl.task.id);
-        }
-      });
-
-      // Visually update selected state on DOM task bars in real-time
+    // Reflect the selection on the live bars without a full re-render.
+    if (changed) {
       state.canvasEl.querySelectorAll<HTMLElement>("[data-task-id]").forEach((bar) => {
-        const tId = bar.dataset.taskId!;
-        if (ctx.selectedTaskIds.has(tId)) {
-          bar.classList.add("is-selected");
-        } else {
-          bar.classList.remove("is-selected");
-        }
+        bar.classList.toggle("is-selected", ctx.selectedTaskIds.has(bar.dataset.taskId!));
       });
     }
   }

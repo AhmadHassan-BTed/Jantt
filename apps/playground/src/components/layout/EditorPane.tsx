@@ -19,6 +19,7 @@ import {
   LogIn
 } from "lucide-react";
 import type { JanttData, ValidationResult } from "@jantt/core";
+import { ConfirmDialog } from "../modals/ModalHost";
 
 interface EditorPaneProps {
   isSidebarCollapsed: boolean;
@@ -41,6 +42,15 @@ interface EditorPaneProps {
   onPromptFork?: () => void;
   isPendingLoginEditor?: boolean;
   onOpenEditorLogin?: () => void;
+}
+
+/** Accepted by the shared importer (JSON, MS Project XML, Primavera XER, CSV). */
+const IMPORT_ACCEPT = ".json,.xml,.xer,.csv,application/json,text/xml,text/csv";
+
+/** Keys that would modify text; viewers pressing them get the "make a local copy" prompt. */
+function isEditingKey(e: React.KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  return e.key.length === 1 || e.key === "Backspace" || e.key === "Delete" || e.key === "Enter";
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
@@ -67,6 +77,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showImportExportMenu, setShowImportExportMenu] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const importExportMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -97,11 +108,15 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
       id="editor-pane"
       className={`editor-pane ${isSidebarCollapsed ? "is-collapsed" : ""}`}
       style={{ width: isSidebarCollapsed ? "0px" : `${sidebarWidth}px` }}
+      aria-label="Plan JSON editor"
+      aria-hidden={isSidebarCollapsed || undefined}
+      // A collapsed editor must leave the tab order and the accessibility tree entirely.
+      {...({ inert: isSidebarCollapsed ? "" : undefined } as Record<string, unknown>)}
     >
       <div className="pane-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <FileJson size={15} />
-          <span>JSON State (Source of Truth)</span>
+        <div className="pane-title" title="JSON plan: the source of truth for every view">
+          <FileJson size={15} aria-hidden="true" />
+          <span className="pane-title-text">JSON Plan</span>
           {isLiveSyncing && (
             <span className="sync-pulse-badge">
               <Zap size={11} />
@@ -116,11 +131,14 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               <input
                 type="file"
                 ref={fileInputRef}
-                accept=".json"
+                accept={IMPORT_ACCEPT}
                 style={{ display: "none" }}
+                tabIndex={-1}
+                aria-hidden="true"
                 onChange={(e) => {
                   setShowImportExportMenu(false);
                   handleImportJsonFile(e);
+                  e.target.value = "";
                 }}
               />
             )}
@@ -130,6 +148,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               style={{ padding: "3px 8px", fontSize: "11px", gap: "5px", display: "flex", alignItems: "center" }}
               onClick={() => setShowImportExportMenu((prev) => !prev)}
               title="Import or export plan data"
+              aria-haspopup="menu"
+              aria-expanded={showImportExportMenu}
             >
               <ArrowDownUp size={12} />
               <span>Import / Export</span>
@@ -146,6 +166,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             {showImportExportMenu && (
               <div
                 className="editor-import-export-popup"
+                role="menu"
+                aria-label="Import or export"
                 style={{
                   position: "absolute",
                   top: "calc(100% + 5px)",
@@ -168,6 +190,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                   <button
                     type="button"
                     className="editor-popup-item"
+                    role="menuitem"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -188,7 +211,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                     }}
                   >
                     <Upload size={13} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} />
-                    <span style={{ fontWeight: 500 }}>Import JSON Plan (.json)</span>
+                    <span style={{ fontWeight: 500 }}>Import plan file (.json, .xml, .xer, .csv)</span>
                   </button>
                 )}
 
@@ -205,6 +228,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                   <button
                     type="button"
                     className="editor-popup-item"
+                    role="menuitem"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -234,6 +258,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                   <button
                     type="button"
                     className="editor-popup-item"
+                    role="menuitem"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -261,22 +286,46 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             )}
           </div>
 
-          <button className="btn-nav" style={{ padding: "3px 7px", fontSize: "11px" }} onClick={formatJson} title="Format JSON">
+          <button
+            type="button"
+            className="btn-nav"
+            style={{ padding: "3px 7px", fontSize: "11px" }}
+            onClick={formatJson}
+            title="Format JSON"
+            disabled={isViewer}
+          >
             Format
           </button>
-          <button className="btn-nav" style={{ padding: "3px 7px", fontSize: "11px" }} onClick={handleResetActiveProject} title="Reset current plan back to saved state or default template">
-            <RotateCcw size={12} />
+          <button
+            type="button"
+            className="btn-nav"
+            style={{ padding: "3px 7px", fontSize: "11px" }}
+            onClick={() => setConfirmReset(true)}
+            title="Discard unsaved editor changes and reload the last saved version of this plan"
+            disabled={isViewer}
+          >
+            <RotateCcw size={12} aria-hidden="true" />
             <span>Reset</span>
           </button>
-          <button className="btn-nav" style={{ padding: "3px 7px", fontSize: "11px" }} onClick={handleCopyJson} title="Copy JSON">
-            {copiedJson ? <Check size={12} /> : <Copy size={12} />}
+          <button
+            type="button"
+            className="btn-nav"
+            style={{ padding: "3px 7px", fontSize: "11px" }}
+            onClick={handleCopyJson}
+            title="Copy JSON"
+          >
+            {copiedJson ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
             <span>{copiedJson ? "Copied" : "Copy"}</span>
           </button>
           <button
+            type="button"
             className="btn-nav"
             style={{ padding: isMobile ? "3px 8px" : "3px 6px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
             onClick={() => setIsSidebarCollapsed(true)}
             title={isMobile ? "Close JSON Editor" : "Collapse JSON Sidebar"}
+            aria-label={isMobile ? "Close JSON editor" : "Collapse JSON sidebar"}
+            aria-controls="editor-pane"
+            aria-expanded="true"
           >
             {isMobile ? (
               <>
@@ -370,15 +419,35 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           className={`code-textarea ${isLiveSyncing ? "is-live-glowing" : ""}`}
           value={jsonText}
           readOnly={isViewer}
+          aria-label="Plan JSON"
+          aria-invalid={!validationResult.valid}
+          aria-describedby="diagnostics-panel"
           onChange={(e) => {
-            if (isViewer) {
-              onPromptFork?.();
-              return;
-            }
+            if (isViewer) return;
             handleEditorChange(e.target.value);
           }}
-          onClick={() => {
+          // Viewers can select and copy freely; only an actual edit attempt asks to make a copy.
+          onKeyDown={(e) => {
+            if (isViewer && isEditingKey(e)) {
+              e.preventDefault();
+              onPromptFork?.();
+            }
+          }}
+          onPaste={(e) => {
             if (isViewer) {
+              e.preventDefault();
+              onPromptFork?.();
+            }
+          }}
+          onCut={(e) => {
+            if (isViewer) {
+              e.preventDefault();
+              onPromptFork?.();
+            }
+          }}
+          onDrop={(e) => {
+            if (isViewer) {
+              e.preventDefault();
               onPromptFork?.();
             }
           }}
@@ -388,7 +457,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
       </div>
 
       {/* Real-time Diagnostics Bar */}
-      <div className="diagnostics-panel" id="diagnostics-panel">
+      <div className="diagnostics-panel" id="diagnostics-panel" aria-live="polite">
         <div className="diagnostics-title">
           {validationResult.valid ? (
             <>
@@ -421,6 +490,20 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           </div>
         )}
       </div>
+
+      {confirmReset && (
+        <ConfirmDialog
+          title="Reset to the last saved version?"
+          tone="danger"
+          confirmLabel="Discard unsaved edits"
+          message="The editor reloads the last saved version of this plan. Edits that have not been saved yet are lost."
+          onConfirm={() => {
+            setConfirmReset(false);
+            handleResetActiveProject();
+          }}
+          onCancel={() => setConfirmReset(false)}
+        />
+      )}
     </section>
   );
 };

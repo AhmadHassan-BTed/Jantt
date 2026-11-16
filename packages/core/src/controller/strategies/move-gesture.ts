@@ -1,51 +1,60 @@
-import { IGestureStrategy, DragState, GestureContext } from "../contracts";
+import { IGestureStrategy, DragState, GestureContext, constrainedStart } from "../contracts";
 import { addDays, diffDays } from "../../date-math";
-import { getTaskDependencies, resolveSchedule } from "../../resolver";
-import { getEffectiveGap } from "../../utils";
+import { Task } from "../../types";
 
 export class MoveGestureStrategy implements IGestureStrategy {
   public readonly mode = "move" as const;
 
-  public onMove(e: PointerEvent, state: DragState, ctx: GestureContext): void {
-    const deltaX = e.clientX - state.startX;
-    const deltaDays = Math.round(deltaX / ctx.dayWidth);
-    const task = ctx.data.tasks.find((t) => t.id === state.taskId);
-    if (!task) return;
+  public onMove(e: PointerEvent, state: DragState, ctx: GestureContext): boolean {
+    const deltaDays = Math.round((e.clientX - state.startX + (state.autoScrollX ?? 0)) / ctx.dayWidth);
+    if (deltaDays === state.lastValue) return false;
 
-    if (state.multiTasks && state.multiTasks.size > 1) {
-      state.multiTasks.forEach((orig, id) => {
-        const target = ctx.data.tasks.find((t) => t.id === id);
-        if (target) {
-          const origDur = Math.max(diffDays(orig.start, orig.end), 0);
-          const newStart = addDays(orig.start, deltaDays);
-          target.start = newStart;
-          target.end = addDays(newStart, origDur);
-        }
+    // Always recompute from the pre-drag tasks so repeated moves never accumulate rounding. The
+    // pre-drag lookup is built once per gesture, not on every frame.
+    const base = state.origTasks ?? ctx.data.tasks;
+    const byId = state.origTasks
+      ? (state.origById ??= new Map(base.map((t) => [t.id, t] as [string, Task])))
+      : new Map(base.map((t) => [t.id, t] as [string, Task]));
+    if (!state.taskId || !byId.has(state.taskId)) return false;
+    state.lastValue = deltaDays;
+
+    if (deltaDays === 0 && state.origTasks) {
+      ctx.setTasks(state.origTasks);
+      return true;
+    }
+
+    const moving =
+      state.multiTasks && state.multiTasks.size > 1
+        ? state.multiTasks
+        : new Map([[state.taskId, { start: state.origStart!, end: state.origEnd! }]]);
+
+    const placed = (orig: { start: string; end: string }, shift: number) => {
+      const start = addDays(orig.start, shift);
+      return { start, end: addDays(start, Math.max(diffDays(orig.start, orig.end), 0)) };
+    };
+
+    let shift = deltaDays;
+    if (!ctx.autoCascade) {
+      // Strict mode: never drop a moved task before what its (non-moving) predecessors allow.
+      const external = (id: string) => (moving.has(id) ? undefined : byId.get(id));
+      let extra = 0;
+      moving.forEach((orig, id) => {
+        const task = byId.get(id);
+        if (!task) return;
+        const proposed = { ...task, ...placed(orig, deltaDays) };
+        extra = Math.max(extra, diffDays(proposed.start, constrainedStart(proposed, external, ctx.resolve, byId)));
       });
-    } else {
-      const origDuration = Math.max(diffDays(state.origStart!, state.origEnd!), 0);
-      let newStart = addDays(state.origStart!, deltaDays);
-
-      if (!ctx.autoCascade) {
-        const deps = getTaskDependencies(task);
-        for (const depId of deps) {
-          const prereq = ctx.data.tasks.find((t) => t.id === depId);
-          if (prereq) {
-            const minAllowed = addDays(prereq.end, getEffectiveGap(task, ctx.defaultGapDays));
-            if (diffDays(minAllowed, newStart) < 0) {
-              newStart = minAllowed;
-            }
-          }
-        }
-      }
-
-      task.start = newStart;
-      task.end = addDays(newStart, origDuration);
+      shift += extra;
     }
 
-    if (ctx.autoCascade) {
-      ctx.data.tasks = resolveSchedule(ctx.data.tasks, ctx.defaultGapDays);
-    }
+    ctx.setTasks(
+      base.map((t) => {
+        const orig = moving.get(t.id);
+        return orig ? { ...t, ...placed(orig, shift) } : t;
+      }),
+      true
+    );
+    return true;
   }
 
   public onUp(_e: PointerEvent, state: DragState, ctx: GestureContext): void {
@@ -55,11 +64,10 @@ export class MoveGestureStrategy implements IGestureStrategy {
     if (!state.moved) {
       ctx.options.onTaskClick?.(task);
       ctx.openModalHandler(task);
-    } else {
-      if (ctx.autoCascade) {
-        ctx.data.tasks = resolveSchedule(ctx.data.tasks, ctx.defaultGapDays);
-      }
-      ctx.onRenderRequest();
+      return;
+    }
+    ctx.onRenderRequest();
+    if (!state.origTasks || ctx.data.tasks !== state.origTasks) {
       ctx.commitData();
     }
   }

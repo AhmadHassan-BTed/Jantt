@@ -1,13 +1,15 @@
 import { Task } from "../types";
 import { DEFAULT_GAP_DAYS } from "../constants";
-import { IPipelineStage, PipelineContext } from "./contracts";
+import { createCalendar } from "../calendar";
+import { IPipelineStage, PipelineContext, ScheduleCalendarOptions } from "./contracts";
 import { SanitizeStage } from "./stages/sanitize-stage";
 import { CycleGuardStage } from "./stages/cycle-guard-stage";
 import { CascadeResolveStage } from "./stages/cascade-resolve-stage";
 import { CriticalPathStage } from "./stages/critical-path-stage";
 
-export interface SchedulePipelineOptions {
+export interface SchedulePipelineOptions extends ScheduleCalendarOptions {
   defaultGapDays?: number;
+  /** When false, dates are left untouched (Strict mode). Defaults to true. */
   autoCascade?: boolean;
   breakCycles?: boolean;
   includeCriticalPath?: boolean;
@@ -41,6 +43,32 @@ export class SchedulePipeline {
   }
 
   /**
+   * Builds the execution context shared by all stages from pipeline options
+   * (normalizing the gap and the project calendar).
+   */
+  public static createContext(options: SchedulePipelineOptions = {}): PipelineContext {
+    const gap = options.defaultGapDays;
+    // A string project calendar may name an entry of `calendars` as well as a preset
+    const calendar =
+      typeof options.calendar === "string" && options.calendars?.[options.calendar]
+        ? options.calendars[options.calendar]
+        : options.calendar;
+    return {
+      defaultGapDays: typeof gap === "number" && Number.isFinite(gap) ? gap : DEFAULT_GAP_DAYS,
+      autoCascade: options.autoCascade ?? true,
+      diagnostics: [],
+      calendar: calendar ? createCalendar(calendar) : undefined,
+      calendars: options.calendars,
+      people: options.people,
+      useWorkingDays: options.useWorkingDays,
+      options: {
+        breakCycles: options.breakCycles ?? false,
+        ...options.options
+      }
+    };
+  }
+
+  /**
    * Appends a new stage to the pipeline.
    */
   public pipe(stage: IPipelineStage<Task[], Task[]>): this {
@@ -66,15 +94,7 @@ export class SchedulePipeline {
     tasks: Task[],
     options: SchedulePipelineOptions = {}
   ): { tasks: Task[]; diagnostics: string[]; context: PipelineContext } {
-    const context: PipelineContext = {
-      defaultGapDays: options.defaultGapDays ?? DEFAULT_GAP_DAYS,
-      autoCascade: options.autoCascade ?? true,
-      diagnostics: [],
-      options: {
-        breakCycles: options.breakCycles ?? false,
-        ...options.options
-      }
-    };
+    const context = SchedulePipeline.createContext(options);
 
     let current = tasks;
     for (const stage of this.stages) {

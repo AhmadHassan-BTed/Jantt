@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useId } from "react";
 import {
   Users,
   X,
@@ -15,10 +15,11 @@ import {
   Eye,
   Edit3
 } from "lucide-react";
-import type { Team, Person } from "@jantt/core";
+import { normalizeUsername, sanitizeCssColor, type Team, type Person } from "@jantt/core";
 import { ref, onValue } from "firebase/database";
 import {
   rtdb,
+  decodePlanFromRtdb,
   searchUsersByUsername,
   shareRoomWithUser,
   shareRoomWithTeam,
@@ -27,9 +28,11 @@ import {
   updateMemberRole,
   type UserProfile,
   type RoomMember,
+  type RoomMetadata,
   type RoomTeam
 } from "../../firebase";
-import { buildRoomViewerUrl, buildRoomCollaboratorUrl, getStoredRoomSecret } from "../../room-storage";
+import { buildRoomViewerUrl, getTrustedAvatarUrl, isValidRoomId } from "../../room-storage";
+import { Modal, ModalHeader, ConfirmDialog } from "../modals/ModalHost";
 
 interface ShareRoomModalProps {
   show: boolean;
@@ -38,12 +41,162 @@ interface ShareRoomModalProps {
   roomTitle: string;
   currentUserProfile: UserProfile | null;
   showToast: (msg: string, isErr?: boolean) => void;
+  /** Included in the copied room link when provided. */
+  activeView?: string;
+  selectedThemeId?: string;
+  /** @deprecated Teams and people are read from the shared room itself (the active plan may be another one). */
   planTeams?: Team[];
+  /** @deprecated See `planTeams`. */
   planPeople?: Person[];
+  /** @deprecated Counts are read from the room's metadata. */
   planTasksCount?: number;
+  /** @deprecated See `planTasksCount`. */
   planNotesCount?: number;
 }
 
+type ShareTab = "link" | "people" | "teams" | "members";
+
+interface PendingConfirm {
+  title: string;
+  message: React.ReactNode;
+  confirmLabel: string;
+  onConfirm: () => Promise<void>;
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "9px 12px",
+  borderRadius: "8px",
+  background: "var(--jantt-bg, rgba(15, 23, 42, 0.7))",
+  border: "1px solid var(--jantt-border)",
+  color: "var(--jantt-text)",
+  fontSize: "0.88rem"
+};
+
+const cardStyle: React.CSSProperties = {
+  padding: "14px 16px",
+  borderRadius: "10px",
+  border: "1px solid var(--jantt-border)",
+  background: "var(--jantt-surface)"
+};
+
+const mutedText: React.CSSProperties = { margin: 0, fontSize: "0.8rem", color: "var(--jantt-text-muted)", lineHeight: 1.45 };
+
+const sectionLabel: React.CSSProperties = {
+  fontSize: "0.74rem",
+  fontWeight: 700,
+  color: "var(--jantt-text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  marginBottom: "6px"
+};
+
+function errorText(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : String(err || "Unknown error");
+}
+
+function toList<T>(value: unknown, isItem: (item: unknown) => item is T): T[] {
+  if (!value || typeof value !== "object") return [];
+  const items = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>);
+  return items.filter(isItem);
+}
+
+const isNamed = <T extends { id: string; name: string }>(v: unknown): v is T =>
+  Boolean(v && typeof v === "object" && typeof (v as T).id === "string" && typeof (v as T).name === "string");
+
+const str = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+const strList = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+
+function snapshotEntries(value: unknown): [string, Record<string, unknown>][] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>).filter(
+    (entry): entry is [string, Record<string, unknown>] => Boolean(entry[0] && entry[1] && typeof entry[1] === "object")
+  );
+}
+
+/**
+ * Members keyed by uid. The key is the identity: a record body may carry a stale or forged `uid`,
+ * so the key alone is used for list keys, role changes and removal. Bodies are display hints and
+ * are type-checked before rendering.
+ */
+function membersFromSnapshot(value: unknown): RoomMember[] {
+  return snapshotEntries(value).map(([uid, m]) => {
+    const username = str(m.username) ?? "";
+    return {
+      uid,
+      username,
+      displayName: str(m.displayName)?.trim() || username || "Unknown member",
+      photoURL: str(m.photoURL),
+      role: m.role === "owner" || m.role === "editor" ? m.role : "viewer",
+      joinedAt: str(m.joinedAt) ?? "",
+      teamId: str(m.teamId),
+      teamName: str(m.teamName)
+    };
+  });
+}
+
+/** Teams shared with the room, keyed by team id (the key is the identity, as for members). */
+function teamsFromSnapshot(value: unknown): RoomTeam[] {
+  return snapshotEntries(value)
+    .filter(([, t]) => typeof t.name === "string")
+    .map(([id, t]) => ({
+      id,
+      name: t.name as string,
+      color: str(t.color),
+      memberUids: strList(t.memberUids),
+      memberUsernames: strList(t.memberUsernames),
+      role: t.role === "editor" ? "editor" : "viewer",
+      addedAt: str(t.addedAt) ?? ""
+    }));
+}
+
+const teamColor = (color: unknown) => sanitizeCssColor(color, "var(--jantt-accent)");
+
+/** "@handle", or the display name of a record without a username. */
+const memberLabel = (member: RoomMember) => (member.username ? `@${member.username}` : member.displayName);
+
+function teamPeople(team: Team, people: Person[]): Person[] {
+  const listed = Array.isArray(team.members) ? (team.members as unknown[]) : [];
+  return people.filter((p) => p.teamId === team.id || listed.includes(p.id));
+}
+
+const Avatar: React.FC<{ name?: string; photoURL?: string; size: number }> = ({ name, photoURL, size }) => {
+  const avatar = getTrustedAvatarUrl(photoURL);
+  return avatar ? (
+    <img
+      src={avatar}
+      alt=""
+      referrerPolicy="no-referrer"
+      style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0 }}
+    />
+  ) : (
+    <span
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: "50%",
+        background: "var(--jantt-accent)",
+        color: "var(--jantt-accent-contrast, #000000)",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 700,
+        fontSize: size * 0.4
+      }}
+    >
+      {(name?.trim()?.[0] || "?").toUpperCase()}
+    </span>
+  );
+};
+
+/**
+ * Share & access dialog of a cloud room. Everyone sees the room link and the member list;
+ * only the owner can invite people or teams and change or remove access (the database rules
+ * reject those writes for anyone else).
+ */
 export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   show,
   setShow,
@@ -51,909 +204,831 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   roomTitle,
   currentUserProfile,
   showToast,
-  planTeams = [],
-  planPeople = [],
-  planTasksCount,
-  planNotesCount
+  activeView,
+  selectedThemeId
 }) => {
-  const [activeTab, setActiveTab] = useState<"link" | "username" | "teams" | "members">("link");
+  const baseId = useId();
+  const [activeTab, setActiveTab] = useState<ShareTab>("link");
+  const [meta, setMeta] = useState<RoomMetadata | null>(null);
+  const [members, setMembers] = useState<RoomMember[]>([]);
+  const [roomTeams, setRoomTeams] = useState<RoomTeam[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+
+  // Individual invites
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [rawResults, setRawResults] = useState<UserProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [highlighted, setHighlighted] = useState(0);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [selectedRole, setSelectedRole] = useState<"editor" | "viewer">("editor");
   const [isSharing, setIsSharing] = useState(false);
+  const searchRequestRef = useRef(0);
 
-  // Teams search
+  // Team invites (teams and people of the shared room's own plan)
+  const [planTeams, setPlanTeams] = useState<Team[]>([]);
+  const [planPeople, setPlanPeople] = useState<Person[]>([]);
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
   const [selectedTeamRole, setSelectedTeamRole] = useState<"editor" | "viewer">("editor");
-  const [isTeamSharing, setIsTeamSharing] = useState(false);
+  const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
 
-  // Members & Teams in active room
-  const [members, setMembers] = useState<RoomMember[]>([]);
-  const [roomTeams, setRoomTeams] = useState<RoomTeam[]>([]);
-  const [copiedEditLink, setCopiedEditLink] = useState(false);
-  const [copiedViewLink, setCopiedViewLink] = useState(false);
+  const validRoomId = show && isValidRoomId(roomId) ? roomId : null;
+  const currentUid = currentUserProfile?.uid ?? null;
+  const isOwner = Boolean(currentUid && meta?.ownerUid === currentUid);
 
-  // Listen to members of active room
+  // Reset per open / per room.
   useEffect(() => {
-    if (!show || !roomId) {
-      setMembers([]);
-      setRoomTeams([]);
-      return;
-    }
-
-    const membersRef = ref(rtdb, `rooms/${roomId}/members`);
-    const unsubMembers = onValue(membersRef, (snap) => {
-      if (snap.exists()) {
-        const val = snap.val();
-        setMembers(Object.values(val));
-      } else {
-        setMembers([]);
-      }
-    });
-
-    const teamsRef = ref(rtdb, `rooms/${roomId}/teams`);
-    const unsubTeams = onValue(teamsRef, (snap) => {
-      if (snap.exists()) {
-        const val = snap.val();
-        setRoomTeams(Object.values(val));
-      } else {
-        setRoomTeams([]);
-      }
-    });
-
-    return () => {
-      unsubMembers();
-      unsubTeams();
-    };
+    if (!show) return;
+    setActiveTab("link");
+    setSearchQuery("");
+    setRawResults([]);
+    setSelectedUser(null);
+    setTeamSearchQuery("");
+    setCopiedLink(false);
+    setPendingConfirm(null);
   }, [show, roomId]);
 
-  // Real-time username autocomplete search
+  // Room meta, members and teams.
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
+    setMeta(null);
+    setMembers([]);
+    setRoomTeams([]);
+    setLoadError(null);
+    if (!validRoomId) return;
+    const onError = (error: Error) => setLoadError(error.message);
+    const unsubscribers = [
+      onValue(
+        ref(rtdb, `rooms/${validRoomId}/meta`),
+        (snap) => setMeta(snap.exists() ? (snap.val() as RoomMetadata) : null),
+        onError
+      ),
+      onValue(ref(rtdb, `rooms/${validRoomId}/members`), (snap) => setMembers(membersFromSnapshot(snap.val())), onError),
+      onValue(ref(rtdb, `rooms/${validRoomId}/teams`), (snap) => setRoomTeams(teamsFromSnapshot(snap.val())), onError)
+    ];
+    return () => unsubscribers.forEach((stop) => stop());
+  }, [validRoomId]);
+
+  // The room's own teams and people, only while inviting teams.
+  useEffect(() => {
+    setPlanTeams([]);
+    setPlanPeople([]);
+    if (!validRoomId || activeTab !== "teams" || !isOwner) return;
+    const decode = (value: unknown) => (value && typeof value === "object" ? decodePlanFromRtdb(value) : value);
+    const unsubscribers = [
+      onValue(
+        ref(rtdb, `rooms/${validRoomId}/data/teams`),
+        (snap) => setPlanTeams(toList(decode(snap.val()), isNamed<Team>)),
+        () => setPlanTeams([])
+      ),
+      onValue(
+        ref(rtdb, `rooms/${validRoomId}/data/people`),
+        (snap) => setPlanPeople(toList(decode(snap.val()), isNamed<Person>)),
+        () => setPlanPeople([])
+      )
+    ];
+    return () => unsubscribers.forEach((stop) => stop());
+  }, [validRoomId, activeTab, isOwner]);
+
+  // Username autocomplete; responses to superseded queries are dropped.
+  useEffect(() => {
+    const query = searchQuery.trim();
+    const requestId = ++searchRequestRef.current;
+    setSearchError(null);
+    if (!query || selectedUser || !isOwner) {
+      setRawResults([]);
       setIsSearching(false);
       return;
     }
-
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
+    setIsSearching(true);
+    const timer = window.setTimeout(async () => {
       try {
-        const results = await searchUsersByUsername(searchQuery, currentUserProfile?.uid);
-        const memberUids = new Set(members.map((m) => m.uid));
-        setSearchResults(results.filter((u) => !memberUids.has(u.uid)));
-      } catch {
-        setSearchResults([]);
+        const results = await searchUsersByUsername(query, currentUid ?? undefined);
+        if (searchRequestRef.current === requestId) setRawResults(results);
+      } catch (err) {
+        // A failed lookup is not "no such user": say so, so the owner can retry.
+        if (searchRequestRef.current === requestId) {
+          setRawResults([]);
+          setSearchError(errorText(err));
+        }
       } finally {
-        setIsSearching(false);
+        if (searchRequestRef.current === requestId) setIsSearching(false);
       }
     }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, selectedUser, isOwner, currentUid]);
 
-    return () => clearTimeout(timer);
-  }, [searchQuery, members, currentUserProfile?.uid]);
+  const memberUids = useMemo(() => new Set(members.map((m) => m.uid)), [members]);
+  // The owner (meta.ownerUid, the only definition of owner) first, then editors, then viewers.
+  const sortedMembers = useMemo(() => {
+    const rank = (m: RoomMember) => (m.uid === meta?.ownerUid ? 0 : m.role === "editor" ? 1 : 2);
+    return [...members].sort((a, b) => rank(a) - rank(b) || a.displayName.localeCompare(b.displayName));
+  }, [members, meta?.ownerUid]);
+  const searchResults = useMemo(
+    () => rawResults.filter((u) => !memberUids.has(u.uid) && u.uid !== meta?.ownerUid),
+    [rawResults, memberUids, meta?.ownerUid]
+  );
+  useEffect(() => setHighlighted(0), [searchResults]);
 
-  // Filtered plan teams
   const filteredTeams = useMemo(() => {
     const q = teamSearchQuery.toLowerCase().trim();
     if (!q) return planTeams;
     return planTeams.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
-        (typeof (t as any).department === "string" && ((t as any).department as string).toLowerCase().includes(q))
+        (typeof t.department === "string" && t.department.toLowerCase().includes(q))
     );
   }, [planTeams, teamSearchQuery]);
 
+  useEffect(() => {
+    if (!copiedLink) return;
+    const timer = window.setTimeout(() => setCopiedLink(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [copiedLink]);
+
   if (!show || !roomId) return null;
 
-  const secretKey = roomId ? getStoredRoomSecret(roomId) : null;
-  const editLink = roomId ? buildRoomCollaboratorUrl(roomId, secretKey, "gantt", "noir") : "";
-  const viewLink = roomId ? buildRoomViewerUrl(roomId, "gantt", "noir") : "";
-  const isOwner = currentUserProfile && members.some((m) => m.uid === currentUserProfile.uid && m.role === "owner");
+  const close = () => setShow(false);
+  const viewLink = validRoomId ? buildRoomViewerUrl(validRoomId, activeView, selectedThemeId) : "";
+  const ownerHandle = meta?.ownerUsername ? `@${meta.ownerUsername}` : "the owner";
+  const title = meta?.title || roomTitle;
 
-  const handleCopyEditLink = async () => {
-    try {
-      await navigator.clipboard.writeText(editLink);
-      setCopiedEditLink(true);
-      setTimeout(() => setCopiedEditLink(false), 2500);
-      showToast("Collaborator Edit link copied to clipboard!");
-    } catch {}
+  const tabs: { id: ShareTab; label: string; icon: React.ReactNode }[] = [
+    { id: "link", label: "Room link", icon: <Globe size={14} aria-hidden="true" /> },
+    ...(isOwner
+      ? [
+          { id: "people" as const, label: "Invite people", icon: <UserPlus size={14} aria-hidden="true" /> },
+          { id: "teams" as const, label: "Invite a team", icon: <Layers size={14} aria-hidden="true" /> }
+        ]
+      : []),
+    { id: "members", label: `Members (${members.length})`, icon: <Users size={14} aria-hidden="true" /> }
+  ];
+  const currentTab = tabs.some((t) => t.id === activeTab) ? activeTab : "link";
+  const tabId = (tab: ShareTab) => `${baseId}-tab-${tab}`;
+  const panelId = `${baseId}-panel`;
+
+  const focusTab = (tab: ShareTab) => {
+    setActiveTab(tab);
+    document.getElementById(tabId(tab))?.focus();
   };
 
-  const handleCopyViewLink = async () => {
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const index = tabs.findIndex((t) => t.id === currentTab);
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      const delta = event.key === "ArrowRight" ? 1 : -1;
+      focusTab(tabs[(index + delta + tabs.length) % tabs.length].id);
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      focusTab(tabs[event.key === "Home" ? 0 : tabs.length - 1].id);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!viewLink) return;
     try {
       await navigator.clipboard.writeText(viewLink);
-      setCopiedViewLink(true);
-      setTimeout(() => setCopiedViewLink(false), 2500);
-      showToast("Pure View (Read-Only) link copied to clipboard!");
-    } catch {}
+      setCopiedLink(true);
+      showToast("Room link copied. Anyone with it can view the plan.");
+    } catch {
+      showToast("Couldn't copy the link. Select it and copy it manually.", true);
+    }
+  };
+
+  const selectUser = (user: UserProfile) => {
+    setSelectedUser(user);
+    setSearchQuery(`@${user.username}`);
+  };
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (selectedUser || searchResults.length === 0) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      setHighlighted((h) => (h + delta + searchResults.length) % searchResults.length);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const user = searchResults[highlighted];
+      if (user) selectUser(user);
+    }
   };
 
   const handleShareWithSelectedUser = async () => {
-    if (!selectedUser || isSharing) return;
+    if (!selectedUser || isSharing || !validRoomId) return;
     setIsSharing(true);
     try {
-      await shareRoomWithUser(roomId, selectedUser, selectedRole);
-      showToast(`Added @${selectedUser.username} as ${selectedRole}!`);
+      await shareRoomWithUser(validRoomId, selectedUser, selectedRole);
+      showToast(
+        `Added @${selectedUser.username} as ${selectedRole === "editor" ? "an editor" : "a viewer"}. The room now appears in their "Shared with me" list.`
+      );
       setSelectedUser(null);
       setSearchQuery("");
-      setSearchResults([]);
-    } catch (err: any) {
-      showToast(`Failed to share: ${err.message}`, true);
+    } catch (err) {
+      showToast(`Couldn't add @${selectedUser.username}: ${errorText(err)}`, true);
     } finally {
       setIsSharing(false);
     }
   };
 
+  /** Invites the team's people that have a Jantt account (matched by their username). */
   const handleAddTeam = async (team: Team) => {
-    if (!roomId || isTeamSharing) return;
-    setIsTeamSharing(true);
+    if (!validRoomId || busyTeamId) return;
+    const people = teamPeople(team, planPeople);
+    const handles = Array.from(
+      new Set(people.map((p) => (typeof p.username === "string" ? normalizeUsername(p.username) : "")).filter(Boolean))
+    );
+    const withoutUsername = people.length - people.filter((p) => typeof p.username === "string" && normalizeUsername(p.username)).length;
+    if (handles.length === 0) {
+      showToast(`Nobody in "${team.name}" has a username in this plan. Share the room link with them instead.`, true);
+      return;
+    }
 
+    setBusyTeamId(team.id);
     try {
-      // Resolve members in this team from planPeople
-      const teamPersons = planPeople.filter(
-        (p) => p.teamId === team.id || (Array.isArray(team.members) && (team.members as unknown[]).includes(p.id))
+      let failedLookups = 0;
+      const matches = await Promise.all(
+        handles.map(async (handle) => {
+          try {
+            const results = await searchUsersByUsername(handle);
+            return results.find((u) => u.username === handle) ?? null;
+          } catch {
+            failedLookups++; // Reported below, separately from people without an account.
+            return null;
+          }
+        })
       );
-
-      // Create synthetic user records for team members
-      const usersToAdd: UserProfile[] = teamPersons.map((p) => ({
-        uid: `user-${p.id.toLowerCase().replace(/[^a-z0-9]/g, "-")}`,
-        username: (p.username || p.name).toLowerCase().replace(/[^a-z0-9]/g, "_"),
-        displayUsername: p.username || p.name,
-        displayName: p.name,
-        email: (p as any).email || `${p.name.toLowerCase().replace(/\s+/g, ".")}@team.local`,
-        photoURL: p.avatar,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }));
-
-      await shareRoomWithTeam(
-        roomId,
-        { id: team.id, name: team.name, color: team.color },
-        usersToAdd,
+      const accounts = matches.filter((u): u is UserProfile => Boolean(u));
+      const unresolved = handles.length - accounts.length - failedLookups + withoutUsername;
+      if (accounts.length === 0) {
+        showToast(
+          failedLookups > 0
+            ? `Couldn't look up the people in "${team.name}". Check your connection and try again.`
+            : `Nobody in "${team.name}" has a Jantt account yet. Share the room link with them instead.`,
+          true
+        );
+        return;
+      }
+      const result = await shareRoomWithTeam(
+        validRoomId,
+        { id: team.id, name: team.name, color: sanitizeCssColor(team.color) },
+        accounts,
         selectedTeamRole
       );
-
-      showToast(`Added team "${team.name}" with ${usersToAdd.length} member(s)!`);
-    } catch (err: any) {
-      showToast(`Failed to add team: ${err.message}`, true);
+      const added = result?.added?.length ?? accounts.length;
+      const missing = unresolved + (result?.skipped?.length ?? 0);
+      // People who already had access are neither added nor missing.
+      const addedText =
+        added > 0
+          ? `Added ${added} ${added === 1 ? "person" : "people"} from "${team.name}".`
+          : `Everyone in "${team.name}" with a Jantt account already has access.`;
+      const missingText =
+        missing > 0
+          ? ` ${missing} ${missing === 1 ? "person has" : "people have"} no Jantt account yet; share the room link with them.`
+          : "";
+      const failedText =
+        failedLookups > 0 ? ` ${failedLookups} ${failedLookups === 1 ? "person" : "people"} couldn't be looked up; try inviting the team again.` : "";
+      showToast(addedText + missingText + failedText, failedLookups > 0);
+    } catch (err) {
+      showToast(`Couldn't add team "${team.name}": ${errorText(err)}`, true);
     } finally {
-      setIsTeamSharing(false);
+      setBusyTeamId(null);
     }
   };
 
-  const handleRemoveTeam = async (teamId: string, teamName: string) => {
+  const confirmRemoveTeam = (team: { id: string; name: string }) => {
+    if (!validRoomId) return;
+    setPendingConfirm({
+      title: `Remove team "${team.name}"?`,
+      message: "People who were added only through this team lose access to the room. People you invited individually keep their access.",
+      confirmLabel: "Remove team",
+      onConfirm: async () => {
+        try {
+          await removeTeamFromRoom(validRoomId, team.id);
+          showToast(`Removed team "${team.name}".`);
+        } catch (err) {
+          showToast(`Couldn't remove the team: ${errorText(err)}`, true);
+        }
+      }
+    });
+  };
+
+  const confirmRemoveMember = (member: RoomMember) => {
+    if (!validRoomId) return;
+    setPendingConfirm({
+      title: `Remove ${memberLabel(member)}?`,
+      message: `${memberLabel(member)} will lose access to this room and it disappears from their room list.`,
+      confirmLabel: "Remove",
+      onConfirm: async () => {
+        try {
+          await removeMemberFromRoom(validRoomId, member.uid);
+          showToast(`Removed ${memberLabel(member)} from the room.`);
+        } catch (err) {
+          showToast(`Couldn't remove ${memberLabel(member)}: ${errorText(err)}`, true);
+        }
+      }
+    });
+  };
+
+  const handleRoleChange = async (member: RoomMember, newRole: "editor" | "viewer") => {
+    if (!validRoomId || member.role === newRole) return;
     try {
-      await removeTeamFromRoom(roomId, teamId);
-      showToast(`Removed team "${teamName}" and all its members.`);
-    } catch (err: any) {
-      showToast(`Could not remove team: ${err.message}`, true);
+      await updateMemberRole(validRoomId, member.uid, newRole);
+      showToast(`${memberLabel(member)} can now ${newRole === "editor" ? "edit" : "only view"} this room.`);
+    } catch (err) {
+      showToast(`Couldn't change the role: ${errorText(err)}`, true);
     }
   };
 
-  const handleRoleChange = async (memberUid: string, newRole: "editor" | "viewer") => {
-    try {
-      await updateMemberRole(roomId, memberUid, newRole);
-      showToast("Member permissions updated.");
-    } catch (err: any) {
-      showToast(`Could not update role: ${err.message}`, true);
-    }
-  };
+  const counts = [
+    `${members.length} member${members.length === 1 ? "" : "s"}`,
+    typeof meta?.taskCount === "number" ? `${meta.taskCount} task${meta.taskCount === 1 ? "" : "s"}` : null,
+    typeof meta?.noteCount === "number" ? `${meta.noteCount} note${meta.noteCount === 1 ? "" : "s"}` : null
+  ].filter(Boolean);
 
-  const handleRemoveMember = async (memberUid: string, username: string) => {
-    try {
-      await removeMemberFromRoom(roomId, memberUid);
-      showToast(`Removed @${username} from room.`);
-    } catch (err: any) {
-      showToast(`Could not remove member: ${err.message}`, true);
-    }
-  };
+  const listboxId = `${baseId}-results`;
+  const showResults = isOwner && !selectedUser && searchResults.length > 0;
 
   return (
-    <div className="prompt-modal-backdrop" onClick={() => setShow(false)}>
-      <div
-        className="prompt-modal-card"
-        style={{ maxWidth: "640px", width: "95%", maxHeight: "88vh", display: "flex", flexDirection: "column" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="prompt-modal-header" style={{ padding: "16px 20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: "40px",
-                height: "40px",
-                borderRadius: "10px",
-                background: "linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.2))",
-                color: "var(--jantt-accent)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "1px solid rgba(56, 189, 248, 0.3)"
-              }}
-            >
-              <Users size={22} />
-            </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: "1.12rem", fontWeight: 700, color: "var(--jantt-text)" }}>
-                Share Room: {roomTitle}
-              </h3>
-              <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--jantt-muted)" }}>
-                Room ID: <code style={{ color: "var(--jantt-accent)" }}>{roomId}</code> • {members.length} member{members.length === 1 ? "" : "s"}
-                {planTasksCount !== undefined && ` • ${planTasksCount} task${planTasksCount === 1 ? "" : "s"}`}
-                {planNotesCount !== undefined && ` • ${planNotesCount} note${planNotesCount === 1 ? "" : "s"}`}
-              </p>
-            </div>
-          </div>
-          <button className="prompt-modal-close" onClick={() => setShow(false)} aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
+    <>
+      <Modal onClose={close} maxWidth={640}>
+        <ModalHeader
+          icon={<Users size={18} />}
+          title={`Share "${title}"`}
+          subtitle={
+            <>
+              Room <code style={{ color: "var(--jantt-accent)" }}>{roomId}</code> · {counts.join(" · ")}
+            </>
+          }
+        />
 
-        {/* Tab Navigation */}
         <div
+          role="tablist"
+          aria-label="Share options"
           style={{
             display: "flex",
+            flexWrap: "wrap",
             gap: "4px",
-            padding: "6px",
-            margin: "0 20px",
-            background: "var(--jantt-surface-subtle, rgba(15, 23, 42, 0.5))",
+            margin: "12px 20px 0",
+            padding: "4px",
             borderRadius: "10px",
-            border: "1px solid var(--jantt-border)"
+            border: "1px solid var(--jantt-border)",
+            background: "var(--jantt-surface)",
+            flexShrink: 0
           }}
         >
-          <button
-            type="button"
-            onClick={() => setActiveTab("link")}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              borderRadius: "8px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              background: activeTab === "link" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "link" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)",
-              boxShadow: activeTab === "link" ? "0 2px 8px var(--jantt-accent-glow, rgba(255,255,255,0.2))" : "none",
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Globe size={14} /> Invite Link
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("username")}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              borderRadius: "8px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              background: activeTab === "username" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "username" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)",
-              boxShadow: activeTab === "username" ? "0 2px 8px var(--jantt-accent-glow, rgba(255,255,255,0.2))" : "none",
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Search size={14} /> Individuals
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("teams")}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              borderRadius: "8px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              background: activeTab === "teams" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "teams" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)",
-              boxShadow: activeTab === "teams" ? "0 2px 8px var(--jantt-accent-glow, rgba(255,255,255,0.2))" : "none",
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Layers size={14} /> Teams ({planTeams.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("members")}
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              borderRadius: "8px",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              background: activeTab === "members" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "members" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)",
-              boxShadow: activeTab === "members" ? "0 2px 8px var(--jantt-accent-glow, rgba(255,255,255,0.2))" : "none",
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Users size={14} /> Roster ({members.length})
-          </button>
+          {tabs.map((tab) => {
+            const selected = tab.id === currentTab;
+            return (
+              <button
+                key={tab.id}
+                id={tabId(tab.id)}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={panelId}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={handleTabKeyDown}
+                style={{
+                  flex: "1 1 120px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  padding: "7px 10px",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  background: selected ? "var(--jantt-accent)" : "transparent",
+                  color: selected ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)"
+                }}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Modal Body */}
-        <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
-          {/* TAB 1: INVITE LINKS (EDIT vs VIEW) */}
-          {activeTab === "link" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <p style={{ margin: "0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
-                Choose between an <strong>Edit Mode Link</strong> for teammates to collaborate live, or a <strong>Pure View Link</strong> for stakeholders to inspect the roadmap safely.
-              </p>
-
-              {/* Option A: Edit Mode Link */}
-              <div
-                style={{
-                  padding: "16px",
-                  borderRadius: "10px",
-                  background: "rgba(16, 185, 129, 0.05)",
-                  border: "1px solid rgba(16, 185, 129, 0.25)"
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Edit3 size={16} style={{ color: "#34D399" }} />
-                    <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--jantt-text)" }}>
-                      Edit Mode Link (Collaborative Live Sync)
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                        padding: "2px 7px",
-                        borderRadius: "100px",
-                        background: "rgba(16, 185, 129, 0.15)",
-                        color: "#34D399",
-                        border: "1px solid rgba(16, 185, 129, 0.3)"
-                      }}
-                    >
-                      Editor Access
-                    </span>
-                  </div>
-                  <button
-                    onClick={handleCopyEditLink}
-                    className="btn btn-primary"
-                    style={{
-                      padding: "6px 14px",
-                      fontSize: "0.82rem",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      background: copiedEditLink ? "#059669" : "var(--jantt-accent)"
-                    }}
-                  >
-                    {copiedEditLink ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedEditLink ? "Copied!" : "Copy Edit Link"}
-                  </button>
-                </div>
-                <p style={{ margin: "0 0 10px 0", fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
-                  Teammates sign in via GitHub to edit tasks, adjust schedules, and auto-sync in real time.
+        <div
+          id={panelId}
+          role="tabpanel"
+          aria-labelledby={tabId(currentTab)}
+          style={{ padding: "18px 20px 20px", overflowY: "auto", flex: 1, minHeight: 0 }}
+        >
+          {!validRoomId ? (
+            <p role="alert" style={mutedText}>
+              This room ID is not valid.
+            </p>
+          ) : (
+            <>
+              {loadError && (
+                <p role="alert" style={{ ...mutedText, color: "#F87171", marginBottom: "12px" }}>
+                  Couldn't load the room's members: {loadError}
                 </p>
-                <input
-                  readOnly
-                  value={editLink}
-                  onFocus={(e) => e.target.select()}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "6px",
-                    background: "rgba(15, 23, 42, 0.8)",
-                    border: "1px solid var(--jantt-border)",
-                    color: "var(--jantt-text)",
-                    fontSize: "0.82rem",
-                    fontFamily: "monospace"
-                  }}
-                />
-              </div>
+              )}
 
-              {/* Option B: Pure View Link */}
-              <div
-                style={{
-                  padding: "16px",
-                  borderRadius: "10px",
-                  background: "rgba(56, 189, 248, 0.05)",
-                  border: "1px solid rgba(56, 189, 248, 0.25)"
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Eye size={16} style={{ color: "var(--jantt-accent)" }} />
-                    <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--jantt-text)" }}>
-                      Pure View Link (Safe Read-Only)
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                        padding: "2px 7px",
-                        borderRadius: "100px",
-                        background: "rgba(56, 189, 248, 0.15)",
-                        color: "var(--jantt-accent)",
-                        border: "1px solid rgba(56, 189, 248, 0.3)"
-                      }}
-                    >
-                      Read-Only
-                    </span>
+              {/* ROOM LINK */}
+              {currentTab === "link" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                  <div style={cardStyle}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Eye size={16} aria-hidden="true" style={{ color: "var(--jantt-accent)" }} />
+                        <strong style={{ fontSize: "0.9rem" }}>Room link</strong>
+                        <span style={{ fontSize: "0.7rem", fontWeight: 700, padding: "2px 7px", borderRadius: "999px", background: "rgba(56, 189, 248, 0.15)", color: "var(--jantt-accent)" }}>
+                          View access
+                        </span>
+                      </div>
+                      <button type="button" onClick={handleCopyLink} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: "0.82rem" }}>
+                        {copiedLink ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                        {copiedLink ? "Copied" : "Copy link"}
+                      </button>
+                    </div>
+                    <p style={{ ...mutedText, marginBottom: "10px" }}>
+                      Anyone with this link can view the plan and its live updates, without signing in. The link never
+                      gives edit access.
+                    </p>
+                    <input
+                      readOnly
+                      aria-label="Room link"
+                      value={viewLink}
+                      onFocus={(e) => e.currentTarget.select()}
+                      style={{ ...inputStyle, fontFamily: "var(--jantt-font-mono, monospace)", fontSize: "0.8rem" }}
+                    />
                   </div>
-                  <button
-                    onClick={handleCopyViewLink}
-                    className="btn btn-secondary"
-                    style={{
-                      padding: "6px 14px",
-                      fontSize: "0.82rem",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px"
-                    }}
-                  >
-                    {copiedViewLink ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedViewLink ? "Copied!" : "Copy View Link"}
-                  </button>
-                </div>
-                <p style={{ margin: "0 0 10px 0", fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
-                  Share with clients, executives, and observers. They can view live updates but cannot modify tasks or sync edits. No login required.
-                </p>
-                <input
-                  readOnly
-                  value={viewLink}
-                  onFocus={(e) => e.target.select()}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "6px",
-                    background: "rgba(15, 23, 42, 0.8)",
-                    border: "1px solid var(--jantt-border)",
-                    color: "var(--jantt-text)",
-                    fontSize: "0.82rem",
-                    fontFamily: "monospace"
-                  }}
-                />
-              </div>
 
-              {/* Security & Access Summary */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "10px",
-                  padding: "12px 14px",
-                  borderRadius: "8px",
-                  background: "rgba(16, 185, 129, 0.08)",
-                  border: "1px solid rgba(16, 185, 129, 0.2)"
-                }}
-              >
-                <Shield size={16} style={{ color: "#34D399", flexShrink: 0, marginTop: "2px" }} />
-                <span style={{ fontSize: "0.78rem", color: "var(--jantt-muted)", lineHeight: 1.45 }}>
-                  <strong>Edit Protection:</strong> Anyone not signed in via GitHub can only view the chart via the Pure View link. Performing edits to the shared cloud room strictly requires a GitHub account and verified editor permissions.
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: INDIVIDUALS SEARCH */}
-          {activeTab === "username" && (
-            <div>
-              <p style={{ margin: "0 0 14px 0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
-                Search for any registered collaborator by username or display name to add them to this room.
-              </p>
-
-              <div style={{ position: "relative", marginBottom: "14px" }}>
-                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                  <Search size={16} style={{ position: "absolute", left: "12px", color: "var(--jantt-muted)" }} />
-                  <input
-                    type="text"
-                    placeholder="Search @username or name..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setSelectedUser(null);
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: "10px 38px 10px 36px",
-                      borderRadius: "8px",
-                      background: "rgba(15, 23, 42, 0.7)",
-                      border: "1px solid var(--jantt-border)",
-                      color: "var(--jantt-text)",
-                      fontSize: "0.9rem"
-                    }}
-                  />
-                  {isSearching && (
-                    <Loader2 size={16} className="spin" style={{ position: "absolute", right: "12px", color: "var(--jantt-muted)" }} />
-                  )}
-                </div>
-
-                {/* Autocomplete Dropdown List */}
-                {searchResults.length > 0 && !selectedUser && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 4px)",
-                      left: 0,
-                      right: 0,
-                      background: "rgba(15, 23, 42, 0.98)",
-                      border: "1px solid var(--jantt-border)",
-                      borderRadius: "8px",
-                      boxShadow: "0 10px 25px rgba(0, 0, 0, 0.5)",
-                      zIndex: 100,
-                      maxHeight: "220px",
-                      overflowY: "auto"
-                    }}
-                  >
-                    {searchResults.map((user) => (
-                      <div
-                        key={user.uid}
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setSearchQuery(`@${user.username}`);
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "10px 14px",
-                          cursor: "pointer",
-                          borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-                          transition: "background 0.15s ease"
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(56, 189, 248, 0.15)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          {user.photoURL ? (
-                            <img src={user.photoURL} alt="Avatar" style={{ width: "28px", height: "28px", borderRadius: "50%" }} />
-                          ) : (
-                            <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "var(--jantt-accent)", color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.8rem" }}>
-                              {user.displayName?.[0]?.toUpperCase() || "U"}
-                            </div>
-                          )}
+                  <div style={{ ...cardStyle, display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                    <Shield size={16} aria-hidden="true" style={{ color: "#34D399", flexShrink: 0, marginTop: "2px" }} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }}>
+                      <strong style={{ fontSize: "0.88rem" }}>Who can edit</strong>
+                      {isOwner ? (
+                        <>
+                          <p style={mutedText}>
+                            Invite teammates by their Jantt username and choose <strong>Can edit</strong>. They edit
+                            after signing in with GitHub; you can change or remove their access any time under Members.
+                          </p>
                           <div>
-                            <strong style={{ fontSize: "0.88rem", color: "var(--jantt-text)" }}>{user.displayName}</strong>
-                            <div style={{ fontSize: "0.78rem", color: "var(--jantt-accent)" }}>@{user.username}</div>
+                            <button type="button" className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: "0.82rem" }} onClick={() => setActiveTab("people")}>
+                              <UserPlus size={14} aria-hidden="true" /> Invite people
+                            </button>
                           </div>
-                        </div>
-                        <span style={{ fontSize: "0.75rem", color: "var(--jantt-muted)" }}>{user.email}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Selected User Action Card */}
-              {selectedUser && (
-                <div
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "10px",
-                    background: "rgba(56, 189, 248, 0.08)",
-                    border: "1px solid rgba(56, 189, 248, 0.3)",
-                    marginBottom: "16px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between"
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    {selectedUser.photoURL ? (
-                      <img src={selectedUser.photoURL} alt="Avatar" style={{ width: "36px", height: "36px", borderRadius: "50%" }} />
-                    ) : (
-                      <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--jantt-accent)", color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>
-                        {selectedUser.displayName?.[0]?.toUpperCase() || "U"}
-                      </div>
-                    )}
-                    <div>
-                      <div style={{ fontWeight: 700, color: "var(--jantt-text)", fontSize: "0.95rem" }}>
-                        {selectedUser.displayName} <span style={{ color: "var(--jantt-accent)", fontWeight: 600 }}>@{selectedUser.username}</span>
-                      </div>
-                      <div style={{ fontSize: "0.78rem", color: "var(--jantt-muted)" }}>{selectedUser.email}</div>
+                        </>
+                      ) : (
+                        <p style={mutedText}>
+                          Only {ownerHandle} can invite people or change access.
+                          {currentUserProfile ? " Ask them to make you an Editor." : " Sign in with GitHub, then ask them to make you an Editor."}
+                        </p>
+                      )}
                     </div>
                   </div>
+                </div>
+              )}
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              {/* INVITE PEOPLE (owner) */}
+              {currentTab === "people" && isOwner && (
+                <div>
+                  <p style={{ ...mutedText, marginBottom: "12px" }}>
+                    Find a teammate by their Jantt username. They must have signed in to Jantt once.
+                  </p>
+                  <label htmlFor={`${baseId}-search`} style={sectionLabel}>
+                    Username
+                  </label>
+                  <div style={{ position: "relative", marginBottom: "14px" }}>
+                    <Search size={16} aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--jantt-text-muted)" }} />
+                    <input
+                      id={`${baseId}-search`}
+                      type="text"
+                      role="combobox"
+                      aria-expanded={showResults}
+                      aria-controls={listboxId}
+                      aria-autocomplete="list"
+                      aria-activedescendant={showResults ? `${listboxId}-${highlighted}` : undefined}
+                      autoComplete="off"
+                      spellCheck={false}
+                      data-autofocus
+                      placeholder="@username"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setSelectedUser(null);
+                      }}
+                      onKeyDown={handleSearchKeyDown}
+                      style={{ ...inputStyle, padding: "10px 36px" }}
+                    />
+                    {isSearching && (
+                      <Loader2 size={16} className="spin-sync-icon" aria-label="Searching" style={{ position: "absolute", right: "12px", top: "50%", marginTop: "-8px", color: "var(--jantt-text-muted)" }} />
+                    )}
+                    {showResults && (
+                      <ul
+                        id={listboxId}
+                        role="listbox"
+                        aria-label="Matching users"
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 4px)",
+                          left: 0,
+                          right: 0,
+                          margin: 0,
+                          padding: "4px",
+                          listStyle: "none",
+                          background: "var(--jantt-surface-solid, #0F172A)",
+                          border: "1px solid var(--jantt-border-strong, var(--jantt-border))",
+                          borderRadius: "8px",
+                          boxShadow: "0 10px 25px rgba(0, 0, 0, 0.35)",
+                          zIndex: 5,
+                          maxHeight: "220px",
+                          overflowY: "auto"
+                        }}
+                      >
+                        {searchResults.map((user, index) => (
+                          <li
+                            key={user.uid}
+                            id={`${listboxId}-${index}`}
+                            role="option"
+                            aria-selected={index === highlighted}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onMouseEnter={() => setHighlighted(index)}
+                            onClick={() => selectUser(user)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              padding: "8px 10px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              background: index === highlighted ? "var(--jantt-surface-hover, rgba(56, 189, 248, 0.15))" : "transparent"
+                            }}
+                          >
+                            <Avatar name={user.displayName} photoURL={user.photoURL} size={28} />
+                            <span style={{ minWidth: 0 }}>
+                              <strong style={{ display: "block", fontSize: "0.86rem", color: "var(--jantt-text)" }}>{user.displayName}</strong>
+                              <span style={{ fontSize: "0.78rem", color: "var(--jantt-accent)" }}>@{user.username}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  {searchError && (
+                    <p role="alert" style={{ ...mutedText, color: "#F87171", marginBottom: "12px" }}>
+                      Couldn't search for accounts: {searchError}
+                    </p>
+                  )}
+                  {!isSearching && !searchError && searchQuery.trim() && !selectedUser && searchResults.length === 0 && (
+                    <p style={{ ...mutedText, marginBottom: "12px" }}>
+                      No matching account that isn't already a member. People without a Jantt account can view with the room link.
+                    </p>
+                  )}
+
+                  {selectedUser && (
+                    <div style={{ ...cardStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                        <Avatar name={selectedUser.displayName} photoURL={selectedUser.photoURL} size={36} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: "0.92rem" }}>{selectedUser.displayName}</div>
+                          <div style={{ fontSize: "0.8rem", color: "var(--jantt-accent)" }}>@{selectedUser.username}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <label htmlFor={`${baseId}-role`} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+                          Access for @{selectedUser.username}
+                        </label>
+                        <select
+                          id={`${baseId}-role`}
+                          value={selectedRole}
+                          onChange={(e) => setSelectedRole(e.target.value as "editor" | "viewer")}
+                          className="select-input"
+                          style={{ padding: "6px 10px", fontSize: "0.82rem" }}
+                        >
+                          <option value="editor">Can edit</option>
+                          <option value="viewer">Can view</option>
+                        </select>
+                        <button type="button" onClick={handleShareWithSelectedUser} disabled={isSharing} className="btn btn-primary" style={{ padding: "7px 14px", fontSize: "0.85rem" }}>
+                          {isSharing ? <Loader2 size={14} className="spin-sync-icon" aria-hidden="true" /> : <UserPlus size={14} aria-hidden="true" />} Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* INVITE A TEAM (owner) */}
+              {currentTab === "teams" && isOwner && (
+                <div>
+                  <p style={{ ...mutedText, marginBottom: "12px" }}>
+                    Invite everyone in one of this room's teams. People are matched to Jantt accounts by the username in
+                    their People &amp; Teams entry; anyone without an account can still view with the room link.
+                  </p>
+                  <div style={{ marginBottom: "14px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ position: "relative", flex: "1 1 220px" }}>
+                      <Search size={16} aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--jantt-text-muted)" }} />
+                      <input
+                        type="search"
+                        aria-label="Filter teams"
+                        placeholder="Filter teams…"
+                        value={teamSearchQuery}
+                        onChange={(e) => setTeamSearchQuery(e.target.value)}
+                        style={{ ...inputStyle, paddingLeft: "36px" }}
+                      />
+                    </div>
                     <select
-                      value={selectedRole}
-                      onChange={(e) => setSelectedRole(e.target.value as "editor" | "viewer")}
+                      aria-label="Access for invited team members"
+                      value={selectedTeamRole}
+                      onChange={(e) => setSelectedTeamRole(e.target.value as "editor" | "viewer")}
                       className="select-input"
                       style={{ padding: "6px 10px", fontSize: "0.82rem" }}
                     >
-                      <option value="editor">Can Edit</option>
-                      <option value="viewer">Can View</option>
+                      <option value="editor">Add as editors</option>
+                      <option value="viewer">Add as viewers</option>
                     </select>
-
-                    <button
-                      onClick={handleShareWithSelectedUser}
-                      disabled={isSharing}
-                      className="btn btn-primary"
-                      style={{ padding: "7px 14px", fontSize: "0.85rem" }}
-                    >
-                      {isSharing ? <Loader2 size={14} className="spin" /> : <UserPlus size={14} />} Add
-                    </button>
                   </div>
+
+                  {filteredTeams.length === 0 ? (
+                    <p style={{ ...mutedText, textAlign: "center", padding: "24px 10px" }}>
+                      {planTeams.length === 0
+                        ? "This room's plan has no teams yet. Create teams under People & Teams first."
+                        : "No team matches the filter."}
+                    </p>
+                  ) : (
+                    <ul style={{ display: "flex", flexDirection: "column", gap: "10px", margin: 0, padding: 0, listStyle: "none" }}>
+                      {filteredTeams.map((team) => {
+                        const isAdded = roomTeams.some((rt) => rt.id === team.id);
+                        const memberCount = teamPeople(team, planPeople).length;
+                        const isBusy = busyTeamId === team.id;
+                        return (
+                          <li key={team.id} style={{ ...cardStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", padding: "12px 14px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                              <span aria-hidden="true" style={{ width: "12px", height: "12px", borderRadius: "50%", flexShrink: 0, background: teamColor(team.color) }} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <strong style={{ fontSize: "0.9rem" }}>{team.name}</strong>
+                                  {isAdded && (
+                                    <span style={{ fontSize: "0.68rem", padding: "1px 6px", borderRadius: "10px", background: "#10B981", color: "#FFFFFF", fontWeight: 700 }}>Added</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: "0.78rem", color: "var(--jantt-text-muted)" }}>
+                                  {memberCount} {memberCount === 1 ? "person" : "people"}
+                                  {typeof team.department === "string" && team.department ? ` · ${team.department}` : ""}
+                                </div>
+                              </div>
+                            </div>
+                            {isAdded ? (
+                              <button type="button" onClick={() => confirmRemoveTeam(team)} className="btn btn-secondary" style={{ fontSize: "0.78rem", padding: "5px 10px", color: "#EF4444" }}>
+                                Remove team
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAddTeam(team)}
+                                disabled={Boolean(busyTeamId) || memberCount === 0}
+                                className="btn btn-primary"
+                                style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                              >
+                                {isBusy ? <Loader2 size={13} className="spin-sync-icon" aria-hidden="true" /> : <Layers size={13} aria-hidden="true" />} Invite team
+                              </button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* TAB 3: TEAMS BULK SEARCH & ADDITION */}
-          {activeTab === "teams" && (
-            <div>
-              <p style={{ margin: "0 0 14px 0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
-                Add entire teams in bulk to grant collaboration access to all team members in one click.
-              </p>
+              {/* MEMBERS */}
+              {currentTab === "members" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {!isOwner && <p style={{ ...mutedText, marginBottom: "6px" }}>Only {ownerHandle} can change access.</p>}
 
-              <div style={{ marginBottom: "14px", display: "flex", gap: "10px" }}>
-                <div style={{ position: "relative", flex: 1, display: "flex", alignItems: "center" }}>
-                  <Search size={16} style={{ position: "absolute", left: "12px", color: "var(--jantt-muted)" }} />
-                  <input
-                    type="text"
-                    placeholder="Search teams by name..."
-                    value={teamSearchQuery}
-                    onChange={(e) => setTeamSearchQuery(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "9px 12px 9px 36px",
-                      borderRadius: "8px",
-                      background: "rgba(15, 23, 42, 0.7)",
-                      border: "1px solid var(--jantt-border)",
-                      color: "var(--jantt-text)",
-                      fontSize: "0.88rem"
-                    }}
-                  />
-                </div>
-                <select
-                  value={selectedTeamRole}
-                  onChange={(e) => setSelectedTeamRole(e.target.value as "editor" | "viewer")}
-                  className="select-input"
-                  style={{ padding: "6px 10px", fontSize: "0.82rem" }}
-                >
-                  <option value="editor">Add as Editors</option>
-                  <option value="viewer">Add as Viewers</option>
-                </select>
-              </div>
+                  {roomTeams.length > 0 && (
+                    <div style={{ marginBottom: "10px" }}>
+                      <div style={sectionLabel}>Teams ({roomTeams.length})</div>
+                      <ul style={{ display: "flex", flexWrap: "wrap", gap: "8px", margin: 0, padding: 0, listStyle: "none" }}>
+                        {roomTeams.map((rt) => (
+                          <li key={rt.id} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "5px 10px", borderRadius: "8px", background: "rgba(56, 189, 248, 0.1)", border: "1px solid rgba(56, 189, 248, 0.25)" }}>
+                            <span aria-hidden="true" style={{ width: "8px", height: "8px", borderRadius: "50%", background: teamColor(rt.color) }} />
+                            <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>{rt.name}</span>
+                            <span style={{ fontSize: "0.72rem", color: "var(--jantt-text-muted)" }}>
+                              {rt.memberUids?.length || 0} {rt.memberUids?.length === 1 ? "person" : "people"}
+                            </span>
+                            {isOwner && (
+                              <button
+                                type="button"
+                                onClick={() => confirmRemoveTeam(rt)}
+                                aria-label={`Remove team ${rt.name}`}
+                                title="Remove team"
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: "0 2px", display: "inline-flex" }}
+                              >
+                                <X size={12} aria-hidden="true" />
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
-              {filteredTeams.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "30px 10px", color: "var(--jantt-muted)", fontSize: "0.88rem" }}>
-                  No teams found in this plan. Create teams under <strong>People & Teams</strong> first to share in bulk.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {filteredTeams.map((team) => {
-                    const isAlreadyAdded = roomTeams.some((rt) => rt.id === team.id);
-                    const memberCount = (Array.isArray(team.members) ? team.members.length : 0) || planPeople.filter((p) => p.teamId === team.id).length;
-
-                    return (
-                      <div
-                        key={team.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "12px 16px",
-                          borderRadius: "10px",
-                          background: isAlreadyAdded ? "rgba(16, 185, 129, 0.08)" : "rgba(30, 41, 59, 0.4)",
-                          border: isAlreadyAdded ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid var(--jantt-border)"
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <div
-                            style={{
-                              width: "14px",
-                              height: "14px",
-                              borderRadius: "50%",
-                              background: team.color || "var(--jantt-accent)"
-                            }}
-                          />
-                          <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <strong style={{ fontSize: "0.92rem", color: "var(--jantt-text)" }}>{team.name}</strong>
-                              {isAlreadyAdded && (
-                                <span style={{ fontSize: "0.68rem", padding: "1px 6px", borderRadius: "10px", background: "#10B981", color: "#FFF", fontWeight: 700 }}>
-                                  ADDED
-                                </span>
+                  <div style={sectionLabel}>People ({members.length})</div>
+                  <ul style={{ display: "flex", flexDirection: "column", gap: "8px", margin: 0, padding: 0, listStyle: "none" }}>
+                    {sortedMembers.map((member) => {
+                      const isRoomOwnerRow = member.uid === meta?.ownerUid;
+                      const isMe = member.uid === currentUid;
+                      const roleLabel = isRoomOwnerRow ? "Owner" : member.role === "editor" ? "Editor" : "Viewer";
+                      return (
+                        <li key={member.uid} style={{ ...cardStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", padding: "10px 14px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                            <Avatar name={member.displayName || member.username} photoURL={member.photoURL} size={32} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <strong style={{ fontSize: "0.88rem" }}>{member.displayName || member.username}</strong>
+                                {isMe && <span style={{ fontSize: "0.7rem", color: "var(--jantt-accent)", fontWeight: 700 }}>(you)</span>}
+                                {member.teamName && (
+                                  <span style={{ fontSize: "0.68rem", padding: "1px 5px", borderRadius: "4px", background: "rgba(99, 102, 241, 0.15)", color: "#818CF8" }}>
+                                    {member.teamName}
+                                  </span>
+                                )}
+                              </div>
+                              {member.username && (
+                                <div style={{ fontSize: "0.76rem", color: "var(--jantt-text-muted)" }}>@{member.username}</div>
                               )}
                             </div>
-                            <div style={{ fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
-                              {memberCount} member{memberCount === 1 ? "" : "s"} {team.department ? `• ${team.department}` : ""}
-                            </div>
                           </div>
-                        </div>
 
-                        {isAlreadyAdded ? (
-                          <button
-                            onClick={() => handleRemoveTeam(team.id, team.name)}
-                            className="btn btn-secondary"
-                            style={{ fontSize: "0.78rem", padding: "5px 10px", color: "#EF4444" }}
-                          >
-                            Remove Team
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleAddTeam(team)}
-                            disabled={isTeamSharing}
-                            className="btn btn-primary"
-                            style={{ fontSize: "0.8rem", padding: "6px 12px" }}
-                          >
-                            <Layers size={13} /> Add Team ({memberCount})
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {isRoomOwnerRow ? (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "0.75rem", fontWeight: 700, color: "#F59E0B", padding: "3px 8px", borderRadius: "6px", background: "rgba(245, 158, 11, 0.15)" }}>
+                                <Crown size={12} aria-hidden="true" /> Owner
+                              </span>
+                            ) : isOwner ? (
+                              <>
+                                <select
+                                  aria-label={`Access for ${memberLabel(member)}`}
+                                  value={member.role === "editor" ? "editor" : "viewer"}
+                                  onChange={(e) => handleRoleChange(member, e.target.value as "editor" | "viewer")}
+                                  className="select-input"
+                                  style={{ padding: "4px 8px", fontSize: "0.78rem" }}
+                                >
+                                  <option value="editor">Can edit</option>
+                                  <option value="viewer">Can view</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => confirmRemoveMember(member)}
+                                  className="btn btn-secondary"
+                                  aria-label={`Remove ${memberLabel(member)} from the room`}
+                                  title="Remove from room"
+                                  style={{ color: "#EF4444", padding: "6px 8px" }}
+                                >
+                                  <Trash2 size={13} aria-hidden="true" />
+                                </button>
+                              </>
+                            ) : (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 600,
+                                  padding: "3px 8px",
+                                  borderRadius: "6px",
+                                  background: member.role === "editor" ? "rgba(16, 185, 129, 0.15)" : "rgba(56, 189, 248, 0.15)",
+                                  color: member.role === "editor" ? "#34D399" : "var(--jantt-accent)"
+                                }}
+                              >
+                                {member.role === "editor" ? <Edit3 size={11} aria-hidden="true" /> : <Eye size={11} aria-hidden="true" />} {roleLabel}
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* TAB 4: ROSTER DIRECTORY & MANAGEMENT */}
-          {activeTab === "members" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {/* Added Teams Section */}
-              {roomTeams.length > 0 && (
-                <div style={{ marginBottom: "12px" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", marginBottom: "6px" }}>
-                    Active Teams ({roomTeams.length})
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                    {roomTeams.map((rt) => (
-                      <div
-                        key={rt.id}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          padding: "6px 10px",
-                          borderRadius: "8px",
-                          background: "rgba(56, 189, 248, 0.1)",
-                          border: "1px solid rgba(56, 189, 248, 0.25)"
-                        }}
-                      >
-                        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: rt.color || "var(--jantt-accent)" }} />
-                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--jantt-text)" }}>{rt.name}</span>
-                        <span style={{ fontSize: "0.72rem", color: "var(--jantt-muted)" }}>({rt.memberUids?.length || 0} members)</span>
-                        {isOwner && (
-                          <button
-                            onClick={() => handleRemoveTeam(rt.id, rt.name)}
-                            title="Remove entire team from room"
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: "0 2px" }}
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Members List */}
-              <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", marginBottom: "6px" }}>
-                Individual Members ({members.length})
-              </div>
-
-              {members.map((member) => {
-                const isMemberOwner = member.role === "owner";
-                const isMe = currentUserProfile && member.uid === currentUserProfile.uid;
-
-                return (
-                  <div
-                    key={member.uid}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "10px 14px",
-                      borderRadius: "8px",
-                      background: "rgba(30, 41, 59, 0.4)",
-                      border: "1px solid var(--jantt-border)"
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      {member.photoURL ? (
-                        <img src={member.photoURL} alt="Avatar" style={{ width: "32px", height: "32px", borderRadius: "50%" }} />
-                      ) : (
-                        <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--jantt-accent)", color: "#FFF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.8rem" }}>
-                          {member.displayName?.[0]?.toUpperCase() || "U"}
-                        </div>
-                      )}
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <strong style={{ fontSize: "0.88rem", color: "var(--jantt-text)" }}>{member.displayName}</strong>
-                          {isMe && (
-                            <span style={{ fontSize: "0.7rem", color: "var(--jantt-accent)", fontWeight: 700 }}>(You)</span>
-                          )}
-                          {member.teamName && (
-                            <span style={{ fontSize: "0.68rem", padding: "1px 5px", borderRadius: "4px", background: "rgba(99, 102, 241, 0.15)", color: "#818CF8", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
-                              {member.teamName}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: "0.76rem", color: "var(--jantt-muted)" }}>@{member.username}</div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      {isMemberOwner ? (
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            fontSize: "0.75rem",
-                            fontWeight: 700,
-                            color: "#F59E0B",
-                            padding: "3px 8px",
-                            borderRadius: "6px",
-                            background: "rgba(245, 158, 11, 0.15)"
-                          }}
-                        >
-                          <Crown size={12} /> Owner
-                        </span>
-                      ) : isOwner ? (
-                        <>
-                          <select
-                            value={member.role}
-                            onChange={(e) => handleRoleChange(member.uid, e.target.value as "editor" | "viewer")}
-                            className="select-input"
-                            style={{ padding: "4px 8px", fontSize: "0.78rem" }}
-                          >
-                            <option value="editor">Editor</option>
-                            <option value="viewer">Viewer</option>
-                          </select>
-                          <button
-                            onClick={() => handleRemoveMember(member.uid, member.username)}
-                            className="btn btn-secondary"
-                            title="Remove from room"
-                            style={{ color: "#EF4444", padding: "6px 8px" }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </>
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            fontWeight: 600,
-                            padding: "3px 8px",
-                            borderRadius: "6px",
-                            background: member.role === "editor" ? "rgba(16, 185, 129, 0.15)" : "rgba(56, 189, 248, 0.15)",
-                            color: member.role === "editor" ? "#34D399" : "var(--jantt-accent)"
-                          }}
-                        >
-                          {member.role === "editor" ? "Editor" : "Viewer"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            </>
           )}
         </div>
-      </div>
-    </div>
+      </Modal>
+
+      {pendingConfirm && (
+        <ConfirmDialog
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          confirmLabel={pendingConfirm.confirmLabel}
+          tone="danger"
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => {
+            const action = pendingConfirm.onConfirm;
+            setPendingConfirm(null);
+            void action();
+          }}
+        />
+      )}
+    </>
   );
 };

@@ -64,8 +64,23 @@
   --jantt-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.95);
 }
 
-/* Base Root Container */
+/* Base Root Container
+   Stacking model (bottom to top), enforced by stacking contexts rather than by large z-indexes:
+   1. .jantt-body-wrap (the scroll body) is an isolated stacking context at z-index 0, so nothing
+      inside it can paint over the toolbar (--jantt-z-toolbar) or its settings popover.
+   2. Inside the body: the canvas (.jantt-grid-container, isolated, z-index 0)
+      < sticky timeline header (--jantt-z-header) < sticky task table (--jantt-z-label), whose
+      corner cell (--jantt-z-label-header) and splitter (--jantt-z-splitter) stack inside it.
+   Bars, critical-path styling, links, the today line, the marquee and the link chip keep their own
+   small z-indexes but are confined to the canvas, so they can never overlay the sticky header or
+   the table while scrolling, whatever the theme. Tokens may be retuned, but the order must hold. */
 .jantt-container {
+  --jantt-z-header: 40;
+  --jantt-z-label: 45;
+  --jantt-z-label-header: 50;
+  --jantt-z-splitter: 60;
+  --jantt-z-toolbar: 80;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   background: var(--jantt-bg);
@@ -98,7 +113,7 @@
   border-bottom: 1px solid var(--jantt-border);
   gap: 12px;
   flex-wrap: wrap;
-  z-index: 30;
+  z-index: var(--jantt-z-toolbar, 80);
   position: relative;
 }
 
@@ -425,12 +440,17 @@
   color: var(--jantt-text);
 }
 
+/* Active state keeps the theme's text color on a critical tint (readable in light and dark themes) */
 .jantt-critical-btn.is-active {
   background: var(--jantt-critical-glow, rgba(245, 158, 11, 0.2));
-  color: #FFFFFF;
+  color: var(--jantt-text);
   border-color: var(--jantt-critical);
-  box-shadow: 0 0 16px var(--jantt-critical-glow), inset 0 0 8px var(--jantt-critical-glow);
+  box-shadow: inset 0 0 0 1px var(--jantt-critical), 0 0 12px var(--jantt-critical-glow);
   font-weight: 700;
+}
+
+.jantt-critical-btn.is-active svg {
+  color: var(--jantt-critical);
 }
 
 /* Zone 3: Right (Search, Add Task, Settings) */
@@ -557,14 +577,17 @@
   color: var(--jantt-accent-contrast, #000000);
 }
 
-/* Floating Chart Settings Popover */
+/* Floating Chart Settings Popover: always opens below its trigger; JS caps its height to the space
+   left inside the chart/viewport (--jantt-popover-max-h) and it scrolls internally beyond that. */
 .jantt-settings-popover {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
   width: 310px;
-  max-height: calc(100vh - 120px);
+  max-width: calc(100vw - 24px);
+  max-height: var(--jantt-popover-max-h, calc(100vh - 120px));
   overflow-y: auto;
+  overscroll-behavior: contain;
   box-sizing: border-box;
   background: var(--jantt-surface);
   backdrop-filter: blur(20px);
@@ -584,6 +607,21 @@
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
+}
+
+/* Hidden panels must not be reachable by keyboard or assistive tech */
+.jantt-settings-popover:not(.is-open) {
+  visibility: hidden;
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.18s;
+}
+
+.jantt-settings-popover.is-align-left {
+  right: auto;
+  left: 0;
+}
+
+.jantt-settings-popover:focus {
+  outline: none;
 }
 
 .jantt-settings-header {
@@ -823,6 +861,21 @@
   transform: translateX(16px);
 }
 
+/* View-only charts: the rule is shown but cannot be toggled */
+.jantt-settings-switch-row.is-disabled {
+  cursor: not-allowed;
+}
+
+.jantt-settings-switch-row.is-disabled:hover {
+  background: transparent;
+}
+
+.jantt-toggle-switch[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
 .jantt-settings-action-btn {
   display: flex;
   align-items: center;
@@ -922,6 +975,8 @@
 .jantt-body-wrap {
   display: flex;
   position: relative;
+  z-index: 0;
+  isolation: isolate;
   overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -935,7 +990,7 @@
 .jantt-label-column {
   position: sticky;
   left: 0;
-  z-index: 45;
+  z-index: var(--jantt-z-label, 45);
   background: var(--jantt-surface-solid);
   border-right: 1px solid var(--jantt-border);
   flex-shrink: 0;
@@ -948,7 +1003,7 @@
 .jantt-label-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--jantt-z-label-header, 50);
   flex-shrink: 0;
   border-bottom: 1px solid var(--jantt-border);
   display: grid;
@@ -1069,7 +1124,7 @@
   text-align: center;
   padding: 2px 6px;
   border-radius: 100px;
-  background: rgba(56, 189, 248, 0.12);
+  background: var(--jantt-accent-subtle, color-mix(in srgb, var(--jantt-accent) 12%, transparent));
   color: var(--jantt-accent);
   display: inline-flex;
   align-items: center;
@@ -1101,23 +1156,29 @@
   border: 1px solid rgba(100, 116, 139, 0.25);
 }
 
-/* Draggable Table Splitter */
+/* Draggable Table Splitter (mounted inside the sticky label column, straddling its right edge) */
 .jantt-splitter {
   position: absolute;
   top: 0;
   bottom: 0;
+  right: -3px;
   width: 6px;
   cursor: col-resize;
   touch-action: none;
-  z-index: 46;
+  z-index: var(--jantt-z-splitter, 60);
   background: transparent;
   transition: background 0.15s ease;
 }
 
 .jantt-splitter:hover,
-.jantt-splitter.is-dragging {
+.jantt-splitter.is-dragging,
+.jantt-splitter:focus-visible {
   background: var(--jantt-accent);
   box-shadow: 0 0 8px var(--jantt-accent-glow);
+}
+
+.jantt-splitter:focus-visible {
+  outline: none;
 }
 
 /* Timeline Canvas Area */
@@ -1134,7 +1195,10 @@
 .jantt-timeline-header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: var(--jantt-z-header, 40);
+  isolation: isolate;
+  /* Own compositing layer: animated/composited canvas content can never be drawn above it */
+  will-change: transform;
   flex-shrink: 0;
   background: var(--jantt-surface-solid);
   border-bottom: 1px solid var(--jantt-border);
@@ -1191,6 +1255,61 @@
   user-select: none;
 }
 
+/* Tier labels truncate inside their cell (the cell itself stays overflow-visible for the resize handle) */
+.jantt-tier-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Lower tier at zoomed-out scales: short month names (quarter/year) */
+.jantt-month-cell.is-compact {
+  justify-content: center;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--jantt-text-muted);
+}
+
+/* Lower tier at month scale: ISO weeks */
+.jantt-week-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-family: var(--jantt-font-mono);
+  font-weight: 600;
+  color: var(--jantt-text-muted);
+  border-right: 1px solid var(--jantt-grid-line);
+  box-sizing: border-box;
+  position: relative;
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+}
+
+/* Active date filter pin on zoomed-out tiers (no per-day cells there) */
+.jantt-header-date-pin {
+  position: absolute;
+  bottom: 4px;
+  transform: translateX(-50%);
+  z-index: 16;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--jantt-font-mono);
+  color: var(--jantt-accent-contrast, #FFFFFF);
+  background: var(--jantt-accent);
+  border: none;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 8px var(--jantt-accent-glow);
+}
+
 .jantt-header-days {
   display: flex;
   height: 29px;
@@ -1220,8 +1339,13 @@
 }
 
 .jantt-day-cell:hover {
-  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.15));
+  background: var(--jantt-accent-subtle, color-mix(in srgb, var(--jantt-accent) 14%, transparent));
   color: var(--jantt-accent);
+}
+
+.jantt-day-cell:focus-visible {
+  outline: 2px solid var(--jantt-accent);
+  outline-offset: -2px;
 }
 
 .jantt-day-cell.is-date-selected {
@@ -1233,23 +1357,19 @@
 }
 
 .jantt-day-cell.is-date-selected .jantt-day-name,
-.jantt-day-cell.is-date-selected .jantt-day-num,
-.jantt-day-cell.is-date-selected .jantt-boundary-marker {
+.jantt-day-cell.is-date-selected .jantt-day-num {
   color: var(--jantt-accent-contrast, #FFFFFF) !important;
 }
 
 .jantt-theme-dark .jantt-day-cell.is-date-selected,
 .jantt-theme-dark .jantt-day-cell.is-date-selected .jantt-day-name,
 .jantt-theme-dark .jantt-day-cell.is-date-selected .jantt-day-num,
-.jantt-theme-dark .jantt-day-cell.is-date-selected .jantt-boundary-marker,
 .jantt-theme-nordic-frost .jantt-day-cell.is-date-selected,
 .jantt-theme-nordic-frost .jantt-day-cell.is-date-selected .jantt-day-name,
 .jantt-theme-nordic-frost .jantt-day-cell.is-date-selected .jantt-day-num,
-.jantt-theme-nordic-frost .jantt-day-cell.is-date-selected .jantt-boundary-marker,
 .jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected,
 .jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected .jantt-day-name,
-.jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected .jantt-day-num,
-.jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected .jantt-boundary-marker {
+.jantt-theme-cyber-emerald .jantt-day-cell.is-date-selected .jantt-day-num {
   color: var(--jantt-accent-contrast, #000000) !important;
 }
 
@@ -1284,20 +1404,14 @@
   box-shadow: 0 0 6px var(--jantt-accent-glow, rgba(56, 189, 248, 0.6));
 }
 
-.jantt-day-cell:hover {
-  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.15));
-  color: var(--jantt-accent);
-  cursor: pointer;
-}
-
-.jantt-month-cell:hover {
-  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.08));
+.jantt-month-cell:hover,
+.jantt-week-cell:hover {
+  background: var(--jantt-accent-subtle, color-mix(in srgb, var(--jantt-accent) 8%, transparent));
   cursor: col-resize;
 }
 
 .jantt-day-name,
-.jantt-day-num,
-.jantt-boundary-marker {
+.jantt-day-num {
   pointer-events: none;
 }
 
@@ -1318,33 +1432,8 @@
   font-weight: 800;
 }
 
-.jantt-boundary-marker {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 10.5px;
-  font-weight: 700;
-  font-family: var(--jantt-font-mono);
-  color: var(--jantt-text);
-  background: var(--jantt-surface-solid);
-  border: 1px solid var(--jantt-accent);
-  padding: 2px 6px;
-  border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  white-space: nowrap;
-  z-index: 5;
-  pointer-events: auto;
-  cursor: default;
-}
-
-.jantt-boundary-marker.is-today-marker {
-  border-color: var(--jantt-today);
-  color: var(--jantt-today);
-}
-
 .jantt-day-cell.is-task-boundary {
-  background: rgba(56, 189, 248, 0.08);
+  background: color-mix(in srgb, var(--jantt-accent) 8%, transparent);
 }
 
 .jantt-day-cell.is-weekend {
@@ -1355,7 +1444,7 @@
 .jantt-day-cell.is-today {
   color: var(--jantt-today);
   font-weight: bold;
-  background: var(--jantt-today-subtle, rgba(225, 29, 72, 0.08));
+  background: var(--jantt-today-subtle, color-mix(in srgb, var(--jantt-today) 8%, transparent));
 }
 
 .jantt-day-cell.is-today .jantt-day-name.is-today,
@@ -1365,8 +1454,11 @@
   opacity: 1;
 }
 
+/* Timeline canvas: isolated stacking context below the sticky header and table */
 .jantt-grid-container {
   position: relative;
+  z-index: 0;
+  isolation: isolate;
   flex-shrink: 0;
 }
 
@@ -1388,7 +1480,7 @@
 }
 
 .jantt-grid-row.is-row-highlighted {
-  background: rgba(56, 189, 248, 0.04);
+  background: color-mix(in srgb, var(--jantt-accent) 5%, transparent);
 }
 
 .jantt-grid-day-col {
@@ -1407,7 +1499,7 @@
 }
 
 .jantt-grid-day-col.is-selected-date-col {
-  background: var(--jantt-accent-subtle, rgba(56, 189, 248, 0.09));
+  background: var(--jantt-accent-subtle, color-mix(in srgb, var(--jantt-accent) 9%, transparent));
   border-left: 1px dashed var(--jantt-accent);
   border-right: 1px dashed var(--jantt-accent);
   z-index: 2;
@@ -1422,7 +1514,7 @@
   background: var(--jantt-today);
   z-index: 5;
   pointer-events: none;
-  box-shadow: 0 0 5px rgba(225, 29, 72, 0.35);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--jantt-today) 35%, transparent);
 }
 
 /* Header-Anchored Today Marker Pin */
@@ -1455,7 +1547,7 @@
   background: var(--jantt-today);
   padding: 1.5px 6px;
   border-radius: 999px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 8px rgba(225, 29, 72, 0.45);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 8px color-mix(in srgb, var(--jantt-today) 45%, transparent);
   white-space: nowrap;
   line-height: 1.15;
 }
@@ -1478,62 +1570,74 @@
   z-index: 4;
 }
 
+/* Visible wire is purely visual; the wider .jantt-dep-hit stroke (editable charts only) takes input */
 .jantt-dep-path {
   fill: none;
   stroke: var(--jantt-dep-line);
   stroke-width: 1.75;
   stroke-dasharray: none;
   transition: stroke 0.2s, stroke-width 0.2s;
-  pointer-events: stroke;
-  cursor: pointer;
+  pointer-events: none;
 }
 
-.jantt-dep-path:hover,
 .jantt-dep-path.is-active {
   stroke: var(--jantt-dep-line-active);
   stroke-width: 2.5;
   stroke-dasharray: none;
 }
 
-/* Luminous Critical Path Wire & Glow */
-@keyframes jantt-critical-wire-pulse {
-  0% {
-    filter: drop-shadow(0 0 2px var(--jantt-critical))
-            drop-shadow(0 0 7px var(--jantt-critical-glow))
-            drop-shadow(0 0 14px var(--jantt-critical-glow));
-    stroke-width: 3px;
-  }
-  100% {
-    filter: drop-shadow(0 0 4px var(--jantt-critical))
-            drop-shadow(0 0 12px var(--jantt-critical))
-            drop-shadow(0 0 22px var(--jantt-critical-glow))
-            drop-shadow(0 0 34px var(--jantt-critical-glow));
-    stroke-width: 3.5px;
-  }
+.jantt-dep-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12px;
+  pointer-events: stroke;
+  cursor: pointer;
 }
 
-@keyframes jantt-critical-node-pulse {
-  0% {
-    box-shadow: 0 0 0 1.5px var(--jantt-critical),
-                0 0 12px var(--jantt-critical),
-                0 0 24px var(--jantt-critical-glow);
-  }
-  100% {
-    box-shadow: 0 0 0 2.5px var(--jantt-critical),
-                0 0 18px var(--jantt-critical),
-                0 0 32px var(--jantt-critical),
-                0 0 48px var(--jantt-critical-glow);
-  }
-}
-
+/* Critical Path Wire: static glow (no infinite filter animation, so no per-frame repaints) */
 .jantt-dep-path.is-critical {
-  stroke: var(--jantt-critical) !important;
-  stroke-width: 3.2px;
-  stroke-dasharray: none !important;
+  stroke: var(--jantt-critical);
+  stroke-width: 3px;
   stroke-linecap: round;
   stroke-linejoin: round;
-  animation: jantt-critical-wire-pulse 2s ease-in-out infinite alternate;
-  z-index: 10;
+  filter: drop-shadow(0 0 3px var(--jantt-critical-glow));
+}
+
+.jantt-dep-path.is-critical.is-active {
+  stroke-width: 3.5px;
+}
+
+/* Anchored "Remove link" confirmation chip (shown at the click point on a dependency wire) */
+.jantt-link-remove-chip {
+  position: absolute;
+  z-index: 40;
+  transform: translate(-50%, calc(-100% - 8px));
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #EF4444 45%, transparent);
+  background: var(--jantt-surface-solid, #FFFFFF);
+  color: #EF4444;
+  font-family: var(--jantt-font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  animation: jantt-popover-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.jantt-link-remove-chip.is-below {
+  transform: translate(-50%, 8px);
+}
+
+.jantt-link-remove-chip:hover,
+.jantt-link-remove-chip:focus-visible {
+  background: #EF4444;
+  color: #FFFFFF;
+  outline: none;
 }
 
 .jantt-link-preview-line {
@@ -1544,8 +1648,9 @@
   pointer-events: none;
 }
 
-/* Task Bar */
+/* Task Bar (border-box: inline width/height from layout are the exact bar extents) */
 .jantt-task-bar {
+  box-sizing: border-box;
   position: absolute;
   display: flex;
   align-items: center;
@@ -1571,10 +1676,25 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
 }
 
-.jantt-task-bar.is-critical {
-  border: 2px solid var(--jantt-critical) !important;
-  animation: jantt-critical-node-pulse 2s ease-in-out infinite alternate !important;
-  z-index: 14 !important;
+/* Critical ring drawn with box-shadow so the bar keeps its exact date-aligned size.
+   Scoped under .jantt-show-critical for precedence over theme bar shadows (e.g. Pink Beenie). */
+.jantt-show-critical .jantt-task-bar.is-critical,
+.jantt-show-critical .jantt-task-bar.is-critical:hover {
+  box-shadow: 0 0 0 2px var(--jantt-critical), 0 0 14px var(--jantt-critical-glow);
+  z-index: 14;
+}
+
+.jantt-show-critical .jantt-task-bar.is-critical.is-selected {
+  box-shadow: 0 0 0 2px var(--jantt-critical), 0 0 12px var(--jantt-accent-glow);
+}
+
+.jantt-show-critical .jantt-task-bar.is-critical:focus-visible {
+  box-shadow: 0 0 0 2px var(--jantt-bg), 0 0 0 4px var(--jantt-accent);
+}
+
+.jantt-show-critical .jantt-task-bar.is-critical.is-dragging,
+.jantt-show-critical .jantt-milestone.is-critical.is-dragging {
+  z-index: 30;
 }
 
 .jantt-critical-pill {
@@ -1621,8 +1741,9 @@
   border-radius: var(--jantt-bar-radius);
 }
 
-/* Milestone Diamond Pin */
+/* Milestone Diamond Pin (border-box keeps link anchors on the diamond tips) */
 .jantt-milestone {
+  box-sizing: border-box;
   position: absolute;
   width: 17px;
   height: 17px;
@@ -1640,11 +1761,20 @@
   transform: translate(-50%, -50%) rotate(45deg) scale(1.2);
 }
 
-.jantt-milestone.is-critical {
-  border-color: var(--jantt-critical) !important;
-  border-width: 2.5px !important;
-  animation: jantt-critical-node-pulse 2s ease-in-out infinite alternate !important;
-  z-index: 15 !important;
+.jantt-show-critical .jantt-milestone.is-critical {
+  border-color: var(--jantt-critical);
+  box-shadow: 0 0 0 1px var(--jantt-critical), 0 0 14px var(--jantt-critical-glow);
+  z-index: 15;
+}
+
+.jantt-milestone:focus-visible {
+  outline: 2px solid var(--jantt-accent);
+  outline-offset: 3px;
+}
+
+.jantt-milestone.is-dragging {
+  cursor: grabbing;
+  z-index: 30;
 }
 
 .jantt-milestone.is-selected {
@@ -1688,7 +1818,7 @@
 
 .jantt-show-critical .jantt-label-row.is-critical {
   border-left: 3px solid var(--jantt-critical);
-  background: rgba(245, 158, 11, 0.08);
+  background: color-mix(in srgb, var(--jantt-critical) 8%, transparent);
 }
 
 .jantt-show-critical .jantt-label-row.is-critical .jantt-label-dot {
@@ -2523,13 +2653,35 @@
     animation: jantt-slide-out-down 0.2s ease-in forwards !important;
   }
 
-  /* Compact Gantt Toolbar on Mobile */
+  /* Compact Gantt Toolbar on Mobile.
+     No backdrop-filter here: it would become the containing block of the fixed settings sheet. */
   .jantt-toolbar {
     padding: 8px 10px;
     gap: 6px;
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* Settings open as a bottom sheet: never clipped by the horizontally scrolling toolbar */
+  .jantt-settings-popover,
+  .jantt-settings-popover.is-align-left {
+    position: fixed;
+    top: auto;
+    left: auto;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    width: min(420px, calc(100vw - 24px));
+    max-width: none;
+    max-height: 75vh;
+    z-index: 1000;
+    transform: translateY(12px);
+  }
+
+  .jantt-settings-popover.is-open {
+    transform: translateY(0);
   }
 
   .jantt-toolbar::-webkit-scrollbar {
@@ -2552,19 +2704,42 @@
     display: none;
   }
 
+  /* clip (not hidden): a hidden overflow would make the column a scroll container and unstick
+     its sticky header cell from the scroll body */
   .jantt-label-column {
     max-width: 140px;
     min-width: 100px;
+    overflow: hidden;
+    overflow: clip;
+  }
+
+  /* Two columns (Task, Days) on phones: header and rows share one template so they stay aligned */
+  .jantt-label-header,
+  .jantt-label-row {
+    grid-template-columns: minmax(70px, 1fr) 30px;
+    gap: 4px;
+    padding: 0 6px;
   }
 
   .jantt-label-header {
-    grid-template-columns: minmax(80px, 1fr) 30px;
-    padding: 0 6px;
     font-size: 9.5px;
   }
 
-  .jantt-label-header > span:nth-child(3) {
+  .jantt-label-header > :nth-child(3),
+  .jantt-label-row > :nth-child(3) {
     display: none;
+  }
+}
+
+/* Respect reduced-motion preferences for entrance and hover animations */
+@media (prefers-reduced-motion: reduce) {
+  .jantt-container *,
+  .jantt-hover-card,
+  .jantt-sidebar-backdrop,
+  .jantt-sidebar-drawer {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

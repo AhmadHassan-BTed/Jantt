@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useId } from "react";
 import {
   Search,
   Layers,
@@ -49,135 +49,105 @@ export interface CommandPaletteProps {
   onFilterWeek?: () => void;
 }
 
+type CommandCategory = "Views" | "Actions" | "Tasks" | "Export & Interop" | "Themes" | "Help";
+
 interface CommandItem {
   id: string;
-  category: "Views" | "Actions" | "Tasks" | "Export & Interop" | "Themes" | "Help";
+  category: CommandCategory;
   title: string;
+  /** Plain text only; it is always rendered as a text node, never as HTML. */
   subtitle?: string;
   icon: React.ReactNode;
   shortcut?: string;
   action: () => void;
 }
 
-export const CommandPalette: React.FC<CommandPaletteProps> = ({
-  isOpen,
-  onClose,
-  parsedData,
-  activeView,
-  setActiveView,
-  selectedThemeId,
-  setSelectedThemeId,
-  showCriticalPath,
-  onToggleCriticalPath,
-  showBaselines,
-  onToggleBaselines,
-  onSelectTask,
-  onOpenMonteCarlo,
-  onOpenShare,
-  onOpenAddPlan,
-  onOpenPlanManager,
-  onOpenShortcuts,
-  onExportMsProject,
-  onExportPrimavera,
-  onExportCsv,
-  onExportExecutiveReport,
-  onDownloadJson,
-  onJumpToday,
-  onFilterWeek
-}) => {
+/** Task search results are capped so a 100k-task plan cannot stall typing. */
+const MAX_TASK_RESULTS = 50;
+
+const IS_APPLE_PLATFORM =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
+
+/** Label of the primary shortcut modifier on this platform ("⌘" on Apple devices, "Ctrl" elsewhere). */
+export const PRIMARY_MODIFIER_LABEL = IS_APPLE_PLATFORM ? "⌘" : "Ctrl";
+
+const DEFAULT_CATEGORIES: ReadonlySet<CommandCategory> = new Set(["Views", "Actions", "Help"]);
+
+function matchesQuery(command: CommandItem, q: string): boolean {
+  return (
+    command.title.toLowerCase().includes(q) ||
+    (command.subtitle?.toLowerCase().includes(q) ?? false) ||
+    command.category.toLowerCase().includes(q)
+  );
+}
+
+/**
+ * Universal command palette (Ctrl/Cmd+K).
+ * The dialog body only mounts while open, so the closed palette costs nothing on App renders.
+ */
+export const CommandPalette: React.FC<CommandPaletteProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <CommandPaletteDialog {...props} />;
+};
+
+const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
+  const { parsedData, selectedThemeId, showCriticalPath, showBaselines } = props;
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const baseId = useId();
+  const listId = `${baseId}-list`;
+  const optionId = (index: number) => `${baseId}-opt-${index}`;
 
-  // Focus input when opened
+  // Callbacks are read through a ref so inline arrow props from App do not rebuild the catalogue.
+  const propsRef = useRef(props);
+  propsRef.current = props;
+
+  // Focus the search box on open and give focus back to where it was on close, unless a dialog
+  // opened by the chosen command has already taken focus.
   useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-      setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 40);
-    }
-  }, [isOpen]);
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    inputRef.current?.focus();
+    return () => {
+      const focusLost = !document.activeElement || document.activeElement === document.body;
+      if (focusLost && previouslyFocused?.isConnected && typeof previouslyFocused.focus === "function") {
+        previouslyFocused.focus();
+      }
+    };
+  }, []);
 
-  // Build command catalogue
-  const allCommands = useMemo(() => {
+  const has = {
+    jumpToday: Boolean(props.onJumpToday),
+    filterWeek: Boolean(props.onFilterWeek),
+    monteCarlo: Boolean(props.onOpenMonteCarlo),
+    addPlan: Boolean(props.onOpenAddPlan),
+    planManager: Boolean(props.onOpenPlanManager),
+    msProject: Boolean(props.onExportMsProject),
+    primavera: Boolean(props.onExportPrimavera),
+    csv: Boolean(props.onExportCsv),
+    execReport: Boolean(props.onExportExecutiveReport),
+    json: Boolean(props.onDownloadJson),
+    share: Boolean(props.onOpenShare),
+    shortcuts: Boolean(props.onOpenShortcuts)
+  };
+
+  const staticCommands = useMemo(() => {
+    const run = (fn: (p: CommandPaletteProps) => void) => () => {
+      fn(propsRef.current);
+      propsRef.current.onClose();
+    };
     const list: CommandItem[] = [];
+    const view = (id: ActiveView, title: string, subtitle: string, icon: React.ReactNode, shortcut: string) =>
+      list.push({ id: `view-${id}`, category: "Views", title, subtitle, icon, shortcut, action: run((p) => p.setActiveView(id)) });
 
-    // 1. Views
-    list.push({
-      id: "view-gantt",
-      category: "Views",
-      title: "Gantt Timeline Schedule",
-      subtitle: "Standard timeline with critical path and baseline bars",
-      icon: <Layers size={15} style={{ color: "#38BDF8" }} />,
-      shortcut: "1",
-      action: () => {
-        setActiveView("gantt");
-        onClose();
-      }
-    });
-    list.push({
-      id: "view-canvas",
-      category: "Views",
-      title: "Canvas 60 FPS Engine",
-      subtitle: "Hardware-accelerated viewport for 100k+ tasks",
-      icon: <Zap size={15} style={{ color: "#A855F7" }} />,
-      shortcut: "2",
-      action: () => {
-        setActiveView("canvas");
-        onClose();
-      }
-    });
-    list.push({
-      id: "view-kanban",
-      category: "Views",
-      title: "Kanban Board",
-      subtitle: "Status-based card workflow and drag management",
-      icon: <Kanban size={15} style={{ color: "#F59E0B" }} />,
-      shortcut: "3",
-      action: () => {
-        setActiveView("kanban");
-        onClose();
-      }
-    });
-    list.push({
-      id: "view-tasks",
-      category: "Views",
-      title: "Task Checklist & Grid",
-      subtitle: "Detailed tabular task manager with completion checks",
-      icon: <CheckSquare size={15} style={{ color: "#10B981" }} />,
-      shortcut: "4",
-      action: () => {
-        setActiveView("tasks");
-        onClose();
-      }
-    });
-    list.push({
-      id: "view-summary",
-      category: "Views",
-      title: "Health & EVM Analytics",
-      subtitle: "DCMA 14-point audit, S-Curve, Earned Value Performance",
-      icon: <Activity size={15} style={{ color: "#F43F5E" }} />,
-      shortcut: "5",
-      action: () => {
-        setActiveView("summary");
-        onClose();
-      }
-    });
-    list.push({
-      id: "view-notes",
-      category: "Views",
-      title: "Project Notes & Docs",
-      subtitle: "Markdown documentation linked to schedule activities",
-      icon: <StickyNote size={15} style={{ color: "#06B6D4" }} />,
-      shortcut: "6",
-      action: () => {
-        setActiveView("notes");
-        onClose();
-      }
-    });
+    view("gantt", "Gantt Timeline Schedule", "Standard timeline with critical path and baseline bars", <Layers size={15} style={{ color: "#38BDF8" }} />, "1");
+    view("canvas", "Canvas 60 FPS Engine", "Hardware-accelerated viewport for 100k+ tasks", <Zap size={15} style={{ color: "#A855F7" }} />, "2");
+    view("kanban", "Kanban Board", "Status-based card workflow and drag management", <Kanban size={15} style={{ color: "#F59E0B" }} />, "3");
+    view("tasks", "Task Checklist & Grid", "Detailed tabular task manager with completion checks", <CheckSquare size={15} style={{ color: "#10B981" }} />, "4");
+    view("summary", "Health & EVM Analytics", "DCMA 14-point audit, S-Curve, Earned Value Performance", <Activity size={15} style={{ color: "#F43F5E" }} />, "5");
+    view("notes", "Project Notes & Docs", "Markdown documentation linked to schedule activities", <StickyNote size={15} style={{ color: "#06B6D4" }} />, "6");
 
-    // 2. Actions & Toggles
     list.push({
       id: "action-critical-path",
       category: "Actions",
@@ -185,10 +155,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: "Highlight zero-float tasks driving project deadline",
       icon: <Activity size={15} style={{ color: "#EF4444" }} />,
       shortcut: "C",
-      action: () => {
-        onToggleCriticalPath();
-        onClose();
-      }
+      action: run((p) => p.onToggleCriticalPath())
     });
     list.push({
       id: "action-baselines",
@@ -197,160 +164,122 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: "Compare current dates with baseline commitments",
       icon: <Sliders size={15} style={{ color: "#818CF8" }} />,
       shortcut: "B",
-      action: () => {
-        onToggleBaselines();
-        onClose();
-      }
+      action: run((p) => p.onToggleBaselines())
     });
-    if (onJumpToday) {
+    if (has.jumpToday) {
       list.push({
-        id: "action-jump-today",
+        id: "action-filter-today",
         category: "Actions",
-        title: "Jump to Today",
-        subtitle: "Align schedule view with current calendar date",
+        title: "Filter: Tasks Active Today",
+        subtitle: "Show only the tasks scheduled for today",
         icon: <Calendar size={15} style={{ color: "#38BDF8" }} />,
         shortcut: "T",
-        action: () => {
-          onJumpToday();
-          onClose();
-        }
+        action: run((p) => p.onJumpToday?.())
       });
     }
-    if (onFilterWeek) {
+    if (has.filterWeek) {
       list.push({
         id: "action-filter-week",
         category: "Actions",
-        title: "Filter Current Week",
+        title: "Filter: Tasks Active This Week",
         subtitle: "Focus activities scheduled for this week",
         icon: <Calendar size={15} style={{ color: "#A78BFA" }} />,
         shortcut: "W",
-        action: () => {
-          onFilterWeek();
-          onClose();
-        }
+        action: run((p) => p.onFilterWeek?.())
       });
     }
-    if (onOpenMonteCarlo) {
+    if (has.monteCarlo) {
       list.push({
         id: "action-monte-carlo",
         category: "Actions",
-        title: "Run Monte Carlo Risk Simulation",
-        subtitle: "Probabilistic schedule risk assessment (P50, P80, P95)",
+        title: "Open Health & Risk Analytics",
+        subtitle: "Schedule health, EVM and Monte Carlo risk simulation (P50, P80, P95)",
         icon: <Sparkles size={15} style={{ color: "#F59E0B" }} />,
-        action: () => {
-          onOpenMonteCarlo();
-          onClose();
-        }
+        action: run((p) => p.onOpenMonteCarlo?.())
       });
     }
-    if (onOpenAddPlan) {
+    if (has.addPlan) {
       list.push({
         id: "action-new-plan",
         category: "Actions",
         title: "Create New Project Plan",
         subtitle: "Start a fresh project from scratch or from templates",
         icon: <Command size={15} style={{ color: "#10B981" }} />,
-        action: () => {
-          onOpenAddPlan();
-          onClose();
-        }
+        action: run((p) => p.onOpenAddPlan?.())
       });
     }
-    if (onOpenPlanManager) {
+    if (has.planManager) {
       list.push({
         id: "action-manage-plans",
         category: "Actions",
         title: "Plan Manager & Cloud Hub",
         subtitle: "Organize, clone, export, and sync all saved projects",
         icon: <Layers size={15} style={{ color: "#818CF8" }} />,
-        action: () => {
-          onOpenPlanManager();
-          onClose();
-        }
+        action: run((p) => p.onOpenPlanManager?.())
       });
     }
 
-    // 3. Export & Interoperability
-    if (onExportMsProject) {
+    if (has.msProject) {
       list.push({
         id: "export-msproject",
         category: "Export & Interop",
         title: "Export Microsoft Project XML (.xml)",
         subtitle: "Native MSPDI XML format compatible with MS Project 2010-2024",
         icon: <FileCode size={15} style={{ color: "#38BDF8" }} />,
-        action: () => {
-          onExportMsProject();
-          onClose();
-        }
+        action: run((p) => p.onExportMsProject?.())
       });
     }
-    if (onExportPrimavera) {
+    if (has.primavera) {
       list.push({
         id: "export-primavera",
         category: "Export & Interop",
         title: "Export Primavera P6 XER (.xer)",
         subtitle: "Oracle Primavera P6 Enterprise batch interchange format",
         icon: <FileSpreadsheet size={15} style={{ color: "#F59E0B" }} />,
-        action: () => {
-          onExportPrimavera();
-          onClose();
-        }
+        action: run((p) => p.onExportPrimavera?.())
       });
     }
-    if (onExportCsv) {
+    if (has.csv) {
       list.push({
         id: "export-csv",
         category: "Export & Interop",
         title: "Export Universal Spreadsheet CSV (.csv)",
         subtitle: "Standard tabular data for Excel, Google Sheets, or BI tools",
         icon: <FileSpreadsheet size={15} style={{ color: "#10B981" }} />,
-        action: () => {
-          onExportCsv();
-          onClose();
-        }
+        action: run((p) => p.onExportCsv?.())
       });
     }
-    if (onExportExecutiveReport) {
+    if (has.execReport) {
       list.push({
         id: "export-exec-report",
         category: "Export & Interop",
         title: "Generate Executive Status Booklet (.html)",
         subtitle: "Self-contained C-level briefing document formatted for vector PDF print",
         icon: <Download size={15} style={{ color: "#A855F7" }} />,
-        action: () => {
-          onExportExecutiveReport();
-          onClose();
-        }
+        action: run((p) => p.onExportExecutiveReport?.())
       });
     }
-    if (onDownloadJson) {
+    if (has.json) {
       list.push({
         id: "export-json",
         category: "Export & Interop",
         title: "Download Native Jantt JSON (.json)",
         subtitle: "Zero-loss local backup containing all metadata, people, and baselines",
         icon: <FileCode size={15} style={{ color: "#64748B" }} />,
-        action: () => {
-          onDownloadJson();
-          onClose();
-        }
+        action: run((p) => p.onDownloadJson?.())
       });
     }
-    if (onOpenShare) {
+    if (has.share) {
       list.push({
         id: "action-share-link",
         category: "Export & Interop",
         title: "Share Project Link & Embed Snippet",
         subtitle: "Generate compressed read-only URL or iframe embed code",
         icon: <Share2 size={15} style={{ color: "#A855F7" }} />,
-        action: () => {
-          onOpenShare();
-          onClose();
-        }
+        action: run((p) => p.onOpenShare?.())
       });
     }
 
-    // 4. Themes
     AVAILABLE_THEMES.forEach((theme) => {
       list.push({
         id: `theme-${theme.id}`,
@@ -358,15 +287,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         title: `Theme: ${theme.name}`,
         subtitle: `${theme.mode.toUpperCase()} MODE - ${theme.description || "Sophisticated color scheme"}`,
         icon: <Palette size={15} style={{ color: selectedThemeId === theme.id ? "#10B981" : "#94A3B8" }} />,
-        action: () => {
-          setSelectedThemeId(theme.id);
-          onClose();
-        }
+        action: run((p) => p.setSelectedThemeId(theme.id))
       });
     });
 
-    // 5. Help
-    if (onOpenShortcuts) {
+    if (has.shortcuts) {
       list.push({
         id: "help-shortcuts",
         category: "Help",
@@ -374,298 +299,184 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         subtitle: "View all desktop-grade hotkeys and navigation controls",
         icon: <HelpCircle size={15} style={{ color: "#38BDF8" }} />,
         shortcut: "?",
-        action: () => {
-          onOpenShortcuts();
-          onClose();
-        }
+        action: run((p) => p.onOpenShortcuts?.())
       });
     }
 
-    // 6. Tasks (Active Schedule)
-    const tasks = (parsedData?.tasks || []).filter((t) => !t._deleted);
-    tasks.forEach((task) => {
-      const taskTitle = task.label || task.name || task.id;
+    return list;
+    // `has` is a fresh object each render; its individual flags are the real dependencies.
+  }, [
+    showCriticalPath,
+    showBaselines,
+    selectedThemeId,
+    has.jumpToday,
+    has.filterWeek,
+    has.monteCarlo,
+    has.addPlan,
+    has.planManager,
+    has.msProject,
+    has.primavera,
+    has.csv,
+    has.execReport,
+    has.json,
+    has.share,
+    has.shortcuts
+  ]);
+
+  const normalizedQuery = query.toLowerCase().trim();
+
+  // Tasks are only searched (never listed wholesale) and the result set is capped.
+  const taskCommands = useMemo(() => {
+    if (!normalizedQuery || !parsedData?.tasks) return [];
+    const results: CommandItem[] = [];
+    for (const task of parsedData.tasks) {
+      if (task._deleted) continue;
+      const taskTitle = String(task.label || task.name || task.id);
       const progressPct = Math.round((task.progress || 0) * 100);
-      list.push({
+      const subtitle = `ID: ${task.id} • ${task.start} → ${task.end} • ${progressPct}% completed`;
+      if (!taskTitle.toLowerCase().includes(normalizedQuery) && !subtitle.toLowerCase().includes(normalizedQuery)) {
+        continue;
+      }
+      results.push({
         id: `task-${task.id}`,
         category: "Tasks",
         title: taskTitle,
-        subtitle: `ID: ${task.id} &bull; ${task.start} &rarr; ${task.end} &bull; ${progressPct}% completed`,
+        subtitle,
         icon: (
-          <div
-            style={{
-              width: "12px",
-              height: "12px",
-              borderRadius: "2px",
-              background: progressPct === 100 ? "#10B981" : progressPct > 0 ? "#38BDF8" : "#64748B"
-            }}
+          <span
+            className="command-task-swatch"
+            style={{ background: progressPct === 100 ? "#10B981" : progressPct > 0 ? "#38BDF8" : "#64748B" }}
+            aria-hidden="true"
           />
         ),
         action: () => {
-          if (onSelectTask) {
-            onSelectTask(task);
-          }
-          onClose();
+          propsRef.current.onSelectTask?.(task);
+          propsRef.current.onClose();
         }
       });
-    });
-
-    return list;
-  }, [
-    parsedData,
-    activeView,
-    setActiveView,
-    selectedThemeId,
-    setSelectedThemeId,
-    showCriticalPath,
-    onToggleCriticalPath,
-    showBaselines,
-    onToggleBaselines,
-    onSelectTask,
-    onOpenMonteCarlo,
-    onOpenShare,
-    onOpenAddPlan,
-    onOpenPlanManager,
-    onOpenShortcuts,
-    onExportMsProject,
-    onExportPrimavera,
-    onExportCsv,
-    onExportExecutiveReport,
-    onDownloadJson,
-    onJumpToday,
-    onFilterWeek,
-    onClose
-  ]);
-
-  // Filter commands by query
-  const filteredCommands = useMemo(() => {
-    if (!query.trim()) {
-      // Default: show Views, Actions, Help, and First 5 Tasks
-      return allCommands.filter(
-        (c) => c.category === "Views" || c.category === "Actions" || c.category === "Help"
-      );
+      if (results.length >= MAX_TASK_RESULTS) break;
     }
+    return results;
+  }, [parsedData, normalizedQuery]);
 
-    const q = query.toLowerCase().trim();
-    return allCommands.filter((c) => {
-      return (
-        c.title.toLowerCase().includes(q) ||
-        (c.subtitle && c.subtitle.toLowerCase().includes(q)) ||
-        c.category.toLowerCase().includes(q)
-      );
-    });
-  }, [allCommands, query]);
+  const filteredCommands = useMemo(() => {
+    if (!normalizedQuery) {
+      return staticCommands.filter((c) => DEFAULT_CATEGORIES.has(c.category));
+    }
+    return [...staticCommands.filter((c) => matchesQuery(c, normalizedQuery)), ...taskCommands];
+  }, [staticCommands, taskCommands, normalizedQuery]);
 
-  // Keyboard navigation
+  const activeIndex = filteredCommands.length === 0 ? -1 : Math.min(selectedIndex, filteredCommands.length - 1);
+
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev + 1 < filteredCommands.length ? prev + 1 : 0));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : filteredCommands.length - 1));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const selected = filteredCommands[selectedIndex];
-      if (selected) {
-        selected.action();
-      }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
+    const count = filteredCommands.length;
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        if (count) setSelectedIndex((activeIndex + 1) % count);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        if (count) setSelectedIndex((activeIndex - 1 + count) % count);
+        break;
+      case "Home":
+        if (count) {
+          e.preventDefault();
+          setSelectedIndex(0);
+        }
+        break;
+      case "End":
+        if (count) {
+          e.preventDefault();
+          setSelectedIndex(count - 1);
+        }
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (activeIndex >= 0) filteredCommands[activeIndex].action();
+        break;
+      case "Escape":
+        e.preventDefault();
+        props.onClose();
+        break;
+      case "Tab":
+        // The search box is the only tabbable element: keep focus inside the dialog.
+        e.preventDefault();
+        break;
     }
   };
 
-  // Scroll active item into view
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const activeEl = list.querySelector(".is-command-selected") as HTMLElement;
-    if (activeEl) {
-      activeEl.scrollIntoView({ block: "nearest" });
-    }
-  }, [selectedIndex]);
-
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="prompt-modal-backdrop"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(3, 7, 18, 0.75)",
-        backdropFilter: "blur(8px)",
-        zIndex: 99999,
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        paddingTop: "12vh"
-      }}
-      onClick={onClose}
-    >
+    <div className="command-palette-backdrop" onMouseDown={props.onClose}>
       <div
         className="command-palette-card"
-        style={{
-          width: "92%",
-          maxWidth: "640px",
-          maxHeight: "68vh",
-          background: "var(--jantt-surface, #0B132B)",
-          border: "1px solid var(--jantt-border, #1E293B)",
-          borderRadius: "12px",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05)",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden"
-        }}
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Search Input Box */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "14px 18px",
-            borderBottom: "1px solid var(--jantt-border, #1E293B)",
-            gap: "12px"
-          }}
-        >
-          <Search size={18} style={{ color: "#38BDF8", flexShrink: 0 }} />
+        <div className="command-palette-search">
+          <Search size={18} className="command-palette-search-icon" aria-hidden="true" />
           <input
             ref={inputRef}
             type="text"
-            placeholder="Type a command, jump to task, switch view, or run simulation..."
+            className="command-palette-input"
+            placeholder="Type a command, jump to a task, or switch view..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            style={{
-              width: "100%",
-              background: "transparent",
-              border: "none",
-              outline: "none",
-              color: "var(--jantt-text, #F8FAFC)",
-              fontSize: "14px",
-              fontFamily: "inherit"
-            }}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
+            aria-label="Search commands and tasks"
+            autoComplete="off"
+            spellCheck={false}
           />
-          <kbd
-            style={{
-              fontSize: "10px",
-              padding: "2px 6px",
-              borderRadius: "4px",
-              background: "rgba(255, 255, 255, 0.08)",
-              color: "var(--jantt-text-muted, #94A3B8)",
-              border: "1px solid rgba(255, 255, 255, 0.12)"
-            }}
-          >
-            ESC
-          </kbd>
+          <kbd className="command-palette-kbd">ESC</kbd>
         </div>
 
-        {/* Command List */}
-        <div
-          ref={listRef}
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "8px",
-            maxHeight: "440px"
-          }}
-        >
+        <div ref={listRef} id={listId} className="command-palette-list" role="listbox" aria-label="Commands">
           {filteredCommands.length === 0 ? (
-            <div
-              style={{
-                padding: "36px 20px",
-                textAlign: "center",
-                color: "var(--jantt-text-muted, #94A3B8)",
-                fontSize: "13px"
-              }}
-            >
+            <div className="command-palette-empty" role="presentation">
               No matching commands or tasks found for &ldquo;{query}&rdquo;
             </div>
           ) : (
             filteredCommands.map((cmd, idx) => {
-              const isSelected = idx === selectedIndex;
+              const isSelected = idx === activeIndex;
               return (
                 <div
                   key={cmd.id}
+                  id={optionId(idx)}
+                  data-index={idx}
+                  role="option"
+                  aria-selected={isSelected}
                   className={`command-item ${isSelected ? "is-command-selected" : ""}`}
                   onClick={cmd.action}
-                  onMouseEnter={() => setSelectedIndex(idx)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "9px 12px",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    background: isSelected ? "rgba(56, 189, 248, 0.12)" : "transparent",
-                    border: isSelected ? "1px solid rgba(56, 189, 248, 0.25)" : "1px solid transparent",
-                    transition: "background 0.1s ease",
-                    marginBottom: "2px"
+                  onMouseMove={() => {
+                    if (!isSelected) setSelectedIndex(idx);
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", overflow: "hidden" }}>
-                    <div style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>{cmd.icon}</div>
-                    <div style={{ overflow: "hidden" }}>
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: isSelected ? "#38BDF8" : "var(--jantt-text, #F8FAFC)",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis"
-                        }}
-                      >
-                        {cmd.title}
-                      </div>
-                      {cmd.subtitle && (
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            color: "var(--jantt-text-muted, #94A3B8)",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis"
-                          }}
-                          dangerouslySetInnerHTML={{ __html: cmd.subtitle }}
-                        />
-                      )}
+                  <div className="command-item-main">
+                    <span className="command-item-icon">{cmd.icon}</span>
+                    <div className="command-item-text">
+                      <div className="command-item-title">{cmd.title}</div>
+                      {cmd.subtitle && <div className="command-item-subtitle">{cmd.subtitle}</div>}
                     </div>
                   </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, marginLeft: "12px" }}>
-                    <span
-                      style={{
-                        fontSize: "9.5px",
-                        fontWeight: 600,
-                        textTransform: "uppercase",
-                        padding: "2px 6px",
-                        borderRadius: "4px",
-                        background: "rgba(255, 255, 255, 0.05)",
-                        color: "var(--jantt-text-muted, #64748B)"
-                      }}
-                    >
-                      {cmd.category}
-                    </span>
-                    {cmd.shortcut && (
-                      <kbd
-                        style={{
-                          fontSize: "10px",
-                          padding: "2px 5px",
-                          borderRadius: "4px",
-                          background: "rgba(56, 189, 248, 0.15)",
-                          color: "#38BDF8",
-                          border: "1px solid rgba(56, 189, 248, 0.3)"
-                        }}
-                      >
-                        {cmd.shortcut}
-                      </kbd>
-                    )}
+                  <div className="command-item-meta">
+                    <span className="command-item-category">{cmd.category}</span>
+                    {cmd.shortcut && <kbd className="command-item-shortcut">{cmd.shortcut}</kbd>}
                   </div>
                 </div>
               );
@@ -673,30 +484,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           )}
         </div>
 
-        {/* Footer Help Bar */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "8px 16px",
-            borderTop: "1px solid var(--jantt-border, #1E293B)",
-            background: "rgba(0, 0, 0, 0.2)",
-            fontSize: "11px",
-            color: "var(--jantt-text-muted, #64748B)"
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div className="command-palette-footer" aria-hidden="true">
+          <div className="command-palette-hints">
             <span>&uarr;&darr; Navigate</span>
             <span>&crarr; Select</span>
             <span>ESC Close</span>
           </div>
-          <div>
-            <span style={{ color: "#38BDF8", fontWeight: 600 }}>Jantt Command Engine</span>
-          </div>
+          <span className="command-palette-brand">{PRIMARY_MODIFIER_LABEL}+K</span>
         </div>
       </div>
     </div>
   );
 };
-

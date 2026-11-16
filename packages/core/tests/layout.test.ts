@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { layout, getScaleFromDayWidth } from "../src/layout";
+import {
+  layout,
+  getScaleFromDayWidth,
+  computeDependencyPath,
+  computeChartBounds,
+  resolveHeaderHeight,
+  sanitizeCssColor,
+  SCALE_DAY_WIDTHS
+} from "../src/layout";
+import { TaskScheduleCoordinator } from "../src/rendering/task-schedule-coordinator";
+import { ViewportCoordinator } from "../src/rendering/viewport-coordinator";
+import { diffDays } from "../src/date-math";
 import { JanttData, JanttLayoutResult } from "../src/types";
 import constructionJson from "../../../examples/construction-enterprise.json";
 import basicJson from "../../../examples/basic.json";
@@ -316,9 +327,17 @@ describe("Layout Engine", () => {
     expect(getScaleFromDayWidth(5)).toBe("month");
     expect(getScaleFromDayWidth(4.9)).toBe("quarter");
     expect(getScaleFromDayWidth(3)).toBe("quarter");
-    expect(getScaleFromDayWidth(2.2)).toBe("quarter");
+    expect(getScaleFromDayWidth(2.3)).toBe("quarter");
+    // The "year" preset width maps back to "year" so presets round-trip
+    expect(getScaleFromDayWidth(SCALE_DAY_WIDTHS.year)).toBe("year");
     expect(getScaleFromDayWidth(2.1)).toBe("year");
     expect(getScaleFromDayWidth(1.2)).toBe("year");
+  });
+
+  it("round-trips every scale preset width back to its own scale", () => {
+    (Object.keys(SCALE_DAY_WIDTHS) as Array<keyof typeof SCALE_DAY_WIDTHS>).forEach((scale) => {
+      expect(getScaleFromDayWidth(SCALE_DAY_WIDTHS[scale])).toBe(scale);
+    });
   });
 
   it("auto-adjusts scale tier in layout() when continuous dayWidth is provided", () => {
@@ -341,5 +360,353 @@ describe("Layout Engine", () => {
     const resYear = layout(sampleData, { dayWidth: 1.5 });
     expect(resYear.header.scale).toBe("year");
     expect(resYear.viewport.dayWidth).toBe(1.5);
+  });
+});
+
+describe("Dependency routing by anchor side (FS / SS / FF / SF)", () => {
+  const points = (path: string): Array<[number, number]> => {
+    const nums = path.replace(/[MLC,]/g, " ").trim().split(/\s+/).map(Number);
+    const out: Array<[number, number]> = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) out.push([nums[i], nums[i + 1]]);
+    return out;
+  };
+
+  it("keeps the default finish-to-start routing unchanged", () => {
+    expect(computeDependencyPath(150, 20, 180, 60)).toBe("M 150 20 L 165 20 L 165 60 L 180 60");
+    expect(computeDependencyPath(150, 20, 180, 60, 46, "orthogonal", "end", "start")).toBe(
+      "M 150 20 L 165 20 L 165 60 L 180 60"
+    );
+  });
+
+  it("start-to-start exits leftwards around both bars and enters the successor start from the left", () => {
+    const pts = points(computeDependencyPath(100, 20, 200, 60, 40, "orthogonal", "start", "start"));
+    expect(pts[0]).toEqual([100, 20]);
+    expect(pts[1][0]).toBeLessThan(100); // leaves away from the predecessor body
+    const [beforeLast, last] = pts.slice(-2);
+    expect(last).toEqual([200, 60]);
+    expect(beforeLast[0]).toBeLessThan(200); // arrives travelling right
+  });
+
+  it("finish-to-finish wraps on the right and enters the successor end from the right", () => {
+    const pts = points(computeDependencyPath(300, 20, 250, 60, 40, "orthogonal", "end", "end"));
+    expect(pts[1][0]).toBeGreaterThan(300);
+    const [beforeLast, last] = pts.slice(-2);
+    expect(last).toEqual([250, 60]);
+    expect(beforeLast[0]).toBeGreaterThan(250); // arrives travelling left, arrow points into the end
+  });
+
+  it("start-to-finish mirrors finish-to-start", () => {
+    expect(computeDependencyPath(300, 20, 200, 60, 40, "orthogonal", "start", "end")).toBe(
+      "M 300 20 L 250 20 L 250 60 L 200 60"
+    );
+  });
+
+  it("every routing style keeps a straight horizontal lead-in for typed links", () => {
+    (["orthogonal", "curved", "direct"] as const).forEach((style) => {
+      expect(computeDependencyPath(300, 20, 250, 60, 40, style, "end", "end").endsWith("L 250 60")).toBe(true);
+      expect(computeDependencyPath(100, 20, 200, 60, 40, style, "start", "start").endsWith("L 200 60")).toBe(true);
+    });
+  });
+
+  it("layout routes SS links from the predecessor start edge", () => {
+    const data: JanttData = {
+      tasks: [
+        { id: "a", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+        { id: "b", category: "dev", start: "2026-09-03", end: "2026-09-08", dependsOn: "a:SS" }
+      ]
+    };
+    const res = layout(data, { dayWidth: 30, rowHeight: 40 });
+    const [dep] = res.dependencies;
+    const a = res.tasks[0];
+    expect(dep.type).toBe("SS");
+    expect(dep.fromX).toBe(a.x);
+    expect(points(dep.path)[1][0]).toBeLessThan(a.x);
+  });
+});
+
+describe("Timeline bounds hardening", () => {
+  it("computeChartBounds agrees with the rendered layout window", () => {
+    const options = { dayWidth: 30, rowHeight: 40 };
+    const bounds = computeChartBounds(sampleData, options);
+    const res = layout(sampleData, options);
+    expect(bounds.startDate).toBe(res.viewport.startDate);
+    expect(bounds.endDate).toBe(res.viewport.endDate);
+    expect(bounds.totalDays).toBe(res.header.totalDays);
+    expect(resolveHeaderHeight(bounds.spansMultipleYears)).toBe(res.header.totalHeight);
+  });
+
+  it("reports the multi-year header when the runway (not the tasks) crosses a year boundary", () => {
+    const data: JanttData = {
+      tasks: [{ id: "dec", category: "dev", start: "2026-12-10", end: "2026-12-24" }]
+    };
+    const opts = { dayWidth: 30, showToday: false };
+    expect(computeChartBounds(data, opts).spansMultipleYears).toBe(true); // 14-day buffer runs into January
+    expect(layout(data, opts).header.totalHeight).toBe(78);
+  });
+
+  it("caps an absurd explicit start date so a hostile plan cannot render centuries of days", () => {
+    const data: JanttData = {
+      meta: { start: "1000-01-01" },
+      tasks: [{ id: "t", category: "dev", start: "2026-09-01", end: "2026-09-10" }]
+    };
+    const res = layout(data, { dayWidth: 30, showToday: false });
+    expect(res.header.totalDays).toBeLessThanOrEqual(3660);
+    expect(res.header.days.length).toBe(res.header.totalDays);
+    // The task window stays visible
+    expect(diffDays(res.viewport.startDate, "2026-09-01")).toBeGreaterThanOrEqual(0);
+    expect(res.tasks[0].x).toBeGreaterThanOrEqual(0);
+  });
+
+  it("hard-caps task ranges longer than the maximum span", () => {
+    const data: JanttData = {
+      tasks: [{ id: "forever", category: "dev", start: "2000-01-01", end: "2090-01-01" }]
+    };
+    const res = layout(data, { dayWidth: 1.2, showToday: false });
+    expect(res.header.totalDays).toBe(3660);
+    expect(Number.isFinite(res.canvasWidth)).toBe(true);
+  });
+
+  it("ignores invalid dates instead of producing NaN bounds", () => {
+    const data: JanttData = {
+      meta: { start: "not-a-date" },
+      tasks: [
+        { id: "bad", category: "dev", start: "garbage", end: "2026-13-45" },
+        { id: "ok", category: "dev", start: "2026-09-01", end: "2026-09-05" }
+      ]
+    };
+    const res = layout(data, { dayWidth: 30, showToday: false });
+    expect(Number.isFinite(res.header.totalDays)).toBe(true);
+    expect(Number.isFinite(res.canvasWidth)).toBe(true);
+    expect(res.header.days.length).toBe(res.header.totalDays);
+  });
+
+  it("honours viewport.headerHeight as a minimum header height", () => {
+    expect(resolveHeaderHeight(false)).toBe(58);
+    expect(resolveHeaderHeight(true)).toBe(78);
+    expect(resolveHeaderHeight(false, 90)).toBe(90);
+    expect(layout(sampleData, { dayWidth: 30, headerHeight: 90 }).header.totalHeight).toBe(90);
+  });
+});
+
+describe("Plan-provided values are sanitized by layout", () => {
+  it("allow-lists plain CSS colors and rejects injection payloads", () => {
+    const safe = ["#3B82F6", "#abc", "#11223344", "rgb(1, 2, 3)", "rgba(1,2,3,0.5)", "hsl(200 50% 40% / 0.5)", "teal", "var(--jantt-accent)"];
+    safe.forEach((c) => expect(sanitizeCssColor(c, "FALLBACK")).toBe(c));
+    const unsafe: unknown[] = [
+      "red\"><img src=x onerror=alert(1)>",
+      "url(https://attacker.example/x)",
+      "red; background: url(x)",
+      "#12345",
+      "expression(alert(1))",
+      "rgb(1,2,3) url(x)",
+      42,
+      null
+    ];
+    unsafe.forEach((c) => expect(sanitizeCssColor(c, "FALLBACK")).toBe("FALLBACK"));
+  });
+
+  it("resolves categories by own keys only and sanitizes their colors", () => {
+    const data: JanttData = {
+      categories: {
+        evil: { label: "Evil", color: "red\"><img src=x onerror=alert(1)>" },
+        ok: { label: "Ok", color: "#10B981" }
+      },
+      tasks: [
+        { id: "a", category: "constructor", start: "2026-09-01", end: "2026-09-03" },
+        { id: "b", category: "evil", start: "2026-09-01", end: "2026-09-03" },
+        { id: "c", category: "ok", start: "2026-09-01", end: "2026-09-03" }
+      ]
+    };
+    const res = layout(data, { dayWidth: 30 });
+    expect(res.tasks[0].category.label).toBe("General");
+    expect(res.tasks[1].category.label).toBe("Evil");
+    expect(res.tasks[1].category.color).toBe("#3B82F6");
+    expect(res.tasks[2].category.color).toBe("#10B981");
+  });
+
+  it("keeps baseline ghost bars inside their own row at compact row heights", () => {
+    const data: JanttData = {
+      tasks: [
+        { id: "t1", category: "dev", start: "2026-09-05", end: "2026-09-15", baseline: { start: "2026-09-01", end: "2026-09-10" } },
+        { id: "m1", category: "dev", start: "2026-09-20", end: "2026-09-20", milestone: true, baseline: { start: "2026-09-18", end: "2026-09-18" } }
+      ]
+    };
+    [26, 32, 46].forEach((rowHeight) => {
+      const res = layout(data, { dayWidth: 30, rowHeight, showBaselines: true });
+      res.tasks.forEach((tl) => {
+        const b = tl.baselineLayout!;
+        expect(b).toBeDefined();
+        expect(b.y + b.height).toBeLessThanOrEqual((tl.rowIndex + 1) * rowHeight - 1);
+        expect(b.y).toBeGreaterThanOrEqual(tl.rowIndex * rowHeight);
+      });
+      // Link anchors follow the bar center
+      const bar = res.tasks[0];
+      expect(bar.anchorInY).toBe(bar.y + bar.height / 2);
+    });
+  });
+});
+
+describe("TaskScheduleCoordinator (typed dependencies & immutability)", () => {
+  const typedData = (): JanttData => ({
+    tasks: [
+      { id: "a", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+      { id: "x", category: "dev", start: "2026-09-01", end: "2026-09-03" },
+      { id: "b", category: "dev", start: "2026-09-03", end: "2026-09-08", dependsOn: [{ id: "a", type: "SS", lagDays: 2 }, "x"] },
+      { id: "c", category: "dev", start: "2026-09-04", end: "2026-09-09", dependsOn: "a:FF-1d" },
+      { id: "d", category: "dev", start: "2026-09-06", end: "2026-09-10", dependsOn: "x" },
+      { id: "e", category: "dev", start: "2026-09-06", end: "2026-09-10" }
+    ]
+  });
+
+  it("deleting a task keeps every other typed dependency verbatim and never mutates input tasks", () => {
+    const data = typedData();
+    const before = JSON.stringify(data);
+    const next = TaskScheduleCoordinator.deleteTask(data, "x");
+    expect(JSON.stringify(data)).toBe(before);
+
+    const byId = new Map(next.tasks.map((t) => [t.id, t]));
+    expect(byId.has("x")).toBe(false);
+    expect(byId.get("b")!.dependsOn).toEqual({ id: "a", type: "SS", lagDays: 2 });
+    expect(byId.get("c")!.dependsOn).toBe("a:FF-1d");
+    expect(byId.get("d")!.dependsOn).toBeNull();
+    expect(byId.get("e")!.dependsOn).toBeUndefined();
+  });
+
+  it("removing one link keeps the remaining typed links", () => {
+    const data = typedData();
+    const next = TaskScheduleCoordinator.removeDependency(data, "x", "b");
+    expect(next.tasks.find((t) => t.id === "b")!.dependsOn).toEqual({ id: "a", type: "SS", lagDays: 2 });
+    expect(data.tasks.find((t) => t.id === "b")!.dependsOn).toHaveLength(2);
+    // Removing a link that does not exist is a no-op
+    expect(TaskScheduleCoordinator.removeDependency(data, "e", "b")).toBe(data);
+  });
+
+  it("creates unique task ids and continues the top-level WBS sequence", () => {
+    let data: JanttData = {
+      tasks: [
+        { id: "t1", wbs: "4.0", category: "dev", start: "2026-09-01", end: "2026-09-03" },
+        { id: "t2", wbs: "7.2", category: "dev", start: "2026-09-04", end: "2026-09-06" }
+      ]
+    };
+    const ids = new Set<string>();
+    for (let i = 0; i < 25; i++) {
+      const { nextData, newTask } = TaskScheduleCoordinator.createTask(data);
+      expect(ids.has(newTask.id)).toBe(false);
+      ids.add(newTask.id);
+      data = nextData;
+    }
+    expect(data.tasks[2].wbs).toBe("8.0");
+  });
+
+  it("continues nested WBS plans after the highest top-level number, and row numbers otherwise", () => {
+    const nested: JanttData = {
+      tasks: [
+        { id: "p1", wbs: "1", category: "dev", start: "2026-09-01", end: "2026-09-03" },
+        { id: "c1", wbs: "1.1", category: "dev", start: "2026-09-01", end: "2026-09-02" },
+        { id: "c2", wbs: "1.2", category: "dev", start: "2026-09-02", end: "2026-09-03" },
+        { id: "p2", wbs: "2", category: "dev", start: "2026-09-04", end: "2026-09-06" },
+        { id: "c3", wbs: "2.1", category: "dev", start: "2026-09-04", end: "2026-09-05" }
+      ]
+    };
+    expect(TaskScheduleCoordinator.createTask(nested).newTask.wbs).toBe("3.0");
+
+    const plain: JanttData = {
+      tasks: [
+        { id: "a", category: "dev", start: "2026-09-01", end: "2026-09-03" },
+        { id: "b", category: "dev", start: "2026-09-04", end: "2026-09-06" }
+      ]
+    };
+    expect(TaskScheduleCoordinator.createTask(plain).newTask.wbs).toBe("3.0");
+  });
+});
+
+describe("Scale resolution and zoom anchoring", () => {
+  it("falls back to the day tier for unknown or empty scale names", () => {
+    const bogus = { ...sampleData, meta: { ...sampleData.meta, scale: "decade" as never } };
+    const res = layout(bogus, {});
+    expect(res.header.scale).toBe("day");
+    expect(res.viewport.dayWidth).toBe(SCALE_DAY_WIDTHS.day);
+    const empty = { ...sampleData, meta: { ...sampleData.meta, scale: "" as never } };
+    expect(layout(empty, {}).header.scale).toBe("day");
+  });
+
+  const baseState = () => ({
+    currentScale: "day" as const,
+    currentDayWidth: 40,
+    currentRouting: "orthogonal" as const,
+    rowHeightMode: "custom" as const,
+    customRowHeight: 46,
+    showCritical: false,
+    showBaselines: true,
+    labelWidth: 300,
+    filterQuery: "",
+    selectedDateFilter: null,
+    renderedDayWidth: 20,
+    renderedStartDate: "2026-09-01",
+    dragAnchorLeftmostDays: null as number | null,
+    dragAnchorStartDate: "",
+    dragAnchorOffsetPx: 0
+  });
+
+  it("keeps the anchored date at the same screen offset while zooming", () => {
+    // Pointer 200px into the visible timeline, scrolled 400px at 20px/day => anchored at day 30
+    const state = { ...baseState(), dragAnchorLeftmostDays: 30, dragAnchorStartDate: "2026-09-01", dragAnchorOffsetPx: 200 };
+    // Zoomed to 40px/day: day 30 sits at 1200px, so scroll to 1000px to keep it 200px from the edge
+    expect(ViewportCoordinator.calculateScrollTarget(400, true, "2026-09-01", 40, state)).toBe(1000);
+    // A runway that grows 5 days to the left shifts the anchor by 5 days
+    expect(ViewportCoordinator.calculateScrollTarget(400, true, "2026-08-27", 40, state)).toBe(1200);
+  });
+
+  it("pivots on the leftmost visible date when no anchor is set", () => {
+    expect(ViewportCoordinator.calculateScrollTarget(400, true, "2026-09-01", 40, baseState())).toBe(800);
+  });
+});
+
+describe("Fit row height sizing", () => {
+  const fakeRoot = (innerH: number, toolbarH: number, body?: { offsetHeight: number; clientHeight: number }) => {
+    const toolbar = { offsetHeight: toolbarH };
+    return {
+      clientHeight: innerH,
+      querySelector: (sel: string) => (sel === ".jantt-toolbar" ? toolbar : sel === ".jantt-body-wrap" ? body ?? null : null)
+    } as unknown as HTMLElement;
+  };
+  const container = { clientHeight: 0 } as unknown as HTMLElement;
+  const tasks = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `t${i}`, category: "dev", start: "2026-09-01", end: "2026-09-05" }));
+  const opts = { dayWidth: 30, showToday: false };
+
+  it("fills the body exactly with rows plus the add row", () => {
+    const data: JanttData = { tasks: tasks(10) };
+    // 700 inner - 50 toolbar - 58 header = 592 => (592 - 38 add row) / 10 rows
+    expect(ViewportCoordinator.calculateRowHeight(container, fakeRoot(700, 50), data, opts, "fit", 46, false)).toBe(55);
+  });
+
+  it("is a fixed point for content-sized hosts (no shrinking feedback loop)", () => {
+    const data: JanttData = { tasks: tasks(6) };
+    let rowH = 46;
+    for (let i = 0; i < 5; i++) {
+      const contentH = 58 + 6 * rowH + Math.min(rowH, 38);
+      const body = { offsetHeight: contentH, clientHeight: contentH };
+      rowH = ViewportCoordinator.calculateRowHeight(container, fakeRoot(50 + contentH, 50, body), data, opts, "fit", 46, false);
+    }
+    expect(rowH).toBe(46);
+  });
+
+  it("falls back to the custom row height when the chart has no definite space yet", () => {
+    const data: JanttData = { tasks: tasks(5) };
+    expect(ViewportCoordinator.calculateRowHeight(container, fakeRoot(50, 50), data, opts, "fit", 46, false)).toBe(46);
+  });
+
+  it("clamps to the minimum (the body then scrolls) when rows cannot fit", () => {
+    const data: JanttData = { tasks: tasks(40) };
+    expect(ViewportCoordinator.calculateRowHeight(container, fakeRoot(550, 50), data, opts, "fit", 46, false)).toBe(26);
+  });
+
+  it("budgets the multi-year header when the runway crosses into the next year", () => {
+    const data: JanttData = {
+      tasks: Array.from({ length: 4 }, (_, i) => ({ id: `d${i}`, category: "dev", start: "2026-12-18", end: "2026-12-31" }))
+    };
+    const h = ViewportCoordinator.calculateRowHeight(container, fakeRoot(600, 50), data, opts, "fit", 46, true);
+    expect(h).toBe(Math.floor((600 - 50 - 78) / 4));
   });
 });

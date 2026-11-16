@@ -11,24 +11,30 @@ import {
   AlertTriangle,
   Sparkles,
   BarChart3,
-  Dice5
+  Dice5,
+  X
 } from "lucide-react";
 import {
   type JanttData,
   type Task,
   type Team,
+  type ScheduleHealthOptions,
   resolveTaskAssignee,
   isTaskDone,
   calculateCriticalPath,
   calculateEVM,
   auditScheduleIntegrity,
-  getTaskDependencies
+  diffDays,
+  getTodayISODate,
+  isValidISODate,
+  sanitizeCssColor
 } from "@jantt/core";
 import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "../../types";
 import { isTaskMatchingPersonFilter } from "../../utils";
-import { EvmKpiCards } from "./EvmKpiCards";
+import { EvmKpiCards, formatMoney, getPlanCurrency } from "./EvmKpiCards";
 import { ScheduleHealthCard } from "./ScheduleHealthCard";
 import { EvmSCurveChart } from "./EvmSCurveChart";
+import { tintColor } from "./KanbanView";
 import { MonteCarloModal } from "../modals/MonteCarloModal";
 
 interface BudgetKpiViewProps {
@@ -44,7 +50,51 @@ interface BudgetKpiViewProps {
   selectedPersonFilter?: string;
   dateFilterBehavior?: "dim" | "hide";
   completedFilterMode?: CompletedFilterMode;
+  /**
+   * Opens the Monte Carlo dialog hosted by the app shell (ModalHost), so it survives view
+   * switches. Without it the view hosts the dialog itself.
+   */
+  onOpenMonteCarlo?: () => void;
 }
+
+type QuickFilter = "all" | "ready" | "blocked" | "bottleneck";
+
+const QUICK_FILTER_LABELS: Record<Exclude<QuickFilter, "all">, string> = {
+  ready: "Ready to Start",
+  blocked: "Blocked",
+  bottleneck: "Critical Bottlenecks"
+};
+
+/**
+ * Total-float label driven by the float value itself (never by the critical flag), so
+ * negative float (target breached) and positive float on the least-float path stay visible.
+ */
+export function formatFloatLabel(totalFloat: number): string {
+  if (totalFloat < 0) return `${Math.abs(totalFloat)}d past target`;
+  if (totalFloat === 0) return "0d (Bottleneck)";
+  return `${totalFloat}d buffer`;
+}
+
+function describeFloatForPeople(totalFloat: number): string {
+  if (totalFloat < 0) {
+    return `Planned to finish ${Math.abs(totalFloat)} day(s) after the target date unless it is recovered`;
+  }
+  if (totalFloat === 0) return "No slack: any delay to this task delays the project finish";
+  return `Can slip by ${totalFloat} day(s) without delaying the project finish`;
+}
+
+const SORTABLE_COLUMNS: ReadonlyArray<{ id: string; label: (essential: boolean, currency: string) => string }> = [
+  { id: "wbs", label: () => "WBS" },
+  { id: "name", label: () => "Task Name" },
+  { id: "category", label: () => "Category" },
+  { id: "assignee", label: () => "Assignee / Team" },
+  { id: "start", label: () => "Start" },
+  { id: "end", label: () => "End" },
+  { id: "buffer", label: (essential) => (essential ? "Wiggle Room" : "Total Float (Slack)") },
+  { id: "budget", label: (_essential, currency) => `Budget (${currency})` },
+  { id: "status", label: () => "Status" },
+  { id: "progress", label: () => "Progress" }
+];
 
 export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   parsedData,
@@ -58,12 +108,18 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   teams,
   selectedPersonFilter = "all",
   dateFilterBehavior = "dim",
-  completedFilterMode = "show"
+  completedFilterMode = "show",
+  onOpenMonteCarlo
 }) => {
   // Mode switcher: "essential" (simple/hobbyist/team lead) vs "advanced" (senior PM/EVM/audit)
   const [viewMode, setViewMode] = useState<"essential" | "advanced">("essential");
-  const [quickFilter, setQuickFilter] = useState<"all" | "ready" | "blocked" | "bottleneck">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
+
+  const currency = getPlanCurrency(parsedData);
+  const money = (val: number) => formatMoney(val, currency);
+  const rawTargetDate = parsedData.meta?.targetDate;
+  const targetDate = typeof rawTargetDate === "string" && isValidISODate(rawTargetDate) ? rawTargetDate : undefined;
 
   // 1. Calculate Comprehensive Project Management Math on the full project schedule
   const allProjectTasks = useMemo(() => {
@@ -72,66 +128,57 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
 
   const cpm = useMemo(() => {
     return calculateCriticalPath(allProjectTasks, {
-      targetDate: parsedData.meta?.targetDate as string | undefined,
+      targetDate,
       defaultGapDays: parsedData.meta?.defaultGapDays
     });
-  }, [allProjectTasks, parsedData.meta?.targetDate, parsedData.meta?.defaultGapDays]);
+  }, [allProjectTasks, targetDate, parsedData.meta?.defaultGapDays]);
 
-  const evm = useMemo(() => {
-    return calculateEVM(allProjectTasks, {
-      defaultGapDays: parsedData.meta?.defaultGapDays
-    });
-  }, [allProjectTasks, parsedData.meta?.defaultGapDays]);
+  const evm = useMemo(() => calculateEVM(allProjectTasks), [allProjectTasks]);
 
-  const audit = useMemo(() => {
-    return auditScheduleIntegrity(allProjectTasks, cpm);
-  }, [allProjectTasks, cpm]);
+  // DCMA float/duration thresholds are working days: measure them on the plan's calendar when it
+  // schedules in working days (same rule as the cascade: explicit useWorkingDays wins, else a calendar).
+  const planCalendar = parsedData.meta?.calendar;
+  const usesWorkingDays = parsedData.meta?.useWorkingDays ?? Boolean(planCalendar);
+  const planCalendars = parsedData.calendars;
+  const healthOptions = useMemo<ScheduleHealthOptions | undefined>(() => {
+    if (!usesWorkingDays) return undefined;
+    // A string calendar may name an entry of `calendars` as well as a preset.
+    const named = typeof planCalendar === "string" ? planCalendars?.[planCalendar] : undefined;
+    return { calendar: named ?? planCalendar ?? "standard" };
+  }, [usesWorkingDays, planCalendar, planCalendars]);
 
-  // Tasks ready to start (not done, and all prerequisites are 100% completed)
-  const byId = useMemo(() => {
-    const map = new Map<string, Task>();
-    summaryKpiTasks.forEach((t) => map.set(t.id, t));
-    return map;
-  }, [summaryKpiTasks]);
+  const audit = useMemo(
+    () => auditScheduleIntegrity(allProjectTasks, cpm, healthOptions),
+    [allProjectTasks, cpm, healthOptions]
+  );
 
+  // Ready / blocked use the same definition as the EVM engine (whole plan, dangling links ignored),
+  // so filters never flip a task's state and both dashboard modes report the same blockers.
   const { readyTaskIds, blockedTaskIds } = useMemo(() => {
     const ready = new Set<string>();
     const blocked = new Set<string>();
-
-    summaryKpiTasks.forEach((t) => {
-      if (isTaskDone(t)) return;
-      const deps = getTaskDependencies(t);
-      if (deps.length === 0) {
-        ready.add(t.id);
-        return;
-      }
-      let allPrereqsDone = true;
-      for (const dId of deps) {
-        const prereq = byId.get(dId);
-        if (!prereq || !isTaskDone(prereq)) {
-          allPrereqsDone = false;
-          break;
-        }
-      }
-      if (allPrereqsDone) {
-        ready.add(t.id);
-      } else {
-        blocked.add(t.id);
-      }
-    });
-
+    for (const t of summaryKpiTasks) {
+      if (isTaskDone(t)) continue;
+      if (evm.taskMetrics.get(t.id)?.isBlocked) blocked.add(t.id);
+      else ready.add(t.id);
+    }
     return { readyTaskIds: ready, blockedTaskIds: blocked };
-  }, [summaryKpiTasks, byId]);
+  }, [summaryKpiTasks, evm]);
+
+  // The quick filter belongs to Essential mode; it never silently narrows the Advanced table.
+  const activeQuickFilter: QuickFilter = viewMode === "essential" ? quickFilter : "all";
 
   // Handle local buffer/float sorting and quick filtering
   const displayTasks = useMemo(() => {
-    let tasks = [...sortedSummaryTasks];
+    // summaryKpiTasks is the single source of truth for visibility (date, person, completed filters).
+    const visibleIds = new Set(summaryKpiTasks.map((t) => t.id));
+    let tasks = sortedSummaryTasks.filter((t) => visibleIds.has(t.id));
 
-    if (quickFilter === "ready") {
+    if (activeQuickFilter === "ready") {
       tasks = tasks.filter((t) => readyTaskIds.has(t.id));
-    } else if (quickFilter === "blocked") {
+    } else if (activeQuickFilter === "blocked") {
       tasks = tasks.filter((t) => blockedTaskIds.has(t.id));
-    } else if (quickFilter === "bottleneck") {
+    } else if (activeQuickFilter === "bottleneck") {
       tasks = tasks.filter((t) => cpm.criticalTaskIds.has(t.id));
     }
 
@@ -141,7 +188,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
 
     if (summarySortConfig.column === "buffer" && summarySortConfig.direction) {
       const dir = summarySortConfig.direction === "asc" ? 1 : -1;
-      return tasks.sort((a, b) => {
+      return [...tasks].sort((a, b) => {
         const floatA = cpm.metrics.get(a.id)?.totalFloat ?? 999;
         const floatB = cpm.metrics.get(b.id)?.totalFloat ?? 999;
         return (floatA - floatB) * dir;
@@ -149,7 +196,43 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
     }
 
     return tasks;
-  }, [sortedSummaryTasks, summarySortConfig, cpm, quickFilter, completedFilterMode, readyTaskIds, blockedTaskIds]);
+  }, [sortedSummaryTasks, summaryKpiTasks, summarySortConfig, cpm, activeQuickFilter, completedFilterMode, readyTaskIds, blockedTaskIds]);
+
+  // Time remaining is counted to the date that is shown (forecast finish), with the target alongside.
+  const today = getTodayISODate();
+  const forecastFinish = cpm.projectEarlyFinish;
+  const daysToForecast = forecastFinish ? Math.max(0, diffDays(today, forecastFinish)) : 0;
+  const daysLateVsTarget = forecastFinish && targetDate ? diffDays(targetDate, forecastFinish) : 0;
+
+  const isOverBudget = evm.bac > 0 && evm.ac > evm.bac;
+  // Actual cost is unknown (not $0) when no task reports one, and cost performance is measured
+  // only on budgeted tasks that report an actual cost (the same rule as the EVM cards).
+  const isActualCostKnown = evm.costCoverage > 0 || evm.ac > 0;
+  const isCostMeasured = evm.costDataAvailable && evm.costCoverage > 0;
+  const openMonteCarlo = onOpenMonteCarlo ?? (() => setShowMonteCarlo(true));
+
+  const quickFilterButton = (id: QuickFilter, label: React.ReactNode, color: string, activeBg: string) => (
+    <button
+      type="button"
+      onClick={() => setQuickFilter(id)}
+      aria-pressed={quickFilter === id}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
+        padding: "4px 10px",
+        borderRadius: "5px",
+        border: "1px solid var(--jantt-border)",
+        background: quickFilter === id ? activeBg : "var(--jantt-bg)",
+        color: quickFilter === id ? (id === "all" ? "var(--jantt-accent-contrast, #FFFFFF)" : "#FFFFFF") : color,
+        fontSize: "11px",
+        fontWeight: 600,
+        cursor: "pointer"
+      }}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="summary-view-container">
@@ -168,51 +251,36 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           border: "1px solid var(--jantt-border)"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text)" }}>
             View Dashboard:
           </span>
-          <div style={{ display: "inline-flex", background: "var(--jantt-bg)", padding: "2px", borderRadius: "6px", border: "1px solid var(--jantt-border)" }}>
-            <button
-              onClick={() => setViewMode("essential")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "5px 12px",
-                borderRadius: "4px",
-                border: "none",
-                background: viewMode === "essential" ? "var(--jantt-accent)" : "transparent",
-                color: viewMode === "essential" ? "var(--jantt-accent-contrast, #FFFFFF)" : "var(--jantt-text-muted)",
-                fontSize: "12px",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 0.15s ease"
-              }}
-            >
-              <Sparkles size={13} />
-              <span>Essential (Simple &amp; Visual)</span>
-            </button>
-            <button
-              onClick={() => setViewMode("advanced")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "5px 12px",
-                borderRadius: "4px",
-                border: "none",
-                background: viewMode === "advanced" ? "var(--jantt-accent)" : "transparent",
-                color: viewMode === "advanced" ? "var(--jantt-accent-contrast, #FFFFFF)" : "var(--jantt-text-muted)",
-                fontSize: "12px",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 0.15s ease"
-              }}
-            >
-              <BarChart3 size={13} />
-              <span>Advanced PM (EVM &amp; Audit)</span>
-            </button>
+          <div role="group" aria-label="Dashboard detail level" style={{ display: "inline-flex", background: "var(--jantt-bg)", padding: "2px", borderRadius: "6px", border: "1px solid var(--jantt-border)" }}>
+            {(["essential", "advanced"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  padding: "5px 12px",
+                  borderRadius: "4px",
+                  border: "none",
+                  background: viewMode === mode ? "var(--jantt-accent)" : "transparent",
+                  color: viewMode === mode ? "var(--jantt-accent-contrast, #FFFFFF)" : "var(--jantt-text-muted)",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                {mode === "essential" ? <Sparkles size={13} /> : <BarChart3 size={13} />}
+                <span>{mode === "essential" ? "Essential (Simple & Visual)" : "Advanced PM (EVM & Audit)"}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -221,11 +289,18 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
             <span>Pace: <strong style={{ color: evm.scheduleStatus === "ahead" ? "#10B981" : evm.scheduleStatus === "behind" ? "#EF4444" : "inherit" }}>{evm.scheduleStatus}</strong></span>
             <span>•</span>
-            <span>Spend: <strong style={{ color: evm.costStatus === "under-budget" ? "#10B981" : evm.costStatus === "over-budget" ? "#EF4444" : "inherit" }}>{evm.costStatus}</strong></span>
+            {isCostMeasured ? (
+              <span>Spend: <strong style={{ color: evm.costStatus === "under-budget" ? "#10B981" : evm.costStatus === "over-budget" ? "#EF4444" : "inherit" }}>{evm.costStatus}</strong></span>
+            ) : (
+              <span title={evm.costDataAvailable ? "No budgeted task reports an actualCost" : "No task has an estimatedCost"}>
+                Spend: <strong>n/a</strong>
+              </span>
+            )}
           </div>
 
           <button
-            onClick={() => setShowMonteCarlo(true)}
+            type="button"
+            onClick={openMonteCarlo}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -260,9 +335,13 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               </div>
               <div className="kpi-data">
                 <span className="kpi-label">Time Remaining</span>
-                <span className="kpi-value">{evm.daysRemaining} Days</span>
+                <span className="kpi-value">{daysToForecast} Days</span>
                 <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  Target Finish: {cpm.projectLateFinish || cpm.projectEarlyFinish}
+                  Forecast finish: {forecastFinish || "-"}
+                  {targetDate && <> • Target: {targetDate}</>}
+                  {daysLateVsTarget > 0 && (
+                    <strong style={{ color: "#EF4444", marginLeft: "6px" }}>{daysLateVsTarget}d late</strong>
+                  )}
                 </span>
               </div>
             </div>
@@ -274,9 +353,25 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               </div>
               <div className="kpi-data">
                 <span className="kpi-label">Budget &amp; Spend</span>
-                <span className="kpi-value">${evm.bac.toLocaleString()}</span>
+                <span className="kpi-value">{evm.bac > 0 ? money(evm.bac) : "No budget set"}</span>
                 <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  Spent: ${evm.ac.toLocaleString()} • <strong>${Math.max(0, evm.bac - evm.ac).toLocaleString()} left</strong>
+                  {!isActualCostKnown ? (
+                    <>Spent: n/a (no actual costs reported)</>
+                  ) : (
+                    <>
+                      Spent: {money(evm.ac)}
+                      {evm.bac > 0 && (
+                        <>
+                          {" • "}
+                          {isOverBudget ? (
+                            <strong style={{ color: "#EF4444" }}>Over by {money(evm.ac - evm.bac)}</strong>
+                          ) : (
+                            <strong>{money(evm.bac - evm.ac)} left</strong>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
                 </span>
               </div>
             </div>
@@ -295,7 +390,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               </div>
             </div>
 
-            {/* Card 4: Bottleneck Tasks (Zero Buffer) */}
+            {/* Card 4: Bottleneck Tasks (least float) */}
             <div className="summary-kpi-card">
               <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical, #EF4444)" }}>
                 <Layers size={20} />
@@ -306,7 +401,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                   {cpm.criticalTaskIds.size} Tasks
                 </span>
                 <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  Zero buffer (delaying these delays project)
+                  Least buffer: delaying these delays the finish
                 </span>
               </div>
             </div>
@@ -314,6 +409,8 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
 
           {/* Quick Filter Action Bar for everyday productivity */}
           <div
+            role="group"
+            aria-label="Quick filter"
             style={{
               display: "flex",
               alignItems: "center",
@@ -328,81 +425,34 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", marginRight: "4px" }}>
               Quick Filter:
             </span>
-            <button
-              onClick={() => setQuickFilter("all")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "4px 10px",
-                borderRadius: "5px",
-                border: "1px solid var(--jantt-border)",
-                background: quickFilter === "all" ? "var(--jantt-accent)" : "var(--jantt-bg)",
-                color: quickFilter === "all" ? "var(--jantt-accent-contrast, #FFFFFF)" : "var(--jantt-text)",
-                fontSize: "11px",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              All Tasks ({summaryKpiTasks.length})
-            </button>
-            <button
-              onClick={() => setQuickFilter("ready")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "4px 10px",
-                borderRadius: "5px",
-                border: "1px solid var(--jantt-border)",
-                background: quickFilter === "ready" ? "#10B981" : "var(--jantt-bg)",
-                color: quickFilter === "ready" ? "#FFFFFF" : "#10B981",
-                fontSize: "11px",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              <PlayCircle size={12} />
-              <span>Ready to Start ({readyTaskIds.size})</span>
-            </button>
-            <button
-              onClick={() => setQuickFilter("blocked")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "4px 10px",
-                borderRadius: "5px",
-                border: "1px solid var(--jantt-border)",
-                background: quickFilter === "blocked" ? "#F59E0B" : "var(--jantt-bg)",
-                color: quickFilter === "blocked" ? "#FFFFFF" : "#F59E0B",
-                fontSize: "11px",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              <AlertTriangle size={12} />
-              <span>Blocked Tasks ({blockedTaskIds.size})</span>
-            </button>
-            <button
-              onClick={() => setQuickFilter("bottleneck")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "4px 10px",
-                borderRadius: "5px",
-                border: "1px solid var(--jantt-border)",
-                background: quickFilter === "bottleneck" ? "var(--jantt-critical, #EF4444)" : "var(--jantt-bg)",
-                color: quickFilter === "bottleneck" ? "#FFFFFF" : "var(--jantt-critical, #EF4444)",
-                fontSize: "11px",
-                fontWeight: 600,
-                cursor: "pointer"
-              }}
-            >
-              <Layers size={12} />
-              <span>Critical Bottlenecks ({cpm.criticalTaskIds.size})</span>
-            </button>
+            {quickFilterButton("all", <>All Tasks ({summaryKpiTasks.length})</>, "var(--jantt-text)", "var(--jantt-accent)")}
+            {quickFilterButton(
+              "ready",
+              <>
+                <PlayCircle size={12} />
+                <span>Ready to Start ({readyTaskIds.size})</span>
+              </>,
+              "#10B981",
+              "#10B981"
+            )}
+            {quickFilterButton(
+              "blocked",
+              <>
+                <AlertTriangle size={12} />
+                <span>Blocked Tasks ({blockedTaskIds.size})</span>
+              </>,
+              "#F59E0B",
+              "#F59E0B"
+            )}
+            {quickFilterButton(
+              "bottleneck",
+              <>
+                <Layers size={12} />
+                <span>Critical Bottlenecks ({cpm.criticalTaskIds.size})</span>
+              </>,
+              "var(--jantt-critical, #EF4444)",
+              "var(--jantt-critical, #EF4444)"
+            )}
           </div>
         </div>
       )}
@@ -413,13 +463,13 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
       {viewMode === "advanced" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "20px" }}>
           {/* Advanced EVM Metrics Panel */}
-          <EvmKpiCards evm={evm} cpm={cpm} />
+          <EvmKpiCards evm={evm} cpm={cpm} currency={currency} />
 
           {/* S-Curve Cumulative Cost vs Progress Visualization */}
-          <EvmSCurveChart parsedData={parsedData} evm={evm} cpm={cpm} />
+          <EvmSCurveChart parsedData={parsedData} evm={evm} currency={currency} />
 
           {/* Schedule Health & Integrity Diagnostic Card */}
-          <ScheduleHealthCard audit={audit} />
+          <ScheduleHealthCard audit={audit} hasTargetDate={Boolean(targetDate)} />
         </div>
       )}
 
@@ -428,13 +478,40 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
       {/* ========================================================================= */}
       <div className="summary-breakdown-card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
-          <h3 style={{ fontSize: "14px", fontWeight: 700, margin: 0 }}>
-            {viewMode === "essential" ? "Work Breakdown & Wiggle Room" : "Work Breakdown & Schedule Performance (CPM / Float)"}
+          <h3 style={{ fontSize: "14px", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+            <span>{viewMode === "essential" ? "Work Breakdown & Wiggle Room" : "Work Breakdown & Schedule Performance (CPM / Float)"}</span>
+            {activeQuickFilter !== "all" && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "2px 4px 2px 8px",
+                  borderRadius: "100px",
+                  border: "1px solid var(--jantt-border)",
+                  color: "var(--jantt-text)"
+                }}
+              >
+                Filter: {QUICK_FILTER_LABELS[activeQuickFilter]}
+                <button
+                  type="button"
+                  onClick={() => setQuickFilter("all")}
+                  aria-label="Clear quick filter"
+                  title="Clear quick filter"
+                  style={{ display: "inline-flex", background: "none", border: "none", cursor: "pointer", color: "var(--jantt-text-muted)", padding: "2px" }}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            )}
             {summarySortConfig.column && (
-              <span style={{ fontSize: "11px", fontWeight: 400, marginLeft: "10px", color: "var(--jantt-text-muted)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 400, color: "var(--jantt-text-muted)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                 <span>Sorted by {summarySortConfig.column}</span>
                 {summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
                 <button
+                  type="button"
                   onClick={() => setSummarySortConfig({ column: "", direction: null })}
                   style={{ marginLeft: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--jantt-accent)", fontSize: "11px" }}
                 >Clear</button>
@@ -449,57 +526,46 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         <table className="summary-table">
           <thead>
             <tr>
-              {(["wbs", "name", "category", "assignee"] as const).map((col) => (
-                <th key={col} className={`summary-th-sortable ${summarySortConfig.column === col ? "is-sorted" : ""}`} onClick={() => handleSummarySort(col)}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                    <span>{col === "wbs" ? "WBS" : col === "name" ? "Task Name" : col === "category" ? "Category" : "Assignee / Team"}</span>
-                    {summarySortConfig.column === col && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                  </span>
-                </th>
-              ))}
-              <th className={`summary-th-sortable ${summarySortConfig.column === "start" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("start")}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <span>Start</span>
-                  {summarySortConfig.column === "start" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                </span>
-              </th>
-              <th className={`summary-th-sortable ${summarySortConfig.column === "end" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("end")}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <span>End</span>
-                  {summarySortConfig.column === "end" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                </span>
-              </th>
-              <th className={`summary-th-sortable ${summarySortConfig.column === "buffer" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("buffer")}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <span>{viewMode === "essential" ? "Wiggle Room" : "Total Float (Slack)"}</span>
-                  {summarySortConfig.column === "buffer" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                </span>
-              </th>
-              <th className={`summary-th-sortable ${summarySortConfig.column === "budget" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("budget")}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <span>Budget ($)</span>
-                  {summarySortConfig.column === "budget" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                </span>
-              </th>
-              <th className={`summary-th-sortable ${summarySortConfig.column === "status" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("status")}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <span>Status</span>
-                  {summarySortConfig.column === "status" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                </span>
-              </th>
-              <th className={`summary-th-sortable ${summarySortConfig.column === "progress" ? "is-sorted" : ""}`} onClick={() => handleSummarySort("progress")}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                  <span>Progress</span>
-                  {summarySortConfig.column === "progress" && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                </span>
-              </th>
+              {SORTABLE_COLUMNS.map((col) => {
+                const isSorted = summarySortConfig.column === col.id && Boolean(summarySortConfig.direction);
+                const label = col.label(viewMode === "essential", currency);
+                return (
+                  <th
+                    key={col.id}
+                    className={`summary-th-sortable ${isSorted ? "is-sorted" : ""}`}
+                    aria-sort={isSorted ? (summarySortConfig.direction === "asc" ? "ascending" : "descending") : "none"}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSummarySort(col.id)}
+                      title={`Sort by ${label}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        textTransform: "inherit",
+                        letterSpacing: "inherit",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <span>{label}</span>
+                      {isSorted && (summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
+                    </button>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {displayTasks.map((t) => {
               const cat = parsedData.categories?.[t.category];
               const isCompleted = isTaskDone(t);
-              const effectiveProgress = isCompleted ? 1.0 : (t.progress ?? 0);
+              const effectiveProgress = isCompleted ? 1.0 : Math.min(1, Math.max(0, Number(t.progress) || 0));
               const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
               const isDateMatch = isTaskMatchingDateFilter(t);
               const isPersonFiltering = selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
@@ -508,15 +574,27 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
               const isDimmed = isFilterDimmed || isCompletedDimmed;
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
+              const teamColor = sanitizeCssColor(assigneeInfo.team?.color, "var(--jantt-accent)");
+              const status = typeof t.status === "string" && t.status ? t.status : "not-started";
 
               // CPM & Float metrics
               const scheduleMetrics = cpm.metrics.get(t.id);
               const isCrit = scheduleMetrics?.isCritical ?? false;
               const isNearCrit = scheduleMetrics?.isNearCritical ?? false;
-              const tf = scheduleMetrics?.totalFloat ?? 0;
+              const tf = scheduleMetrics?.totalFloat;
               const ff = scheduleMetrics?.freeFloat ?? 0;
               const isBlocked = blockedTaskIds.has(t.id);
               const isReady = readyTaskIds.has(t.id);
+              const floatColor =
+                tf === undefined
+                  ? "var(--jantt-text-muted)"
+                  : tf < 0
+                  ? "#EF4444"
+                  : isCrit
+                  ? "var(--jantt-critical, #EF4444)"
+                  : isNearCrit
+                  ? "#F59E0B"
+                  : "#10B981";
 
               return (
                 <tr key={t.id} className={`${isCompleted ? "summary-row-completed" : ""} ${isDimmed ? "summary-row-dimmed" : ""}`.trim()}>
@@ -532,9 +610,9 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                             fontWeight: 800,
                             padding: "1px 5px",
                             borderRadius: "4px",
-                            background: "var(--jantt-critical, #EF4444)20",
+                            background: tintColor("var(--jantt-critical, #EF4444)", 12),
                             color: "var(--jantt-critical, #EF4444)",
-                            border: "1px solid var(--jantt-critical, #EF4444)40",
+                            border: `1px solid ${tintColor("var(--jantt-critical, #EF4444)", 25)}`,
                             textTransform: "uppercase"
                           }}
                         >
@@ -576,7 +654,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     </div>
                   </td>
                   <td>
-                    <span className="jantt-label-dot" style={{ background: isCompleted ? "var(--jantt-bar-done, #64748B)" : (cat?.color || "var(--jantt-accent)"), display: "inline-block", marginRight: "6px" }} />
+                    <span className="jantt-label-dot" style={{ background: isCompleted ? "var(--jantt-bar-done, #64748B)" : sanitizeCssColor(cat?.color, "var(--jantt-accent)"), display: "inline-block", marginRight: "6px" }} />
                     {cat?.label || t.category}
                   </td>
                   <td>
@@ -603,12 +681,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                         {assigneeInfo.team && (
                           <span
                             style={{
-                            fontSize: "9.5px",
-                            fontWeight: 600,
-                            background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1A`,
-                            color: assigneeInfo.team.color || "var(--jantt-accent)",
-                            padding: "1px 5px",
-                            borderRadius: "4px"
+                              fontSize: "9.5px",
+                              fontWeight: 600,
+                              background: tintColor(teamColor, 10),
+                              color: teamColor,
+                              padding: "1px 5px",
+                              borderRadius: "4px"
                             }}
                           >
                             {assigneeInfo.team.name}
@@ -622,27 +700,33 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                   <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.start}</td>
                   <td style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }}>{t.end}</td>
                   <td>
-                    <span
-                      title={viewMode === "essential" ? `Can slip by ${tf} days without delaying the project deadline` : `Total Float: ${tf}d, Free Float: ${ff}d`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        fontFamily: "var(--jantt-font-mono)",
-                        color: isCrit ? "var(--jantt-critical, #EF4444)" : tf < 0 ? "#EF4444" : isNearCrit ? "#F59E0B" : "#10B981"
-                      }}
-                    >
-                      {isCrit ? "0d (Bottleneck)" : tf < 0 ? `Overdue ${tf}d` : `${tf}d buffer`}
-                    </span>
+                    {tf === undefined ? (
+                      <span style={{ color: floatColor }}>-</span>
+                    ) : (
+                      <span
+                        title={viewMode === "essential" ? describeFloatForPeople(tf) : `Total Float: ${tf}d, Free Float: ${ff}d`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          fontFamily: "var(--jantt-font-mono)",
+                          color: floatColor
+                        }}
+                      >
+                        {formatFloatLabel(tf)}
+                      </span>
+                    )}
                   </td>
                   <td style={{ fontFamily: "var(--jantt-font-mono)" }}>
-                    {t.estimatedCost ? `$${t.estimatedCost.toLocaleString()}` : "-"}
+                    {typeof t.estimatedCost === "number" && Number.isFinite(t.estimatedCost) && t.estimatedCost !== 0
+                      ? money(t.estimatedCost)
+                      : "-"}
                   </td>
                   <td>
-                    <span className={`kanban-prio-badge is-status-${(t.status || "not-started").replace("-", "")}`}>
-                      {t.status || "not-started"}
+                    <span className={`kanban-prio-badge is-status-${status.replace("-", "")}`}>
+                      {status}
                     </span>
                   </td>
                   <td>
@@ -667,11 +751,9 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         </table>
       </div>
 
-      <MonteCarloModal
-        show={showMonteCarlo}
-        onClose={() => setShowMonteCarlo(false)}
-        parsedData={parsedData}
-      />
+      {!onOpenMonteCarlo && (
+        <MonteCarloModal show={showMonteCarlo} onClose={() => setShowMonteCarlo(false)} parsedData={parsedData} />
+      )}
     </div>
   );
 };

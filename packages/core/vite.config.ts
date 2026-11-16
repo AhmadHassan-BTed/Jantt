@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
-import { resolve } from "path";
+import { resolve } from "node:path";
 
 export default defineConfig({
   plugins: [
@@ -11,22 +11,18 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: resolve(__dirname, "src/index.ts"),
-      name: "JanttCore",
+      entry: resolve(import.meta.dirname, "src/index.ts"),
       formats: ["es", "cjs"],
-      fileName: (format) => `index.${format === "es" ? "js" : "cjs"}`
+      fileName: (format) => `index.${format === "es" ? "js" : "cjs"}`,
+      // Emitted as dist/theme.css, the target of the "./theme.css" and "./style.css" exports.
+      cssFileName: "theme"
     },
-    rollupOptions: {
+    rolldownOptions: {
+      // Declared in "dependencies": consumers' bundlers resolve and dedupe it.
+      external: ["fflate"],
       output: {
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name === "style.css") return "theme.css";
-          return assetInfo.name || "asset";
-        }
+        exports: "named"
       }
     }
-  },
-  test: {
-    globals: true,
-    environment: "jsdom"
   }
 });

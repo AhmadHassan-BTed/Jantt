@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import {
   type JanttData,
   type Person,
@@ -8,124 +8,134 @@ import {
   validate
 } from "@jantt/core";
 import type { SavedProject } from "../types";
-import { STORAGE_KEYS } from "../constants";
+import { getTabInstanceId } from "../room-storage";
 
-export type SyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict" | "draft";
+const CHANNEL_NAME = "jantt_cross_tab_sync";
+
+interface PlanMutatedMessage {
+  type: "PLAN_MUTATED";
+  senderId: string;
+  projectId: string;
+  timestamp: string;
+  data: JanttData;
+}
 
 interface UseDynamicSyncOptions {
   activeProjectId: string;
-  customProjects: SavedProject[];
-  setCustomProjects: React.Dispatch<React.SetStateAction<SavedProject[]>>;
-  parsedData: JanttData | null;
+  /** The open plan; incoming copies that already match it are ignored. */
+  parsedData?: JanttData | null;
   setParsedData: (data: JanttData | null) => void;
   setJsonText: (text: string) => void;
   setPeople: (people: Person[]) => void;
   setTeams: (teams: Team[]) => void;
   setValidationResult: (res: ValidationResult) => void;
-  showToast: (msg: string, isErr?: boolean) => void;
-  captureSnapshot: (projectId: string, data: JanttData, reason: string) => void;
+  /** @deprecated Unused; accepted for call-site compatibility. */
+  customProjects?: SavedProject[];
+  /** @deprecated Unused; accepted for call-site compatibility. */
+  setCustomProjects?: React.Dispatch<React.SetStateAction<SavedProject[]>>;
+  /** @deprecated Unused; accepted for call-site compatibility. */
+  showToast?: (msg: string, isErr?: boolean) => void;
+  /** @deprecated Unused; accepted for call-site compatibility. */
+  captureSnapshot?: (projectId: string, data: JanttData, reason: string) => void;
 }
 
-function getCollaboratorId(): string {
-  if (typeof window === "undefined") return "peer-serverless";
-  try {
-    let id = localStorage.getItem("jantt_peer_id");
-    if (!id) {
-      id = `peer-${Math.random().toString(36).slice(2, 8)}`;
-      localStorage.setItem("jantt_peer_id", id);
-    }
-    return id;
-  } catch {
-    return "peer-serverless";
-  }
+function isPlanMutatedMessage(value: unknown): value is PlanMutatedMessage {
+  const msg = value as Partial<PlanMutatedMessage> | null;
+  return Boolean(
+    msg &&
+      msg.type === "PLAN_MUTATED" &&
+      typeof msg.senderId === "string" &&
+      typeof msg.projectId === "string" &&
+      msg.data &&
+      typeof msg.data === "object" &&
+      Array.isArray(msg.data.tasks)
+  );
 }
 
 /**
- * Local Cross-Tab Dynamic Coherence Engine
- * Synchronizes edits across multiple browser tabs instantaneously via BroadcastChannel.
- * (All cloud collaboration and multi-user synchronization is handled by Firebase Cloud Rooms).
+ * Cross-tab coherence: when this browser has the same plan open in several tabs, edits saved in
+ * one tab are applied in the others through a BroadcastChannel. Every tab has its own sender id,
+ * copies that already match the open plan are ignored, and a plan applied from another tab is
+ * not broadcast again when this tab autosaves it, so a change travels exactly once.
+ * (Collaboration between users goes through Firebase cloud rooms, see useRoomSync.)
  */
 export function useDynamicSync({
   activeProjectId,
+  parsedData,
   setParsedData,
   setJsonText,
   setPeople,
   setTeams,
-  setValidationResult,
+  setValidationResult
 }: UseDynamicSyncOptions) {
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("in-sync");
-  const [lastSyncTime, setLastSyncTime] = useState<Date>(() => new Date());
-  const [syncMessage, setSyncMessage] = useState<string>("Local plan saved");
-
-  const clientIdRef = useRef<string>(getCollaboratorId());
+  const senderId = getTabInstanceId();
   const activeProjectIdRef = useRef(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
+  const parsedDataRef = useRef(parsedData ?? null);
+  parsedDataRef.current = parsedData ?? null;
+  const settersRef = useRef({ setParsedData, setJsonText, setPeople, setTeams, setValidationResult });
+  settersRef.current = { setParsedData, setJsonText, setPeople, setTeams, setValidationResult };
 
-  // BroadcastChannel for instant cross-tab coherence
   const channelRef = useRef<BroadcastChannel | null>(null);
+  /** The plan last applied from another tab: every tab already has it. */
+  const lastAppliedRef = useRef<JanttData | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
-    const ch = new BroadcastChannel("jantt_cross_tab_sync");
-    channelRef.current = ch;
+    const channel = new BroadcastChannel(CHANNEL_NAME);
+    channelRef.current = channel;
 
-    ch.onmessage = (evt) => {
-      const msg = evt.data;
-      if (!msg || msg.type !== "PLAN_MUTATED") return;
-      if (msg.senderId === clientIdRef.current) return; // Ignore own broadcasts to prevent echo loops
-      if (msg.projectId !== activeProjectIdRef.current) return;
+    channel.onmessage = (evt) => {
+      const msg: unknown = evt.data;
+      if (!isPlanMutatedMessage(msg)) return;
+      if (msg.senderId === senderId || msg.projectId !== activeProjectIdRef.current) return;
 
-      // Update in-memory state cleanly from sister tab
-      if (msg.data) {
-        setParsedData(msg.data);
-        setPeople(msg.data.people || []);
-        setTeams(msg.data.teams || []);
-        const formatted = JSON.stringify(msg.data, null, 2);
-        setJsonText(formatted);
-        setValidationResult(validate(msg.data));
-        try {
-          localStorage.setItem(STORAGE_KEYS.ACTIVE_JSON, formatted);
-        } catch {}
-        setSyncStatus("in-sync");
-        setLastSyncTime(new Date());
-        setSyncMessage("Synced from another tab");
-      }
+      const current = parsedDataRef.current;
+      if (current && calculatePlanHash(current) === calculatePlanHash(msg.data)) return;
+
+      // The sister tab holds the same plan this tab would: mirror it, with its validation result.
+      const s = settersRef.current;
+      parsedDataRef.current = msg.data;
+      lastAppliedRef.current = msg.data;
+      s.setParsedData(msg.data);
+      s.setPeople(Array.isArray(msg.data.people) ? msg.data.people : []);
+      s.setTeams(Array.isArray(msg.data.teams) ? msg.data.teams : []);
+      s.setJsonText(JSON.stringify(msg.data, null, 2));
+      s.setValidationResult(validate(msg.data));
     };
 
     return () => {
-      ch.close();
-      channelRef.current = null;
+      channel.close();
+      if (channelRef.current === channel) channelRef.current = null;
     };
-  }, [setParsedData, setPeople, setTeams, setJsonText, setValidationResult]);
+  }, [senderId]);
 
-  // Broadcast local changes to other open tabs
-  const broadcastLocalChange = useCallback((projectId: string, data: JanttData) => {
-    if (!channelRef.current) return;
-    try {
-      channelRef.current.postMessage({
+  /** Sends a saved plan to this browser's other tabs. */
+  const broadcastLocalChange = useCallback(
+    (projectId: string, data: JanttData) => {
+      const channel = channelRef.current;
+      // Autosave of a plan that came from another tab: re-sending it would only echo back.
+      if (!channel || data === lastAppliedRef.current) return;
+      const message: PlanMutatedMessage = {
         type: "PLAN_MUTATED",
-        senderId: clientIdRef.current,
+        senderId,
         projectId,
-        contentHash: calculatePlanHash(data),
         timestamp: new Date().toISOString(),
         data
-      });
-    } catch {}
-  }, []);
-
-  const checkAndSyncProject = useCallback(async () => {
-    setSyncStatus("in-sync");
-    setSyncMessage("Local plan saved");
-  }, []);
+      };
+      try {
+        channel.postMessage(message);
+      } catch {
+        // intentionally ignored: a closed channel or an uncloneable value only skips this
+        // best-effort hint; every tab still reads the saved plan from storage on its next load.
+      }
+    },
+    [senderId]
+  );
 
   return {
-    syncStatus,
-    lastSyncTime,
-    syncMessage,
-    checkAndSyncProject,
     broadcastLocalChange,
-    isQuotaShieldActive: false,
-    cloudProvider: undefined,
-    peerId: clientIdRef.current
+    /** Identifies this tab in cross-tab messages. */
+    peerId: senderId
   };
 }

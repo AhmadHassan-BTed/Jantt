@@ -6,18 +6,14 @@ export class PanGestureStrategy implements IGestureStrategy {
   public onMove(e: PointerEvent, state: DragState, ctx: GestureContext): void {
     const bodyWrap =
       state.canvasEl?.closest<HTMLElement>(".jantt-body-wrap") ||
-      ctx.container?.querySelector<HTMLElement>(".jantt-body-wrap") ||
-      document.querySelector<HTMLElement>(".jantt-body-wrap");
+      ctx.container?.querySelector<HTMLElement>(".jantt-body-wrap");
     if (!bodyWrap) return;
 
-    const deltaX = e.clientX - state.startX;
-    const deltaY = e.clientY - state.startY;
-
     if (state.origScrollLeft !== undefined) {
-      bodyWrap.scrollLeft = state.origScrollLeft - deltaX;
+      bodyWrap.scrollLeft = state.origScrollLeft - (e.clientX - state.startX);
     }
     if (state.origScrollTop !== undefined) {
-      bodyWrap.scrollTop = state.origScrollTop - deltaY;
+      bodyWrap.scrollTop = state.origScrollTop - (e.clientY - state.startY);
     }
   }
 
@@ -25,7 +21,13 @@ export class PanGestureStrategy implements IGestureStrategy {
     if (state.canvasEl) {
       state.canvasEl.style.cursor = "";
     }
-    if (!state.moved) {
+    if (state.moved) return;
+    // A press that started on a view-only bar and did not pan is a click on that task.
+    const task = state.taskId ? ctx.data.tasks.find((t) => t.id === state.taskId) : undefined;
+    if (task) {
+      ctx.options.onTaskClick?.(task);
+      ctx.openModalHandler(task);
+    } else {
       ctx.clearSelection();
     }
   }

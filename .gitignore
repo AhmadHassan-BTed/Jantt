@@ -18,7 +18,16 @@ build/
 **/.cache/
 .turbo/
 **/.turbo/
+coverage/
+**/coverage/
+cli/tests/tmp/
 *.log
+
+# Python bridge
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
 
 # Environment & Private Files
 .env

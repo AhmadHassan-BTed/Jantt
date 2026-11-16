@@ -1,5 +1,6 @@
 import React from "react";
-import { Eye, Copy, X, ShieldAlert, ArrowRight } from "lucide-react";
+import { Eye, Copy, ShieldAlert } from "lucide-react";
+import { Modal, ModalHeader } from "./ModalHost";
 
 interface ReadOnlyForkModalProps {
   show: boolean;
@@ -16,153 +17,62 @@ export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
 }) => {
   if (!show) return null;
 
-  return (
-    <div
-      className="modal-backdrop"
-      onClick={() => setShow(false)}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 10000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "rgba(0, 0, 0, 0.75)",
-        backdropFilter: "blur(6px)",
-        padding: "16px"
-      }}
-    >
-      <div
-        className="modal-content"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%",
-          maxWidth: "480px",
-          background: "#0f172a",
-          border: "1px solid #334155",
-          borderRadius: "16px",
-          boxShadow: "0 25px 50px rgba(0,0,0,0.6)",
-          padding: "24px",
-          color: "#f8fafc",
-          fontFamily: "inherit"
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: "42px",
-                height: "42px",
-                borderRadius: "12px",
-                background: "rgba(245, 158, 11, 0.15)",
-                color: "#f59e0b",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0
-              }}
-            >
-              <Eye size={22} />
-            </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: "#f8fafc" }}>
-                Read-Only Cloud Room
-              </h2>
-              <p style={{ margin: "2px 0 0 0", fontSize: "0.82rem", color: "#94a3b8" }}>
-                {roomTitle}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShow(false)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#94a3b8",
-              cursor: "pointer",
-              padding: "4px"
-            }}
-          >
-            <X size={18} />
-          </button>
-        </div>
+  const close = () => setShow(false);
 
-        {/* Content explanation */}
+  return (
+    <Modal onClose={close} maxWidth={480} ariaDescribedBy="readonly-fork-desc">
+      <ModalHeader
+        icon={<Eye size={18} />}
+        title="This Room Is View-Only for You"
+        subtitle={<span style={{ overflowWrap: "anywhere" }}>{roomTitle}</span>}
+      />
+
+      <div className="prompt-modal-body" style={{ gap: "16px" }}>
         <div
+          id="readonly-fork-desc"
           style={{
-            background: "rgba(30, 41, 59, 0.6)",
-            border: "1px solid #334155",
+            background: "var(--jantt-surface-hover, rgba(30, 41, 59, 0.6))",
+            border: "1px solid var(--jantt-border, #334155)",
             borderRadius: "10px",
             padding: "14px",
-            marginBottom: "20px",
-            fontSize: "0.85rem",
+            fontSize: "13px",
             lineHeight: 1.5,
-            color: "#cbd5e1"
+            color: "var(--jantt-text)"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", color: "#f59e0b", fontWeight: 600 }}>
-            <ShieldAlert size={16} />
-            <span>Viewer Permissions Active</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", color: "#F59E0B", fontWeight: 600 }}>
+            <ShieldAlert size={16} aria-hidden="true" />
+            <span>Your changes can&apos;t be saved here</span>
           </div>
           <p style={{ margin: "0 0 8px 0" }}>
-            You have <strong>view-only</strong> access to this cloud room. Edits cannot be saved to the shared cloud roadmap.
+            You have <strong>view-only</strong> access to this cloud room, so edits are not saved to the shared plan.
           </p>
-          <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.8rem" }}>
-            To make changes, you can create a private <strong>Local Copy</strong> on your device. Your local copy will have full editing rights and won't affect the cloud room.
+          <p style={{ margin: 0, color: "var(--jantt-text-muted)", fontSize: "12.5px" }}>
+            To make changes, create a private <strong>local copy</strong> on this device. You can edit the copy freely;
+            the shared room stays unchanged. To edit the room itself, ask its owner for editor access.
           </p>
         </div>
 
-        {/* Actions */}
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <button
             type="button"
+            className="btn btn-primary"
+            data-autofocus
+            style={{ width: "100%", padding: "11px 16px" }}
             onClick={() => {
-              setShow(false);
+              close();
               onMakeLocalCopy();
             }}
-            style={{
-              width: "100%",
-              background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "10px",
-              padding: "12px 16px",
-              fontSize: "0.9rem",
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              boxShadow: "0 4px 15px rgba(99, 102, 241, 0.35)"
-            }}
           >
-            <Copy size={16} />
-            <span>Make a Local Copy (Edit Freely)</span>
-            <ArrowRight size={15} />
+            <Copy size={16} aria-hidden="true" />
+            <span>Make a Private Local Copy</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setShow(false)}
-            style={{
-              width: "100%",
-              background: "rgba(255, 255, 255, 0.06)",
-              color: "#94a3b8",
-              border: "1px solid #334155",
-              borderRadius: "10px",
-              padding: "10px 16px",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer"
-            }}
-          >
+          <button type="button" className="btn btn-secondary" style={{ width: "100%" }} onClick={close}>
             Keep Viewing Read-Only
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };

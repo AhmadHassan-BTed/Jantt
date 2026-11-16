@@ -1,786 +1,322 @@
-import React, { useState, useEffect } from "react";
-import {
-  Users,
-  X,
-  Copy,
-  Check,
-  Key,
-  Globe,
-  Radio,
-  Plus,
-  ArrowRight,
-  ShieldCheck,
-  Loader2,
-  Sparkles
-} from "lucide-react";
+import React, { useEffect, useId, useRef, useState } from "react";
+import { Radio, ArrowRight, Plus, Loader2, LogIn } from "lucide-react";
 import type { SavedProject, ActiveView } from "../../types";
 import type { UserProfile } from "../../firebase";
-import {
-  buildRoomViewerUrl,
-  buildRoomCollaboratorUrl,
-  getStoredRoomSecret
-} from "../../room-storage";
+import { parseRoomLink } from "../../room-storage";
+import { Modal, ModalHeader } from "../modals/ModalHost";
+
+type CloudRoomTab = "join" | "create";
 
 interface CloudRoomModalProps {
   showModal: boolean;
   setShowModal: (show: boolean) => void;
   activeProject?: SavedProject;
-  activeView: ActiveView;
-  selectedThemeId: string;
-  onCreateRoom: (options: { title: string; roomId?: string }) => Promise<void>;
-  onJoinRoom: (roomId: string, secretKey?: string) => Promise<void>;
-  onUnlockCollaborator: (secretKey: string) => Promise<void>;
+  /** Resolves to `false` (or `null`) when the room could not be created; the dialog then stays open. */
+  onCreateRoom: (options: { title: string; roomId?: string }) => Promise<unknown>;
+  /** Resolves to `false` when the room could not be opened; the dialog then stays open. */
+  onJoinRoom: (roomId: string, secretKey?: string) => Promise<unknown>;
   isProcessing: boolean;
   activeRoomId?: string | null;
   activeRoomRole?: "collaborator" | "viewer" | "none";
-  activeSecretKey?: string | null;
   currentUserProfile?: UserProfile | null;
+  /** Shown on the "Start a room" tab when signed out. */
+  onLogin?: () => void;
+  /** Tab shown when the dialog opens (default: "join"). */
+  initialTab?: CloudRoomTab;
+  /** @deprecated Unused: room links are built by the Share dialog. */
+  activeView?: ActiveView;
+  /** @deprecated Unused: room links are built by the Share dialog. */
+  selectedThemeId?: string;
+  /** @deprecated Edit keys no longer grant access; editors are invited by the room owner. */
+  onUnlockCollaborator?: (secretKey: string) => Promise<void>;
+  /** @deprecated See `onUnlockCollaborator`. */
+  activeSecretKey?: string | null;
 }
 
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "10px 12px",
+  borderRadius: "8px",
+  background: "var(--jantt-bg, rgba(15, 23, 42, 0.7))",
+  border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.14))",
+  color: "var(--jantt-text)",
+  fontSize: "0.9rem"
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  marginBottom: "6px",
+  color: "var(--jantt-text)"
+};
+
+const helpStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  fontSize: "0.78rem",
+  color: "var(--jantt-text-muted)",
+  lineHeight: 1.45
+};
+
+const isSuccess = (result: unknown) => result !== false && result !== null;
+
+/** "Cloud rooms" dialog: open a room from a link or ID, or start a room from the current plan. */
 export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
   showModal,
   setShowModal,
   activeProject,
-  activeView,
-  selectedThemeId,
   onCreateRoom,
   onJoinRoom,
-  onUnlockCollaborator,
   isProcessing,
   activeRoomId,
-  activeRoomRole = "none",
-  activeSecretKey,
-  currentUserProfile
+  currentUserProfile,
+  onLogin,
+  initialTab = "join"
 }) => {
-  const isCurrentlyInRoom = Boolean(activeRoomId && activeProject?.source === "room");
-
-  const [activeTab, setActiveTab] = useState<"current" | "create" | "join">(
-    isCurrentlyInRoom ? "current" : "create"
-  );
-
-  // Form states
-  const [newRoomTitle, setNewRoomTitle] = useState("");
-  const [newRoomSlug, setNewRoomSlug] = useState("");
-  const [joinRoomInput, setJoinRoomInput] = useState("");
-  const [joinSecretKey, setJoinSecretKey] = useState("");
-  const [unlockKeyInput, setUnlockKeyInput] = useState("");
-  const [copiedViewer, setCopiedViewer] = useState(false);
-  const [copiedCollaborator, setCopiedCollaborator] = useState(false);
-  const [showUnlockInput, setShowUnlockInput] = useState(false);
+  const baseId = useId();
+  const [activeTab, setActiveTab] = useState<CloudRoomTab>(initialTab);
+  const [joinInput, setJoinInput] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [roomTitle, setRoomTitle] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const tabRefs = useRef<Record<CloudRoomTab, HTMLButtonElement | null>>({ join: null, create: null });
+  // Read on open only: a plan rename while the dialog is open must not wipe what was typed.
+  const activeNameRef = useRef(activeProject?.name || "");
+  activeNameRef.current = activeProject?.name || "";
 
   useEffect(() => {
-    if (showModal) {
-      if (isCurrentlyInRoom) {
-        setActiveTab("current");
-      } else {
-        setActiveTab("create");
-        setNewRoomTitle(activeProject?.name || "Sprint Collaboration Room");
-        setNewRoomSlug("");
-      }
-      setCopiedViewer(false);
-      setCopiedCollaborator(false);
-      setShowUnlockInput(false);
-      setUnlockKeyInput("");
-    }
-  }, [showModal, isCurrentlyInRoom, activeProject?.name]);
+    if (!showModal) return;
+    setActiveTab(initialTab);
+    setJoinInput("");
+    setJoinError(null);
+    setCreateError(null);
+    setRoomTitle(activeNameRef.current);
+  }, [showModal, initialTab]);
 
   if (!showModal) return null;
 
-  const currentSecret =
-    activeSecretKey ||
-    (activeRoomId ? getStoredRoomSecret(activeRoomId) : null) ||
-    activeProject?.secretKey ||
-    "";
+  const close = () => setShowModal(false);
+  const isSignedIn = Boolean(currentUserProfile);
+  const tabs: { id: CloudRoomTab; label: string; icon: React.ReactNode }[] = [
+    { id: "join", label: "Join a room", icon: <ArrowRight size={14} aria-hidden="true" /> },
+    { id: "create", label: "Start a room", icon: <Plus size={14} aria-hidden="true" /> }
+  ];
+  const tabId = (tab: CloudRoomTab) => `${baseId}-tab-${tab}`;
+  const panelId = (tab: CloudRoomTab) => `${baseId}-panel-${tab}`;
 
-  const viewerUrl = activeRoomId
-    ? buildRoomViewerUrl(activeRoomId, activeView, selectedThemeId)
-    : "";
-  const collaboratorUrl =
-    activeRoomId && currentSecret
-      ? buildRoomCollaboratorUrl(activeRoomId, currentSecret, activeView, selectedThemeId)
-      : "";
-
-  const handleCopyViewerLink = async () => {
-    if (!viewerUrl) return;
-    try {
-      await navigator.clipboard.writeText(viewerUrl);
-      setCopiedViewer(true);
-      setTimeout(() => setCopiedViewer(false), 2500);
-    } catch {}
-  };
-
-  const handleCopyCollaboratorLink = async () => {
-    if (!collaboratorUrl) return;
-    try {
-      await navigator.clipboard.writeText(collaboratorUrl);
-      setCopiedCollaborator(true);
-      setTimeout(() => setCopiedCollaborator(false), 2500);
-    } catch {}
-  };
-
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRoomTitle.trim() || isProcessing) return;
-    await onCreateRoom({
-      title: newRoomTitle.trim(),
-      roomId: newRoomSlug.trim() || undefined
-    });
-    setActiveTab("current");
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const index = tabs.findIndex((t) => t.id === activeTab);
+    const nextIndex =
+      event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    const next = tabs[nextIndex].id;
+    setActiveTab(next);
+    tabRefs.current[next]?.focus();
   };
 
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinRoomInput.trim() || isProcessing) return;
-
-    let targetRoomId = joinRoomInput.trim();
-    let targetSecret = joinSecretKey.trim();
-
-    // Check if user pasted a full room URL or query parameter
-    const match = targetRoomId.match(/[?&](?:room|cloud)=([^&#]+)/);
-    if (match && match[1]) {
-      targetRoomId = decodeURIComponent(match[1]);
-    } else if (targetRoomId.includes("http://") || targetRoomId.includes("https://")) {
-      try {
-        const parsed = new URL(targetRoomId);
-        const qRoom = parsed.searchParams.get("room") || parsed.searchParams.get("cloud");
-        if (qRoom) targetRoomId = qRoom;
-
-        const hash = parsed.hash.replace(/^#/, "");
-        const hp = new URLSearchParams(hash);
-        const k = hp.get("key") || hp.get("edit");
-        if (k && !targetSecret) targetSecret = k;
-      } catch {}
+    if (isProcessing) return;
+    const roomId = parseRoomLink(joinInput);
+    if (!roomId) {
+      setJoinError("Paste a room link (it contains ?room=…) or a room ID such as room_ab12cd34ef.");
+      return;
     }
-
-    await onJoinRoom(targetRoomId, targetSecret || undefined);
-    setShowModal(false);
+    if (roomId === activeRoomId) {
+      close();
+      return;
+    }
+    setJoinError(null);
+    if (isSuccess(await onJoinRoom(roomId))) {
+      close();
+    } else {
+      setJoinError("The room could not be opened. Check the link, or ask the owner to share it again.");
+    }
   };
 
-  const handleUnlockSubmit = async (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!unlockKeyInput.trim() || isProcessing) return;
-    await onUnlockCollaborator(unlockKeyInput.trim());
-    setShowUnlockInput(false);
+    const title = roomTitle.trim();
+    if (!title || isProcessing) return;
+    setCreateError(null);
+    if (isSuccess(await onCreateRoom({ title }))) {
+      close();
+    } else {
+      setCreateError("The room could not be created. Please try again.");
+    }
   };
 
   return (
-    <div className="prompt-modal-backdrop" onClick={() => setShowModal(false)}>
-      <div
-        className="prompt-modal-card"
-        style={{ maxWidth: "660px", width: "95%" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="prompt-modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: "40px",
-                height: "40px",
-                borderRadius: "10px",
-                background: "linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.2))",
-                color: "var(--jantt-accent)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "1px solid rgba(56, 189, 248, 0.3)"
-              }}
-            >
-              <Radio size={22} className="spin-slow" />
-            </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700, color: "var(--jantt-text)" }}>
-                Collaboration Rooms
-              </h3>
-              <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--jantt-muted)" }}>
-                High-scale live collaboration engine for 100+ concurrent team members
-              </p>
-            </div>
-          </div>
-          <button
-            className="prompt-modal-close"
-            onClick={() => setShowModal(false)}
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <Modal onClose={close} maxWidth={500}>
+      <ModalHeader
+        icon={<Radio size={18} />}
+        title="Cloud rooms"
+        subtitle="Open a room someone shared with you, or start one from this plan."
+      />
 
-        {/* Tab Navigation */}
-        <div
-          style={{
-            display: "flex",
-            gap: "6px",
-            padding: "6px",
-            margin: "14px 20px 0 20px",
-            background: "rgba(15, 23, 42, 0.5)",
-            borderRadius: "10px",
-            border: "1px solid var(--jantt-border)"
-          }}
-        >
-          {isCurrentlyInRoom && (
+      <div
+        role="tablist"
+        aria-label="Cloud room actions"
+        style={{
+          display: "flex",
+          gap: "4px",
+          margin: "14px 20px 0",
+          padding: "4px",
+          borderRadius: "10px",
+          border: "1px solid var(--jantt-border)",
+          background: "var(--jantt-surface)"
+        }}
+      >
+        {tabs.map((tab) => {
+          const selected = tab.id === activeTab;
+          return (
             <button
+              key={tab.id}
+              ref={(el) => {
+                tabRefs.current[tab.id] = el;
+              }}
+              id={tabId(tab.id)}
               type="button"
-              onClick={() => setActiveTab("current")}
+              role="tab"
+              aria-selected={selected}
+              aria-controls={panelId(tab.id)}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setActiveTab(tab.id)}
+              onKeyDown={handleTabKeyDown}
               style={{
                 flex: 1,
-                padding: "8px 12px",
-                borderRadius: "8px",
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                cursor: "pointer",
-                border: "none",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "6px",
-                background: activeTab === "current" ? "var(--jantt-accent)" : "transparent",
-                color: activeTab === "current" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted, #A1A1AA)",
-                boxShadow: activeTab === "current" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
-                transition: "all 0.15s ease"
+                padding: "7px 10px",
+                borderRadius: "8px",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "0.84rem",
+                fontWeight: 600,
+                background: selected ? "var(--jantt-accent)" : "transparent",
+                color: selected ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted)"
               }}
             >
-              <Users size={15} /> Active Room
+              {tab.icon}
+              {tab.label}
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setActiveTab("create")}
-            style={{
-              flex: 1,
-              padding: "8px 12px",
-              borderRadius: "8px",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              background: activeTab === "create" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "create" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted, #A1A1AA)",
-              boxShadow: activeTab === "create" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Plus size={15} /> New Room
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("join")}
-            style={{
-              flex: 1,
-              padding: "8px 12px",
-              borderRadius: "8px",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              background: activeTab === "join" ? "var(--jantt-accent)" : "transparent",
-              color: activeTab === "join" ? "var(--jantt-accent-contrast, #000000)" : "var(--jantt-text-muted, #A1A1AA)",
-              boxShadow: activeTab === "join" ? "0 2px 8px var(--jantt-accent-glow, rgba(255, 255, 255, 0.2))" : "none",
-              transition: "all 0.15s ease"
-            }}
-          >
-            <ArrowRight size={15} /> Join Room
-          </button>
-        </div>
-
-        {/* Modal Content */}
-        <div style={{ padding: "18px 20px" }}>
-          {/* TAB 1: CURRENT ACTIVE ROOM */}
-          {activeTab === "current" && isCurrentlyInRoom && (
-            <div>
-              {/* Room Status Banner */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 16px",
-                  background:
-                    activeRoomRole === "collaborator"
-                      ? "rgba(16, 185, 129, 0.1)"
-                      : "rgba(56, 189, 248, 0.1)",
-                  border:
-                    activeRoomRole === "collaborator"
-                      ? "1px solid rgba(16, 185, 129, 0.25)"
-                      : "1px solid rgba(56, 189, 248, 0.25)",
-                  borderRadius: "10px",
-                  marginBottom: "16px"
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span
-                      style={{
-                        fontSize: "0.95rem",
-                        fontWeight: 700,
-                        color: "var(--jantt-text)"
-                      }}
-                    >
-                      {activeProject?.name || activeRoomId}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.72rem",
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        background:
-                          activeRoomRole === "collaborator"
-                            ? "rgba(16, 185, 129, 0.2)"
-                            : "rgba(56, 189, 248, 0.2)",
-                        color:
-                          activeRoomRole === "collaborator" ? "#34D399" : "var(--jantt-accent)"
-                      }}
-                    >
-                      {activeRoomRole === "collaborator" ? "Collaborator (Live Sync)" : "Viewer (Read-Only)"}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "0.78rem", color: "var(--jantt-muted)", marginTop: "2px" }}>
-                    Room ID: <code style={{ color: "var(--jantt-accent)" }}>{activeRoomId}</code>
-                  </div>
-                </div>
-
-                {activeRoomRole === "viewer" && (
-                  <button
-                    onClick={() => setShowUnlockInput(!showUnlockInput)}
-                    className="btn btn-secondary"
-                    style={{ fontSize: "0.78rem", padding: "5px 10px", display: "flex", gap: "5px", alignItems: "center" }}
-                  >
-                    <Key size={13} /> {showUnlockInput ? "Hide Legacy Key Input" : "Legacy Secret Key"}
-                  </button>
-                )}
-              </div>
-
-              {/* Unlock Input Drawer */}
-              {showUnlockInput && (
-                <div
-                  style={{
-                    padding: "14px",
-                    background: "rgba(30, 41, 59, 0.7)",
-                    borderRadius: "8px",
-                    border: "1px solid rgba(56, 189, 248, 0.3)",
-                    marginBottom: "16px"
-                  }}
-                >
-                  <div style={{ marginBottom: "10px", fontSize: "0.8rem", color: "var(--jantt-text)", lineHeight: 1.4 }}>
-                    {currentUserProfile ? (
-                      <div>
-                        <strong>Modern GitHub Authentication:</strong> You are signed in as{" "}
-                        <span style={{ color: "var(--jantt-accent)" }}>@{currentUserProfile.username}</span>. Editing permissions are managed directly via Role-Based Access Control. Ask the room owner to assign you the <strong>Editor</strong> role in their Share dialog.
-                        <div style={{ fontSize: "0.74rem", color: "var(--jantt-muted)", marginTop: "4px" }}>
-                          Secret Edit Keys are only used as an older fallback for legacy anonymous room links.
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <strong>Sign in with GitHub</strong> for automatic editor permissions, or paste a legacy secret edit key below.
-                      </div>
-                    )}
-                  </div>
-                  <form
-                    onSubmit={handleUnlockSubmit}
-                    style={{
-                      display: "flex",
-                      gap: "8px"
-                    }}
-                  >
-                    <input
-                      type="password"
-                      placeholder="Paste Legacy Secret Edit Key (sec_...)"
-                      value={unlockKeyInput}
-                      onChange={(e) => setUnlockKeyInput(e.target.value)}
-                      style={{
-                        flex: 1,
-                        padding: "8px 12px",
-                        borderRadius: "6px",
-                        background: "rgba(15, 23, 42, 0.8)",
-                        border: "1px solid var(--jantt-border)",
-                        color: "var(--jantt-text)",
-                        fontSize: "0.85rem"
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={!unlockKeyInput.trim() || isProcessing}
-                      style={{ padding: "8px 14px", fontSize: "0.82rem" }}
-                    >
-                      {isProcessing ? <Loader2 size={14} className="spin" /> : "Unlock"}
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {/* Link Option 1: Collaborator Link */}
-              {collaboratorUrl ? (
-                <div
-                  style={{
-                    padding: "14px",
-                    borderRadius: "10px",
-                    background: "rgba(16, 185, 129, 0.05)",
-                    border: "1px solid rgba(16, 185, 129, 0.2)",
-                    marginBottom: "12px"
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <Key size={15} style={{ color: "#34D399" }} />
-                      <strong style={{ fontSize: "0.88rem", color: "#34D399" }}>
-                        Collaborator Link (Edit & Live Sync)
-                      </strong>
-                    </div>
-                    <button
-                      onClick={handleCopyCollaboratorLink}
-                      className="btn btn-primary"
-                      style={{
-                        padding: "6px 12px",
-                        fontSize: "0.8rem",
-                        background: copiedCollaborator ? "#059669" : "var(--jantt-accent)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "5px"
-                      }}
-                    >
-                      {copiedCollaborator ? <Check size={14} /> : <Copy size={14} />}
-                      {copiedCollaborator ? "Copied!" : "Copy Link"}
-                    </button>
-                  </div>
-                  <p style={{ margin: "0 0 8px 0", fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
-                    Share with team members who need to edit tasks, drag dates, and auto-sync in real time.
-                  </p>
-                  <input
-                    readOnly
-                    value={collaboratorUrl}
-                    onFocus={(e) => e.target.select()}
-                    style={{
-                      width: "100%",
-                      padding: "7px 10px",
-                      borderRadius: "6px",
-                      fontSize: "0.78rem",
-                      background: "rgba(15, 23, 42, 0.6)",
-                      border: "1px solid var(--jantt-border)",
-                      color: "var(--jantt-text)",
-                      fontFamily: "monospace"
-                    }}
-                  />
-                </div>
-              ) : null}
-
-              {/* Link Option 2: Viewer Link */}
-              <div
-                style={{
-                  padding: "14px",
-                  borderRadius: "10px",
-                  background: "rgba(56, 189, 248, 0.05)",
-                  border: "1px solid rgba(56, 189, 248, 0.2)",
-                  marginBottom: "14px"
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Globe size={15} style={{ color: "var(--jantt-accent)" }} />
-                    <strong style={{ fontSize: "0.88rem", color: "var(--jantt-accent)" }}>
-                      Viewer Link (Safe Read-Only Feed)
-                    </strong>
-                  </div>
-                  <button
-                    onClick={handleCopyViewerLink}
-                    className="btn btn-secondary"
-                    style={{
-                      padding: "6px 12px",
-                      fontSize: "0.8rem",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "5px"
-                    }}
-                  >
-                    {copiedViewer ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedViewer ? "Copied!" : "Copy Link"}
-                  </button>
-                </div>
-                <p style={{ margin: "0 0 8px 0", fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
-                  Share with clients, executives, and stakeholders. They can view live updates but cannot modify tasks.
-                </p>
-                <input
-                  readOnly
-                  value={viewerUrl}
-                  onFocus={(e) => e.target.select()}
-                  style={{
-                    width: "100%",
-                    padding: "7px 10px",
-                    borderRadius: "6px",
-                    fontSize: "0.78rem",
-                    background: "rgba(15, 23, 42, 0.6)",
-                    border: "1px solid var(--jantt-border)",
-                    color: "var(--jantt-text)",
-                    fontFamily: "monospace"
-                  }}
-                />
-              </div>
-
-              {/* Multi-Collaborator Safety Notice */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "10px",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  background: "rgba(30, 41, 59, 0.4)",
-                  border: "1px solid var(--jantt-border)"
-                }}
-              >
-                <ShieldCheck size={18} style={{ color: "#34D399", flexShrink: 0, marginTop: "2px" }} />
-                <div style={{ fontSize: "0.76rem", color: "var(--jantt-muted)", lineHeight: 1.4 }}>
-                  <strong style={{ color: "var(--jantt-text)" }}>100+ Collaborator Concurrency Protection:</strong>{" "}
-                  Simultaneous edits are automatically synchronized using Jantt's CRDT 3-Way Reconciler. No false
-                  overwrites or lost work.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: CREATE NEW ROOM */}
-          {activeTab === "create" && (
-            <form onSubmit={handleCreateSubmit}>
-              <p style={{ margin: "0 0 16px 0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
-                Publish your current Gantt plan into a live Cloud Room. You'll instantly receive a team edit link and
-                a stakeholder view link.
-              </p>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.82rem",
-                    fontWeight: 600,
-                    marginBottom: "6px",
-                    color: "var(--jantt-text)"
-                  }}
-                >
-                  Room Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Q4 Platform Migration"
-                  value={newRoomTitle}
-                  onChange={(e) => setNewRoomTitle(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    background: "rgba(15, 23, 42, 0.7)",
-                    border: "1px solid var(--jantt-border)",
-                    color: "var(--jantt-text)",
-                    fontSize: "0.9rem"
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "18px" }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.82rem",
-                    fontWeight: 600,
-                    marginBottom: "6px",
-                    color: "var(--jantt-text)"
-                  }}
-                >
-                  Custom Room ID <span style={{ color: "var(--jantt-muted)", fontWeight: 400 }}>(Optional)</span>
-                </label>
-                <div style={{ position: "relative" }}>
-                  <input
-                    type="text"
-                    placeholder="e.g. team-alpha-sprint (leave empty for random ID)"
-                    value={newRoomSlug}
-                    onChange={(e) => setNewRoomSlug(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      borderRadius: "8px",
-                      background: "rgba(15, 23, 42, 0.7)",
-                      border: "1px solid var(--jantt-border)",
-                      color: "var(--jantt-text)",
-                      fontSize: "0.85rem"
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  background: "rgba(56, 189, 248, 0.08)",
-                  border: "1px solid rgba(56, 189, 248, 0.2)",
-                  marginBottom: "20px"
-                }}
-              >
-                <Sparkles size={16} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
-                <span style={{ fontSize: "0.78rem", color: "var(--jantt-muted)" }}>
-                  Zero logins or sign-ups required. Live data is permanently saved to your Firebase cloud instance.
-                </span>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--jantt-border)" }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={!newRoomTitle.trim() || isProcessing}
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 size={15} className="spin" />
-                      <span>Creating Room...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Radio size={15} />
-                      <span>Create Room &amp; Start Sync</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* TAB 3: JOIN ROOM */}
-          {activeTab === "join" && (
-            <form onSubmit={handleJoinSubmit}>
-              <p style={{ margin: "0 0 16px 0", fontSize: "0.85rem", color: "var(--jantt-muted)" }}>
-                Connect to an existing Cloud Room using its Room ID or full share link.
-              </p>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "0.82rem",
-                    fontWeight: 600,
-                    marginBottom: "6px",
-                    color: "var(--jantt-text)"
-                  }}
-                >
-                  Room ID or Share Link
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Paste Room ID (e.g. room-9x2m4) or full URL"
-                  value={joinRoomInput}
-                  onChange={(e) => setJoinRoomInput(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    background: "rgba(15, 23, 42, 0.7)",
-                    border: "1px solid var(--jantt-border)",
-                    color: "var(--jantt-text)",
-                    fontSize: "0.88rem"
-                  }}
-                />
-              </div>
-
-              {currentUserProfile ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    padding: "10px 14px",
-                    borderRadius: "8px",
-                    background: "rgba(56, 189, 248, 0.08)",
-                    border: "1px solid rgba(56, 189, 248, 0.2)",
-                    marginBottom: "18px"
-                  }}
-                >
-                  <Sparkles size={16} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
-                  <span style={{ fontSize: "0.8rem", color: "var(--jantt-muted)", lineHeight: 1.4 }}>
-                    Logged in as <strong style={{ color: "var(--jantt-text)" }}>@{currentUserProfile.username}</strong>: You will join automatically with your collaborator permissions. No secret key needed!
-                  </span>
-                </div>
-              ) : (
-                <div style={{ marginBottom: "18px" }}>
-                  <label
-                    style={{
-                      display: "block",
-                      fontSize: "0.82rem",
-                      fontWeight: 600,
-                      marginBottom: "6px",
-                      color: "var(--jantt-text)"
-                    }}
-                  >
-                    Secret Edit Key <span style={{ color: "var(--jantt-muted)", fontWeight: 400 }}>(Optional for legacy anonymous links)</span>
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="Leave empty to join as View-Only"
-                    value={joinSecretKey}
-                    onChange={(e) => setJoinSecretKey(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      borderRadius: "8px",
-                      background: "rgba(15, 23, 42, 0.7)",
-                      border: "1px solid var(--jantt-border)",
-                      color: "var(--jantt-text)",
-                      fontSize: "0.85rem"
-                    }}
-                  />
-                </div>
-              )}
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--jantt-border)" }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={!joinRoomInput.trim() || isProcessing}
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 size={15} className="spin" />
-                      <span>Connecting...</span>
-                    </>
-                  ) : (
-                    <>
-                      <ArrowRight size={15} />
-                      <span>Connect to Room</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
+          );
+        })}
       </div>
-    </div>
+
+      <div style={{ padding: "18px 20px 20px", overflowY: "auto" }}>
+        {activeTab === "join" ? (
+          <form
+            id={panelId("join")}
+            role="tabpanel"
+            aria-labelledby={tabId("join")}
+            onSubmit={handleJoinSubmit}
+            noValidate
+          >
+            <label htmlFor={`${baseId}-join-input`} style={labelStyle}>
+              Room link or ID
+            </label>
+            <input
+              id={`${baseId}-join-input`}
+              type="text"
+              data-autofocus
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="https://…?room=room_ab12cd34ef"
+              value={joinInput}
+              onChange={(e) => {
+                setJoinInput(e.target.value);
+                if (joinError) setJoinError(null);
+              }}
+              aria-invalid={Boolean(joinError)}
+              aria-describedby={`${baseId}-join-help`}
+              style={inputStyle}
+            />
+            {joinError ? (
+              <p id={`${baseId}-join-help`} role="alert" style={{ ...helpStyle, color: "#F87171" }}>
+                {joinError}
+              </p>
+            ) : (
+              <p id={`${baseId}-join-help`} style={helpStyle}>
+                Anyone with a room link can view the plan live. To edit, the room owner adds you as an Editor
+                {isSignedIn ? "" : " (sign in with GitHub first)"}.
+              </p>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
+              <button type="button" className="btn btn-secondary" onClick={close}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={!joinInput.trim() || isProcessing}>
+                {isProcessing ? <Loader2 size={15} className="spin-sync-icon" aria-hidden="true" /> : <ArrowRight size={15} aria-hidden="true" />}
+                <span>{isProcessing ? "Opening…" : "Open room"}</span>
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div id={panelId("create")} role="tabpanel" aria-labelledby={tabId("create")}>
+            {!isSignedIn ? (
+              <>
+                <p style={{ ...helpStyle, marginTop: 0, fontSize: "0.85rem" }}>
+                  Cloud rooms belong to a GitHub account. Sign in to start a room from this plan and invite teammates.
+                </p>
+                {onLogin && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
+                    <button type="button" className="btn btn-primary" onClick={onLogin} data-autofocus>
+                      <LogIn size={15} aria-hidden="true" />
+                      <span>Sign in with GitHub</span>
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <form onSubmit={handleCreateSubmit} noValidate>
+                <label htmlFor={`${baseId}-title-input`} style={labelStyle}>
+                  Room name
+                </label>
+                <input
+                  id={`${baseId}-title-input`}
+                  type="text"
+                  data-autofocus
+                  maxLength={120}
+                  placeholder="e.g. Q4 Platform Migration"
+                  value={roomTitle}
+                  onChange={(e) => {
+                    setRoomTitle(e.target.value);
+                    if (createError) setCreateError(null);
+                  }}
+                  aria-invalid={Boolean(createError)}
+                  aria-describedby={`${baseId}-title-help`}
+                  style={inputStyle}
+                />
+                {createError ? (
+                  <p id={`${baseId}-title-help`} role="alert" style={{ ...helpStyle, color: "#F87171" }}>
+                    {createError}
+                  </p>
+                ) : (
+                  <p id={`${baseId}-title-help`} style={helpStyle}>
+                    Copies the plan you are viewing into a new room that syncs live. Anyone with its link can view it;
+                    you choose who can edit from Share.
+                    {activeRoomId ? " The current room is not changed." : " Your local plan stays as it is."}
+                  </p>
+                )}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
+                  <button type="button" className="btn btn-secondary" onClick={close}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={!roomTitle.trim() || isProcessing}>
+                    {isProcessing ? <Loader2 size={15} className="spin-sync-icon" aria-hidden="true" /> : <Radio size={15} aria-hidden="true" />}
+                    <span>{isProcessing ? "Starting room…" : "Start room"}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 };

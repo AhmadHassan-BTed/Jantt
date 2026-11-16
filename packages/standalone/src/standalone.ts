@@ -1,5 +1,7 @@
 import { JanttData, JanttOptions, renderJantt, validate, resolveSchedule, layout } from "@jantt/core";
 import "@jantt/core/theme.css";
+// Named JSON import: the bundler inlines only the version string.
+import { version } from "../package.json";
 
 const mountFn = (selectorOrEl: string | HTMLElement, data: JanttData, options?: JanttOptions) => {
   const el = typeof selectorOrEl === "string" ? document.querySelector<HTMLElement>(selectorOrEl) : selectorOrEl;
@@ -20,7 +22,7 @@ export const Jantt = {
   validate,
   resolveSchedule,
   layout,
-  version: "1.0.0"
+  version
 };
 
 // Expose on window in browser environments

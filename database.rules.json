@@ -1,27 +1,80 @@
 {
   "rules": {
     "users": {
-      ".indexOn": ["username"],
-      ".read": true,
       "$uid": {
-        ".write": "auth != null && auth.uid === $uid"
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && auth.uid === $uid && (newData.child('username').exists() || !data.child('username').exists() || newData.parent().parent().child('usernames/' + data.child('username').val()).val() !== auth.uid)",
+        "uid": { ".validate": "newData.val() === $uid" },
+        "username": { ".validate": "newData.isString() && (newData.val() === data.val() || newData.parent().parent().parent().child('usernames/' + newData.val()).val() === $uid)" },
+        "displayUsername": { ".validate": "newData.isString() && newData.val().length <= 256" },
+        "displayName": { ".validate": "newData.isString() && newData.val().length <= 256" },
+        "photoURL": { ".validate": "newData.isString() && newData.val().length <= 1024 && newData.val().beginsWith('https://')" },
+        "githubUsername": { ".validate": "newData.isString() && newData.val().length <= 256" },
+        "githubVerified": { ".validate": "newData.isBoolean()" },
+        "isFollowingCreator": { ".validate": "newData.isBoolean()" },
+        "missingReposCount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "lastVerifiedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "createdAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "updatedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "$other": { ".validate": false }
+      }
+    },
+    "public_profiles": {
+      ".read": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && query.orderByChild === 'username' && query.limitToFirst != null && query.limitToFirst <= 20",
+      ".indexOn": ["username"],
+      "$uid": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider === 'github.com'",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['username'])",
+        "uid": { ".validate": "newData.val() === $uid" },
+        "username": { ".validate": "newData.isString() && (newData.val() === data.val() || newData.parent().parent().parent().child('usernames/' + newData.val()).val() === $uid)" },
+        "displayUsername": { ".validate": "newData.isString() && newData.val().length <= 256" },
+        "displayName": { ".validate": "newData.isString() && newData.val().length <= 256" },
+        "photoURL": { ".validate": "newData.isString() && newData.val().length <= 1024 && newData.val().beginsWith('https://avatars.githubusercontent.com/')" },
+        "updatedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "$other": { ".validate": false }
       }
     },
     "usernames": {
-      ".read": true,
       "$username": {
-        ".write": "auth != null && (!data.exists() || data.val() === auth.uid) && newData.val() === auth.uid"
+        ".read": "auth != null && auth.token.firebase.sign_in_provider === 'github.com'",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && (newData.exists() ? (!data.exists() || data.val() === auth.uid) : (data.val() === auth.uid && newData.parent().parent().child('users/' + auth.uid + '/username').val() !== $username && newData.parent().parent().child('public_profiles/' + auth.uid + '/username').val() !== $username))",
+        ".validate": "newData.val() === auth.uid && $username.length <= 39 && $username.matches(/^[a-z0-9_-]+$/) && newData.parent().parent().child('users/' + auth.uid + '/username').val() === $username && (!root.child('users/' + auth.uid + '/username').exists() || root.child('users/' + auth.uid + '/username').val() === $username || newData.parent().parent().child('usernames/' + root.child('users/' + auth.uid + '/username').val()).val() !== auth.uid)"
       }
     },
     "user_rooms": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         "owned": {
-          ".write": "auth != null && auth.uid === $uid"
+          "$roomId": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && auth.uid === $uid",
+            ".validate": "newData.hasChild('role') && newData.parent().parent().parent().parent().child('rooms/' + $roomId + '/meta/ownerUid').val() === $uid",
+            "roomId": { ".validate": "newData.val() === $roomId" },
+            "role": { ".validate": "newData.val() === 'owner'" },
+            "title": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "ownerUid": { ".validate": "newData.val() === $uid" },
+            "ownerUsername": { ".validate": "newData.val() === newData.parent().parent().parent().parent().parent().child('rooms/' + $roomId + '/meta/ownerUsername').val()" },
+            "createdAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "updatedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "taskCount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "noteCount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "$other": { ".validate": false }
+          }
         },
         "shared": {
           "$roomId": {
-            ".write": "auth != null && (auth.uid === $uid || root.child('rooms').child($roomId).child('meta/ownerUid').val() === auth.uid || root.child('rooms').child($roomId).child('members/' + auth.uid + '/role').val() === 'owner')"
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && (auth.uid === $uid || root.child('rooms/' + $roomId + '/meta/ownerUid').val() === auth.uid)",
+            ".validate": "newData.hasChild('role') && newData.child('role').val() === newData.parent().parent().parent().parent().child('rooms/' + $roomId + '/members/' + $uid + '/role').val()",
+            "roomId": { ".validate": "newData.val() === $roomId" },
+            "role": { ".validate": "newData.val() === 'editor' || newData.val() === 'viewer'" },
+            "title": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "ownerUid": { ".validate": "newData.val() === newData.parent().parent().parent().parent().parent().child('rooms/' + $roomId + '/meta/ownerUid').val()" },
+            "ownerUsername": { ".validate": "newData.val() === newData.parent().parent().parent().parent().parent().child('rooms/' + $roomId + '/meta/ownerUsername').val()" },
+            "createdAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "updatedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "taskCount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "noteCount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "$other": { ".validate": false }
           }
         }
       }
@@ -29,40 +82,96 @@
     "rooms": {
       "$roomId": {
         ".read": true,
-        ".write": "auth != null && ((!data.exists() && newData.child('meta/ownerUid').val() === auth.uid) || data.child('meta/ownerUid').val() === auth.uid || (data.child('members/' + auth.uid + '/role').val() === 'editor' && (!newData.exists() ? false : (newData.child('members').val() === data.child('members').val() && (!data.child('teams').exists() || newData.child('teams').val() === data.child('teams').val()) && newData.child('meta/ownerUid').val() === data.child('meta/ownerUid').val()))))",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && ((!data.exists() && newData.child('meta/ownerUid').val() === auth.uid) || data.child('meta/ownerUid').val() === auth.uid)",
+        ".validate": "newData.hasChild('meta') && (!data.child('meta/ownerUid').isString() || !data.child('members/' + data.child('meta/ownerUid').val()).exists() || newData.child('members/' + data.child('meta/ownerUid').val()).exists())",
         "meta": {
-          ".read": true,
-          ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid || (data.parent().child('members/' + auth.uid + '/role').val() === 'editor' && newData.child('ownerUid').val() === data.child('ownerUid').val() && (!data.child('secretKey').exists() || newData.child('secretKey').val() === data.child('secretKey').val())))",
-          "ownerUid": {
-            ".validate": "newData.isString() && (!data.exists() ? newData.val() === auth.uid : newData.val() === data.val())"
+          ".validate": "newData.hasChildren(['roomId', 'ownerUid', 'title'])",
+          "roomId": { ".validate": "newData.val() === $roomId" },
+          "title": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && data.parent().parent().child('members/' + auth.uid + '/role').val() === 'editor'",
+            ".validate": "newData.isString() && (newData.val() === data.val() || (newData.val().length > 0 && newData.val().length <= 200))"
           },
-          "secretKey": {
-            ".validate": "!data.exists() || newData.val() === data.val() || data.parent().child('ownerUid').val() === auth.uid"
-          }
+          "ownerUid": { ".validate": "newData.isString() && (data.exists() ? newData.val() === data.val() : newData.val() === auth.uid)" },
+          "ownerUsername": { ".validate": "newData.isString() && (newData.val() === data.val() || root.child('usernames/' + newData.val()).val() === newData.parent().child('ownerUid').val())" },
+          "createdAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "updatedAt": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && data.parent().parent().child('members/' + auth.uid + '/role').val() === 'editor'",
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "revision": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && data.parent().parent().child('members/' + auth.uid + '/role').val() === 'editor'",
+            ".validate": "newData.isNumber() && (data.exists() ? (newData.val() === data.val() || newData.val() === data.val() + 1) : newData.val() >= 1)"
+          },
+          "contentHash": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && data.parent().parent().child('members/' + auth.uid + '/role').val() === 'editor'",
+            ".validate": "newData.isString() && newData.val().length <= 128"
+          },
+          "taskCount": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && data.parent().parent().child('members/' + auth.uid + '/role').val() === 'editor'",
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "noteCount": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && data.parent().parent().child('members/' + auth.uid + '/role').val() === 'editor'",
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "secretKey": { ".validate": false },
+          "theme": { ".validate": "newData.isString() && newData.val().length <= 64" },
+          "$other": { ".validate": false }
         },
         "members": {
           "$memberUid": {
-            ".read": true,
-            ".write": "auth != null && (data.parent().parent().child('meta/ownerUid').val() === auth.uid || (!data.parent().parent().exists() && auth.uid === $memberUid && newData.child('role').val() === 'owner') || (auth.uid === $memberUid && (!newData.exists() || (data.exists() && newData.child('role').val() === data.child('role').val()) || (!data.exists() && newData.child('role').val() === 'viewer'))))",
-            "role": {
-              ".validate": "newData.val() === 'owner' || newData.val() === 'editor' || newData.val() === 'viewer'"
-            }
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && auth.uid === $memberUid && (!newData.exists() || (!data.exists() && newData.child('role').val() === 'viewer' && data.parent().parent().child('meta/ownerUid').exists() && !data.parent().parent().child('banned/' + auth.uid).exists()))",
+            ".validate": "data.exists() || newData.hasChildren(['uid', 'username', 'role'])",
+            "uid": { ".validate": "newData.val() === $memberUid || newData.val() === data.val()" },
+            "username": { ".validate": "newData.isString() && (newData.val() === data.val() || root.child('usernames/' + newData.val()).val() === $memberUid)" },
+            "displayName": { ".validate": "newData.isString() && (newData.val() === data.val() || newData.val().length <= 256)" },
+            "photoURL": { ".validate": "newData.isString() && (newData.val() === data.val() || (newData.val().length <= 1024 && newData.val().beginsWith('https://avatars.githubusercontent.com/')))" },
+            "role": { ".validate": "newData.val() === data.val() || newData.val() === 'editor' || newData.val() === 'viewer' || (newData.val() === 'owner' && $memberUid === newData.parent().parent().parent().child('meta/ownerUid').val())" },
+            "joinedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "teamId": { ".validate": "newData.isString() && newData.val().length <= 128" },
+            "teamName": { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "$other": { ".validate": false }
           }
         },
         "teams": {
-          ".read": true,
-          ".write": "auth != null && data.parent().child('meta/ownerUid').val() === auth.uid"
-        },
-        "presence": {
-          ".read": true,
-          "$uid": {
-            ".write": "auth != null && auth.uid === $uid"
+          "$teamId": {
+            ".validate": "data.exists() || newData.hasChildren(['id', 'name', 'role'])",
+            "id": { ".validate": "newData.val() === $teamId" },
+            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+            "color": { ".validate": "newData.isString() && newData.val().length <= 64" },
+            "role": { ".validate": "newData.val() === 'editor' || newData.val() === 'viewer'" },
+            "addedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "memberUids": {
+              "$index": { ".validate": "newData.isString() && newData.val().length <= 128" }
+            },
+            "memberUsernames": {
+              "$index": { ".validate": "newData.isString() && newData.val().length <= 64" }
+            },
+            "$other": { ".validate": false }
           }
         },
+        "presence": {
+          "$uid": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && auth.uid === $uid && (!newData.exists() || data.parent().parent().child('members/' + auth.uid).exists())",
+            ".validate": "newData.hasChildren(['uid', 'username', 'displayName', 'status', 'lastSeen', 'joinedAt'])",
+            "uid": { ".validate": "newData.val() === $uid" },
+            "username": { ".validate": "newData.isString() && (newData.val() === data.val() || root.child('usernames/' + newData.val()).val() === $uid)" },
+            "displayName": { ".validate": "newData.isString() && newData.val().length <= 256" },
+            "photoURL": { ".validate": "newData.isString() && newData.val().length <= 1024 && newData.val().beginsWith('https://avatars.githubusercontent.com/')" },
+            "status": { ".validate": "newData.val() === 'online'" },
+            "lastSeen": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "joinedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "$other": { ".validate": false }
+          }
+        },
+        "banned": {
+          "$uid": { ".validate": "newData.val() === true" }
+        },
         "data": {
-          ".read": true,
-          ".write": "auth != null && (data.parent().child('meta/ownerUid').val() === auth.uid || data.parent().child('members/' + auth.uid + '/role').val() === 'owner' || data.parent().child('members/' + auth.uid + '/role').val() === 'editor')"
-        }
+          ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && newData.exists() && data.parent().child('members/' + auth.uid + '/role').val() === 'editor'",
+          ".validate": "newData.hasChildren()"
+        },
+        "$other": { ".validate": false }
       }
     }
   }

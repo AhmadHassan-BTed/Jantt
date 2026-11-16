@@ -44,14 +44,25 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
   teams = [],
   tasks = []
 }) => {
+  // One pass over tasks for all assignee counts (soft-deleted tasks are not counted).
+  const assigneeCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tasks) {
+      if (t._deleted || !t.assignee) continue;
+      counts.set(t.assignee, (counts.get(t.assignee) || 0) + 1);
+    }
+    return counts;
+  }, [tasks]);
+
   return (
     <div className="date-filter-bar">
       {/* Left Zone: Date Filter Tabs, Pickers & Active Summary */}
       <div className="date-filter-left-zone">
-        <div className="date-filter-tabs">
+        <div className="date-filter-tabs" role="group" aria-label="Date filter">
           <button
             type="button"
             className={`date-filter-tab ${dateFilterMode === "all" ? "is-active" : ""}`}
+            aria-pressed={dateFilterMode === "all"}
             onClick={() => setDateFilterMode("all")}
             title="Show all project tasks without date restrictions"
           >
@@ -60,6 +71,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
           <button
             type="button"
             className={`date-filter-tab ${dateFilterMode === "today" ? "is-active" : ""}`}
+            aria-pressed={dateFilterMode === "today"}
             onClick={() => setDateFilterMode("today")}
             title={`Filter tasks active today (${getTodayISODate()})`}
           >
@@ -69,6 +81,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
           <button
             type="button"
             className={`date-filter-tab ${dateFilterMode === "week" ? "is-active" : ""}`}
+            aria-pressed={dateFilterMode === "week"}
             onClick={() => setDateFilterMode("week")}
             title="Filter tasks active this week (Monday to Sunday)"
           >
@@ -78,6 +91,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
           <button
             type="button"
             className={`date-filter-tab ${dateFilterMode === "date" ? "is-active" : ""}`}
+            aria-pressed={dateFilterMode === "date"}
             onClick={() => {
               setDateFilterMode("date");
               if (!dateFilterValue) setDateFilterValue(getTodayISODate());
@@ -90,6 +104,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
           <button
             type="button"
             className={`date-filter-tab ${dateFilterMode === "range" ? "is-active" : ""}`}
+            aria-pressed={dateFilterMode === "range"}
             onClick={() => {
               setDateFilterMode("range");
               if (!dateFilterRangeStart) setDateFilterRangeStart(getTodayISODate());
@@ -109,6 +124,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             value={dateFilterValue}
             onChange={(e) => setDateFilterValue(e.target.value)}
             title="Select target date"
+            aria-label="Filter date"
           />
         )}
 
@@ -122,8 +138,9 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
               value={dateFilterRangeStart}
               onChange={(e) => setDateFilterRangeStart(e.target.value)}
               title="Range Start Date"
+              aria-label="Range start date"
             />
-            <span className="date-filter-range-sep">→</span>
+            <span className="date-filter-range-sep" aria-hidden="true">→</span>
             <input
               type="date"
               className="date-filter-input"
@@ -131,6 +148,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
               value={dateFilterRangeEnd}
               onChange={(e) => setDateFilterRangeEnd(e.target.value)}
               title="Range End Date"
+              aria-label="Range end date"
             />
           </div>
         )}
@@ -149,14 +167,17 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
               className="date-filter-reset-btn"
               onClick={() => {
                 setDateFilterMode("all");
-                setDateFilterValue("");
                 setDateFilterRangeStart("");
                 setDateFilterRangeEnd("");
+                setCompletedFilterMode?.("show");
+                if (selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:")) {
+                  setSelectedPersonFilter?.("all");
+                }
               }}
-              title="Clear date filter and show all tasks"
+              title="Clear all filters (date, person and completed) and show every task"
             >
               <X size={11} />
-              Clear
+              Clear all
             </button>
           </div>
         )}
@@ -167,14 +188,17 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
         {/* Universal Mode Toggle (Dim vs Filter) */}
         <div
           className="date-filter-behavior-group"
-          title="Date & person filter mode: Dim non-matching tasks or completely Filter/Hide them"
+          role="group"
+          aria-label="Tasks that do not match the date or person filter"
+          title="Tasks outside the date / person filter: dim them in place, or hide them"
         >
-          <span className="date-filter-behavior-label">Mode:</span>
+          <span className="date-filter-behavior-label">Non-matching:</span>
           <button
             type="button"
             className={`date-filter-behavior-btn ${dateFilterBehavior === "dim" ? "is-active" : ""}`}
+            aria-pressed={dateFilterBehavior === "dim"}
             onClick={() => setDateFilterBehavior("dim")}
-            title="Dim Mode: Keep all tasks visible in context, fade non-matching tasks"
+            title="Dim: keep every task visible in context and fade the non-matching ones"
           >
             <EyeOff size={11} style={{ color: "#F59E0B" }} />
             <span>Dim</span>
@@ -182,11 +206,12 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
           <button
             type="button"
             className={`date-filter-behavior-btn ${dateFilterBehavior === "hide" ? "is-active" : ""}`}
+            aria-pressed={dateFilterBehavior === "hide"}
             onClick={() => setDateFilterBehavior("hide")}
-            title="Filter Mode: Only show matching tasks, hide non-matching"
+            title="Hide: only show matching tasks"
           >
             <Filter size={11} style={{ color: "#818CF8" }} />
-            <span>Filter</span>
+            <span>Hide</span>
           </button>
         </div>
 
@@ -194,12 +219,15 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
         {setCompletedFilterMode && (
           <div
             className="date-filter-behavior-group"
-            title="Completed tasks display mode: Show normally, Dim, or Filter/Hide them"
+            role="group"
+            aria-label="Completed tasks"
+            title="Completed tasks: show normally, dim, or hide them"
           >
             <span className="date-filter-behavior-label">Completed:</span>
             <button
               type="button"
               className={`date-filter-behavior-btn ${completedFilterMode === "show" ? "is-active" : ""}`}
+              aria-pressed={completedFilterMode === "show"}
               onClick={() => setCompletedFilterMode("show")}
               title="Show Completed: Display completed tasks normally"
             >
@@ -209,6 +237,7 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             <button
               type="button"
               className={`date-filter-behavior-btn ${completedFilterMode === "dim" ? "is-active" : ""}`}
+              aria-pressed={completedFilterMode === "dim"}
               onClick={() => setCompletedFilterMode("dim")}
               title="Dim Completed: Fade out completed tasks to emphasize active work"
             >
@@ -218,11 +247,12 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
             <button
               type="button"
               className={`date-filter-behavior-btn ${completedFilterMode === "filter" ? "is-active" : ""}`}
+              aria-pressed={completedFilterMode === "filter"}
               onClick={() => setCompletedFilterMode("filter")}
-              title="Filter Completed: Completely hide completed tasks"
+              title="Hide completed tasks"
             >
               <Filter size={11} style={{ color: "#EF4444" }} />
-              <span>Filter</span>
+              <span>Hide</span>
             </button>
           </div>
         )}
@@ -251,9 +281,8 @@ export const DateFilterBar: React.FC<DateFilterBarProps> = ({
               {effectivePeople.length > 0 && (
                 <optgroup label="Filter by Person">
                   {effectivePeople.map((p) => {
-                    const count = tasks.filter(
-                      (t) => t.assignee === p.name || t.assignee === p.id
-                    ).length;
+                    const count =
+                      (assigneeCounts.get(p.name) || 0) + (p.id !== p.name ? assigneeCounts.get(p.id) || 0 : 0);
                     return (
                       <option key={p.id} value={p.id}>
                         {p.name}{count > 0 ? ` (${count} tasks)` : ""}

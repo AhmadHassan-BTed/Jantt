@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   escapeHtml,
+  sanitizeCssColor,
   getTaskDisplayName,
   getEffectiveGap,
   clampDayWidth,
@@ -22,6 +23,53 @@ describe("Core Utilities & Robustness", () => {
     it("handles null and undefined gracefully", () => {
       expect(escapeHtml(null)).toBe("");
       expect(escapeHtml(undefined)).toBe("");
+    });
+
+    it("neutralizes attribute and element break-outs from hostile plan values", () => {
+      const XSS = '"><img src=x onerror="window.__xss=1">';
+      const escaped = escapeHtml(XSS);
+      expect(escaped).not.toMatch(/[<>"']/);
+      // Parsed back as markup, the payload is inert text inside a quoted attribute and as content
+      const host = document.createElement("div");
+      host.innerHTML = `<span title="${escapeHtml(XSS)}" data-x='${escapeHtml("' onclick='x")}'>${escapeHtml(XSS)}</span>`;
+      expect(host.querySelector("img")).toBeNull();
+      const span = host.querySelector("span")!;
+      expect(span.getAttribute("title")).toBe(XSS);
+      expect(span.hasAttribute("onclick")).toBe(false);
+      expect(span.textContent).toBe(XSS);
+      expect((window as unknown as { __xss?: unknown }).__xss).toBeUndefined();
+    });
+
+    it("stringifies non-string values (numbers, booleans, objects) before escaping", () => {
+      expect(escapeHtml(5000)).toBe("5000");
+      expect(escapeHtml(0)).toBe("0");
+      expect(escapeHtml(false)).toBe("false");
+      expect(escapeHtml({ toString: () => "<b>" })).toBe("&lt;b&gt;");
+      expect(escapeHtml("&amp;")).toBe("&amp;amp;"); // not idempotent: escape exactly once at the sink
+    });
+  });
+
+  describe("sanitizeCssColor", () => {
+    it("accepts plain CSS colors (trimmed)", () => {
+      const safe = ["#fff", "#FFFA", "#3B82F6", "#3b82f680", "rgb(1, 2, 3)", "rgba(1 2 3 / 50%)", "hsl(200deg 50% 40%)",
+        "hsla(200, 50%, 40%, 0.5)", "oklch(70% 0.1 200)", "var(--jantt-accent)", "teal", "transparent"];
+      for (const color of safe) expect(sanitizeCssColor(color, "FALLBACK")).toBe(color);
+      expect(sanitizeCssColor("  #abc  ")).toBe("#abc");
+    });
+
+    it("rejects anything that could leave a style value or load a resource", () => {
+      const unsafe = [
+        'red"><img src=x>', "url(https://x)", "rgb(1,2,3);background:url(x)", "var(--x);x", "expression(alert(1))",
+        "image-set(url(x) 1x)", "rgb(calc(1) 2 3)", "#12", "#12345", "red;", "red blue", "a", `#${"a".repeat(200)}`,
+        "", "   ", "\\72 ed", "rgb(1,2,3)\"", `rgb(${"1,".repeat(60)}1)`
+      ];
+      for (const color of unsafe) expect(sanitizeCssColor(color, "FALLBACK")).toBe("FALLBACK");
+      for (const value of [null, undefined, 42, {}, ["#fff"]]) expect(sanitizeCssColor(value, "FALLBACK")).toBe("FALLBACK");
+    });
+
+    it("returns undefined without a fallback so callers can chain candidates", () => {
+      expect(sanitizeCssColor("url(x)")).toBeUndefined();
+      expect(sanitizeCssColor("url(x)") ?? sanitizeCssColor("#38BDF8") ?? "default").toBe("#38BDF8");
     });
   });
 
@@ -53,6 +101,12 @@ describe("Core Utilities & Robustness", () => {
       expect(getEffectiveGap({}, 2)).toBe(2);
       expect(getEffectiveGap({}, 0)).toBe(0);
     });
+
+    it("ignores non-numeric or non-finite gaps", () => {
+      expect(getEffectiveGap({ gapDays: "3" as unknown as number }, 2)).toBe(2);
+      expect(getEffectiveGap({ gapDays: Number.NaN, minGapDays: 1 }, 2)).toBe(1);
+      expect(getEffectiveGap({ minGapDays: Number.POSITIVE_INFINITY }, 2)).toBe(2);
+    });
   });
 
   describe("clampDayWidth", () => {
@@ -68,6 +122,14 @@ describe("Core Utilities & Robustness", () => {
     it("rounds to 1 decimal place", () => {
       expect(clampDayWidth(36.4444)).toBe(36.4);
       expect(clampDayWidth(36.4555)).toBe(36.5);
+    });
+
+    it("returns a finite fallback for NaN, undefined or infinite input", () => {
+      expect(clampDayWidth(Number.NaN)).toBe(52);
+      expect(clampDayWidth(undefined as unknown as number)).toBe(52);
+      expect(clampDayWidth(Number.POSITIVE_INFINITY)).toBe(52);
+      expect(clampDayWidth(Number.NaN, 24)).toBe(24);
+      expect(clampDayWidth(Number.NaN, Number.NaN)).toBe(52);
     });
   });
 
@@ -202,6 +264,24 @@ describe("Core Utilities & Robustness", () => {
       expect(syncTaskProgressAndStatus({ progress: 0.5 }, { status: "submitted" })).toEqual({
         status: "in-progress",
         progress: 0.5
+      });
+    });
+
+    it("never produces a status/progress pair that contradicts isTaskDone", () => {
+      const inProgress = syncTaskProgressAndStatus({ status: "in-progress", progress: 1 });
+      expect(inProgress.progress).toBe(0.99);
+      expect(isTaskDone(inProgress)).toBe(false);
+      const submitted = syncTaskProgressAndStatus({ status: "submitted", progress: 2 });
+      expect(submitted.progress).toBe(0.99);
+      expect(isTaskDone(submitted)).toBe(false);
+      expect(syncTaskProgressAndStatus({ status: "blocked", progress: 1.7 }).progress).toBe(1);
+    });
+
+    it("drops non-finite progress instead of writing NaN", () => {
+      expect(syncTaskProgressAndStatus({ progress: Number.NaN }, { status: "in-progress", progress: 0.4 })).toEqual({});
+      expect(syncTaskProgressAndStatus({ status: "in-progress", progress: Number.NaN }, { progress: 0.4 })).toEqual({
+        status: "in-progress",
+        progress: 0.4
       });
     });
   });

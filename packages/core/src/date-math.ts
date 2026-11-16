@@ -5,6 +5,11 @@
 
 const DAY_MS = 86400000;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+/** Optional, well-formed ISO time suffix (`T08:30`, `T08:30:00.000Z`, `T08:30:00+02:00`). */
+const ISO_TIME_SUFFIX_REGEX = /^T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?(Z|[+-]([01]\d|2[0-3]):?[0-5]\d)?$/;
+/** Date prefix accepted by toEpochDay (same rules as isValidISODate). */
+const EPOCH_DAY_INPUT_REGEX = /^\s*(\d{4})-(\d{2})-(\d{2})\s*(?:T|$)/;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 const MONTH_NAMES_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -47,13 +52,56 @@ export function isValidISODate(dateStr: string): boolean {
 }
 
 /**
+ * Strict variant of {@link isValidISODate} for validating stored plan data: the raw string must be
+ * exactly `YYYY-MM-DD` (a real calendar date), optionally followed by a well-formed ISO time
+ * (`2026-01-01T09:00:00Z`). Surrounding whitespace and trailing garbage are rejected.
+ */
+export function isStrictISODate(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const datePart = value.slice(0, 10);
+  if (!ISO_DATE_REGEX.test(datePart) || !isValidISODate(datePart)) return false;
+  return value.length === 10 || ISO_TIME_SUFFIX_REGEX.test(value.slice(10));
+}
+
+/**
+ * Converts an ISO date to whole days since 1970-01-01 (UTC) for fast integer scheduling math.
+ * Returns NaN for anything that is not a real calendar date, so callers can skip bad data
+ * instead of silently scheduling against a fallback date.
+ */
+export function toEpochDay(dateStr: string | null | undefined): number {
+  if (typeof dateStr !== "string") return NaN;
+  // Same acceptance rules as isValidISODate (optional surrounding whitespace / time suffix), one pass
+  const m = EPOCH_DAY_INPUT_REGEX.exec(dateStr);
+  if (!m) return NaN;
+  const year = +m[1];
+  const month = +m[2];
+  const day = +m[3];
+  if (year < 1000 || month < 1 || month > 12 || day < 1) return NaN;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  if (day > (month === 2 && leap ? 29 : DAYS_IN_MONTH[month - 1])) return NaN;
+  return Date.UTC(year, month - 1, day) / DAY_MS;
+}
+
+/**
+ * Inverse of {@link toEpochDay}: formats whole days since 1970-01-01 (UTC) as YYYY-MM-DD.
+ */
+export function fromEpochDay(epochDay: number): string {
+  return formatISODate(new Date(epochDay * DAY_MS));
+}
+
+/**
  * Parses YYYY-MM-DD into a UTC Date instance.
  * Gracefully strips any trailing ISO time component (e.g. T00:00:00Z).
+ *
+ * Lenient by design (rendering must never crash on a bad cell): input that is not a real
+ * calendar date is parsed best-effort, with missing parts defaulting to 2026-01-01 and
+ * out-of-range parts rolling over (e.g. "2026-02-30" -> 2026-03-02). Scheduling code that must
+ * not act on such values should check {@link isValidISODate} or use {@link toEpochDay}.
  */
 export function parseISODate(dateStr: string): Date {
   const cleanStr = typeof dateStr === "string" ? dateStr.split("T")[0].trim() : "";
   if (!isValidISODate(cleanStr)) {
-    // Fallback best effort or return current UTC
+    // Best-effort fallback (see doc comment): never throws, never returns an invalid Date
     const parts = (cleanStr || "").split("-");
     const y = parseInt(parts[0], 10) || 2026;
     const m = (parseInt(parts[1], 10) || 1) - 1;

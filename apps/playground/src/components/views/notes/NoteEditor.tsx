@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Pin,
@@ -10,11 +10,21 @@ import {
   User,
   CheckSquare
 } from "lucide-react";
-import type { Task, Team, NoteItem } from "@jantt/core";
+import { sanitizeCssColor, type Task, type Team, type NoteItem } from "@jantt/core";
 import type { EffectivePerson } from "../../../types";
-import { NOTE_PALETTE } from "./note-markdown";
+import {
+  DEFAULT_NOTE_COLOR,
+  NOTE_PALETTE,
+  createMentionLookup,
+  getTaskTitle,
+  insertPlainTextAt,
+  parseNoteMarkdown,
+  toText,
+  type NoteBlock,
+  type NoteInline
+} from "./note-markdown";
 import { AttachedTasksDrawer } from "./AttachedTasksDrawer";
-import { useNoteMentionEngine } from "./useNoteMentionEngine";
+import { useNoteMentionEngine, usePopoverDismiss } from "./useNoteMentionEngine";
 
 export interface NoteEditorProps {
   activeNote: NoteItem;
@@ -40,6 +50,77 @@ export interface NoteEditorProps {
   onUnlinkTask: (taskId: string) => void;
   isViewer?: boolean;
   onPromptFork?: () => void;
+}
+
+function renderInlines(inlines: NoteInline[]): React.ReactNode[] {
+  return inlines.map((node, i) => {
+    switch (node.kind) {
+      case "text":
+        return <React.Fragment key={i}>{node.text}</React.Fragment>;
+      case "strong":
+        return <strong key={i}>{renderInlines(node.children)}</strong>;
+      case "em":
+        return <em key={i}>{renderInlines(node.children)}</em>;
+      case "code":
+        return <code key={i}>{node.text}</code>;
+      case "link":
+        return (
+          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer">
+            {renderInlines(node.children)}
+          </a>
+        );
+      case "person":
+        return (
+          <span key={i} className="note-mention-pill is-person">
+            <User size={11} aria-hidden="true" />
+            <span className="note-pill-text">@{node.label}</span>
+          </span>
+        );
+      case "task":
+        return (
+          <span key={i} className="note-mention-pill is-task">
+            <CheckSquare size={11} aria-hidden="true" />
+            <span className="note-pill-text">{node.id}: {node.label}</span>
+          </span>
+        );
+      default:
+        return null;
+    }
+  });
+}
+
+function renderBlock(block: NoteBlock, i: number): React.ReactNode {
+  switch (block.kind) {
+    case "heading": {
+      const Tag = (`h${block.level}` as unknown) as "h1";
+      return <Tag key={i} style={{ margin: "0.6em 0 0.3em" }}>{renderInlines(block.inlines)}</Tag>;
+    }
+    case "list": {
+      const ListTag = block.ordered ? "ol" : "ul";
+      return (
+        <ListTag key={i} style={{ margin: "0.3em 0", paddingLeft: "1.4em" }}>
+          {block.items.map((item, j) => (
+            <li key={j}>{renderInlines(item)}</li>
+          ))}
+        </ListTag>
+      );
+    }
+    case "quote":
+      return (
+        <blockquote
+          key={i}
+          style={{ margin: "0.3em 0", paddingLeft: "0.8em", borderLeft: "3px solid var(--jantt-border-strong, #475569)", color: "var(--jantt-text-muted)" }}
+        >
+          {renderInlines(block.inlines)}
+        </blockquote>
+      );
+    case "rule":
+      return <hr key={i} style={{ border: 0, borderTop: "1px solid var(--jantt-border)", margin: "0.8em 0" }} />;
+    case "blank":
+      return <div key={i} style={{ height: "0.8em" }} aria-hidden="true" />;
+    default:
+      return <p key={i} style={{ margin: 0 }}>{renderInlines(block.inlines)}</p>;
+  }
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -68,6 +149,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onPromptFork
 }) => {
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const colorAnchorRef = useRef<HTMLDivElement>(null);
+  const colorTriggerRef = useRef<HTMLButtonElement>(null);
+  usePopoverDismiss(showColorPicker, () => setShowColorPicker(false), colorAnchorRef, colorTriggerRef);
+
+  const idBase = useId();
+  const listboxId = `${idBase}-mentions`;
+  const optionId = (idx: number) => `${idBase}-mention-${idx}`;
 
   const {
     mentionPopup,
@@ -77,8 +165,64 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     insertPersonPill,
     insertTaskPill,
     handleEditorInput,
-    handleEditorKeyDown
+    handleEditorKeyDown,
+    closeMentionPopup
   } = useNoteMentionEngine(contentEditableRef, effectivePeople, allTasks, onContentChange);
+
+  const isMentionOpen = !isViewer && mentionPopup.isOpen;
+  const mentionCount = mentionPopup.type === "person" ? autocompletePeople.length : autocompleteTasks.length;
+  const activeOptionId =
+    isMentionOpen && mentionCount > 0 ? optionId(Math.min(mentionPopup.selectedIndex, mentionCount - 1)) : undefined;
+
+  // Keep the keyboard-highlighted suggestion visible inside the scrolling list.
+  useEffect(() => {
+    if (activeOptionId) document.getElementById(activeOptionId)?.scrollIntoView({ block: "nearest" });
+  }, [activeOptionId]);
+
+  // Leaving edit mode (preview / viewer) must not leave a dangling popup behind.
+  useEffect(() => {
+    if (isPreviewMode || isViewer) closeMentionPopup();
+  }, [isPreviewMode, isViewer, closeMentionPopup]);
+
+  // Paste and drop insert plain text only: foreign HTML (remote images, styled markup) never
+  // enters the editor DOM, so what is shown is exactly what gets saved.
+  const insertPlainText = (text: string, range?: Range | null) => {
+    const editorEl = contentEditableRef.current;
+    if (!editorEl || !insertPlainTextAt(editorEl, text, range)) return;
+    closeMentionPopup();
+    onContentChange();
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    insertPlainText(e.clipboardData.getData("text/plain"));
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const text = e.dataTransfer.getData("text/plain");
+    if (!text) return; // files and other non-text payloads are ignored
+    const doc = document as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    };
+    let range: Range | null = null;
+    if (typeof doc.caretRangeFromPoint === "function") {
+      range = doc.caretRangeFromPoint(e.clientX, e.clientY);
+    } else if (typeof doc.caretPositionFromPoint === "function") {
+      const pos = doc.caretPositionFromPoint(e.clientX, e.clientY);
+      if (pos) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+        range.collapse(true);
+      }
+    }
+    insertPlainText(text, range);
+  };
+
+  const previewBlocks = useMemo(
+    () => (isPreviewMode ? parseNoteMarkdown(editContent, createMentionLookup(effectivePeople, allTasks)) : []),
+    [isPreviewMode, editContent, effectivePeople, allTasks]
+  );
 
   return (
     <div className="note-editor-pane">
@@ -94,16 +238,16 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             <ArrowLeft size={16} />
             <span>All Notes</span>
           </button>
-          <div className="note-save-indicator">
+          <div className="note-save-indicator" aria-live="polite">
             {isViewer ? (
               <button
                 type="button"
                 className="save-tag is-viewer"
                 onClick={() => onPromptFork?.()}
-                title="Shared room note is read-only (Click to fork a local copy)"
+                title="This shared note is read-only. Click to make an editable local copy."
               >
                 <Eye size={12} />
-                <span>Viewer (Read-Only)</span>
+                <span>Read-only · Make a copy</span>
               </button>
             ) : saveStatus === "saved" ? (
               <span className="save-tag is-saved">
@@ -123,46 +267,45 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           <button
             type="button"
             className={`note-action-btn ${editPinned ? "is-pinned" : ""}`}
-            onClick={() => {
-              if (isViewer) {
-                onPromptFork?.();
-                return;
-              }
-              setEditPinned(!editPinned);
-            }}
-            title={isViewer ? "Note is pinned (View-Only)" : editPinned ? "Unpin note" : "Pin note to top"}
+            onClick={() => setEditPinned(!editPinned)}
+            disabled={isViewer}
+            aria-pressed={editPinned}
+            aria-label={editPinned ? "Unpin note" : "Pin note to top"}
+            title={isViewer ? (editPinned ? "Pinned (read-only)" : "Not pinned (read-only)") : editPinned ? "Unpin note" : "Pin note to top"}
           >
             <Pin size={15} />
           </button>
 
           {/* Color Palette Popover */}
-          <div className="note-color-picker-anchor">
+          <div className="note-color-picker-anchor" ref={colorAnchorRef}>
             <button
+              ref={colorTriggerRef}
               type="button"
               className="note-action-btn"
-              onClick={() => {
-                if (isViewer) {
-                  onPromptFork?.();
-                  return;
-                }
-                setShowColorPicker(!showColorPicker);
-              }}
-              title={isViewer ? "Note color theme (View-Only)" : "Change note color theme"}
+              onClick={() => setShowColorPicker((open) => !open)}
+              disabled={isViewer}
+              aria-haspopup="true"
+              aria-expanded={showColorPicker}
+              aria-label="Change note color"
+              title={isViewer ? "Note color (read-only)" : "Change note color"}
             >
-              <span className="note-color-swatch-indicator" style={{ backgroundColor: editColor }} />
+              <span className="note-color-swatch-indicator" style={{ backgroundColor: sanitizeCssColor(editColor, DEFAULT_NOTE_COLOR) }} />
             </button>
 
             {!isViewer && showColorPicker && (
-              <div className="note-color-picker-dropdown">
+              <div className="note-color-picker-dropdown" role="group" aria-label="Note color">
                 {NOTE_PALETTE.map((pal) => (
                   <button
                     key={pal.id}
                     type="button"
                     className={`note-picker-swatch ${editColor === pal.id ? "is-selected" : ""}`}
                     style={{ backgroundColor: pal.bg }}
+                    aria-pressed={editColor === pal.id}
+                    aria-label={pal.label}
                     onClick={() => {
                       setEditColor(pal.id);
                       setShowColorPicker(false);
+                      colorTriggerRef.current?.focus();
                     }}
                     title={pal.label}
                   />
@@ -175,7 +318,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             type="button"
             className={`note-action-btn ${isPreviewMode ? "is-active" : ""}`}
             onClick={() => setIsPreviewMode(!isPreviewMode)}
-            title={isPreviewMode ? "Switch to Edit Mode" : "Preview Markdown"}
+            aria-pressed={isPreviewMode}
+            aria-label={isPreviewMode ? "Back to editing" : "Preview formatted note"}
+            title={isPreviewMode ? "Back to editing" : "Preview formatted note (Markdown)"}
           >
             {isPreviewMode ? <Edit3 size={15} /> : <Eye size={15} />}
           </button>
@@ -185,6 +330,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               type="button"
               className="note-action-btn is-danger"
               onClick={() => onDeleteNote(activeNote.id)}
+              aria-label="Delete this note"
               title="Delete this note"
             >
               <Trash2 size={15} />
@@ -196,27 +342,24 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       {/* Editor Document Surface */}
       <div className="note-editor-doc-scroll">
         <div className="note-editor-sheet">
-          {/* Note Title Input */}
           <input
             ref={titleInputRef}
             type="text"
             className={`note-title-input ${isViewer ? "is-readonly" : ""}`}
             placeholder={isViewer ? "Untitled Note" : "Note title..."}
+            aria-label="Note title"
             value={editTitle}
             readOnly={isViewer}
-            onClick={() => {
-              if (isViewer) onPromptFork?.();
-            }}
             onChange={(e) => {
               if (!isViewer) setEditTitle(e.target.value);
             }}
           />
 
-          {/* Rich ContentEditable Body or Markdown Preview */}
+          {/* Rich ContentEditable Body or formatted preview */}
           {isPreviewMode ? (
             <div className="note-preview-body">
-              {editContent ? (
-                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{editContent}</div>
+              {toText(editContent).trim() ? (
+                <div style={{ lineHeight: 1.6, overflowWrap: "anywhere" }}>{previewBlocks.map(renderBlock)}</div>
               ) : (
                 <span className="note-preview-empty">No content in this note.</span>
               )}
@@ -227,22 +370,29 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               className={`note-contenteditable-surface ${isViewer ? "is-readonly" : ""}`}
               contentEditable={!isViewer}
               suppressContentEditableWarning
+              role="textbox"
+              aria-multiline="true"
+              aria-label="Note body"
+              aria-readonly={isViewer || undefined}
+              aria-autocomplete={isViewer ? undefined : "list"}
+              aria-controls={isMentionOpen ? listboxId : undefined}
+              aria-activedescendant={activeOptionId}
               onInput={isViewer ? undefined : handleEditorInput}
               onKeyDown={isViewer ? undefined : handleEditorKeyDown}
-              onClick={() => {
-                if (isViewer) onPromptFork?.();
-              }}
+              onBlur={isViewer ? undefined : closeMentionPopup}
+              onPaste={isViewer ? undefined : handlePaste}
+              onDrop={isViewer ? undefined : handleDrop}
               data-placeholder={
                 isViewer
-                  ? "This note is read-only in Viewer mode. Click to make a local copy."
-                  : "Start typing your note... Use @ to mention team members and / to attach tasks."
+                  ? "This note is empty."
+                  : "Start typing your note... Use @ to mention team members and / to reference tasks."
               }
             />
           )}
 
           {/* Attached Tasks Drawer */}
           <AttachedTasksDrawer
-            attachedTaskIds={activeNote.task_ids || []}
+            attachedTaskIds={Array.isArray(activeNote.task_ids) ? activeNote.task_ids : []}
             allTasks={allTasks}
             teamsMap={teamsMap}
             onAttachTask={onAttachTask}
@@ -253,23 +403,23 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       </div>
 
       {/* Floating Autocomplete Popover (Editors only) */}
-      {!isViewer && mentionPopup.isOpen && (
+      {isMentionOpen && (
         <div
           className="note-mention-dropdown"
+          // Keep focus (and the caret) in the editor while interacting with the list.
+          onMouseDown={(e) => e.preventDefault()}
           style={{
-            top: `${mentionPopup.coords.top}px`,
-            left: `${mentionPopup.coords.left}px`
+            top: mentionPopup.coords.top !== undefined ? `${mentionPopup.coords.top}px` : undefined,
+            bottom: mentionPopup.coords.bottom !== undefined ? `${mentionPopup.coords.bottom}px` : undefined,
+            left: `${mentionPopup.coords.left}px`,
+            maxHeight: `${mentionPopup.coords.maxHeight}px`
           }}
         >
-          <div className="note-dropdown-header">
-            {mentionPopup.type === "person" ? (
-              <span>Mention Team Member</span>
-            ) : (
-              <span>Link Roadmap Task</span>
-            )}
+          <div className="note-dropdown-header" id={`${listboxId}-label`}>
+            {mentionPopup.type === "person" ? "Mention team member" : "Reference task"}
           </div>
 
-          <div className="note-dropdown-list">
+          <div className="note-dropdown-list" id={listboxId} role="listbox" aria-labelledby={`${listboxId}-label`}>
             {mentionPopup.type === "person" ? (
               autocompletePeople.length === 0 ? (
                 <div className="note-dropdown-empty">No matching team members</div>
@@ -277,7 +427,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 autocompletePeople.map((person, idx) => (
                   <button
                     key={person.id}
+                    id={optionId(idx)}
                     type="button"
+                    role="option"
+                    aria-selected={idx === mentionPopup.selectedIndex}
+                    tabIndex={-1}
                     className={`note-dropdown-item ${idx === mentionPopup.selectedIndex ? "is-selected" : ""}`}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -287,8 +441,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                   >
                     <User size={14} className="note-dropdown-icon" />
                     <div className="note-dropdown-info">
-                      <span className="note-dropdown-name">{person.name}</span>
-                      {person.role && <span className="note-dropdown-role">{person.role}</span>}
+                      <span className="note-dropdown-name">{toText(person.name)}</span>
+                      {person.role && <span className="note-dropdown-role">{toText(person.role)}</span>}
                     </div>
                   </button>
                 ))
@@ -299,7 +453,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               autocompleteTasks.map((task, idx) => (
                 <button
                   key={task.id}
+                  id={optionId(idx)}
                   type="button"
+                  role="option"
+                  aria-selected={idx === mentionPopup.selectedIndex}
+                  tabIndex={-1}
                   className={`note-dropdown-item ${idx === mentionPopup.selectedIndex ? "is-selected" : ""}`}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -310,7 +468,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                   <CheckSquare size={14} className="note-dropdown-icon" />
                   <div className="note-dropdown-info">
                     <span className="note-dropdown-id">{task.id}</span>
-                    <span className="note-dropdown-name">{task.label || task.name || task.id}</span>
+                    <span className="note-dropdown-name">{getTaskTitle(task)}</span>
                   </div>
                 </button>
               ))

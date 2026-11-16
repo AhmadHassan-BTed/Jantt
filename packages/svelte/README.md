@@ -31,7 +31,6 @@ npm install @jantt/svelte @jantt/core
   use:janttAction={{
     data: plan,
     options: {
-      autoCascade: true,
       onCommit: (newPlan) => {
         plan = newPlan;
       }
@@ -39,6 +38,14 @@ npm install @jantt/svelte @jantt/core
   }}
 />
 ```
+
+Svelte calls the action's `update` whenever the parameter object changes; `data` and `options`
+are then handed to the chart, so include stateful settings such as `options.viewport` or
+`options.autoCascade` only when you want to (re)apply them.
+
+Errors thrown while mounting or updating are passed to `options.onError` (or logged to the
+console). If the first mount fails, the next update retries it, so fixing the data brings the
+chart back. Updates after the element is destroyed are ignored.
 
 ### Imperative Mount
 

@@ -1,7 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Share2,
-  X,
   Copy,
   Check,
   Cloud,
@@ -18,12 +17,17 @@ import {
   ArrowRight,
   Loader2,
   Building2,
-  FileText
+  FileText,
+  Eye,
+  HardDrive
 } from "lucide-react";
 import type { JanttData, ThemeDefinition } from "@jantt/core";
 import { exportMsProjectXml, exportPrimaveraXer, exportSpreadsheetCsv, exportExecutiveReportHtml } from "@jantt/interop";
 import type { SavedProject, ActiveView } from "../../types";
-import { ENABLE_GITHUB_VERIFICATION_GATE, type UserProfile } from "../../firebase";
+import { Modal, ModalHeader, buildExportFilename, downloadTextFile } from "./ModalHost";
+
+/** The signed-in user's role in the active cloud room. */
+export type ShareRoomRole = "owner" | "editor" | "viewer";
 
 interface ShareModalProps {
   showShareModal: boolean;
@@ -34,24 +38,156 @@ interface ShareModalProps {
   activeTheme: ThemeDefinition;
   activeProject?: SavedProject;
   activeProjectId: string;
+  /** Link to the current plan. Any editor secret it carries is removed before it is shown or shared. */
   shareUrl: string;
-  handleCopyShareLink: () => void;
-  copiedShareLink: boolean;
-  handleNativeShare: () => void;
-  handleWhatsAppShare?: () => void;
+  /** @deprecated Ignored: the dialog measures the link it actually shares. */
   isWhatsAppSafe?: boolean;
-  onOpenCloudRooms?: () => void;
+  /** Role in the active cloud room; omitted for plans that are not cloud rooms. */
+  roomRole?: ShareRoomRole;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
   handleDownloadJson: () => void;
-  currentUserProfile?: UserProfile | null;
+  isLoggedIn?: boolean;
+  /** Whether the user may create cloud rooms (signed in and, when the gate is on, GitHub-verified). */
+  isCloudVerified?: boolean;
+  /** A GitHub sign-in is in progress: sign-in buttons are disabled so it is not started twice. */
+  isSigningIn?: boolean;
   onCreateRoomFromActive?: (title?: string) => Promise<string | null>;
   onOpenShareRoom?: (roomId: string) => void;
   onLogin?: () => void;
   onOpenVerificationModal?: () => void;
+  /** Lets viewers fork the room into an editable plan on this device. */
+  onMakeLocalCopy?: () => void;
+  showToast?: (msg: string, isErr?: boolean) => void;
 }
 
-export const ShareModal: React.FC<ShareModalProps> = ({
-  showShareModal,
+/** URL fragment / query keys that grant edit access to a room and must never leave the owner's browser. */
+const SECRET_URL_KEYS = new Set(["key", "edit"]);
+
+function removeSecretParams(part: string): string {
+  return part
+    .split("&")
+    .filter((pair) => {
+      const name = pair.split("=")[0];
+      try {
+        return pair !== "" && !SECRET_URL_KEYS.has(decodeURIComponent(name).toLowerCase());
+      } catch {
+        return pair !== "";
+      }
+    })
+    .join("&");
+}
+
+/**
+ * Removes room editor secrets (`#key=...`, `#edit=...`, `?key=...`) from a share link so snapshot
+ * links, WhatsApp/native shares and public embeds can only ever grant view access. Every other
+ * parameter (including a `#data=` snapshot payload) is kept byte-for-byte.
+ */
+export function stripShareSecrets(url: string): string {
+  const hashIndex = url.indexOf("#");
+  const beforeHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const hash = hashIndex >= 0 ? removeSecretParams(url.slice(hashIndex + 1)) : "";
+  const queryIndex = beforeHash.indexOf("?");
+  const path = queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash;
+  const query = queryIndex >= 0 ? removeSecretParams(beforeHash.slice(queryIndex + 1)) : "";
+  return `${path}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
+}
+
+/** WhatsApp's GET /send limit is 2,048 characters; this leaves room for the message text. */
+const WHATSAPP_SAFE_URL_LENGTH = 1900;
+
+/**
+ * Only absolute http(s) links are opened, embedded or handed to other apps: attribute escaping
+ * cannot stop a `javascript:` or `data:` URL from running inside an `<iframe src>` or `<a href>`.
+ */
+export function isShareableWebUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+const escapeHtmlAttribute = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Read-only `<iframe>` snippet; every interpolated value is attribute-escaped. */
+export function buildEmbedSnippet(url: string, planName: string): string {
+  const title = escapeHtmlAttribute(`Jantt plan: ${planName}`);
+  return `<iframe src="${escapeHtmlAttribute(url)}" title="${title}" width="100%" height="600" style="border:0" loading="lazy" allowfullscreen></iframe>`;
+}
+
+/** Copies text with the async clipboard API, falling back to a hidden textarea. Resolves false on failure. */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Permission denied or unsupported: fall through to the legacy path.
+  }
+  const previouslyFocused = document.activeElement as HTMLElement | null;
+  const textarea = document.createElement("textarea");
+  try {
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+    previouslyFocused?.focus?.({ preventScroll: true });
+  }
+}
+
+const ROLE_LABELS: Record<ShareRoomRole, string> = {
+  owner: "Owner",
+  editor: "Editor",
+  viewer: "Viewer"
+};
+
+const heroButtonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  padding: "9px 16px",
+  fontWeight: 600,
+  fontSize: "13px"
+};
+
+const exportButtonStyle: React.CSSProperties = {
+  fontSize: "11px",
+  padding: "4px 10px",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "5px"
+};
+
+const panelStyle: React.CSSProperties = {
+  background: "var(--jantt-surface, #F8FAFC)",
+  border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
+  borderRadius: "10px",
+  padding: "12px 14px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px"
+};
+
+const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+export const ShareModal: React.FC<ShareModalProps> = (props) => {
+  if (!props.showShareModal) return null;
+  // Mounted per open, so copy feedback and pending timers never leak between openings.
+  return <ShareDialog {...props} />;
+};
+
+const ShareDialog: React.FC<ShareModalProps> = ({
   setShowShareModal,
   currentProjectName,
   parsedData,
@@ -60,722 +196,666 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   activeProject,
   activeProjectId,
   shareUrl,
-  handleCopyShareLink,
-  copiedShareLink,
-  handleNativeShare,
-  handleWhatsAppShare,
-  isWhatsAppSafe = true,
-  onOpenCloudRooms,
+  roomRole,
   setIsSidebarCollapsed,
   handleDownloadJson,
-  currentUserProfile,
+  isLoggedIn = false,
+  isCloudVerified = true,
+  isSigningIn = false,
   onCreateRoomFromActive,
   onOpenShareRoom,
   onLogin,
-  onOpenVerificationModal
+  onOpenVerificationModal,
+  onMakeLocalCopy,
+  showToast
 }) => {
   const [isStartingRoom, setIsStartingRoom] = useState(false);
-  const [copiedEmbed, setCopiedEmbed] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState<"link" | "embed" | null>(null);
+  const copiedTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copiedTimerRef.current), []);
 
-  if (!showShareModal) return null;
-
-  const isRoomActive = activeProject?.source === "room" && Boolean(activeProject.roomId);
-
-  const triggerDownload = (filename: string, content: string, mime: string) => {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const close = () => setShowShareModal(false);
+  const notify = (message: string, isError = false) => {
+    if (showToast) showToast(message, isError);
+    else if (isError) console.error(message);
   };
 
-  const handleExportMsProject = () => {
-    if (!parsedData) return;
-    const xml = exportMsProjectXml(parsedData, { projectName: currentProjectName });
-    triggerDownload(`${(currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.xml`, xml, "application/xml");
+  const roomId = activeProject?.source === "room" ? activeProject.roomId : undefined;
+  const isRoomActive = Boolean(roomId);
+  const effectiveRole: ShareRoomRole | undefined =
+    roomRole ?? (isRoomActive ? (activeProject?.role === "collaborator" ? "editor" : "viewer") : undefined);
+  // Managing teammates needs an account: a signed-out editor is asked to sign in instead.
+  const needsSignInToManage = isRoomActive && !isLoggedIn;
+  const canManageRoom = !needsSignInToManage && (effectiveRole === "owner" || effectiveRole === "editor");
+  const safeUrl = stripShareSecrets(shareUrl);
+  const isWebUrl = isShareableWebUrl(safeUrl);
+  const isWhatsAppSafe = safeUrl.length <= WHATSAPP_SAFE_URL_LENGTH;
+  const embedCode = isWebUrl ? buildEmbedSnippet(safeUrl, currentProjectName) : "";
+  const linkUnavailableTitle = "No shareable web link is available for this plan";
+
+  const handleCopy = async (target: "link" | "embed") => {
+    if (target === "embed" && !embedCode) return;
+    const ok = await copyTextToClipboard(target === "link" ? safeUrl : embedCode);
+    if (!ok) {
+      notify("Could not copy to the clipboard. Select the text and copy it manually.", true);
+      return;
+    }
+    setCopiedTarget(target);
+    notify(target === "link" ? "Link copied to clipboard." : "Embed code copied to clipboard.");
+    window.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = window.setTimeout(() => setCopiedTarget(null), 2000);
   };
 
-  const handleExportPrimavera = () => {
-    if (!parsedData) return;
-    const xer = exportPrimaveraXer(parsedData, { projectName: currentProjectName });
-    triggerDownload(`${(currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.xer`, xer, "text/plain");
+  const shareText = `Check out this project plan: ${currentProjectName}`;
+
+  const handleWhatsAppShare = () => {
+    if (!isWebUrl) return;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(`${shareText}\n\n${safeUrl}`)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const handleExportCsv = () => {
-    if (!parsedData) return;
-    const csv = exportSpreadsheetCsv(parsedData);
-    triggerDownload(`${(currentProjectName || "jantt-project").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.csv`, csv, "text/csv;charset=utf-8;");
+  const canNativeShare = isWebUrl && typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const handleNativeShare = async () => {
+    try {
+      await navigator.share({ title: currentProjectName, text: shareText, url: safeUrl });
+    } catch (err) {
+      if ((err as DOMException)?.name !== "AbortError") notify(`Sharing failed: ${errorMessage(err)}`, true);
+    }
   };
 
-  const handleExportExecutiveReport = () => {
-    if (!parsedData?.tasks) return;
-    const html = exportExecutiveReportHtml(parsedData.tasks, {
-      title: currentProjectName || "Executive Project Status & Schedule Health Report",
-      projectCode: activeProjectId || "PROJ-1",
-      theme: activeTheme?.mode === "dark" ? "dark" : "corporate"
-    });
-    triggerDownload(`${(currentProjectName || "jantt-executive-report").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}.html`, html, "text/html;charset=utf-8;");
+  const handleStartRoom = async () => {
+    if (!isLoggedIn) {
+      if (isSigningIn) return;
+      close();
+      onLogin?.();
+      return;
+    }
+    if (!isCloudVerified) {
+      close();
+      onOpenVerificationModal?.();
+      return;
+    }
+    if (!onCreateRoomFromActive || isStartingRoom) return;
+    setIsStartingRoom(true);
+    try {
+      const newRoomId = await onCreateRoomFromActive(currentProjectName);
+      if (newRoomId) {
+        close();
+        onOpenShareRoom?.(newRoomId);
+      }
+    } catch (err) {
+      notify(`Could not start a cloud room: ${errorMessage(err)}`, true);
+    } finally {
+      setIsStartingRoom(false);
+    }
   };
+
+  const startRoomLabel = !isLoggedIn
+    ? isSigningIn
+      ? "Signing in with GitHub..."
+      : "Sign in with GitHub to start a room"
+    : !isCloudVerified
+    ? "Verify GitHub to start a room"
+    : isStartingRoom
+    ? "Starting cloud room..."
+    : "Start live cloud room & invite";
+  // Signing in and starting the room both show progress; the start button is disabled meanwhile.
+  const isStartBusy = isStartingRoom || (!isLoggedIn && isSigningIn);
+  const startRoomIcon = !isLoggedIn ? (
+    isSigningIn ? <Loader2 size={15} className="spin-sync-icon" /> : <LogIn size={15} />
+  ) : !isCloudVerified ? (
+    <ShieldCheck size={15} />
+  ) : isStartingRoom ? (
+    <Loader2 size={15} className="spin-sync-icon" />
+  ) : (
+    <Users size={15} />
+  );
+
+  const runExport = (label: string, build: () => { content: string; extension: string; mime: string } | null) => {
+    try {
+      const file = build();
+      if (!file) return;
+      downloadTextFile(buildExportFilename(currentProjectName, file.extension), file.content, file.mime);
+    } catch (err) {
+      notify(`${label} export failed: ${errorMessage(err)}`, true);
+    }
+  };
+
+  const handleExportMsProject = () =>
+    runExport("MS Project", () =>
+      parsedData
+        ? { content: exportMsProjectXml(parsedData, { projectName: currentProjectName }), extension: "xml", mime: "application/xml" }
+        : null
+    );
+
+  const handleExportPrimavera = () =>
+    runExport("Primavera P6", () =>
+      parsedData
+        ? { content: exportPrimaveraXer(parsedData, { projectName: currentProjectName }), extension: "xer", mime: "text/plain" }
+        : null
+    );
+
+  const handleExportCsv = () =>
+    runExport("CSV", () =>
+      parsedData ? { content: exportSpreadsheetCsv(parsedData), extension: "csv", mime: "text/csv;charset=utf-8" } : null
+    );
+
+  const handleExportExecutiveReport = () =>
+    runExport("Executive report", () =>
+      parsedData?.tasks
+        ? {
+            content: exportExecutiveReportHtml(parsedData.tasks, {
+              title: currentProjectName || "Executive Project Status & Schedule Health Report",
+              // Internal plan ids mean nothing to report readers; rooms have a shareable id.
+              projectCode: roomId,
+              theme: activeTheme?.mode === "dark" ? "dark" : "corporate"
+            }),
+            extension: "html",
+            mime: "text/html;charset=utf-8"
+          }
+        : null
+    );
+
+  const planBadge = isRoomActive ? "Live cloud room" : activeProjectId === "default" ? "Built-in sample" : "On this device";
 
   return (
-    <div className="prompt-modal-backdrop" onClick={() => setShowShareModal(false)}>
-      <div
-        className="prompt-modal-card"
-        style={{ maxWidth: "580px", width: "90%" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="prompt-modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                background: "rgba(56, 189, 248, 0.15)",
-                color: "var(--jantt-accent)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-              }}
-            >
-              <Share2 size={20} />
+    <Modal onClose={close} maxWidth={580}>
+      <ModalHeader
+        icon={<Share2 size={18} />}
+        title="Share plan"
+        subtitle={isRoomActive ? "Invite teammates to the live room or share a view-only link." : "Start a live room or share a read-only snapshot link."}
+      />
+
+      <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Plan overview */}
+        <div style={{ ...panelStyle, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--jantt-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {currentProjectName}
             </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--jantt-text)" }}>
-                Share Project Plan
-              </h3>
-              <p style={{ margin: 0, fontSize: "12px", color: "var(--jantt-text-muted)" }}>
-                Collaborate live in real-time or share an offline link.
-              </p>
+            <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
+              {parsedData?.tasks?.length || 0} tasks &bull; View: {activeView.toUpperCase()} &bull; Theme: {activeTheme.label}
             </div>
           </div>
-          <button className="prompt-modal-close-btn" onClick={() => setShowShareModal(false)}>
-            <X size={16} />
-          </button>
+          <span
+            style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              padding: "3px 9px",
+              borderRadius: "100px",
+              flexShrink: 0,
+              background: isRoomActive ? "rgba(34, 197, 94, 0.15)" : "rgba(56, 189, 248, 0.12)",
+              color: isRoomActive ? "#22c55e" : "var(--jantt-accent)",
+              border: `1px solid ${isRoomActive ? "rgba(34, 197, 94, 0.35)" : "rgba(56, 189, 248, 0.3)"}`
+            }}
+          >
+            {planBadge}
+          </span>
         </div>
 
-        <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {/* Plan Overview Card */}
+        {/* Live collaboration */}
+        {isRoomActive && roomId ? (
           <div
             style={{
-              background: "var(--jantt-surface, #F8FAFC)",
-              border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
-              borderRadius: "10px",
-              padding: "12px 14px",
+              background: "linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(129, 140, 248, 0.08) 100%)",
+              border: "1px solid rgba(56, 189, 248, 0.35)",
+              borderRadius: "12px",
+              padding: "16px",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
+              flexDirection: "column",
               gap: "12px"
             }}
           >
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--jantt-text)" }}>
-                {currentProjectName}
-              </div>
-              <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                {parsedData?.tasks?.length || 0} tasks &bull; View: {activeView.toUpperCase()} &bull; Theme: {activeTheme.label}
-              </div>
-            </div>
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: 600,
-                padding: "3px 9px",
-                borderRadius: "100px",
-                background: isRoomActive
-                  ? "rgba(34, 197, 94, 0.15)"
-                  : activeProject?.source === "linked"
-                  ? "rgba(16, 185, 129, 0.12)"
-                  : "rgba(56, 189, 248, 0.12)",
-                color: isRoomActive ? "#22c55e" : activeProject?.source === "linked" ? "#10B981" : "var(--jantt-accent)",
-                border: `1px solid ${
-                  isRoomActive
-                    ? "rgba(34, 197, 94, 0.35)"
-                    : activeProject?.source === "linked"
-                    ? "rgba(16, 185, 129, 0.3)"
-                    : "rgba(56, 189, 248, 0.3)"
-                }`
-              }}
-            >
-              {isRoomActive ? "Live Cloud Room" : activeProject?.source === "linked" ? "Cloud Linked" : activeProjectId === "default" ? "Template" : "Direct Plan"}
-            </span>
-          </div>
-
-          {/* Real-time Collaboration Hero Section */}
-          {isRoomActive && activeProject?.roomId ? (
-            <div
-              style={{
-                background: "linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(129, 140, 248, 0.08) 100%)",
-                border: "1px solid rgba(56, 189, 248, 0.35)",
-                borderRadius: "12px",
-                padding: "16px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px"
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      padding: "3px 10px",
-                      borderRadius: "100px",
-                      background: "rgba(34, 197, 94, 0.15)",
-                      color: "#22c55e",
-                      border: "1px solid rgba(34, 197, 94, 0.3)"
-                    }}
-                  >
-                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-                    Active Cloud Room
-                  </span>
-                  <span style={{ fontSize: "12px", fontFamily: "var(--jantt-font-mono, monospace)", color: "var(--jantt-text-muted)" }}>
-                    #{activeProject.roomId}
-                  </span>
-                </div>
-                <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                  Role: <strong style={{ color: "var(--jantt-text)" }}>{activeProject.role || "collaborator"}</strong>
-                </span>
-              </div>
-
-              <div style={{ fontSize: "12.5px", color: "var(--jantt-text)", lineHeight: "1.4" }}>
-                This plan is synced in real-time. You can invite individuals by username, bulk-invite entire teams, or share a direct join link.
-              </div>
-
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setShowShareModal(false);
-                  if (onOpenShareRoom && activeProject.roomId) {
-                    onOpenShareRoom(activeProject.roomId);
-                  }
-                }}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  padding: "9px 16px",
-                  fontWeight: 600,
-                  fontSize: "13px"
-                }}
-              >
-                <Users size={15} />
-                <span>Manage Teammates &amp; Invite Link</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
-          ) : (
-            <div
-              style={{
-                background: "linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)",
-                border: "1px solid rgba(56, 189, 248, 0.3)",
-                borderRadius: "12px",
-                padding: "16px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px"
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div
-                  style={{
-                    width: "34px",
-                    height: "34px",
-                    borderRadius: "8px",
-                    background: "rgba(56, 189, 248, 0.18)",
-                    color: "var(--jantt-accent)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0
-                  }}
-                >
-                  <Sparkles size={18} />
-                </div>
-                <div>
-                  <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--jantt-text)" }}>
-                    Collaborate Live in Real-Time
-                  </div>
-                  <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                    Invite individuals, bulk-add teams, and auto-sync with live presence &amp; CRDT conflict resolution.
-                  </div>
-                </div>
-              </div>
-
-              {currentUserProfile ? (
-                (!ENABLE_GITHUB_VERIFICATION_GATE || currentUserProfile.githubVerified) ? (
-                  <button
-                    className="btn btn-primary"
-                    disabled={isStartingRoom}
-                    onClick={async () => {
-                      if (!onCreateRoomFromActive) return;
-                      setIsStartingRoom(true);
-                      try {
-                        const newRoomId = await onCreateRoomFromActive(currentProjectName);
-                        if (newRoomId) {
-                          setShowShareModal(false);
-                          onOpenShareRoom?.(newRoomId);
-                        }
-                      } finally {
-                        setIsStartingRoom(false);
-                      }
-                    }}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      padding: "9px 16px",
-                      fontWeight: 600,
-                      fontSize: "13px"
-                    }}
-                  >
-                    {isStartingRoom ? <Loader2 size={15} className="spin-sync-icon" /> : <Users size={15} />}
-                    <span>{isStartingRoom ? "Starting Cloud Room..." : "Start Live Cloud Room & Share"}</span>
-                    <ArrowRight size={14} />
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setShowShareModal(false);
-                      onOpenVerificationModal?.();
-                    }}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      padding: "9px 16px",
-                      fontWeight: 600,
-                      fontSize: "13px"
-                    }}
-                  >
-                    <ShieldCheck size={15} />
-                    <span>Verify GitHub Stars to Start Room</span>
-                  </button>
-                )
-              ) : (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setShowShareModal(false);
-                    onLogin?.();
-                  }}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    padding: "9px 16px",
-                    fontWeight: 600,
-                    fontSize: "13px"
+                    gap: "5px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    padding: "3px 10px",
+                    borderRadius: "100px",
+                    background: "rgba(34, 197, 94, 0.15)",
+                    color: "#22c55e",
+                    border: "1px solid rgba(34, 197, 94, 0.3)"
                   }}
                 >
-                  <LogIn size={15} />
-                  <span>Sign in with GitHub to Share Room</span>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                  Cloud room
+                </span>
+                <span style={{ fontSize: "12px", fontFamily: "var(--jantt-font-mono, monospace)", color: "var(--jantt-text-muted)" }}>
+                  #{roomId}
+                </span>
+              </div>
+              {effectiveRole && (
+                <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
+                  Your role: <strong style={{ color: "var(--jantt-text)" }}>{ROLE_LABELS[effectiveRole]}</strong>
+                </span>
+              )}
+            </div>
+
+            {canManageRoom ? (
+              <>
+                <div style={{ fontSize: "12.5px", color: "var(--jantt-text)", lineHeight: "1.4" }}>
+                  Changes sync live. Invite people by username, add whole teams, or create an invite link with the role you choose.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    close();
+                    onOpenShareRoom?.(roomId);
+                  }}
+                  style={heroButtonStyle}
+                >
+                  <Users size={15} />
+                  <span>{effectiveRole === "owner" ? "Manage teammates & invites" : "Teammates & invite links"}</span>
+                  <ArrowRight size={14} />
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: "12.5px", color: "var(--jantt-text)", lineHeight: "1.4", display: "flex", gap: "8px" }}>
+                  {needsSignInToManage ? (
+                    <LogIn size={15} style={{ flexShrink: 0, marginTop: "1px", color: "var(--jantt-text-muted)" }} />
+                  ) : (
+                    <Eye size={15} style={{ flexShrink: 0, marginTop: "1px", color: "var(--jantt-text-muted)" }} />
+                  )}
+                  <span>
+                    {needsSignInToManage
+                      ? "You are signed out, so this room is view-only here. Sign in to use your edit access and invite teammates, or make your own editable copy on this device."
+                      : "You have view-only access. Ask the room owner for edit access, or make your own editable copy on this device."}
+                  </span>
+                </div>
+                {needsSignInToManage && onLogin && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={isSigningIn}
+                    aria-busy={isSigningIn || undefined}
+                    onClick={() => {
+                      close();
+                      onLogin();
+                    }}
+                    style={heroButtonStyle}
+                  >
+                    {isSigningIn ? <Loader2 size={15} className="spin-sync-icon" /> : <LogIn size={15} />}
+                    <span>{isSigningIn ? "Signing in with GitHub..." : "Sign in with GitHub to edit and invite"}</span>
+                  </button>
+                )}
+                {onMakeLocalCopy && (
+                  <button
+                    type="button"
+                    className={needsSignInToManage && onLogin ? "btn btn-secondary" : "btn btn-primary"}
+                    onClick={() => {
+                      close();
+                      onMakeLocalCopy();
+                    }}
+                    style={heroButtonStyle}
+                  >
+                    <HardDrive size={15} />
+                    <span>Make an editable copy on this device</span>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        ) : (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)",
+              border: "1px solid rgba(56, 189, 248, 0.3)",
+              borderRadius: "12px",
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div
+                aria-hidden="true"
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  borderRadius: "8px",
+                  background: "rgba(56, 189, 248, 0.18)",
+                  color: "var(--jantt-accent)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+              >
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--jantt-text)" }}>Collaborate live</div>
+                <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
+                  Turns this plan into a cloud room you own. Invite people and edit together in real time.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={isStartBusy}
+              aria-busy={isStartBusy || undefined}
+              onClick={handleStartRoom}
+              style={heroButtonStyle}
+            >
+              {startRoomIcon}
+              <span>{startRoomLabel}</span>
+              {isLoggedIn && isCloudVerified && !isStartingRoom && <ArrowRight size={14} />}
+            </button>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "2px 0" }}>
+          <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
+          <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {isRoomActive ? "Or share a view-only link" : "Or share a read-only snapshot"}
+          </span>
+          <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
+        </div>
+
+        {/* Read-only link */}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px", flexWrap: "wrap" }}>
+            <label htmlFor="share-link-input" style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
+              {isRoomActive ? "View-only room link" : "Snapshot link"}
+            </label>
+            <div
+              style={{
+                fontSize: "11px",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "2px 8px",
+                borderRadius: "100px",
+                background: isWhatsAppSafe ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                color: isWhatsAppSafe ? "#10B981" : "#F59E0B",
+                border: `1px solid ${isWhatsAppSafe ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.25)"}`
+              }}
+            >
+              {isWhatsAppSafe ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+              <span>{safeUrl.length} chars &bull; {isWhatsAppSafe ? "WhatsApp safe" : "Long link"}</span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              id="share-link-input"
+              type="text"
+              readOnly
+              className="prompt-input"
+              value={safeUrl}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{ fontFamily: "var(--jantt-font-mono, monospace)", fontSize: "12px", flex: 1, minWidth: 0 }}
+            />
+            <button
+              type="button"
+              className="btn-nav btn-nav-primary"
+              onClick={() => handleCopy("link")}
+              style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {copiedTarget === "link" ? <Check size={14} /> : <Copy size={14} />}
+              <span>{copiedTarget === "link" ? "Copied!" : "Copy link"}</span>
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", flex: "1 1 220px" }}>
+              {isRoomActive
+                ? "Anyone with this link can view the live room but cannot edit it. Invite teammates to give edit access."
+                : "A compressed copy of the plan as it is now; later edits are not included. No account needed to open it."}
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <button
+                type="button"
+                className="btn-nav"
+                style={{
+                  fontSize: "11.5px",
+                  padding: "4px 10px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  background: "rgba(37, 211, 102, 0.12)",
+                  color: "#16a34a",
+                  borderColor: "rgba(37, 211, 102, 0.3)"
+                }}
+                onClick={handleWhatsAppShare}
+                disabled={!isWebUrl}
+                title={isWebUrl ? "Share this link on WhatsApp" : linkUnavailableTitle}
+              >
+                <MessageSquare size={13} />
+                <span>WhatsApp</span>
+              </button>
+              {canNativeShare && (
+                <button
+                  type="button"
+                  className="btn-nav"
+                  style={{ fontSize: "11.5px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                  onClick={handleNativeShare}
+                  title="Open the device share sheet"
+                >
+                  <Share2 size={13} />
+                  <span>More...</span>
                 </button>
               )}
             </div>
-          )}
-
-          {/* Section Divider */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "2px 0" }}>
-            <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
-            <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Or Share Offline Snapshot
-            </span>
-            <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
           </div>
 
-          {/* Shareable Link Input Section */}
-          <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-              <label
-                style={{
-                  fontSize: "12.5px",
-                  fontWeight: 600,
-                  color: "var(--jantt-text)"
-                }}
-              >
-                Shareable Link:
-              </label>
-              <div
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "2px 8px",
-                  borderRadius: "100px",
-                  background: isWhatsAppSafe ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                  color: isWhatsAppSafe ? "#10B981" : "#F59E0B",
-                  border: `1px solid ${isWhatsAppSafe ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.25)"}`
-                }}
-              >
-                {isWhatsAppSafe ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
-                <span>{shareUrl.length} chars &bull; {isWhatsAppSafe ? "WhatsApp Safe" : "Long Plan"}</span>
+          {!isWhatsAppSafe && (
+            <div
+              style={{
+                marginTop: "10px",
+                background: "rgba(245, 158, 11, 0.08)",
+                border: "1px solid rgba(245, 158, 11, 0.25)",
+                borderRadius: "8px",
+                padding: "10px 12px",
+                fontSize: "11.5px",
+                color: "var(--jantt-text)"
+              }}
+            >
+              <div style={{ fontWeight: 600, color: "#D97706", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <AlertTriangle size={13} />
+                <span>This link may be cut off in WhatsApp</span>
               </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input
-                type="text"
-                readOnly
-                className="prompt-input"
-                value={shareUrl}
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-                style={{
-                  fontFamily: "var(--jantt-font-mono, monospace)",
-                  fontSize: "12px",
-                  flex: 1
-                }}
-              />
-              <button
-                className="btn-nav btn-nav-primary"
-                onClick={handleCopyShareLink}
-                style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "6px" }}
-                title="Copy share link to clipboard"
-              >
-                {copiedShareLink ? <Check size={14} /> : <Copy size={14} />}
-                <span>{copiedShareLink ? "Copied!" : "Copy Link"}</span>
-              </button>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                Compressed &bull; Opens exact view and schedule in any browser without account.
-              </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                {handleWhatsAppShare && (
-                  <button
-                    className="btn-nav"
-                    style={{
-                      fontSize: "11.5px",
-                      padding: "4px 10px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      background: "rgba(37, 211, 102, 0.12)",
-                      color: "#16a34a",
-                      borderColor: "rgba(37, 211, 102, 0.3)"
-                    }}
-                    onClick={handleWhatsAppShare}
-                    title={isWhatsAppSafe ? "Share link directly to WhatsApp" : "Share via WhatsApp"}
-                  >
-                    <MessageSquare size={13} />
-                    <span>WhatsApp</span>
-                  </button>
-                )}
-                {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
-                  <button
-                    className="btn-nav"
-                    style={{ fontSize: "11.5px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                    onClick={handleNativeShare}
-                    title="Open native device share dialog"
-                  >
-                    <Share2 size={13} />
-                    <span>Device...</span>
-                  </button>
-                )}
+              <div style={{ color: "var(--jantt-text-muted)", lineHeight: "1.4" }}>
+                The plan is large ({safeUrl.length} characters) and WhatsApp truncates links over about 2,000 characters. Send the file instead, or share a short room link.
               </div>
-            </div>
-
-            {!isWhatsAppSafe && (
-              <div
-                style={{
-                  marginTop: "10px",
-                  background: "rgba(245, 158, 11, 0.08)",
-                  border: "1px solid rgba(245, 158, 11, 0.25)",
-                  borderRadius: "8px",
-                  padding: "10px 12px",
-                  fontSize: "11.5px",
-                  color: "var(--jantt-text)"
-                }}
-              >
-                <div style={{ fontWeight: 600, color: "#D97706", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-                  <AlertTriangle size={13} />
-                  <span>WhatsApp Link Recommendation</span>
-                </div>
-                <div style={{ color: "var(--jantt-text-muted)", lineHeight: "1.4" }}>
-                  This plan is detailed ({shareUrl.length} chars). WhatsApp truncates links over 2,000 characters. For 100% reliable WhatsApp sharing:
-                </div>
-                <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+              <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn-nav"
+                  style={{ fontSize: "11px", padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                  onClick={handleDownloadJson}
+                >
+                  <Download size={12} />
+                  <span>Download JSON file</span>
+                </button>
+                {!isRoomActive && (
                   <button
-                    className="btn-nav"
+                    type="button"
+                    className="btn-nav btn-nav-primary"
                     style={{ fontSize: "11px", padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                    onClick={handleDownloadJson}
+                    onClick={handleStartRoom}
+                    disabled={isStartBusy}
                   >
-                    <Download size={12} />
-                    <span>Download JSON File</span>
+                    <Cloud size={12} />
+                    <span>{isLoggedIn && isCloudVerified ? "Start a cloud room instead" : startRoomLabel}</span>
                   </button>
-                  {onOpenCloudRooms && (
-                    <button
-                      className="btn-nav btn-nav-primary"
-                      style={{ fontSize: "11px", padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                      onClick={() => {
-                        setShowShareModal(false);
-                        onOpenCloudRooms();
-                      }}
-                    >
-                      <Cloud size={12} />
-                      <span>Share via Cloud Room</span>
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
 
-          {/* Embed Snippet Generator */}
-          <div
+        {/* Embed */}
+        <div style={panelStyle}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
+              Embed read-only view (Notion, Confluence, wikis)
+            </span>
+            <button
+              type="button"
+              className="btn-nav"
+              style={{ fontSize: "11px", padding: "3px 8px" }}
+              onClick={() => handleCopy("embed")}
+              disabled={!embedCode}
+              title={embedCode ? undefined : linkUnavailableTitle}
+            >
+              {copiedTarget === "embed" ? <Check size={12} style={{ color: "#10B981" }} /> : <Copy size={12} />}
+              <span>{copiedTarget === "embed" ? "Copied!" : "Copy embed code"}</span>
+            </button>
+          </div>
+          <code
             style={{
-              background: "var(--jantt-surface, #F8FAFC)",
-              border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
-              borderRadius: "10px",
-              padding: "12px 14px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px"
+              fontSize: "11px",
+              fontFamily: "var(--jantt-font-mono, monospace)",
+              background: "var(--jantt-bg, #0B132B)",
+              padding: "6px 8px",
+              borderRadius: "4px",
+              border: "1px solid var(--jantt-border, #1E293B)",
+              color: "var(--jantt-text-muted, #94A3B8)",
+              overflowX: "auto",
+              whiteSpace: "nowrap",
+              display: "block"
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
-                Embed in Documentation (Notion / Confluence / Wiki):
-              </span>
+            {/* Snapshot links can be huge; the preview shows the ends, the copy button copies it all. */}
+            {!embedCode
+              ? "Unavailable: this plan has no shareable web link."
+              : embedCode.length > 320
+              ? `${embedCode.slice(0, 200)}...${embedCode.slice(-90)}`
+              : embedCode}
+          </code>
+        </div>
+
+        {/* Plan source */}
+        <div style={{ ...panelStyle, gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <FileJson size={16} style={{ color: "var(--jantt-accent)" }} />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>Plan source (JSON)</span>
+            </div>
+            {isWebUrl && (
+              <a
+                href={safeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-nav"
+                style={{ fontSize: "12px", textDecoration: "none" }}
+                title="Open the read-only link in a new tab"
+              >
+                <ExternalLink size={13} />
+                <span>Open link</span>
+              </a>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", flex: "1 1 220px" }}>
+              The whole schedule is plain JSON. Inspect it in the editor or download it.
+            </span>
+            <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
               <button
+                type="button"
                 className="btn-nav"
                 style={{ fontSize: "11px", padding: "3px 8px" }}
                 onClick={() => {
-                  const iframeCode = `<iframe src="${shareUrl}" width="100%" height="600" frameborder="0" allowfullscreen></iframe>`;
-                  navigator.clipboard.writeText(iframeCode);
-                  setCopiedEmbed(true);
-                  setTimeout(() => setCopiedEmbed(false), 2000);
+                  close();
+                  setIsSidebarCollapsed(false);
                 }}
+                title="Open the JSON editor"
               >
-                {copiedEmbed ? <Check size={12} style={{ color: "#10B981" }} /> : <Copy size={12} />}
-                <span>{copiedEmbed ? "Copied HTML!" : "Copy Embed Code"}</span>
-              </button>
-            </div>
-            <code
-              style={{
-                fontSize: "11px",
-                fontFamily: "var(--jantt-font-mono, monospace)",
-                background: "var(--jantt-bg, #0B132B)",
-                padding: "6px 8px",
-                borderRadius: "4px",
-                border: "1px solid var(--jantt-border, #1E293B)",
-                color: "var(--jantt-text-muted, #94A3B8)",
-                overflowX: "auto",
-                whiteSpace: "nowrap",
-                display: "block"
-              }}
-            >
-              {`<iframe src="${shareUrl.slice(0, 80)}..." width="100%" height="600" frameborder="0"></iframe>`}
-            </code>
-          </div>
-
-          {/* Source Document Section */}
-          <div
-            style={{
-              background: "var(--jantt-surface, #F8FAFC)",
-              border: "1px solid var(--jantt-border, #E2E8F0)",
-              borderRadius: "10px",
-              padding: "14px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px"
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                {activeProject?.source === "linked" ? (
-                  <Cloud size={16} style={{ color: "var(--jantt-accent)" }} />
-                ) : (
-                  <FileJson size={16} style={{ color: "var(--jantt-accent)" }} />
-                )}
-                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
-                  {activeProject?.source === "linked" ? "Original Cloud Source" : "Plan Source"}
-                </span>
-              </div>
-
-              <div style={{ display: "flex", gap: "6px" }}>
-                {activeProject?.sourceUrl ? (
-                  <a
-                    href={activeProject.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-nav btn-nav-primary"
-                    style={{ fontSize: "12px", textDecoration: "none" }}
-                    title="Open the original source file URL in a new browser tab"
-                  >
-                    <ExternalLink size={13} />
-                    <span>Open Source</span>
-                  </a>
-                ) : (
-                  <a
-                    href={shareUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-nav"
-                    style={{ fontSize: "12px", textDecoration: "none" }}
-                    title="Open this plan link in a new browser tab"
-                  >
-                    <ExternalLink size={13} />
-                    <span>Open Link</span>
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {activeProject?.sourceUrl ? (
-              <div
-                style={{
-                  fontSize: "11.5px",
-                  color: "var(--jantt-text-muted)",
-                  wordBreak: "break-all",
-                  fontFamily: "var(--jantt-font-mono, monospace)",
-                  background: "var(--jantt-bg, #FFFFFF)",
-                  border: "1px solid var(--jantt-border-subtle, #E2E8F0)",
-                  borderRadius: "6px",
-                  padding: "8px 10px"
-                }}
-              >
-                {activeProject.sourceUrl}
-              </div>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-                <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
-                  Raw JSON schedule data is self-contained. You can inspect or download the JSON source.
-                </span>
-                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-                  <button
-                    className="btn-nav"
-                    style={{ fontSize: "11px", padding: "3px 8px" }}
-                    onClick={() => {
-                      setShowShareModal(false);
-                      setIsSidebarCollapsed(false);
-                    }}
-                    title="Open JSON editor sidebar"
-                  >
-                    <FileJson size={12} />
-                    <span>View JSON</span>
-                  </button>
-                  <button
-                    className="btn-nav"
-                    style={{ fontSize: "11px", padding: "3px 8px" }}
-                    onClick={handleDownloadJson}
-                    title="Download JSON file"
-                  >
-                    <Download size={12} />
-                    <span>Download</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Enterprise Interop Export Section */}
-          <div
-            style={{
-              background: "var(--jantt-surface, #F8FAFC)",
-              border: "1px solid var(--jantt-border, #E2E8F0)",
-              borderRadius: "8px",
-              padding: "12px 14px",
-              marginTop: "12px"
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-              <div style={{ fontWeight: 600, fontSize: "12px", color: "var(--jantt-text, #1E293B)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <Building2 size={13} />
-                <span>Enterprise Interoperability & Lossless Export</span>
-              </div>
-            </div>
-            <div style={{ color: "var(--jantt-text-muted)", fontSize: "11px", marginBottom: "10px", lineHeight: "1.4" }}>
-              Losslessly export schedule constraints, milestones, and 4-type dependencies into standard enterprise suites:
-            </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button
-                className="btn-nav"
-                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                onClick={handleExportMsProject}
-                disabled={!parsedData}
-                title="Export as Microsoft Project 2013-2021 XML format"
-              >
-                <Download size={12} style={{ color: "#38BDF8" }} />
-                <span>MS Project (.xml)</span>
+                <FileJson size={12} />
+                <span>View JSON</span>
               </button>
               <button
+                type="button"
                 className="btn-nav"
-                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                onClick={handleExportPrimavera}
-                disabled={!parsedData}
-                title="Export as Oracle Primavera P6 .xer batch file"
+                style={{ fontSize: "11px", padding: "3px 8px" }}
+                onClick={handleDownloadJson}
+                title="Download the JSON file"
               >
-                <Download size={12} style={{ color: "#F59E0B" }} />
-                <span>Primavera P6 (.xer)</span>
-              </button>
-              <button
-                className="btn-nav"
-                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                onClick={handleExportCsv}
-                disabled={!parsedData}
-                title="Export as RFC 4180 CSV spreadsheet"
-              >
-                <Download size={12} style={{ color: "#10B981" }} />
-                <span>Spreadsheet (.csv)</span>
-              </button>
-              <button
-                className="btn-nav"
-                style={{ fontSize: "11px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px", background: "rgba(168, 85, 247, 0.12)", color: "#C084FC", borderColor: "rgba(168, 85, 247, 0.35)" }}
-                onClick={handleExportExecutiveReport}
-                disabled={!parsedData}
-                title="Export high-resolution Executive PDF Booklet & Status Report with EVM Scorecard & DCMA-14 Diagnostics"
-              >
-                <FileText size={12} style={{ color: "#A855F7" }} />
-                <span>Executive Report (.html / PDF)</span>
+                <Download size={12} />
+                <span>Download</span>
               </button>
             </div>
           </div>
         </div>
 
-        <div className="prompt-modal-footer">
-          <button className="btn-nav" onClick={() => setShowShareModal(false)}>
-            Close
-          </button>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {activeProject?.sourceUrl && (
-              <a
-                href={activeProject.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-nav"
-                style={{ textDecoration: "none" }}
-              >
-                <ExternalLink size={13} />
-                <span>Open Source</span>
-              </a>
-            )}
+        {/* Interop exports */}
+        <div style={panelStyle}>
+          <div style={{ fontWeight: 600, fontSize: "12px", color: "var(--jantt-text, #1E293B)", display: "flex", alignItems: "center", gap: "6px" }}>
+            <Building2 size={13} />
+            <span>Export to other tools</span>
+          </div>
+          <div style={{ color: "var(--jantt-text-muted)", fontSize: "11px", lineHeight: "1.4" }}>
+            Exports tasks, milestones, constraints and dependency types in standard formats.
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <button
-              className="btn-nav btn-nav-primary"
-              onClick={handleCopyShareLink}
+              type="button"
+              className="btn-nav"
+              style={exportButtonStyle}
+              onClick={handleExportMsProject}
+              disabled={!parsedData}
+              title="Microsoft Project XML (2013 and later)"
             >
-              {copiedShareLink ? <Check size={14} /> : <Copy size={14} />}
-              <span>{copiedShareLink ? "Link Copied!" : "Copy Share Link"}</span>
+              <Download size={12} style={{ color: "#38BDF8" }} />
+              <span>MS Project (.xml)</span>
+            </button>
+            <button
+              type="button"
+              className="btn-nav"
+              style={exportButtonStyle}
+              onClick={handleExportPrimavera}
+              disabled={!parsedData}
+              title="Oracle Primavera P6 XER file"
+            >
+              <Download size={12} style={{ color: "#F59E0B" }} />
+              <span>Primavera P6 (.xer)</span>
+            </button>
+            <button
+              type="button"
+              className="btn-nav"
+              style={exportButtonStyle}
+              onClick={handleExportCsv}
+              disabled={!parsedData}
+              title="CSV spreadsheet; can be imported back into Jantt"
+            >
+              <Download size={12} style={{ color: "#10B981" }} />
+              <span>Spreadsheet (.csv)</span>
+            </button>
+            <button
+              type="button"
+              className="btn-nav"
+              style={{ ...exportButtonStyle, background: "rgba(168, 85, 247, 0.12)", color: "#C084FC", borderColor: "rgba(168, 85, 247, 0.35)" }}
+              onClick={handleExportExecutiveReport}
+              disabled={!parsedData}
+              title="Status report as an HTML page; use your browser's Print to save it as PDF"
+            >
+              <FileText size={12} style={{ color: "#A855F7" }} />
+              <span>Executive report (HTML, printable)</span>
             </button>
           </div>
         </div>
       </div>
-    </div>
+
+      <div className="prompt-modal-footer" style={{ flexShrink: 0 }}>
+        <button type="button" className="btn-nav" onClick={close}>
+          Close
+        </button>
+        <button type="button" className="btn-nav btn-nav-primary" onClick={() => handleCopy("link")}>
+          {copiedTarget === "link" ? <Check size={14} /> : <Copy size={14} />}
+          <span>{copiedTarget === "link" ? "Link copied!" : "Copy link"}</span>
+        </button>
+      </div>
+    </Modal>
   );
 };

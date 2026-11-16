@@ -1,6 +1,7 @@
 /**
- * Jantt 2D Virtualization & Windowing Engine
- * Sub-millisecond 2D viewport windowing for handling 100,000+ tasks at 60 FPS.
+ * Jantt 2D Virtualization & Windowing Math
+ * O(1) viewport windowing helpers for renderers that draw only what is visible
+ * (used by the canvas renderer; the DOM renderer does not window rows or days yet).
  *
  * Implements:
  * 1. O(1) Vertical Row Windowing with dynamic overscan buffer
@@ -183,7 +184,8 @@ export class PlanVirtualizer {
   }
 
   /**
-   * Spatial Culling: Checks if a bounding box intersects the 2D visible window.
+   * Spatial Culling: Checks if a bounding box (canvas px) intersects the 2D rendered window,
+   * i.e. [offsetX, endDayOffset * dayWidth] x [offsetY, endIndex * rowHeight].
    */
   public isVisible(
     boxX: number,
@@ -192,10 +194,13 @@ export class PlanVirtualizer {
     boxHeight: number,
     window2D: Virtual2DViewport
   ): boolean {
-    const windowMinX = window2D.horizontal.offsetX;
-    const windowMaxX = window2D.horizontal.offsetX + (window2D.horizontal.visibleDays * (boxWidth > 0 ? (window2D.horizontal.totalWidth / (window2D.horizontal.endDayOffset || 1)) : 1));
-    const windowMinY = window2D.vertical.offsetY;
-    const windowMaxY = window2D.vertical.offsetY + (window2D.vertical.visibleCount * boxHeight);
+    const { horizontal, vertical } = window2D;
+    // Window extents derived from the same units the windows were computed in (dayWidth/rowHeight),
+    // independent of the queried box size.
+    const windowMinX = horizontal.offsetX;
+    const windowMaxX = horizontal.totalWidth - horizontal.paddingRight;
+    const windowMinY = vertical.offsetY;
+    const windowMaxY = vertical.totalHeight - vertical.paddingBottom;
 
     return !(
       boxX + boxWidth < windowMinX ||

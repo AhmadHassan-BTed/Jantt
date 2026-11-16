@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   freezeProjectBaseline,
   activateBaselineSnapshot,
-  computeBaselineVariance
+  computeBaselineVariance,
+  getBaselineSnapshots
 } from "../src/baselines";
 import type { JanttData } from "../src/types";
 
@@ -40,7 +41,7 @@ describe("Project Baseline Snapshot & Variance Analysis Engine", () => {
       taskId: "t1",
       start: "2026-11-01",
       end: "2026-11-05",
-      estimatedCost: 5500 // Took actualCost as new freeze baseline
+      estimatedCost: 5000 // The budget at freeze time, not the spend so far
     });
 
     expect(updatedData.meta?.showBaselines).toBe(true);
@@ -84,7 +85,7 @@ describe("Project Baseline Snapshot & Variance Analysis Engine", () => {
     expect(t1Var.startSlippageDays).toBe(2);
     expect(t1Var.endSlippageDays).toBe(2);
     expect(t1Var.durationVarianceDays).toBe(0); // 4 days duration unchanged
-    expect(t1Var.costVariance).toBe(700); // 6200 - 5500
+    expect(t1Var.costVariance).toBe(1200); // 6200 actual - 5000 baseline budget
     expect(t1Var.status).toBe("delayed");
 
     const t2Var = variance.taskVariances.find((v) => v.taskId === "t2")!;
@@ -122,5 +123,57 @@ describe("Project Baseline Snapshot & Variance Analysis Engine", () => {
     expect(reactivatedPlan2.meta?.activeBaselineId).toBe(base2.id);
     expect(reactivatedPlan2.tasks[0].baseline?.start).toBe("2026-11-03");
     expect(reactivatedPlan2.tasks[0].baseline?.end).toBe("2026-11-07");
+  });
+
+  describe("malformed and remote baseline data", () => {
+    const snapshot = {
+      id: "b1",
+      name: "Remote",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      tasks: { 0: { taskId: "t1", start: "2026-11-01", end: "2026-11-05", estimatedCost: 5000 }, 1: null }
+    };
+
+    it("reads RTDB object-form snapshots and drops unusable entries", () => {
+      const snapshots = getBaselineSnapshots({
+        baselines: { a: snapshot, b: { name: "no id" }, c: { id: "b2", tasks: "nope" } } as never
+      });
+      expect(snapshots.map((s) => s.id)).toEqual(["b1", "b2"]);
+      expect(snapshots[0].tasks).toEqual([{ taskId: "t1", start: "2026-11-01", end: "2026-11-05", estimatedCost: 5000 }]);
+      expect(snapshots[1].tasks).toEqual([]);
+    });
+
+    it("never throws on malformed meta.baselines", () => {
+      const plan = { ...initialPlan, meta: { baselines: { a: snapshot } as never, activeBaselineId: "b1" } };
+      expect(() => activateBaselineSnapshot(plan, "b1")).not.toThrow();
+      expect(computeBaselineVariance(plan)?.baselineId).toBe("b1");
+      const frozen = freezeProjectBaseline(plan, "Next").updatedData;
+      expect(frozen.meta?.baselines?.map((b) => b.id)).toEqual(["b1", frozen.meta?.activeBaselineId]);
+      expect(computeBaselineVariance({ ...initialPlan, meta: { baselines: 42 as never } })).toBeNull();
+    });
+
+    it("tolerates holes in the task list when freezing and activating", () => {
+      const plan: JanttData = { ...initialPlan, tasks: [...initialPlan.tasks, null as never] };
+      const { updatedData, snapshot } = freezeProjectBaseline(plan, "Holes");
+      expect(snapshot.tasks.map((e) => e.taskId)).toEqual(["t1", "t2"]);
+      expect(() => activateBaselineSnapshot(updatedData, snapshot.id)).not.toThrow();
+    });
+
+    it("does not mix dates from another snapshot into an activated or selected baseline", () => {
+      const { updatedData: withB1, snapshot: b1 } = freezeProjectBaseline(initialPlan, "B1");
+      const grown: JanttData = {
+        ...withB1,
+        tasks: [...withB1.tasks, { id: "n", category: "dev", start: "2026-11-20", end: "2026-11-25" }]
+      };
+      const { updatedData: withB2 } = freezeProjectBaseline(grown, "B2");
+
+      const reactivated = activateBaselineSnapshot(withB2, b1.id);
+      expect(reactivated.tasks.find((t) => t.id === "n")!.baseline).toBeUndefined();
+
+      const variance = computeBaselineVariance(withB2, b1.id)!;
+      expect(variance.baselineName).toBe("B1");
+      expect(variance.taskVariances.map((v) => v.taskId)).toEqual(["t1", "t2"]);
+      expect(variance.unbaselinedTaskIds).toEqual(["n"]);
+      expect(computeBaselineVariance(withB2, "missing")).toBeNull();
+    });
   });
 });

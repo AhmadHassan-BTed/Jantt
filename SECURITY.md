@@ -16,6 +16,16 @@ We actively support and provide security patches for the following versions:
 
 ---
 
+## Scope
+
+Reports are welcome for:
+- The `@jantt/*` packages, the CLI and the playground app.
+- **Jantt Cloud**: the Firebase Realtime Database rules ([`database.rules.json`](database.rules.json)) that protect cloud rooms and profiles, and the Cloudflare worker in `worker/`.
+
+The cloud threat model, the rules matrix and its accepted risks are documented in [docs/security.md](docs/security.md#cloud-collaboration--identity-security). A way to read or write data the matrix says you cannot (another user's profile, a room you were not invited to edit, a roster you do not own) is a vulnerability.
+
+---
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability or potential threat in Jantt, please do **NOT** open a public issue. Instead, please report it privately:
@@ -39,5 +49,6 @@ If you discover a security vulnerability or potential threat in Jantt, please do
 ## Security Design Principles
 
 - **Zero Remote Code Execution**: Jantt parses and validates JSON state strictly as declarative data without executing scripts or arbitrary templates.
-- **Zero Runtime Dependencies**: `@jantt/core` has no third-party runtime dependencies, drastically reducing supply-chain risk.
-- **Strict Input Validation**: Every JSON payload is checked for schema compliance, malicious loops, and invalid date formats before rendering.
+- **Minimal Runtime Dependencies**: `@jantt/core` depends only on `fflate` (share-link compression), keeping supply-chain risk small.
+- **Strict Input Validation**: Every plan the engine loads is checked for schema compliance, malicious loops, and invalid date formats before rendering.
+- **Server-Side Enforcement for Cloud Data**: Access to Jantt Cloud data is decided only by the database rules; client-side checks are UX conveniences and are never relied on for security.

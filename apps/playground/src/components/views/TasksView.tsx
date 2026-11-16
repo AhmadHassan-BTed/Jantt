@@ -4,7 +4,6 @@ import {
   X,
   Kanban,
   ListTodo,
-  Users,
   Plus,
   CheckCircle2,
   Calendar,
@@ -16,14 +15,14 @@ import {
   type Task,
   type Team,
   resolveTaskAssignee,
-  resolveTeamById,
-  resolveSchedule,
-  syncTaskProgressAndStatus,
   isTaskDone,
-  getTaskDependencies
+  filterDependsOn,
+  sanitizeCssColor,
+  type TaskIdLookup
 } from "@jantt/core";
 import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
-import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
+import { getPeerId, isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
+import { TaskStatusSelect, applyTaskStatus, getStatusValue, onActivateKey, tintColor } from "./KanbanView";
 
 interface TasksViewProps {
   parsedData: JanttData;
@@ -41,11 +40,31 @@ interface TasksViewProps {
   effectivePeople: EffectivePerson[];
   handleAddNewTask: () => void;
   setDateFilterMode: (mode: DateFilterMode) => void;
+  setCompletedFilterMode?: (mode: CompletedFilterMode) => void;
   openTaskDetailSidebar: (task: Task) => void;
+  /** Must be the guarded plan commit (viewer / pending-login checks + undo snapshot). */
   handleChartCommit: (data: JanttData) => void;
   isViewer?: boolean;
   onPromptFork?: () => void;
 }
+
+/**
+ * Removes only the relations pointing at `removedId`, keeping every other link exactly as
+ * written (types, lags, object or string form). Returns the same reference when nothing
+ * changes so untouched tasks keep their sync timestamps. Pass the plan's task ids as
+ * `knownIds` so ids such as "model-3d" are not misread as "model" with a lead.
+ *
+ * @deprecated Thin wrapper kept for existing callers; use core `filterDependsOn` directly.
+ */
+export function removeDependencyOn(
+  dependsOn: Task["dependsOn"],
+  removedId: string,
+  knownIds?: TaskIdLookup
+): Task["dependsOn"] {
+  return filterDependsOn(dependsOn, (rel) => rel.id !== removedId, knownIds) as Task["dependsOn"];
+}
+
+const asLower = (value: unknown) => (typeof value === "string" ? value : value == null ? "" : String(value)).toLowerCase();
 
 export const TasksView: React.FC<TasksViewProps> = ({
   parsedData,
@@ -63,6 +82,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   effectivePeople,
   handleAddNewTask,
   setDateFilterMode,
+  setCompletedFilterMode,
   openTaskDetailSidebar,
   handleChartCommit,
   isViewer = false,
@@ -71,41 +91,115 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const activeTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
   const matchingDateFilterTasks = activeTasks.filter(isTaskMatchingDateFilter);
 
-  const handleDeleteTask = React.useCallback(
-    (taskIdToDelete: string) => {
-      if (isViewer) {
-        onPromptFork?.();
-        return;
-      }
-      const active = (parsedData.tasks || []).filter((item) => item.id !== taskIdToDelete && !item._deleted);
-      const pruned = active.map((item) => {
-        const remaining = getTaskDependencies(item).filter((id) => id !== taskIdToDelete);
-        return {
-          ...item,
-          dependsOn: remaining.length === 0 ? null : (remaining.length === 1 ? remaining[0] : remaining)
-        };
-      });
-      const nowIso = new Date().toISOString();
-      const tombstones = {
-        ...(parsedData.meta?.tombstones || {}),
-        [taskIdToDelete]: { deletedAt: nowIso, entityType: "task" }
-      };
-      const resolved = resolveSchedule(pruned, parsedData.meta?.defaultGapDays ?? 2);
-      handleChartCommit({
-        ...parsedData,
-        meta: {
-          ...parsedData.meta,
-          tombstones
-        },
-        tasks: resolved
-      });
-    },
-    [parsedData, handleChartCommit]
-  );
+  const isPersonFiltering =
+    selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
+  const isPersonSorting = selectedPersonFilter === "sort:assignee";
+  const hasActiveConstraint =
+    dateFilterMode !== "all" ||
+    completedFilterMode === "filter" ||
+    isPersonFiltering ||
+    tasksSearchQuery.trim() !== "";
+
+  const requestEdit = () => {
+    if (isViewer) {
+      onPromptFork?.();
+      return false;
+    }
+    return true;
+  };
+
+  const handleStatusChange = (taskId: string, status: string) => {
+    if (!requestEdit()) return;
+    handleChartCommit({ ...parsedData, tasks: applyTaskStatus(parsedData.tasks, taskId, status) });
+  };
+
+  const handleToggleDone = (t: Task) => handleStatusChange(t.id, isTaskDone(t) ? "in-progress" : "completed");
+
+  const handleDeleteTask = (task: Task) => {
+    if (!requestEdit()) return;
+    const label = task.label || task.name || task.id;
+    if (!window.confirm(`Delete task "${label}"? Links from other tasks to it will be removed.`)) return;
+
+    // Composite "<iso>#<peer>" stamp, the same clock every other delete path uses, so concurrent
+    // edits and deletes of this task order deterministically across collaborators.
+    const deletedAt = `${new Date().toISOString()}#${getPeerId()}`;
+    const allTasks = parsedData.tasks || [];
+    const knownIds = new Set(allTasks.map((item) => item.id));
+    // Soft-delete (task kept with `_deleted` plus a tombstone): the filtered-view commit merge
+    // and the reconciler both see the deletion and cannot resurrect it. Only links that point
+    // at the deleted task are removed (types and lags of the others survive); nothing is re-scheduled.
+    const tasks = allTasks.map((item) => {
+      if (item.id === task.id) return { ...item, _deleted: true, deletedAt };
+      if (item._deleted) return item;
+      const dependsOn = filterDependsOn(item.dependsOn, (rel) => rel.id !== task.id, knownIds);
+      return dependsOn === item.dependsOn ? item : { ...item, dependsOn };
+    });
+    handleChartCommit({
+      ...parsedData,
+      meta: {
+        ...parsedData.meta,
+        tombstones: {
+          ...(parsedData.meta?.tombstones || {}),
+          [task.id]: { deletedAt, entityType: "task" }
+        }
+      },
+      tasks
+    });
+  };
+
+  const resetAllConstraints = () => {
+    setDateFilterMode("all");
+    setCompletedFilterMode?.("show");
+    if (isPersonFiltering) setSelectedPersonFilter("all");
+    setTasksSearchQuery("");
+  };
+
+  const renderEmptyState = () => {
+    if (activeTasks.length === 0) {
+      return (
+        <div className="today-empty-state">
+          <ListTodo size={48} style={{ color: "var(--jantt-accent)" }} />
+          <h3>No tasks yet</h3>
+          <p>
+            {isViewer
+              ? "This shared plan has no tasks. Make a local copy to start planning."
+              : "Add your first task to start planning this project."}
+            <button
+              type="button"
+              className="date-filter-reset-btn"
+              style={{ marginTop: "12px", display: "inline-flex" }}
+              onClick={() => (isViewer ? onPromptFork?.() : handleAddNewTask())}
+            >
+              {isViewer ? "Make a Local Copy" : "Add Task"}
+            </button>
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div className="today-empty-state">
+        <CheckCircle2 size={48} style={{ color: "#10B981" }} />
+        <h3>No matching tasks</h3>
+        <p>
+          None of the {activeTasks.length} task{activeTasks.length === 1 ? "" : "s"} match the active filters and search.
+          {hasActiveConstraint && (
+            <button
+              type="button"
+              className="date-filter-reset-btn"
+              style={{ marginTop: "12px", display: "inline-flex" }}
+              onClick={resetAllConstraints}
+            >
+              Show All Tasks
+            </button>
+          )}
+        </p>
+      </div>
+    );
+  };
 
   return (
     <div className="tasks-view-container">
-      {/* Header with Title, Stats, Search, View Mode, Person Filter, Add Task */}
+      {/* Header with Title, Stats, Search, View Mode, Add Task (person filter lives in the filter bar) */}
       <div className="tasks-view-header">
         <div className="tasks-view-title-section">
           <CheckSquare size={22} style={{ color: "var(--jantt-accent)" }} />
@@ -129,14 +223,17 @@ export const TasksView: React.FC<TasksViewProps> = ({
               type="text"
               className="tasks-search-input"
               placeholder="Search tasks, WBS, tags..."
+              aria-label="Search tasks"
               value={tasksSearchQuery}
               onChange={(e) => setTasksSearchQuery(e.target.value)}
             />
             {tasksSearchQuery && (
               <button
+                type="button"
                 className="tasks-search-clear"
                 onClick={() => setTasksSearchQuery("")}
                 title="Clear search"
+                aria-label="Clear search"
                 style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
                 <X size={12} />
@@ -145,18 +242,22 @@ export const TasksView: React.FC<TasksViewProps> = ({
           </div>
 
           {/* Mode Selector: Cards vs Todo Checklist */}
-          <div className="tasks-mode-group">
+          <div className="tasks-mode-group" role="group" aria-label="Task layout">
             <button
+              type="button"
               className={`tasks-mode-btn ${tasksViewMode === "cards" ? "is-active" : ""}`}
               onClick={() => setTasksViewMode("cards")}
+              aria-pressed={tasksViewMode === "cards"}
               title="Display as detailed task cards"
             >
               <Kanban size={12} />
               Cards
             </button>
             <button
+              type="button"
               className={`tasks-mode-btn ${tasksViewMode === "todo" ? "is-active" : ""}`}
               onClick={() => setTasksViewMode("todo")}
+              aria-pressed={tasksViewMode === "todo"}
               title="Display as interactive Todo checklist"
             >
               <ListTodo size={12} />
@@ -164,57 +265,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
             </button>
           </div>
 
-          {/* Person / Team Filter */}
-          <div className="today-view-person-filter">
-            <Users size={13} />
-            <select
-              className="today-person-select"
-              value={selectedPersonFilter}
-              onChange={(e) => setSelectedPersonFilter(e.target.value)}
-            >
-              <option value="all">All People &amp; Teams</option>
-              <option value="sort:assignee">Sort by Assignee (A-Z)</option>
-              {teams.length > 0 && (
-                <optgroup label="Teams / Squads">
-                  {teams.map((tm) => (
-                    <option key={tm.id} value={`team:${tm.id}`}>
-                      Team: {tm.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {effectivePeople.length > 0 && (
-                <optgroup label="Team Members & Assignees">
-                  {effectivePeople.map((p) => {
-                    const pTeam = resolveTeamById(teams, p.teamId);
-                    const count = activeTasks.filter((t) => t.assignee === p.name || t.assignee === p.id).length;
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {p.name}{count > 0 ? ` (${count} tasks)` : ""}{pTeam ? ` • ${pTeam.name}` : ""}
-                      </option>
-                    );
-                  })}
-                </optgroup>
-              )}
-            </select>
-          </div>
-
           {/* + Add Task Button */}
-          <button
-            className="btn-nav is-primary"
-            style={{ padding: "5px 10px", borderRadius: "7px", fontSize: "11.5px" }}
-            onClick={() => {
-              if (isViewer) {
-                onPromptFork?.();
-                return;
-              }
-              handleAddNewTask();
-            }}
-            title="Create a new task in this project"
-          >
-            <Plus size={12} />
-            <span>Add Task</span>
-          </button>
+          {!isViewer && (
+            <button
+              type="button"
+              className="btn-nav is-primary"
+              style={{ padding: "5px 10px", borderRadius: "7px", fontSize: "11.5px" }}
+              onClick={handleAddNewTask}
+              title="Create a new task in this project"
+            >
+              <Plus size={12} />
+              <span>Add Task</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -224,10 +287,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
           dateFilterMode !== "all" && dateFilterBehavior === "hide"
             ? activeTasks.filter(isTaskMatchingDateFilter)
             : activeTasks;
-
-        const isPersonFiltering =
-          selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
-        const isPersonSorting = selectedPersonFilter === "sort:assignee";
 
         if (isPersonFiltering && dateFilterBehavior === "hide") {
           tasksToDisplay = tasksToDisplay.filter((t) =>
@@ -243,75 +302,84 @@ export const TasksView: React.FC<TasksViewProps> = ({
           tasksToDisplay = tasksToDisplay.filter((t) => !isTaskDone(t));
         }
 
-        if (tasksSearchQuery.trim()) {
-          const q = tasksSearchQuery.toLowerCase();
+        const q = tasksSearchQuery.trim().toLowerCase();
+        if (q) {
           tasksToDisplay = tasksToDisplay.filter((t) =>
-            (t.label || t.name || t.id).toLowerCase().includes(q) ||
-            (t.wbs || "").toLowerCase().includes(q) ||
-            (t.category || "").toLowerCase().includes(q) ||
-            (t.assignee || "").toLowerCase().includes(q)
+            asLower(t.label || t.name || t.id).includes(q) ||
+            asLower(t.id).includes(q) ||
+            asLower(t.wbs).includes(q) ||
+            asLower(t.category).includes(q) ||
+            asLower(t.assignee).includes(q) ||
+            (Array.isArray(t.tags) && t.tags.some((tag) => asLower(tag).includes(q)))
           );
         }
 
         if (tasksToDisplay.length === 0) {
-          return (
-            <div className="today-empty-state">
-              <CheckCircle2 size={48} style={{ color: "#10B981" }} />
-              <h3>All Clear!</h3>
-              <p>
-                No tasks matching your active filter criteria and search query.
-                {(dateFilterMode !== "all" || completedFilterMode === "filter") && (
-                  <button
-                    className="date-filter-reset-btn"
-                    style={{ marginTop: "12px", display: "inline-flex" }}
-                    onClick={() => setDateFilterMode("all")}
-                  >
-                    Show All Tasks
-                  </button>
-                )}
-              </p>
-            </div>
-          );
+          return renderEmptyState();
         }
+
+        const describeDim = (t: Task) => {
+          const isCompleted = isTaskDone(t);
+          const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
+          const isDateMatch = isTaskMatchingDateFilter(t);
+          const isFilterDimmed =
+            dateFilterBehavior === "dim" && ((dateFilterMode !== "all" && !isDateMatch) || (isPersonFiltering && !isPersonMatch));
+          const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
+          return {
+            isCompleted,
+            isDimmed: isFilterDimmed || isCompletedDimmed,
+            dimReason: isCompletedDimmed ? "Completed" : isPersonFiltering && !isPersonMatch ? "Other Assignee" : "Outside Date"
+          };
+        };
+
+        const renderDeleteButton = (t: Task) =>
+          isViewer ? null : (
+            <button
+              type="button"
+              className="kanban-sort-remove-btn"
+              title="Delete task"
+              aria-label={`Delete task ${t.label || t.name || t.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteTask(t);
+              }}
+            >
+              <Trash2 size={13} style={{ color: "var(--jantt-text-muted)" }} />
+            </button>
+          );
 
         if (tasksViewMode === "todo") {
           return (
             <div className="tasks-todo-list">
               {tasksToDisplay.map((t) => {
                 const cat = parsedData.categories?.[t.category];
-                const catColor = cat?.color || "var(--jantt-accent)";
-                const isCompleted = isTaskDone(t);
-                const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
-                const isDateMatch = isTaskMatchingDateFilter(t);
-                const isFilterDimmed =
-                  dateFilterBehavior === "dim" && ((dateFilterMode !== "all" && !isDateMatch) || (isPersonFiltering && !isPersonMatch));
-                const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
-                const isDimmed = isFilterDimmed || isCompletedDimmed;
+                const catColor = sanitizeCssColor(cat?.color, "var(--jantt-accent)");
+                const { isCompleted, isDimmed, dimReason } = describeDim(t);
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
+                const title = t.label || t.name || t.id;
                 return (
                   <div
                     key={t.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open details for ${title}`}
                     className={`tasks-todo-row ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
                     style={{ borderLeftColor: catColor }}
                     onClick={() => openTaskDetailSidebar(t)}
+                    onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
                   >
                     <div className="tasks-todo-left">
                       <button
+                        type="button"
                         className={`tasks-checkbox-btn ${isCompleted ? "is-checked" : ""}`}
+                        disabled={isViewer}
+                        aria-pressed={isCompleted}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (isViewer) {
-                            onPromptFork?.();
-                            return;
-                          }
-                          const nextStatus = isCompleted ? "in-progress" : "completed";
-                          const synced = syncTaskProgressAndStatus({ status: nextStatus }, t);
-                          const updatedTasks = parsedData.tasks.map((item) =>
-                            item.id === t.id ? { ...item, ...synced } : item
-                          );
-                          handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                          handleToggleDone(t);
                         }}
-                        title={isCompleted ? "Mark as in progress" : "Mark as completed"}
+                        title={isViewer ? "Read-only" : isCompleted ? "Mark as in progress" : "Mark as completed"}
+                        aria-label={isCompleted ? `Mark ${title} as in progress` : `Mark ${title} as completed`}
                       >
                         {isCompleted ? (
                           <CheckCircle2 size={18} />
@@ -324,12 +392,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
                           {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
                           <span className="kanban-cat-dot" style={{ background: catColor }} />
                           <span className="kanban-cat-label" style={{ fontSize: "11px" }}>{cat?.label || t.category}</span>
-                          <span className={`tasks-todo-title ${isCompleted ? "is-struck" : ""}`}>
-                            {t.label || t.name || t.id}
-                          </span>
+                          <span className={`tasks-todo-title ${isCompleted ? "is-struck" : ""}`}>{title}</span>
                           {isDimmed && (
-                            <span className="task-dimmed-tag" title="Task falls outside active filter criteria">
-                              {!isPersonMatch ? "Other Assignee" : "Outside Date"}
+                            <span className="task-dimmed-tag" title="Task is dimmed by the active filters">
+                              {dimReason}
                             </span>
                           )}
                           {t.priority && (
@@ -353,47 +419,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     </div>
 
                     <div className="tasks-todo-right">
-                      <select
-                        className="kanban-status-select"
-                        value={t.status || "not-started"}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isViewer) {
-                            onPromptFork?.();
-                          }
-                        }}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          if (isViewer) {
-                            onPromptFork?.();
-                            return;
-                          }
-                          const newStatus = e.target.value;
-                          let newProgress = t.progress;
-                          if (newStatus === "completed") newProgress = 1.0;
-                          else if (newStatus === "submitted" && (t.progress ?? 0) < 0.75) newProgress = 0.75;
-                          else if (newStatus === "not-started") newProgress = 0;
-                          const updatedTasks = parsedData.tasks.map((item) =>
-                            item.id === t.id ? { ...item, status: newStatus as any, progress: newProgress } : item
-                          );
-                          handleChartCommit({ ...parsedData, tasks: updatedTasks });
-                        }}
-                      >
-                        <option value="not-started">To Do</option>
-                        <option value="in-progress">In Progress</option>
-                        <option value="submitted">Submitted</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                      <button
-                        className="kanban-sort-remove-btn"
-                        title="Delete task"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteTask(t.id);
-                        }}
-                      >
-                        <Trash2 size={13} style={{ color: "var(--jantt-text-muted)" }} />
-                      </button>
+                      <TaskStatusSelect
+                        task={t}
+                        value={getStatusValue(t)}
+                        disabled={isViewer}
+                        onStatusChange={(status) => handleStatusChange(t.id, status)}
+                      />
+                      {renderDeleteButton(t)}
                     </div>
                   </div>
                 );
@@ -407,29 +439,30 @@ export const TasksView: React.FC<TasksViewProps> = ({
           <div className="today-task-grid">
             {tasksToDisplay.map((t) => {
               const cat = parsedData.categories?.[t.category];
-              const catColor = cat?.color || "var(--jantt-accent)";
-              const isCompleted = isTaskDone(t);
-              const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
-              const isDateMatch = isTaskMatchingDateFilter(t);
-              const isFilterDimmed =
-                dateFilterBehavior === "dim" && ((dateFilterMode !== "all" && !isDateMatch) || (isPersonFiltering && !isPersonMatch));
-              const isCompletedDimmed = completedFilterMode === "dim" && isCompleted;
-              const isDimmed = isFilterDimmed || isCompletedDimmed;
+              const catColor = sanitizeCssColor(cat?.color, "var(--jantt-accent)");
+              const { isCompleted, isDimmed, dimReason } = describeDim(t);
               const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
+              const title = t.label || t.name || t.id;
+              const teamColor = sanitizeCssColor(assigneeInfo.team?.color, "var(--jantt-accent)");
+              const progressPct = Math.round(Math.min(1, Math.max(0, Number(t.progress) || 0)) * 100);
               return (
                 <div
                   key={t.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open details for ${title}`}
                   className={`today-task-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
                   style={{ borderTopColor: catColor }}
                   onClick={() => openTaskDetailSidebar(t)}
+                  onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
                 >
                   <div className="today-card-header">
                     <div className="today-card-category">
                       <span className="kanban-cat-dot" style={{ background: catColor }} />
                       <span>{cat?.label || t.category}</span>
                       {isDimmed && (
-                        <span className="task-dimmed-tag" title="Task is dimmed">
-                          {isCompletedDimmed ? "Completed" : !isPersonMatch ? "Other Assignee" : "Outside Date"}
+                        <span className="task-dimmed-tag" title="Task is dimmed by the active filters">
+                          {dimReason}
                         </span>
                       )}
                     </div>
@@ -437,19 +470,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
                       {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
                       <button
+                        type="button"
                         className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`}
+                        disabled={isViewer}
+                        aria-pressed={isCompleted}
+                        title={isViewer ? "Read-only" : isCompleted ? "Mark as in progress" : "Mark as completed"}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (isViewer) {
-                            onPromptFork?.();
-                            return;
-                          }
-                          const nextStatus = isCompleted ? "in-progress" : "completed";
-                          const synced = syncTaskProgressAndStatus({ status: nextStatus }, t);
-                          const updatedTasks = parsedData.tasks.map((item) =>
-                            item.id === t.id ? { ...item, ...synced } : item
-                          );
-                          handleChartCommit({ ...parsedData, tasks: updatedTasks });
+                          handleToggleDone(t);
                         }}
                       >
                         {isCompleted ? <Check size={11} /> : null}
@@ -457,7 +485,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       </button>
                     </div>
                   </div>
-                  <h3 className="today-card-title">{t.label || t.name || t.id}</h3>
+                  <h3 className="today-card-title">{title}</h3>
                   <div className="today-card-meta">
                     <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                       <Calendar size={11} /> {t.start} → {t.end}
@@ -489,11 +517,11 @@ export const TasksView: React.FC<TasksViewProps> = ({
                             style={{
                               fontSize: "9.5px",
                               fontWeight: 700,
-                              background: `${assigneeInfo.team.color || "var(--jantt-accent)"}1F`,
-                              color: assigneeInfo.team.color || "var(--jantt-accent)",
+                              background: tintColor(teamColor, 12),
+                              color: teamColor,
                               padding: "2px 6px",
                               borderRadius: "100px",
-                              border: `1px solid ${assigneeInfo.team.color || "var(--jantt-accent)"}40`
+                              border: `1px solid ${tintColor(teamColor, 25)}`
                             }}
                           >
                             {assigneeInfo.team.name}
@@ -510,41 +538,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   ) : (
                     <div className="today-card-progress">
                       <div className="today-prog-bar-wrap">
-                        <div className="today-prog-bar-fill" style={{ width: `${Math.round((t.progress ?? 0) * 100)}%`, background: catColor }} />
+                        <div className="today-prog-bar-fill" style={{ width: `${progressPct}%`, background: catColor }} />
                       </div>
-                      <span className="today-prog-pct">{Math.round((t.progress ?? 0) * 100)}%</span>
+                      <span className="today-prog-pct">{progressPct}%</span>
                     </div>
                   )}
                   <div className="today-card-actions" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <select
-                      className="kanban-status-select"
-                      value={t.status || "not-started"}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        const newStatus = e.target.value;
-                        const synced = syncTaskProgressAndStatus({ status: newStatus as any }, t);
-                        const updatedTasks = parsedData.tasks.map((item) =>
-                          item.id === t.id ? { ...item, ...synced } : item
-                        );
-                        handleChartCommit({ ...parsedData, tasks: updatedTasks });
-                      }}
-                    >
-                      <option value="not-started">To Do</option>
-                      <option value="in-progress">In Progress</option>
-                      <option value="submitted">Submitted</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                    <button
-                      className="kanban-sort-remove-btn"
-                      title="Delete task"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteTask(t.id);
-                      }}
-                    >
-                      <Trash2 size={13} style={{ color: "var(--jantt-text-muted)" }} />
-                    </button>
+                    <TaskStatusSelect
+                      task={t}
+                      value={getStatusValue(t)}
+                      disabled={isViewer}
+                      onStatusChange={(status) => handleStatusChange(t.id, status)}
+                    />
+                    {renderDeleteButton(t)}
                   </div>
                 </div>
               );

@@ -9,10 +9,15 @@ export interface JanttProps {
   onTaskClick?: (task: Task) => void;
   onTaskDelete?: (taskId: string) => void;
   onTaskAdd?: (newTask: Task) => void;
+  onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;
+  onLinkDelete?: (fromTaskId: string, toTaskId: string) => void;
   sidebarContainer?: HTMLElement | string;
   selectedDate?: string | null;
   showDateFilterBadge?: boolean;
   filterTasksByDate?: boolean;
+  autoCascade?: boolean;
+  /** Initial toolbar search text; later changes are made by the user in the toolbar. */
+  searchQuery?: string;
   onDateClick?: (dateStr: string) => void;
   onClearDateFilter?: () => void;
   onDayWidthChange?: (dayWidth: number) => void;
@@ -39,6 +44,72 @@ export interface JanttProps {
   isMobile?: boolean;
 }
 
+/**
+ * Viewport keys the engine treats as live state (the toolbar, zoom and date filter change them).
+ * Forwarding one again on an unrelated update would undo the user's change.
+ */
+const STATEFUL_VIEWPORT_KEYS: (keyof ViewportOptions)[] = [
+  "scale",
+  "dayWidth",
+  "linkRouting",
+  "rowHeight",
+  "rowHeightMode",
+  "showCriticalPath",
+  "showBaselines",
+  "autoCascade",
+  "selectedDate"
+];
+
+/** Scalar viewport props that trigger an update when they change. */
+const WATCHED_VIEWPORT_KEYS: (keyof ViewportOptions)[] = [
+  ...STATEFUL_VIEWPORT_KEYS,
+  "labelWidth",
+  "headerHeight",
+  "startDate",
+  "endDate",
+  "showToday",
+  "showTodayTag",
+  "showWeekends",
+  "showDateFilterBadge",
+  "filterTasksByDate"
+];
+
+/**
+ * Returns the viewport to forward on update, or null when no viewport prop changed. Stateful keys
+ * whose prop did not change since the last forward are sent as undefined, which the engine reads
+ * as "keep the current value".
+ */
+function viewportUpdate(
+  prev: ViewportOptions | undefined,
+  next: ViewportOptions | undefined,
+  engineDayWidth: number
+): ViewportOptions | null {
+  const changed = new Set(WATCHED_VIEWPORT_KEYS.filter((key) => prev?.[key] !== next?.[key]));
+  // The engine already shows this zoom (it reported it through onDayWidthChange/onViewportChange).
+  // A scale forwarded without its dayWidth would snap the zoom to the scale's default.
+  if (changed.has("dayWidth") && next?.dayWidth === engineDayWidth) {
+    changed.delete("dayWidth");
+    changed.delete("scale");
+  }
+  if (changed.size === 0) return null;
+
+  const forwarded: ViewportOptions = { ...next };
+  STATEFUL_VIEWPORT_KEYS.forEach((key) => {
+    if (!changed.has(key)) delete forwarded[key];
+  });
+  return forwarded;
+}
+
+interface SyncedProps {
+  data: JanttData;
+  viewport?: ViewportOptions;
+  selectedDate?: string | null;
+  autoCascade?: boolean;
+  config: unknown[];
+}
+
+const toError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+
 export const Jantt: React.FC<JanttProps> = ({
   data,
   onChange,
@@ -47,10 +118,14 @@ export const Jantt: React.FC<JanttProps> = ({
   onTaskClick,
   onTaskDelete,
   onTaskAdd,
+  onLinkCreate,
+  onLinkDelete,
   sidebarContainer,
   selectedDate,
   showDateFilterBadge,
   filterTasksByDate,
+  autoCascade,
+  searchQuery,
   onDateClick,
   onClearDateFilter,
   onDayWidthChange,
@@ -71,6 +146,13 @@ export const Jantt: React.FC<JanttProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<JanttInstance | null>(null);
+  /** Props as last handed to the engine; null before the first mount attempt. */
+  const syncedRef = useRef<SyncedProps | null>(null);
+  /**
+   * Plan the engine emitted most recently: receiving it back as `data` needs no update. Cleared
+   * whenever other data is applied, so returning to it later (e.g. redo) is applied again.
+   */
+  const lastEmittedRef = useRef<JanttData | null>(null);
 
   // Keep latest callbacks in ref to eliminate stale closure bugs
   const callbacksRef = useRef({
@@ -80,6 +162,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskClick,
     onTaskDelete,
     onTaskAdd,
+    onLinkCreate,
+    onLinkDelete,
     onDateClick,
     onClearDateFilter,
     onDayWidthChange,
@@ -98,6 +182,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskClick,
     onTaskDelete,
     onTaskAdd,
+    onLinkCreate,
+    onLinkDelete,
     onDateClick,
     onClearDateFilter,
     onDayWidthChange,
@@ -109,14 +195,36 @@ export const Jantt: React.FC<JanttProps> = ({
     onError
   };
 
-  const getForwardingOptions = (): JanttOptions => ({
-    viewport,
-    theme,
+  const serializedTheme = theme ? JSON.stringify(theme) : "";
+
+  // Options that are plain configuration: re-applying an unchanged value is harmless.
+  const config: unknown[] = [
+    serializedTheme,
     themeClassName,
-    className,
     readOnly,
     sidebarContainer,
-    selectedDate,
+    showDateFilterBadge,
+    filterTasksByDate,
+    disableDragOnTouch,
+    isMobile,
+    Boolean(renderDetail),
+    Boolean(onOpenAutoSave),
+    Boolean(onImportJson),
+    Boolean(onExportJson),
+    Boolean(onExportCsv)
+  ];
+
+  const reportError = (error: unknown) => {
+    const err = toError(error);
+    if (callbacksRef.current.onError) callbacksRef.current.onError(err);
+    else console.error("[@jantt/react] Jantt error:", err);
+  };
+
+  const getForwardingOptions = (): JanttOptions => ({
+    theme,
+    themeClassName,
+    readOnly,
+    sidebarContainer,
     showDateFilterBadge,
     filterTasksByDate,
     disableDragOnTouch,
@@ -124,71 +232,107 @@ export const Jantt: React.FC<JanttProps> = ({
     onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
     onClearDateFilter: () => callbacksRef.current.onClearDateFilter?.(),
     onDayWidthChange: (w: number) => callbacksRef.current.onDayWidthChange?.(w),
-    onChange: (draft: JanttData) => callbacksRef.current.onChange?.(draft),
-    onCommit: (final: JanttData) => callbacksRef.current.onCommit?.(final),
+    onChange: (draft: JanttData) => {
+      lastEmittedRef.current = draft;
+      callbacksRef.current.onChange?.(draft);
+    },
+    onCommit: (final: JanttData) => {
+      lastEmittedRef.current = final;
+      callbacksRef.current.onCommit?.(final);
+    },
     onViewportChange: (vp: ViewportOptions) => callbacksRef.current.onViewportChange?.(vp),
     onTaskClick: (t: Task) => callbacksRef.current.onTaskClick?.(t),
     onTaskDelete: (id: string) => callbacksRef.current.onTaskDelete?.(id),
     onTaskAdd: (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask),
-    renderDetail: callbacksRef.current.renderDetail
+    onLinkCreate: (fromId: string, toId: string) => callbacksRef.current.onLinkCreate?.(fromId, toId),
+    onLinkDelete: (fromId: string, toId: string) => callbacksRef.current.onLinkDelete?.(fromId, toId),
+    // Optional features are forwarded only when provided: the engine shows the detail renderer and
+    // the toolbar's data menu entries based on their presence.
+    renderDetail: renderDetail
       ? (task, container, api) => callbacksRef.current.renderDetail?.(task, container, api)
       : undefined,
-    onOpenAutoSave: () => callbacksRef.current.onOpenAutoSave?.(),
-    onImportJson: () => callbacksRef.current.onImportJson?.(),
-    onExportJson: () => callbacksRef.current.onExportJson?.(),
-    onExportCsv: () => callbacksRef.current.onExportCsv?.(),
-    onError: (error: Error) => callbacksRef.current.onError?.(error)
+    onOpenAutoSave: onOpenAutoSave ? () => callbacksRef.current.onOpenAutoSave?.() : undefined,
+    onImportJson: onImportJson ? () => callbacksRef.current.onImportJson?.() : undefined,
+    onExportJson: onExportJson ? () => callbacksRef.current.onExportJson?.() : undefined,
+    onExportCsv: onExportCsv ? () => callbacksRef.current.onExportCsv?.() : undefined,
+    onError: reportError
   });
+
+  const mount = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    syncedRef.current = { data, viewport, selectedDate, autoCascade, config };
+    lastEmittedRef.current = null;
+    try {
+      instanceRef.current = renderJantt(container, data, {
+        ...getForwardingOptions(),
+        viewport,
+        selectedDate,
+        autoCascade,
+        searchQuery
+      });
+    } catch (error) {
+      instanceRef.current = null;
+      reportError(error);
+    }
+  };
 
   // Mount/unmount lifecycle
   useEffect(() => {
-    if (!containerRef.current) return;
-
-    instanceRef.current = renderJantt(containerRef.current, data, getForwardingOptions());
-
+    mount();
     return () => {
       instanceRef.current?.destroy();
       instanceRef.current = null;
+      syncedRef.current = null;
     };
   }, []);
 
-  const serializedTheme = theme ? JSON.stringify(theme) : "";
-
-  // Update on data or configuration changes
+  // Forward prop changes. Runs after the mount effect in the same commit, where it finds nothing
+  // changed, so the initial render is not repeated.
   useEffect(() => {
-    if (instanceRef.current) {
-      instanceRef.current.update(data, getForwardingOptions());
+    const prev = syncedRef.current;
+    if (!prev) return;
+
+    const instance = instanceRef.current;
+    const dataChanged = data !== prev.data && data !== lastEmittedRef.current;
+    const configChanged = config.some((value, i) => value !== prev.config[i]);
+    const viewportChanges = viewportUpdate(prev.viewport, viewport, instance ? instance.getDayWidth() : NaN);
+    const selectedDateChanged = selectedDate !== prev.selectedDate;
+    const autoCascadeChanged = autoCascade !== prev.autoCascade;
+    if (!dataChanged && !configChanged && !viewportChanges && !selectedDateChanged && !autoCascadeChanged) {
+      syncedRef.current = { ...prev, data, viewport };
+      return;
+    }
+
+    if (!instance) {
+      mount(); // the previous mount failed: retry with the new props
+      return;
+    }
+
+    syncedRef.current = { data, viewport, selectedDate, autoCascade, config };
+    const options: Partial<JanttOptions> = getForwardingOptions();
+    if (viewportChanges) options.viewport = viewportChanges;
+    if (selectedDateChanged) options.selectedDate = selectedDate;
+    if (autoCascadeChanged) options.autoCascade = autoCascade;
+    if (dataChanged) lastEmittedRef.current = null;
+    try {
+      // Unchanged data means the engine's own plan is the newest; never revert it to the prop.
+      instance.update(dataChanged ? data : instance.getData(), options);
+    } catch (error) {
+      reportError(error);
     }
   }, [
     data,
-    viewport?.scale,
-    viewport?.dayWidth,
-    viewport?.linkRouting,
-    viewport?.rowHeight,
-    viewport?.rowHeightMode,
-    viewport?.showCriticalPath,
-    viewport?.showBaselines,
-    viewport?.autoCascade,
-    viewport?.selectedDate,
-    viewport?.showDateFilterBadge,
-    viewport?.filterTasksByDate,
-    viewport?.labelWidth,
-    serializedTheme,
-    themeClassName,
-    className,
-    readOnly,
-    sidebarContainer,
+    ...WATCHED_VIEWPORT_KEYS.map((key) => viewport?.[key]),
     selectedDate,
-    showDateFilterBadge,
-    filterTasksByDate,
-    disableDragOnTouch,
-    isMobile
+    autoCascade,
+    ...config
   ]);
 
   return (
     <div
       ref={containerRef}
-      className={`jantt-react-wrapper ${className || ""}`}
+      className={`jantt-react-wrapper ${className || ""}`.trim()}
       style={{ width: "100%", height: "100%", minHeight: 0, display: "flex", flexDirection: "column", flex: "1 1 auto", ...style }}
     />
   );

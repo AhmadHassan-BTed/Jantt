@@ -4,51 +4,32 @@ Converts pandas/polars DataFrames and dictionary lists into JanttPlan specificat
 """
 
 from __future__ import annotations
-import datetime
-from typing import Any, Dict, List, Optional, Union
+
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Union
+
 from .models import JanttPlan, Task
 
-
-def _format_date(val: Any) -> str:
-    if val is None or (isinstance(val, float) and str(val) == "nan"):
-        return ""
-    if isinstance(val, (datetime.date, datetime.datetime)):
-        return val.strftime("%Y-%m-%d")
-    # String or timestamp
-    s = str(val).split("T")[0].split(" ")[0].strip()
-    return s
+_RETURN_TYPES = ("pandas", "polars", "records")
 
 
 def from_records(
-    records: List[Dict[str, Any]],
+    records: Iterable[Mapping[str, Any]],
     meta: Optional[Dict[str, Any]] = None,
     categories: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> JanttPlan:
-    """Converts a list of dict records into a JanttPlan."""
-    plan = JanttPlan(meta=meta or {}, categories=categories or {})
-    for i, r in enumerate(records):
-        task_id = str(r.get("id") or r.get("task_id") or f"t{i + 1}")
-        label = r.get("label") or r.get("name") or r.get("task") or task_id
-        category = str(r.get("category") or r.get("team") or r.get("phase") or "general")
-        start = _format_date(r.get("start") or r.get("start_date"))
-        end = _format_date(r.get("end") or r.get("end_date") or r.get("finish") or start)
-        depends_on = r.get("dependsOn") or r.get("depends_on") or r.get("predecessors")
+    """Converts a list of dict records into a JanttPlan.
 
-        task = Task(
-            id=task_id,
-            label=label,
-            category=category,
-            start=start,
-            end=end,
-            depends_on=depends_on,
-            progress=float(r["progress"]) if "progress" in r and r["progress"] is not None else None,
-            milestone=bool(r.get("milestone", False)),
-            locked=bool(r.get("locked", False)),
-            priority=r.get("priority"),
-            assignee=r.get("assignee"),
-            notes=r.get("notes"),
-        )
-        plan.add_task(task)
+    Each record may use Jantt keys (``id``, ``label``, ``category``, ``start``, ``end``, ``dependsOn``,
+    ``progress``, ``estimatedCost`` ...), their snake_case forms, or common aliases (``name``,
+    ``task_id``, ``start_date``, ``finish``, ``predecessors``). Missing values (None, NaN, NaT) are
+    ignored, dates are normalized to YYYY-MM-DD, and percentages such as 75 become 0.75.
+    Columns that are not part of the Jantt schema are kept as custom ``fields``.
+    """
+    plan = JanttPlan(meta=dict(meta or {}), categories=dict(categories or {}))
+    for i, record in enumerate(records):
+        if not isinstance(record, Mapping):
+            raise TypeError(f"Record {i} must be a dict, got {type(record).__name__}")
+        plan.add_task(Task.from_dict(record, default_id=f"t{i + 1}", row=i))
     return plan
 
 
@@ -61,45 +42,86 @@ def from_dataframe(
     category_col: Optional[str] = None,
     depends_on_col: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
+    categories: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> JanttPlan:
     """
-    Converts a pandas or Polars DataFrame into a JanttPlan.
-    Intelligently discovers columns by standard naming heuristics.
+    Converts a pandas or Polars DataFrame (or a list of dicts) into a JanttPlan.
+
+    Columns are discovered by standard names (see ``from_records``). Use the ``*_col`` arguments to
+    map differently named columns, e.g. ``from_dataframe(df, start_col="kickoff", end_col="due")``.
+    A mapped column that does not exist raises KeyError.
     """
-    # Polars DataFrame detection
-    if hasattr(df, "to_dicts"):
-        records = df.to_dicts()
-        return from_records(records, meta=meta)
-
-    # Pandas DataFrame detection
-    if hasattr(df, "to_dict"):
+    if hasattr(df, "to_dicts"):  # Polars
+        records: List[Mapping[str, Any]] = df.to_dicts()
+        columns: Optional[List[Any]] = list(df.columns)
+    elif hasattr(df, "to_dict") and hasattr(df, "columns"):  # pandas
         records = df.to_dict(orient="records")
-        return from_records(records, meta=meta)
+        columns = list(df.columns)
+    elif isinstance(df, (list, tuple)):
+        records = list(df)
+        columns = None
+    else:
+        raise TypeError(f"Expected pandas/polars DataFrame or list of dicts, got {type(df)}")
 
-    # Fallback if list of dicts passed
-    if isinstance(df, list):
-        return from_records(df, meta=meta)
+    mapping = {
+        source: target
+        for source, target in (
+            (id_col, "id"),
+            (label_col, "label"),
+            (start_col, "start"),
+            (end_col, "end"),
+            (category_col, "category"),
+            (depends_on_col, "dependsOn"),
+        )
+        if source
+    }
+    if mapping:
+        if columns is None:
+            columns = sorted({key for r in records if isinstance(r, Mapping) for key in r}, key=str)
+        missing = [source for source in mapping if source not in columns]
+        if missing and records:
+            raise KeyError(f"Column(s) {missing} not found; available columns: {[str(c) for c in columns]}")
+        records = [_rename_columns(r, mapping) if isinstance(r, Mapping) else r for r in records]
 
-    raise TypeError(f"Expected pandas/polars DataFrame or list of dicts, got {type(df)}")
+    return from_records(records, meta=meta, categories=categories)
+
+
+def _rename_columns(record: Mapping[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+    # Read every mapped value from the original record, so mappings that swap names
+    # (id_col="label", label_col="id") work. A mapped column wins over one already using the target name.
+    renamed = {key: value for key, value in record.items() if key not in mapping}
+    for source, target in mapping.items():
+        renamed[target] = record.get(source)
+    return renamed
 
 
 def to_dataframe(plan: Union[JanttPlan, Dict[str, Any]], return_type: str = "pandas") -> Any:
     """
-    Converts a JanttPlan or dict specification back to a pandas or Polars DataFrame.
+    Converts a JanttPlan or dict specification to a pandas DataFrame (default), a Polars DataFrame
+    (``return_type="polars"``) or the plain list of task dicts (``return_type="records"``).
+    Raises ImportError when the requested library is not installed.
     """
+    if return_type not in _RETURN_TYPES:
+        raise ValueError(f"return_type must be one of {_RETURN_TYPES}, got {return_type!r}")
+
     plan_dict = plan.to_dict() if isinstance(plan, JanttPlan) else plan
-    tasks = plan_dict.get("tasks", [])
+    tasks = list(plan_dict.get("tasks") or [])
+
+    if return_type == "records":
+        return tasks
 
     if return_type == "polars":
         try:
             import polars as pl
-            return pl.DataFrame(tasks)
-        except ImportError:
-            pass
+        except ImportError as e:
+            raise ImportError("polars is required for return_type='polars'. Install it with: pip install \"jantt[polars]\"") from e
+        return pl.from_dicts(tasks, infer_schema_length=None)
 
     try:
         import pandas as pd
-        return pd.DataFrame(tasks)
-    except ImportError:
-        # Fallback to list of dicts if pandas is not installed
-        return tasks
+    except ImportError as e:
+        raise ImportError(
+            "pandas is required for to_dataframe(). Install it with: pip install \"jantt[pandas]\", "
+            "or pass return_type='records' for a list of dicts."
+        ) from e
+    return pd.DataFrame(tasks)

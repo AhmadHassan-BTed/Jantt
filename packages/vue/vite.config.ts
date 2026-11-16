@@ -1,18 +1,7 @@
-import { defineConfig } from "vite";
-import { resolve } from "path";
+import { defineConfig } from "vitest/config";
 
+// Test config only: the package is built with `tsc -p tsconfig.json`.
 export default defineConfig({
-  build: {
-    lib: {
-      entry: resolve(__dirname, "src/index.ts"),
-      name: "JanttVue",
-      formats: ["es", "cjs"],
-      fileName: (format) => `index.${format === "es" ? "js" : "cjs"}`
-    },
-    rollupOptions: {
-      external: ["vue", "@jantt/core"]
-    }
-  },
   test: {
     globals: true,
     environment: "jsdom"

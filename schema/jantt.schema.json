@@ -5,6 +5,123 @@
   "description": "The JSON Gantt chart specification for Jantt.",
   "type": "object",
   "required": ["tasks"],
+  "definitions": {
+    "isoDate": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Calendar date in ISO format YYYY-MM-DD."
+    },
+    "dependencyType": {
+      "type": "string",
+      "enum": ["FS", "SS", "FF", "SF"],
+      "description": "FS = finish-to-start (default), SS = start-to-start, FF = finish-to-finish, SF = start-to-finish."
+    },
+    "dependencyObject": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "ID of the predecessor task." },
+        "type": { "$ref": "#/definitions/dependencyType" },
+        "lag": {
+          "type": "integer",
+          "minimum": -3650,
+          "maximum": 3650,
+          "description": "Lag in days (negative = lead). When set (even 0) it replaces the gap; without it FS links use gapDays/defaultGapDays and SS/FF/SF links use 0."
+        },
+        "lagDays": {
+          "type": "integer",
+          "minimum": -3650,
+          "maximum": 3650,
+          "description": "Alias for lag (takes precedence when both are set)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "dependencyItem": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Task ID, or typed shorthand '<id>:<FS|SS|FF|SF>[+/-<n>d]' (e.g. 'design:SS+2d', 'build:FF-1d'), or '<id>+<n>d' for an FS lag."
+        },
+        { "$ref": "#/definitions/dependencyObject" }
+      ]
+    },
+    "dependsOn": {
+      "description": "Prerequisite links: a single ID/shorthand (comma-separated strings are also accepted), a dependency object, an array of either, or null.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string" },
+        { "$ref": "#/definitions/dependencyObject" },
+        { "type": "array", "items": { "$ref": "#/definitions/dependencyItem" } }
+      ]
+    },
+    "holiday": {
+      "oneOf": [
+        { "$ref": "#/definitions/isoDate" },
+        {
+          "type": "object",
+          "required": ["date"],
+          "properties": {
+            "date": { "$ref": "#/definitions/isoDate" },
+            "name": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "workingCalendar": {
+      "type": "object",
+      "description": "Working-time calendar used for working-day scheduling.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "workingDays": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              { "type": "integer", "minimum": 0, "maximum": 6 },
+              { "type": "string", "pattern": "^([Ss][Uu][Nn]|[Mm][Oo][Nn]|[Tt][Uu][Ee]|[Ww][Ee][Dd]|[Tt][Hh][Uu]|[Ff][Rr][Ii]|[Ss][Aa][Tt])" }
+            ]
+          },
+          "description": "Working weekdays: 0 = Sunday ... 6 = Saturday (or names such as 'Mon'). Defaults to Monday-Friday."
+        },
+        "holidays": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/holiday" },
+          "description": "Additional non-working dates."
+        },
+        "region": {
+          "type": "string",
+          "description": "Statutory holiday region: US (federal), UK/GB (England & Wales), EU, CA (federal), AU (national). Weekend substitute days are applied."
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["date", "isWorkingDay"],
+            "properties": {
+              "date": { "$ref": "#/definitions/isoDate" },
+              "isWorkingDay": { "type": "boolean" },
+              "name": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "description": "Day-specific overrides that force a working day or a day off (they win over holidays)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "calendarRef": {
+      "description": "A preset name ('standard', 'continuous', 'compressed_4x10'), the id of an entry in top-level 'calendars', or an inline calendar.",
+      "oneOf": [
+        { "type": "string" },
+        { "$ref": "#/definitions/workingCalendar" }
+      ]
+    }
+  },
   "properties": {
     "$schema": {
       "type": "string",
@@ -12,7 +129,7 @@
     },
     "meta": {
       "type": "object",
-      "description": "Chart metadata, global bounding dates, and pacing defaults.",
+      "description": "Chart metadata, global bounding dates, and scheduling defaults.",
       "properties": {
         "title": {
           "type": "string",
@@ -23,34 +140,60 @@
           "description": "Owner, assignee, or subject of the plan."
         },
         "start": {
-          "type": "string",
-          "format": "date",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "$ref": "#/definitions/isoDate",
           "description": "The earliest date visible on the chart timeline (YYYY-MM-DD)."
         },
         "end": {
-          "type": "string",
-          "format": "date",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "$ref": "#/definitions/isoDate",
           "description": "The latest date visible on the chart timeline (YYYY-MM-DD)."
         },
         "chartStart": {
-          "type": "string",
-          "format": "date",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "$ref": "#/definitions/isoDate",
           "description": "Alias for meta.start."
         },
         "chartEnd": {
-          "type": "string",
-          "format": "date",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "$ref": "#/definitions/isoDate",
           "description": "Alias for meta.end."
         },
         "defaultGapDays": {
           "type": "number",
-          "minimum": 0,
           "default": 2,
-          "description": "Default spacing (in days) between tasks sharing a category without explicit dependencies."
+          "description": "Default gap (in days) between a predecessor's end and the start of a finish-to-start successor, used when neither the link nor the task sets its own lag/gapDays. Negative values allow overlap."
+        },
+        "targetDate": {
+          "$ref": "#/definitions/isoDate",
+          "description": "Contractual completion deadline used for float (negative when breached) and PERT on-time probability."
+        },
+        "scale": {
+          "type": "string",
+          "enum": ["day", "week", "month", "quarter", "year"],
+          "description": "Default timeline zoom level."
+        },
+        "linkRouting": {
+          "type": "string",
+          "enum": ["orthogonal", "curved", "direct"],
+          "description": "Dependency connector routing style."
+        },
+        "showCriticalPath": {
+          "type": "boolean",
+          "description": "Whether critical path highlighting is enabled by default."
+        },
+        "showBaselines": {
+          "type": "boolean",
+          "description": "Whether baseline ghost bars are rendered."
+        },
+        "autoCascade": {
+          "type": "boolean",
+          "default": true,
+          "description": "When false (Strict mode), edits never move dependent tasks; dependency violations are reported as warnings instead."
+        },
+        "calendar": {
+          "$ref": "#/definitions/calendarRef",
+          "description": "Project-wide working calendar. When set, scheduling uses working days unless useWorkingDays is false."
+        },
+        "useWorkingDays": {
+          "type": "boolean",
+          "description": "Use working-day arithmetic (skip weekends/holidays) when cascading dates."
         },
         "generatedAt": {
           "type": "string",
@@ -82,6 +225,11 @@
         "additionalProperties": true
       }
     },
+    "calendars": {
+      "type": "object",
+      "description": "Named working calendars referenced by meta.calendar, task.calendar / calendarId and person.calendar / calendarId.",
+      "additionalProperties": { "$ref": "#/definitions/workingCalendar" }
+    },
     "documents": {
       "type": "array",
       "description": "Optional list of prerequisite documents or artifacts tracked across tasks.",
@@ -96,6 +244,27 @@
             "enum": ["have", "pending", "missing"]
           },
           "note": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "Shared project notes (Markdown), optionally attached to tasks.",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "content"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string" },
+          "content": { "type": "string", "description": "Markdown body; supports @person and /task-id mentions." },
+          "color": { "type": "string" },
+          "pinned": { "type": "boolean" },
+          "category": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "task_ids": { "type": "array", "items": { "type": "string" }, "description": "IDs of attached tasks." },
+          "createdAt": { "type": "string", "description": "ISO 8601 timestamp." },
+          "updatedAt": { "type": "string", "description": "ISO 8601 timestamp." }
         },
         "additionalProperties": true
       }
@@ -152,7 +321,7 @@
           },
           "avatar": {
             "type": "string",
-            "description": "Avatar URL or fallback initials string."
+            "description": "Avatar image as an https: URL, or initials. Other URL schemes are reported as warnings and should not be loaded."
           },
           "color": {
             "type": "string",
@@ -166,13 +335,19 @@
             "type": "string",
             "format": "email",
             "description": "Email address of the team member."
+          },
+          "calendar": {
+            "$ref": "#/definitions/calendarRef",
+            "description": "Personal working calendar applied to tasks assigned to this person when working days are enabled."
+          },
+          "calendarId": {
+            "type": "string",
+            "description": "ID of an entry in top-level 'calendars'."
           }
         },
         "additionalProperties": true
       }
     },
-
-
     "tasks": {
       "type": "array",
       "description": "List of scheduled tasks/milestones displayed in the Gantt chart.",
@@ -182,6 +357,7 @@
         "properties": {
           "id": {
             "type": "string",
+            "minLength": 1,
             "description": "Unique identifier for the task, referenced in dependsOn."
           },
           "label": {
@@ -197,35 +373,33 @@
             "description": "Category key matching one of the keys defined in top-level 'categories'."
           },
           "start": {
-            "type": "string",
-            "format": "date",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "$ref": "#/definitions/isoDate",
             "description": "Start date in ISO format YYYY-MM-DD."
           },
           "end": {
-            "type": "string",
-            "format": "date",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "End date (inclusive / exclusive range) in ISO format YYYY-MM-DD."
+            "$ref": "#/definitions/isoDate",
+            "description": "End date (YYYY-MM-DD, on or after start). The bar is drawn through the end day; scheduling durations are measured as end - start days. A milestone has end = start."
           },
           "dependsOn": {
-            "type": ["string", "null"],
-            "description": "ID of prerequisite task that must conclude before this task begins."
+            "$ref": "#/definitions/dependsOn"
           },
           "gapDays": {
             "type": ["number", "null"],
-            "minimum": 0,
-            "description": "Minimum days required between the dependsOn task end and this task start."
+            "description": "Days between a predecessor's end and this task's start for finish-to-start links without an explicit lag (overrides meta.defaultGapDays). Negative values allow overlap."
           },
           "minGapDays": {
             "type": ["number", "null"],
-            "minimum": 0,
             "description": "Alias for gapDays."
           },
           "locked": {
             "type": "boolean",
             "default": false,
-            "description": "If true, prevents moving or resizing this task in the interactive UI."
+            "description": "If true, the task is never moved by the cascade or by dragging; dependency violations are reported as warnings."
+          },
+          "milestone": {
+            "type": "boolean",
+            "default": false,
+            "description": "Renders the task as a diamond and schedules it with zero duration (keep end equal to start)."
           },
           "progress": {
             "type": ["number", "null"],
@@ -235,8 +409,13 @@
           },
           "status": {
             "type": "string",
-            "enum": ["not-started", "in-progress", "submitted", "completed", "blocked"],
-            "description": "Execution status."
+            "enum": ["not-started", "in-progress", "submitted", "completed", "done", "blocked"],
+            "description": "Execution status ('done' is an alias of 'completed')."
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "urgent"],
+            "description": "Priority used by resource leveling and views."
           },
           "urgent": {
             "type": "boolean",
@@ -250,22 +429,66 @@
             "type": "string",
             "description": "ID of the assigned team/squad (references teams[].id)."
           },
+          "calendar": {
+            "$ref": "#/definitions/calendarRef",
+            "description": "Task-specific working calendar (always uses working-day scheduling)."
+          },
+          "calendarId": {
+            "type": "string",
+            "description": "ID of an entry in top-level 'calendars'."
+          },
+          "baseline": {
+            "type": "object",
+            "required": ["start", "end"],
+            "properties": {
+              "start": { "$ref": "#/definitions/isoDate" },
+              "end": { "$ref": "#/definitions/isoDate" }
+            },
+            "additionalProperties": true,
+            "description": "Originally planned dates for variance tracking."
+          },
           "wbs": {
             "type": "string",
             "description": "Work Breakdown Structure code (e.g. '1.2.1')."
           },
+          "phase": {
+            "type": "string",
+            "description": "Project phase or stage name."
+          },
+          "color": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Bar color override: a plain CSS color (hex, rgb()/hsl(), var(--token) or a color name). Other values are ignored and reported as INVALID_COLOR warnings."
+          },
+          "pert": {
+            "type": "object",
+            "properties": {
+              "optimistic": { "type": "number", "minimum": 0 },
+              "mostLikely": { "type": "number", "minimum": 0 },
+              "pessimistic": { "type": "number", "minimum": 0 }
+            },
+            "additionalProperties": true,
+            "description": "Three-point duration estimate in days used by PERT and Monte Carlo. Missing values default to 80% / 100% / 135% of the planned duration."
+          },
           "estimatedCost": {
             "type": "number",
-            "description": "Estimated budget or cost amount in dollars."
+            "description": "Estimated budget or cost amount."
+          },
+          "actualCost": {
+            "type": "number",
+            "description": "Actual cost incurred so far."
           },
           "notes": {
             "type": "string",
             "description": "Detailed notes or task description."
           },
-
+          "description": {
+            "type": "string",
+            "description": "Short description of the task."
+          },
           "fields": {
             "type": "object",
-            "description": "Arbitrary domain-specific key-value pairs rendered in the detail panel.",
+            "description": "Arbitrary domain-specific key-value pairs rendered in the detail panel (e.g. optimisticDuration / mostLikelyDuration / pessimisticDuration for PERT).",
             "additionalProperties": true
           }
         },

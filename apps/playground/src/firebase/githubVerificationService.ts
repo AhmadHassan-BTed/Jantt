@@ -4,10 +4,17 @@ export const TARGET_USER = "AhmadHassan-BTed";
 export const TARGET_ORG = "Fractal-Compute-Orchestrations";
 
 /**
- * Global feature flag for the GitHub verification gate (following creator and starring repos).
- * Set to false to disable all follow and star gating and popups across the application.
+ * Build-time flag for the GitHub verification gate (following the creator and starring repos).
+ * Off unless the build sets `VITE_ENABLE_GH_GATE=true`; the bundler then drops the gated code.
+ * The gate is client-side UX only: its flags are self-reported, so it never authorizes anything.
  */
-export const ENABLE_GITHUB_VERIFICATION_GATE = false;
+export const ENABLE_GITHUB_VERIFICATION_GATE: boolean =
+  // Spelled `import.meta.env.VITE_*` after type erasure, so Vite replaces it statically.
+  (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_ENABLE_GH_GATE === "true";
+
+const GITHUB_WEB = "https://github.com/";
+/** `owner/name` as GitHub allows it; anything else is not used to build URLs. */
+const REPO_FULL_NAME_PATTERN = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 
 /**
  * Complete suite of public developer repositories for AhmadHassan-BTed and Fractal-Compute-Orchestrations.
@@ -74,22 +81,29 @@ export const ALL_TARGET_REPOS: RepoItem[] = [
   { fullName: "AhmadHassan-BTed/yt-channels-DS-AI-ML-CS", name: "yt-channels-DS-AI-ML-CS", url: "https://github.com/AhmadHassan-BTed/yt-channels-DS-AI-ML-CS" }
 ];
 
-export const CORE_FLAGSHIP_REPOS = ALL_TARGET_REPOS;
-export const FALLBACK_REPOS = ALL_TARGET_REPOS;
-
-export const CREATOR_USERNAMES = new Set([
-  "ahmadhassan-bted",
-  "ahmadhassan_bted",
-  "ahmadhassan"
-]);
+/**
+ * Creator account, matched against the GitHub login from OAuth only (GitHub logins are unique
+ * case-insensitively). Jantt usernames and display names never grant the creator bypass.
+ */
+export const CREATOR_USERNAMES = new Set([TARGET_USER.toLowerCase()]);
 
 /**
- * Checks if the username belongs to the creator AhmadHassan-BTed.
+ * Checks if the GitHub login belongs to the creator AhmadHassan-BTed.
  */
-export function isCreatorAccount(username?: string): boolean {
-  if (!username) return false;
-  const clean = username.trim().toLowerCase().replace(/^@+/, "");
-  return CREATOR_USERNAMES.has(clean) || clean === TARGET_USER.toLowerCase();
+export function isCreatorAccount(githubLogin?: string): boolean {
+  if (!githubLogin) return false;
+  return CREATOR_USERNAMES.has(githubLogin.trim().toLowerCase().replace(/^@+/, ""));
+}
+
+/**
+ * GitHub could not answer the check (rate limit exhausted, token revoked or expired). Never a
+ * "not following / not starred" answer, so it must not be stored as a verification outcome.
+ */
+class GitHubCheckError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitHubCheckError";
+  }
 }
 
 /**
@@ -106,27 +120,41 @@ function getGitHubHeaders(token?: string): HeadersInit {
 }
 
 /**
- * Retries an asynchronous operation up to maxTrials with delay.
+ * GET against the GitHub REST API without caching. Uses `cache: "no-store"` rather than a
+ * Cache-Control request header, which api.github.com's CORS preflight does not allow.
+ * Throws on rate limiting and rejected tokens so callers never mistake them for
+ * "not following / not starred".
  */
-export async function retryOperation<T>(
-  fn: () => Promise<T>,
-  predicate: (res: T) => boolean,
-  maxTrials = 3,
-  delayMs = 250
-): Promise<T> {
-  let lastResult: T = await fn();
-  if (predicate(lastResult)) return lastResult;
-
-  for (let trial = 2; trial <= maxTrials; trial++) {
-    await new Promise((resolve) => setTimeout(resolve, delayMs * trial));
-    try {
-      lastResult = await fn();
-      if (predicate(lastResult)) return lastResult;
-    } catch {
-      // Continue to next trial
-    }
+async function githubGet(url: string, token?: string): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: getGitHubHeaders(token), cache: "no-store" });
+  } catch {
+    // Offline or blocked: never an answer about the account.
+    throw new GitHubCheckError("Couldn't reach GitHub. Check your connection, then recheck.");
   }
-  return lastResult;
+  if (res.status === 429 || (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0")) {
+    throw new GitHubCheckError("GitHub rate limit reached. Please wait a few minutes, then recheck.");
+  }
+  if (res.status === 401 && token) {
+    throw new GitHubCheckError("Your GitHub session has expired. Sign in with GitHub again, then recheck.");
+  }
+  return res;
+}
+
+function toRepoItems(data: unknown): RepoItem[] {
+  if (!Array.isArray(data)) return [];
+  const items: RepoItem[] = [];
+  for (const item of data) {
+    // Forks and archived repositories are not part of the requirement.
+    if (!item || item.fork || item.archived) continue;
+    const fullName = typeof item.full_name === "string" ? item.full_name : "";
+    if (!REPO_FULL_NAME_PATTERN.test(fullName) || isRepoExcluded(fullName)) continue;
+    // Rendered as links: only github.com pages, never a URL taken verbatim from the response.
+    const url = `${GITHUB_WEB}${fullName}`;
+    items.push({ fullName, name: typeof item.name === "string" && item.name ? item.name : fullName, url });
+  }
+  return items;
 }
 
 // In-memory cache for dynamically fetched repo list
@@ -143,41 +171,15 @@ export async function getDeveloperRepos(token?: string): Promise<RepoItem[]> {
   }
 
   try {
-    const headers = getGitHubHeaders(token);
-    const [userRes, orgRes] = await Promise.allSettled([
-      fetch(`https://api.github.com/users/${TARGET_USER}/repos?per_page=100`, { headers }),
-      fetch(`https://api.github.com/orgs/${TARGET_ORG}/repos?per_page=100`, { headers })
+    const responses = await Promise.allSettled([
+      githubGet(`https://api.github.com/users/${TARGET_USER}/repos?per_page=100`, token),
+      githubGet(`https://api.github.com/orgs/${TARGET_ORG}/repos?per_page=100`, token)
     ]);
 
     const collected: RepoItem[] = [];
-
-    if (userRes.status === "fulfilled" && userRes.value.ok) {
-      const data = await userRes.value.json();
-      if (Array.isArray(data)) {
-        for (const item of data) {
-          if (item && item.full_name && !isRepoExcluded(item.full_name)) {
-            collected.push({
-              fullName: item.full_name,
-              name: item.name,
-              url: item.html_url || `https://github.com/${item.full_name}`
-            });
-          }
-        }
-      }
-    }
-
-    if (orgRes.status === "fulfilled" && orgRes.value.ok) {
-      const data = await orgRes.value.json();
-      if (Array.isArray(data)) {
-        for (const item of data) {
-          if (item && item.full_name && !isRepoExcluded(item.full_name)) {
-            collected.push({
-              fullName: item.full_name,
-              name: item.name,
-              url: item.html_url || `https://github.com/${item.full_name}`
-            });
-          }
-        }
+    for (const res of responses) {
+      if (res.status === "fulfilled" && res.value.ok) {
+        collected.push(...toRepoItems(await res.value.json()));
       }
     }
 
@@ -194,30 +196,28 @@ export async function getDeveloperRepos(token?: string): Promise<RepoItem[]> {
 }
 
 /**
+ * Checks whether a GitHub user follows `target`. With a token, the token owner is checked
+ * (`/user/following`), so the result belongs to the signed-in GitHub account.
+ */
+async function checkIsFollowing(target: string, username: string, token?: string): Promise<boolean> {
+  const url = token
+    ? `https://api.github.com/user/following/${target}`
+    : `https://api.github.com/users/${encodeURIComponent(username)}/following/${target}`;
+  // Failed checks throw (GitHubCheckError); only a real answer resolves.
+  const res = await githubGet(url, token);
+  return res.status === 204;
+}
+
+/**
  * Checks if the user is following the creator @AhmadHassan-BTed.
  */
 export async function checkIsFollowingCreator(
   username: string,
   token?: string
 ): Promise<boolean> {
-  if (!username) return false;
-  if (username.toLowerCase() === TARGET_USER.toLowerCase()) return true;
-
-  try {
-    const timestamp = Date.now();
-    const res = await fetch(
-      `https://api.github.com/users/${encodeURIComponent(username)}/following/${TARGET_USER}?_t=${timestamp}`,
-      {
-        headers: {
-          ...getGitHubHeaders(token),
-          "Cache-Control": "no-cache, no-store"
-        }
-      }
-    );
-    return res.status === 204 || res.status === 200;
-  } catch {
-    return false;
-  }
+  if (!username && !token) return false;
+  if (isCreatorAccount(username)) return true;
+  return checkIsFollowing(TARGET_USER, username, token);
 }
 
 /**
@@ -227,132 +227,92 @@ export async function checkIsFollowingOrg(
   username: string,
   token?: string
 ): Promise<boolean> {
-  if (!username) return false;
+  if (!username && !token) return false;
+  return checkIsFollowing(TARGET_ORG, username, token);
+}
 
-  try {
-    const timestamp = Date.now();
-    const res = await fetch(
-      `https://api.github.com/users/${encodeURIComponent(username)}/following/${TARGET_ORG}?_t=${timestamp}`,
-      {
-        headers: {
-          ...getGitHubHeaders(token),
-          "Cache-Control": "no-cache, no-store"
-        }
-      }
-    );
-    return res.status === 204 || res.status === 200;
-  } catch {
-    return false;
-  }
+/** Opens a GitHub page in a new tab; false when the browser blocked the popup. */
+function openExternal(url: string): boolean {
+  if (typeof window === "undefined") return false;
+  return window.open(url, "_blank", "noopener,noreferrer") !== null;
 }
 
 /**
  * Opens creator GitHub profile in a new tab for manual following.
  */
-export function openCreatorProfile(): void {
-  if (typeof window !== "undefined") {
-    window.open(`https://github.com/${TARGET_USER}`, "_blank", "noopener,noreferrer");
-  }
+export function openCreatorProfile(): boolean {
+  return openExternal(`https://github.com/${TARGET_USER}`);
 }
 
 /**
  * Opens organization GitHub profile in a new tab for manual following.
  */
-export function openOrgProfile(): void {
-  if (typeof window !== "undefined") {
-    window.open(`https://github.com/${TARGET_ORG}`, "_blank", "noopener,noreferrer");
-  }
+export function openOrgProfile(): boolean {
+  return openExternal(`https://github.com/${TARGET_ORG}`);
+}
+
+/** The github.com page of a repository, given its `owner/name` or its github.com URL. */
+function repoPageUrl(repoFullNameOrUrl: string): string | null {
+  const value = (repoFullNameOrUrl || "").trim();
+  const fullName = value.startsWith(GITHUB_WEB) ? value.slice(GITHUB_WEB.length).replace(/\/+$/, "") : value;
+  return REPO_FULL_NAME_PATTERN.test(fullName) ? `${GITHUB_WEB}${fullName}` : null;
 }
 
 /**
- * Opens repository page in a new tab for manual starring on GitHub.
+ * Opens repository page in a new tab for manual starring on GitHub. Only github.com repository
+ * pages are opened; anything else returns false.
  */
-export function openRepoOnGitHub(repoFullNameOrUrl: string): void {
-  if (typeof window !== "undefined") {
-    const url = repoFullNameOrUrl.startsWith("http")
-      ? repoFullNameOrUrl
-      : `https://github.com/${repoFullNameOrUrl}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
+export function openRepoOnGitHub(repoFullNameOrUrl: string): boolean {
+  const url = repoPageUrl(repoFullNameOrUrl);
+  return url ? openExternal(url) : false;
 }
 
 /**
- * Opens missing repositories in browser tabs for manual starring on GitHub.
+ * Opens missing repositories for manual starring. Browsers allow one new tab per click, so
+ * only the first `maxToOpen` (default 1) is opened. Returns how many tabs actually opened.
  */
-export function openMissingRepositories(repos: RepoItem[], maxToOpen = 8): number {
-  if (typeof window === "undefined" || !repos.length) return 0;
-  const toOpen = repos.slice(0, maxToOpen);
-  for (const repo of toOpen) {
-    window.open(repo.url || `https://github.com/${repo.fullName}`, "_blank", "noopener,noreferrer");
+export function openMissingRepositories(repos: RepoItem[], maxToOpen = 1): number {
+  let opened = 0;
+  for (const repo of repos.slice(0, Math.max(0, maxToOpen))) {
+    if (openRepoOnGitHub(repo.fullName)) opened++;
   }
-  return toOpen.length;
+  return opened;
 }
 
 /**
- * Manual follow creator helper: opens profile on GitHub.
+ * Manual follow creator helper: opens profile on GitHub. Returns whether the tab opened.
  * Zero automated PUT requests are made to comply with GitHub Acceptable Use Policies.
  */
 export async function followCreator(_token?: string): Promise<boolean> {
-  openCreatorProfile();
-  return false;
+  return openCreatorProfile();
 }
 
 /**
- * Manual follow organization helper: opens org profile on GitHub.
+ * Manual follow organization helper: opens org profile on GitHub. Returns whether the tab opened.
  * Zero automated PUT requests are made to comply with GitHub Acceptable Use Policies.
  */
 export async function followOrg(_token?: string): Promise<boolean> {
-  openOrgProfile();
-  return false;
+  return openOrgProfile();
 }
 
 /**
- * Checks if a specific repository is starred by the authenticated user with cache-busting.
- */
-export async function checkIsRepoStarred(
-  repoFullName: string,
-  token: string
-): Promise<boolean> {
-  if (!token || !repoFullName) return false;
-  try {
-    const timestamp = Date.now();
-    const res = await fetch(
-      `https://api.github.com/user/starred/${repoFullName}?_t=${timestamp}`,
-      {
-        headers: {
-          ...getGitHubHeaders(token),
-          "Cache-Control": "no-cache, no-store"
-        }
-      }
-    );
-    return res.status === 204;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Retrieves list of starred repositories for the user with cache-busting.
+ * Retrieves the starred repositories (lowercased full names). With a token, the token owner's
+ * stars are listed (`/user/starred`); otherwise the public stars of `username`.
  */
 export async function getUserStarredRepos(
   username: string,
   token?: string
 ): Promise<Set<string>> {
   const starredSet = new Set<string>();
-  if (!username) return starredSet;
+  if (!username && !token) return starredSet;
 
-  const headers: HeadersInit = {
-    ...getGitHubHeaders(token),
-    "Cache-Control": "no-cache, no-store"
-  };
+  const base = token
+    ? "https://api.github.com/user/starred"
+    : `https://api.github.com/users/${encodeURIComponent(username)}/starred`;
 
   try {
-    const timestamp = Date.now();
     for (let page = 1; page <= 5; page++) {
-      const res = await fetch(
-        `https://api.github.com/users/${encodeURIComponent(username)}/starred?per_page=100&page=${page}&_t=${timestamp}`,
-        { headers }
-      );
+      const res = await githubGet(`${base}?per_page=100&page=${page}`, token);
       if (!res.ok) break;
 
       const pageData = await res.json();
@@ -366,7 +326,8 @@ export async function getUserStarredRepos(
 
       if (pageData.length < 100) break;
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof GitHubCheckError) throw err;
     // Return whatever was collected
   }
 
@@ -375,46 +336,39 @@ export async function getUserStarredRepos(
 
 /**
  * Manual star helper: opens repo page on GitHub so user can star it manually.
+ * Returns whether the tab opened.
  * Zero automated PUT requests are made to comply with GitHub Acceptable Use Policies.
  */
 export async function starRepository(
   repoFullName: string,
   _token?: string
 ): Promise<boolean> {
-  openRepoOnGitHub(repoFullName);
-  return false;
+  return openRepoOnGitHub(repoFullName);
 }
 
 /**
- * Opens missing repositories in browser tabs for manual starring.
+ * Opens the next unstarred repository for manual starring (one tab per click).
+ * `failed` counts tabs the browser blocked.
  */
 export async function starAllMissingRepositories(
   missingRepos: RepoItem[],
   _token?: string
 ): Promise<{ success: number; failed: number }> {
-  const opened = openMissingRepositories(missingRepos, 8);
-  return { success: opened, failed: 0 };
-}
-
-/**
- * Strictly verifies current user status via read-only queries.
- * Does not make any automated star or follow mutations.
- */
-export async function runBackgroundAutoVerification(
-  token: string,
-  username: string
-): Promise<VerificationStatus> {
-  return verifyAllGitHubRequirements(username, token);
+  if (!missingRepos.length) return { success: 0, failed: 0 };
+  const opened = openMissingRepositories(missingRepos, 1);
+  return { success: opened, failed: 1 - opened };
 }
 
 /**
  * Comprehensive verification function that tests following creator, org, and starring repos.
+ * `githubLogin` must be the GitHub login from OAuth (not a Jantt username). Failures (rate
+ * limits, network) come back with `error` set so callers can avoid persisting them.
  */
 export async function verifyAllGitHubRequirements(
-  username: string,
+  githubLogin: string,
   token?: string
 ): Promise<VerificationStatus> {
-  if (!ENABLE_GITHUB_VERIFICATION_GATE || isCreatorAccount(username)) {
+  if (!ENABLE_GITHUB_VERIFICATION_GATE || isCreatorAccount(githubLogin)) {
     return {
       isVerified: true,
       isFollowingCreator: true,
@@ -427,40 +381,23 @@ export async function verifyAllGitHubRequirements(
   }
 
   try {
-    const targetRepos = (await getDeveloperRepos(token)).filter((r) => !isRepoExcluded(r.fullName));
-
-    // Concurrently verify follow status
-    const [isFollowingUser, isFollowingOrg] = await Promise.all([
-      checkIsFollowingCreator(username, token),
-      checkIsFollowingOrg(username, token)
-    ]);
-
-    let starredSet: Set<string>;
-    if (token) {
-      // Query individual star status in concurrency groups of 8 with cache-busting
-      const batchSize = 8;
-      const checks: { fullName: string; isStarred: boolean }[] = [];
-      for (let i = 0; i < targetRepos.length; i += batchSize) {
-        const batch = targetRepos.slice(i, i + batchSize);
-        const batchResults = await Promise.all(
-          batch.map(async (repo) => {
-            const isStarred = await checkIsRepoStarred(repo.fullName, token);
-            return { fullName: repo.fullName, isStarred };
-          })
-        );
-        checks.push(...batchResults);
-      }
-      starredSet = new Set(checks.filter((c) => c.isStarred).map((c) => c.fullName.toLowerCase()));
-    } else {
-      starredSet = await getUserStarredRepos(username, token);
+    if (!githubLogin && !token) {
+      throw new Error("Sign in with GitHub again to verify your account.");
     }
+
+    const [targetRepos, isFollowingUser, isFollowingOrg, starredSet] = await Promise.all([
+      getDeveloperRepos(token),
+      checkIsFollowingCreator(githubLogin, token),
+      checkIsFollowingOrg(githubLogin, token),
+      getUserStarredRepos(githubLogin, token)
+    ]);
 
     const missingRepos: RepoItem[] = [];
     const starredList: string[] = [];
 
     for (const repo of targetRepos) {
-      const isStarred = starredSet.has(repo.fullName.toLowerCase());
-      if (isStarred) {
+      if (isRepoExcluded(repo.fullName)) continue;
+      if (starredSet.has(repo.fullName.toLowerCase())) {
         starredList.push(repo.fullName);
       } else {
         missingRepos.push({ ...repo, isStarred: false });
@@ -476,7 +413,7 @@ export async function verifyAllGitHubRequirements(
       isFollowingOrg,
       starredRepos: starredList,
       missingRepos,
-      totalRepos: targetRepos.length,
+      totalRepos: starredList.length + missingRepos.length,
       isDevBypass: false
     };
   } catch (err: any) {

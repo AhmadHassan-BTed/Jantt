@@ -3,14 +3,25 @@ import type { JanttData, NoteItem, Task, Team } from "@jantt/core";
 import type { EffectivePerson } from "../../types";
 import { storageService } from "../../services/storage";
 import {
+  DEFAULT_NOTE_COLOR,
+  getCaretTextOffset,
   populateEditorWithContent,
   serializeEditorToMarkdown,
+  setCaretTextOffset,
+  toText,
   NotesSidebar,
   NoteEditor
 } from "./notes";
 
+/** Idle time before typed changes are committed to the plan (and synced). */
+const NOTE_SAVE_DEBOUNCE_MS = 350;
+
+type NoteDraftField = "title" | "content" | "color" | "pinned" | "task_ids";
+type NotePatch = Partial<Pick<NoteItem, NoteDraftField>>;
+
 interface NotesViewProps {
   parsedData: JanttData;
+  /** Must be the guarded plan commit (viewer / pending-login checks + undo snapshot). */
   handleChartCommit: (data: JanttData) => void;
   effectivePeople?: EffectivePerson[];
   teams?: Team[];
@@ -28,8 +39,12 @@ export const NotesView: React.FC<NotesViewProps> = ({
   onPromptFork,
   activeProjectId = "default"
 }) => {
-  const notes: NoteItem[] = useMemo(() => parsedData.notes || [], [parsedData.notes]);
-  const allTasks: Task[] = useMemo(() => parsedData.tasks || [], [parsedData.tasks]);
+  const notes: NoteItem[] = useMemo(
+    () => (Array.isArray(parsedData.notes) ? parsedData.notes : []).filter((n) => n && typeof n.id === "string" && !n._deleted),
+    [parsedData.notes]
+  );
+  const allTasks: Task[] = useMemo(() => (parsedData.tasks || []).filter((t) => !t._deleted), [parsedData.tasks]);
+  const liveTaskIds = useMemo(() => new Set(allTasks.map((t) => t.id)), [allTasks]);
   const teamsMap = useMemo(() => {
     if (Array.isArray(teams)) {
       return Object.fromEntries(teams.map((tm) => [tm.id, tm]));
@@ -73,7 +88,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   // Local state for the active note being edited
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [editColor, setEditColor] = useState("#3B82F6");
+  const [editColor, setEditColor] = useState(DEFAULT_NOTE_COLOR);
   const [editPinned, setEditPinned] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
@@ -87,161 +102,156 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const isNewlyCreatedRef = useRef(false);
+  /** Id of the note whose content is currently loaded into the editor. */
+  const hydratedNoteIdRef = useRef<string | null>(null);
+  /** Unsaved local edits: only the fields the user actually changed, for one note. */
+  const pendingRef = useRef<{ noteId: string; patch: NotePatch } | null>(null);
 
-  const latestEditRef = useRef({
-    activeNoteId,
-    saveStatus,
-    editTitle,
-    editContent,
-    editColor,
-    editPinned
-  });
-  latestEditRef.current = {
-    activeNoteId,
-    saveStatus,
-    editTitle,
-    editContent,
-    editColor,
-    editPinned
-  };
+  // Latest-value refs: deferred commits (debounce timer, unmount flush) must never
+  // write back a stale plan snapshot or call a stale commit function.
+  const latestDataRef = useRef(parsedData);
+  latestDataRef.current = parsedData;
+  const commitRef = useRef(handleChartCommit);
+  commitRef.current = handleChartCommit;
+  const viewerRef = useRef({ isViewer, onPromptFork });
+  viewerRef.current = { isViewer, onPromptFork };
+  const latestEditRef = useRef({ editTitle, editContent, editColor, editPinned, isPreviewMode });
+  latestEditRef.current = { editTitle, editContent, editColor, editPinned, isPreviewMode };
+  const mentionSourcesRef = useRef({ effectivePeople, allTasks });
+  mentionSourcesRef.current = { effectivePeople, allTasks };
 
-  // Sync active note data into local editor state when opened
-  useEffect(() => {
-    if (activeNote) {
-      setEditTitle(activeNote.title || "");
-      setEditContent(activeNote.content || "");
-      setEditColor(activeNote.color || "#3B82F6");
-      setEditPinned(!!activeNote.pinned);
-      setSaveStatus("saved");
+  const populateEditor = useCallback((content: string, preserveCaret = false) => {
+    const el = contentEditableRef.current;
+    if (!el) return;
+    const caret = preserveCaret && document.activeElement === el ? getCaretTextOffset(el) : null;
+    const { effectivePeople: people, allTasks: tasks } = mentionSourcesRef.current;
+    populateEditorWithContent(el, content, people, tasks);
+    if (caret !== null) setCaretTextOffset(el, caret);
+  }, []);
 
-      if (contentEditableRef.current) {
-        populateEditorWithContent(
-          contentEditableRef.current,
-          activeNote.content || "",
-          effectivePeople,
-          allTasks
-        );
-      }
+  /**
+   * Commits `next` and makes it the base for any further commit in the same tick
+   * (e.g. a flushed edit followed by "New note"), so the second commit cannot drop the first.
+   */
+  const commitPlan = useCallback((next: JanttData) => {
+    latestDataRef.current = next;
+    commitRef.current(next);
+  }, []);
 
-      if (isNewlyCreatedRef.current) {
-        isNewlyCreatedRef.current = false;
-        setTimeout(() => {
-          titleInputRef.current?.focus();
-          titleInputRef.current?.select();
-        }, 50);
-      }
+  /** Applies a field patch to the latest plan and commits it (stable identity). */
+  const commitNoteChanges = useCallback((noteId: string, updates: NotePatch) => {
+    if (viewerRef.current.isViewer) {
+      viewerRef.current.onPromptFork?.();
+      return;
     }
-  }, [activeNoteId]);
+    const data = latestDataRef.current;
+    const currentNotes = Array.isArray(data.notes) ? data.notes : [];
+    // The note was deleted (e.g. by a collaborator) or the plan was switched: never
+    // resurrect it past its tombstone or write it into another project.
+    if (!currentNotes.some((n) => n && n.id === noteId)) return;
+    const now = new Date().toISOString();
+    const updatedNotes = currentNotes.map((n) => (n && n.id === noteId ? { ...n, ...updates, updatedAt: now } : n));
+    commitPlan({ ...data, notes: updatedNotes });
+  }, [commitPlan]);
 
-  // When switching from Preview back to Edit mode, rehydrate editor
-  useEffect(() => {
-    if (!isPreviewMode && contentEditableRef.current && activeNote) {
-      populateEditorWithContent(
-        contentEditableRef.current,
-        editContent,
-        effectivePeople,
-        allTasks
-      );
+  const flushPendingSave = useCallback(() => {
+    if (debounceTimerRef.current !== null) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
-  }, [isPreviewMode]);
-
-  // Function to commit changes immediately to JanttData JSON
-  const commitNoteChanges = useCallback(
-    (noteId: string, updates: Partial<NoteItem>) => {
-      if (isViewer) {
-        onPromptFork?.();
-        return;
-      }
-      const currentNotes = parsedData.notes || [];
-      const noteExists = currentNotes.some((n) => n.id === noteId);
-      const now = new Date().toISOString();
-      let updatedNotes: NoteItem[];
-
-      if (noteExists) {
-        updatedNotes = currentNotes.map((n) => {
-          if (n.id === noteId) {
-            return {
-              ...n,
-              ...updates,
-              updatedAt: now
-            };
-          }
-          return n;
-        });
-      } else {
-        const fullNote: NoteItem = {
-          id: noteId,
-          title: updates.title ?? "Untitled Note",
-          content: updates.content ?? "",
-          color: updates.color ?? "#3B82F6",
-          pinned: updates.pinned ?? false,
-          task_ids: updates.task_ids ?? [],
-          createdAt: now,
-          updatedAt: now,
-          ...updates
-        };
-        updatedNotes = [fullNote, ...currentNotes];
-      }
-
-      handleChartCommit({
-        ...parsedData,
-        notes: updatedNotes
-      });
-      setSaveStatus("saved");
-    },
-    [parsedData, handleChartCommit]
-  );
-
-  // Debounced save when user types in editor
-  const triggerDebouncedSave = useCallback(
-    (updates: { title?: string; content?: string; color?: string; pinned?: boolean; task_ids?: string[] }) => {
-      if (!activeNoteId) return;
-      setSaveStatus("saving");
-
-      if (debounceTimerRef.current) {
-        window.clearTimeout(debounceTimerRef.current);
-      }
-
-      debounceTimerRef.current = window.setTimeout(() => {
-        commitNoteChanges(activeNoteId, updates);
-      }, 350);
-    },
-    [activeNoteId, commitNoteChanges]
-  );
-
-  // Clean up timer & flush pending edits on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        window.clearTimeout(debounceTimerRef.current);
-      }
-      const state = latestEditRef.current;
-      if (state.activeNoteId && state.saveStatus === "saving") {
-        commitNoteChanges(state.activeNoteId, {
-          title: state.editTitle,
-          content: state.editContent,
-          color: state.editColor,
-          pinned: state.editPinned
-        });
-      }
-    };
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    if (pending) commitNoteChanges(pending.noteId, pending.patch);
+    setSaveStatus("saved");
   }, [commitNoteChanges]);
 
-  // Flush any pending changes when exiting editor
-  const handleBackToGallery = () => {
-    if (activeNoteId && saveStatus === "saving") {
-      if (debounceTimerRef.current) {
-        window.clearTimeout(debounceTimerRef.current);
-      }
-      commitNoteChanges(activeNoteId, {
-        title: editTitle,
-        content: editContent,
-        color: editColor,
-        pinned: editPinned
-      });
+  const scheduleSave = useCallback(
+    (noteId: string, patch: NotePatch) => {
+      const prev = pendingRef.current;
+      if (prev && prev.noteId !== noteId) flushPendingSave();
+      pendingRef.current = {
+        noteId,
+        patch: prev && prev.noteId === noteId ? { ...prev.patch, ...patch } : patch
+      };
+      setSaveStatus("saving");
+      if (debounceTimerRef.current !== null) window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = window.setTimeout(flushPendingSave, NOTE_SAVE_DEBOUNCE_MS);
+    },
+    [flushPendingSave]
+  );
+
+  // Flush pending edits when the view unmounts (e.g. switching to Kanban).
+  useEffect(() => flushPendingSave, [flushPendingSave]);
+
+  // Adopt changes made elsewhere (collaborators, JSON editor, undo) to the open note,
+  // field by field, unless the user has unsaved edits to that same field.
+  // Declared before the hydration effect so a note switch is handled by hydration alone.
+  useEffect(() => {
+    if (!activeNote || hydratedNoteIdRef.current !== activeNote.id) return;
+    const pending = pendingRef.current?.noteId === activeNote.id ? pendingRef.current.patch : {};
+    const local = latestEditRef.current;
+
+    const remoteTitle = toText(activeNote.title);
+    if (!("title" in pending) && remoteTitle !== local.editTitle) setEditTitle(remoteTitle);
+    const remoteColor = toText(activeNote.color) || DEFAULT_NOTE_COLOR;
+    if (!("color" in pending) && remoteColor !== local.editColor) setEditColor(remoteColor);
+    const remotePinned = Boolean(activeNote.pinned);
+    if (!("pinned" in pending) && remotePinned !== local.editPinned) setEditPinned(remotePinned);
+
+    const remoteContent = toText(activeNote.content);
+    if (!("content" in pending) && remoteContent !== local.editContent) {
+      setEditContent(remoteContent);
+      if (!local.isPreviewMode) populateEditor(remoteContent, true);
     }
-    setActiveNoteId(null);
-  };
+  }, [activeNote, populateEditor]);
+
+  // Load the selected note into the editor: on selection, on mount (restored selection)
+  // and when a stored selection's note arrives after the plan finishes loading.
+  const activeNoteKey = activeNote?.id ?? null;
+  useEffect(() => {
+    if (!activeNote) {
+      hydratedNoteIdRef.current = null;
+      return;
+    }
+    hydratedNoteIdRef.current = activeNote.id;
+    const content = toText(activeNote.content);
+    setEditTitle(toText(activeNote.title));
+    setEditContent(content);
+    setEditColor(toText(activeNote.color) || DEFAULT_NOTE_COLOR);
+    setEditPinned(Boolean(activeNote.pinned));
+    setSaveStatus(pendingRef.current ? "saving" : "saved");
+    // Keep latestEditRef coherent for effects running before the next render.
+    latestEditRef.current = { ...latestEditRef.current, editContent: content };
+    if (!latestEditRef.current.isPreviewMode) populateEditor(content);
+
+    if (isNewlyCreatedRef.current) {
+      isNewlyCreatedRef.current = false;
+      window.setTimeout(() => {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+      }, 50);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNoteKey]);
+
+  // Returning from Preview to Edit mode: the editor DOM was unmounted, rebuild it from
+  // the latest local text. Only a real true -> false transition counts (never on mount).
+  const wasPreviewRef = useRef(isPreviewMode);
+  useEffect(() => {
+    const wasPreview = wasPreviewRef.current;
+    wasPreviewRef.current = isPreviewMode;
+    if (wasPreview && !isPreviewMode) populateEditor(latestEditRef.current.editContent);
+  }, [isPreviewMode, populateEditor]);
+
+  const handleSelectNote = useCallback(
+    (id: string | null) => {
+      flushPendingSave();
+      setActiveNoteId(id);
+    },
+    [flushPendingSave, setActiveNoteId]
+  );
+
+  const handleBackToGallery = () => handleSelectNote(null);
 
   // Create a fresh note
   const handleCreateNote = () => {
@@ -249,13 +259,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
       onPromptFork?.();
       return;
     }
-    const newId = `note-${Date.now()}`;
+    flushPendingSave();
+    const newId = `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const now = new Date().toISOString();
     const newNote: NoteItem = {
       id: newId,
       title: "New Project Note",
       content: "",
-      color: "#3B82F6",
+      color: DEFAULT_NOTE_COLOR,
       pinned: false,
       task_ids: [],
       createdAt: now,
@@ -263,30 +274,44 @@ export const NotesView: React.FC<NotesViewProps> = ({
     };
 
     isNewlyCreatedRef.current = true;
-    const currentNotes = parsedData.notes || [];
-    handleChartCommit({
-      ...parsedData,
-      notes: [newNote, ...currentNotes]
+    const data = latestDataRef.current;
+    commitPlan({
+      ...data,
+      notes: [newNote, ...(Array.isArray(data.notes) ? data.notes : [])]
     });
     setActiveNoteId(newId);
   };
 
-  // Delete note
+  // Delete note (with a tombstone so sync does not resurrect it)
   const handleDeleteNote = (noteId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (isViewer) {
       onPromptFork?.();
       return;
     }
-    const confirmed = window.confirm("Are you sure you want to delete this note from the project?");
-    if (!confirmed) return;
+    const target = notes.find((n) => n.id === noteId);
+    const label = toText(target?.title).trim() || "this note";
+    if (!window.confirm(`Delete "${label}" from the project?`)) return;
 
-    const currentNotes = parsedData.notes || [];
-    const updatedNotes = currentNotes.filter((n) => n.id !== noteId);
+    if (pendingRef.current?.noteId === noteId) {
+      if (debounceTimerRef.current !== null) window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+      pendingRef.current = null;
+      setSaveStatus("saved");
+    }
 
-    handleChartCommit({
-      ...parsedData,
-      notes: updatedNotes
+    const data = latestDataRef.current;
+    const deletedAt = new Date().toISOString();
+    commitPlan({
+      ...data,
+      meta: {
+        ...data.meta,
+        tombstones: {
+          ...(data.meta?.tombstones || {}),
+          [noteId]: { deletedAt, entityType: "note" }
+        }
+      },
+      notes: (Array.isArray(data.notes) ? data.notes : []).filter((n) => n.id !== noteId)
     });
 
     if (activeNoteId === noteId) {
@@ -294,45 +319,51 @@ export const NotesView: React.FC<NotesViewProps> = ({
     }
   };
 
+  const currentTaskIds = (): string[] => {
+    const ids = activeNote?.task_ids;
+    return Array.isArray(ids) ? ids : [];
+  };
+
   // Attach task to note
   const handleAttachTask = (taskId: string) => {
     if (!activeNoteId || !activeNote) return;
-    const currentAttached = activeNote.task_ids || [];
+    const currentAttached = currentTaskIds();
     if (!currentAttached.includes(taskId)) {
-      const nextAttached = [...currentAttached, taskId];
-      commitNoteChanges(activeNoteId, { task_ids: nextAttached });
+      commitNoteChanges(activeNoteId, { task_ids: [...currentAttached, taskId] });
     }
   };
 
   // Detach task from note
   const handleDetachTask = (taskId: string) => {
     if (!activeNoteId || !activeNote) return;
-    const currentAttached = activeNote.task_ids || [];
-    const nextAttached = currentAttached.filter((id) => id !== taskId);
-    commitNoteChanges(activeNoteId, { task_ids: nextAttached });
+    commitNoteChanges(activeNoteId, { task_ids: currentTaskIds().filter((id) => id !== taskId) });
   };
 
-  // Sync current contenteditable text back to state & trigger debounced save
+  // Sync current contenteditable text back to state & schedule a save of the body only
   const handleContentChange = useCallback(() => {
-    if (!contentEditableRef.current) return;
-    const serialized = serializeEditorToMarkdown(contentEditableRef.current);
+    const el = contentEditableRef.current;
+    if (!el || !activeNoteId) return;
+    const serialized = serializeEditorToMarkdown(el);
     setEditContent(serialized);
-    triggerDebouncedSave({ content: serialized, title: editTitle, color: editColor, pinned: editPinned });
-  }, [triggerDebouncedSave, editTitle, editColor, editPinned]);
+    scheduleSave(activeNoteId, { content: serialized });
+  }, [activeNoteId, scheduleSave]);
 
   const handleTitleChange = (newTitle: string) => {
+    if (!activeNoteId) return;
     setEditTitle(newTitle);
-    triggerDebouncedSave({ title: newTitle, content: editContent, color: editColor, pinned: editPinned });
+    scheduleSave(activeNoteId, { title: newTitle });
   };
 
   const handleColorChange = (newColor: string) => {
+    if (!activeNoteId) return;
     setEditColor(newColor);
-    triggerDebouncedSave({ color: newColor, title: editTitle, content: editContent, pinned: editPinned });
+    scheduleSave(activeNoteId, { color: newColor });
   };
 
   const handlePinnedToggle = (newPinned: boolean) => {
+    if (!activeNoteId) return;
     setEditPinned(newPinned);
-    triggerDebouncedSave({ pinned: newPinned, title: editTitle, content: editContent, color: editColor });
+    scheduleSave(activeNoteId, { pinned: newPinned });
   };
 
   return (
@@ -341,7 +372,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
       <NotesSidebar
         notes={notes}
         activeNoteId={activeNoteId}
-        onSelectNote={setActiveNoteId}
+        onSelectNote={handleSelectNote}
         onCreateNote={handleCreateNote}
         onDeleteNote={handleDeleteNote}
         searchQuery={searchQuery}
@@ -349,6 +380,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
         selectedColor={selectedColor}
         onSelectColor={setSelectedColor}
         isViewer={isViewer}
+        liveTaskIds={liveTaskIds}
       />
 
       {/* 2. Main Editor Surface */}
@@ -383,7 +415,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
           <p className="note-editor-empty-title">Select or create a note</p>
           <p className="note-editor-empty-sub">
             {isViewer
-              ? "This shared room is in read-only Viewer mode. Select a note to read specifications or make a copy to edit."
+              ? "This shared room is read-only. Select a note to read it, or make a local copy to edit."
               : "Capture project meeting summaries, team action items, and link roadmap tasks directly in your notes."}
           </p>
           <button
@@ -391,7 +423,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
             className="notes-empty-create-btn"
             onClick={isViewer ? onPromptFork : handleCreateNote}
           >
-            {isViewer ? "Fork to Create Note" : "Create New Note"}
+            {isViewer ? "Make a Local Copy" : "Create New Note"}
           </button>
         </div>
       )}

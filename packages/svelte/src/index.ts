@@ -26,36 +26,58 @@ export interface JanttActionResult {
  * Svelte Action to mount and reactively bind a Jantt timeline to any DOM element:
  *
  * <div use:janttAction={{ data: plan, options: { autoCascade: true } }} />
+ *
+ * Errors thrown while mounting or updating go to `options.onError` (or the console). A failed
+ * mount is retried on the next update, so fixing the data brings the chart back.
  */
 export function janttAction(
   node: HTMLElement,
   params: JanttActionOptions
 ): JanttActionResult {
   let instance: JanttInstance | null = null;
+  let current = params;
+  let destroyed = false;
 
-  try {
-    instance = renderJantt(node, params.data, params.options || {});
-    if (params.onReady && instance) {
-      params.onReady(instance);
-    }
-  } catch (err) {
-    if (params.options?.onError) {
-      params.options.onError(err as Error);
+  const reportError = (err: unknown) => {
+    const error = err instanceof Error ? err : new Error(String(err));
+    if (current.options?.onError) {
+      current.options.onError(error);
     } else {
-      console.error("[@jantt/svelte] Failed to mount Jantt instance:", err);
+      console.error("[@jantt/svelte] Jantt failed to render:", error);
     }
-  }
+  };
+
+  const mount = () => {
+    try {
+      instance = renderJantt(node, current.data, current.options || {});
+    } catch (err) {
+      instance = null;
+      reportError(err);
+      return;
+    }
+    current.onReady?.(instance);
+  };
+
+  mount();
 
   return {
     update(newParams: JanttActionOptions) {
-      if (!instance || !newParams.data) return;
-      instance.update(newParams.data, newParams.options);
+      current = newParams;
+      if (destroyed || !newParams.data) return;
+      if (!instance) {
+        mount();
+        return;
+      }
+      try {
+        instance.update(newParams.data, newParams.options);
+      } catch (err) {
+        reportError(err);
+      }
     },
     destroy() {
-      if (instance && typeof instance.destroy === "function") {
-        instance.destroy();
-        instance = null;
-      }
+      destroyed = true;
+      instance?.destroy();
+      instance = null;
     }
   };
 }

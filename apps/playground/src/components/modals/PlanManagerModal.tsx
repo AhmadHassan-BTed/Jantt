@@ -1,35 +1,38 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Layers,
-  X,
   Search,
   HardDrive,
   Cloud,
   Users,
   Crown,
   Plus,
-  Copy,
   Check,
+  ArrowLeftRight,
+  ChevronDown,
   Share2,
   Upload,
   Sparkles,
   GripVertical,
   LogOut,
-  CloudUpload,
   Trash2,
   UserMinus,
   MoreVertical,
-  ExternalLink,
   Edit2,
   Files,
   FileJson,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Github,
+  ShieldCheck,
+  Loader2,
+  Link2
 } from "lucide-react";
+import type { JanttData } from "@jantt/core";
 import type { SavedProject } from "../../types";
 import { getRoom, type UserRoomPointer, type UserProfile } from "../../firebase";
 import { DEFAULT_TEMPLATE } from "../../constants";
 import { formatRelativeTime } from "../../utils";
-import { downloadCsv, type JanttData } from "@jantt/core";
+import { ConfirmDialog, Modal, ModalHeader, downloadPlanExport, useMediaQuery, type ConfirmDialogProps } from "./ModalHost";
 
 export interface PlanManagerModalProps {
   show: boolean;
@@ -39,438 +42,970 @@ export interface PlanManagerModalProps {
   ownedRooms: UserRoomPointer[];
   sharedRooms: UserRoomPointer[];
   userProfile?: UserProfile | null;
+  /** Live editor data of the open plan; it can hold edits that are not autosaved yet. */
+  activePlanData?: JanttData | null;
+  /** Defaults to whether a user profile is present. */
+  isLoggedIn?: boolean;
+  /** Whether cloud rooms may be created (GitHub verification gate passed or disabled). */
+  isCloudVerified?: boolean;
+  /** A GitHub sign-in is in progress: sign-in buttons are disabled so it is not started twice. */
+  isSigningIn?: boolean;
+  onLogin?: () => void;
+  onRequireVerification?: () => void;
   onSelectProject: (id: string) => void;
-  onDeleteProject: (id: string) => void;
+  /**
+   * Removes a plan (or a cached room copy) from this device. The Plan Manager confirms in-app first
+   * and passes `{ confirm: false }`, so the implementation must not prompt again. Returns false when
+   * nothing was removed.
+   */
+  onDeleteProject: (id: string, options?: { confirm?: boolean }) => boolean | void;
   onDuplicateProject: (id: string) => void;
   onRenameProject: (id: string, newName: string) => void;
   onCreateLocalCopy: (title: string, data: JanttData) => void;
+  /** Creates a cloud room from the data and resolves with its id, or null when it was not created. */
   onPublishToCloud: (title: string, data: JanttData) => Promise<string | null>;
   onDeleteCloudRoom?: (roomId: string) => Promise<void>;
   onLeaveCloudRoom?: (roomId: string) => Promise<void>;
   onOpenShareRoom?: (roomId: string) => void;
   onOpenAddPlanModal: () => void;
   onCreateNewRoom?: () => void;
+  /** Opens the "join a room by link or ID" dialog (offered in the "Shared with me" list). */
+  onJoinRoomLink?: () => void;
   onSignOut?: () => Promise<void>;
-  onImportJsonFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Opens the file picker that imports .json, MS Project .xml, Primavera .xer or .csv files. */
+  onImportFile: () => void;
   showToast: (msg: string, isErr?: boolean) => void;
 }
 
-interface PlanCardItem {
+/* --------------------------------------------------------------------------
+   Plan lists & transfer rules (pure, so drag & drop and the dropdown share them)
+   -------------------------------------------------------------------------- */
+
+export type PlanListId = "device" | "cloud" | "shared";
+export type PlanItemKind = "template" | "local" | "owned_room" | "shared_room" | "cached_room";
+export type TransferKind = "copy_to_cloud" | "move_to_cloud" | "copy_to_device";
+
+export interface PlanCardItem {
   id: string;
   name: string;
-  type: "template" | "local" | "owned_room" | "shared_room";
-  taskCount: number;
-  updatedAt: string;
+  kind: PlanItemKind;
+  list: PlanListId;
+  /** null when neither a cached copy nor the room pointer knows the count. */
+  taskCount: number | null;
+  updatedAt?: string;
   data?: JanttData;
-  rawProject?: SavedProject;
-  rawRoom?: UserRoomPointer;
   roomId?: string;
-  role?: string;
+  roleLabel?: string;
   ownerUsername?: string;
+  badge?: string;
   isActive: boolean;
 }
 
-export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
-  show,
-  setShow,
-  activeProjectId,
+export interface TransferOption {
+  list: PlanListId;
+  label: string;
+  /** Set when the transfer can run; otherwise `disabledReason` explains why not. */
+  kind?: TransferKind;
+  disabledReason?: string;
+}
+
+export const PLAN_LIST_ORDER: PlanListId[] = ["device", "cloud", "shared"];
+
+const SHARED_LIST_RULE = "only rooms other people share with you appear there";
+
+function latestTimestamp(a?: string, b?: string): string | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(a) >= Date.parse(b) ? a : b;
+}
+
+/**
+ * Splits everything the user can open into exactly three lists:
+ * "This device" (local plans + the built-in sample), "My cloud" (rooms the user owns) and
+ * "Shared with me" (rooms shared with the user, plus rooms cached on this device that are in
+ * neither pointer list, e.g. opened from a link or while signed out).
+ */
+export function buildPlanLists({
   customProjects,
-  ownedRooms = [],
-  sharedRooms = [],
-  userProfile,
-  onSelectProject,
-  onDeleteProject,
-  onDuplicateProject,
-  onRenameProject,
-  onCreateLocalCopy,
-  onPublishToCloud,
-  onDeleteCloudRoom,
-  onLeaveCloudRoom,
-  onOpenShareRoom,
-  onOpenAddPlanModal,
-  onCreateNewRoom,
-  onSignOut,
-  onImportJsonFile,
-  showToast
-}) => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [isActionBusy, setIsActionBusy] = useState(false);
-  const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null);
-  const modalFileInputRef = useRef<HTMLInputElement>(null);
+  ownedRooms,
+  sharedRooms,
+  activeProjectId,
+  isLoggedIn
+}: {
+  customProjects: SavedProject[];
+  ownedRooms: UserRoomPointer[];
+  sharedRooms: UserRoomPointer[];
+  activeProjectId: string;
+  isLoggedIn: boolean;
+}): Record<PlanListId, PlanCardItem[]> {
+  const cachedRooms = new Map<string, SavedProject>();
+  const device: PlanCardItem[] = [];
 
-  // Drag Mode: "move" (default per user requirement) vs "copy"
-  const [dragMode, setDragMode] = useState<"move" | "copy">("move");
-
-  // HTML5 Drag and Drop State
-  const [draggedPlan, setDraggedPlan] = useState<PlanCardItem | null>(null);
-  const [dragOverCol, setDragOverCol] = useState<"local" | "owned" | null>(null);
-
-  // Click outside listener for card floating menu
-  useEffect(() => {
-    if (!openCardMenuId) return;
-    const handleDocumentClick = () => setOpenCardMenuId(null);
-    document.addEventListener("click", handleDocumentClick);
-    return () => document.removeEventListener("click", handleDocumentClick);
-  }, [openCardMenuId]);
-
-  if (!show) return null;
-
-  // 1. Local Offline Projects (+ Default Template)
-  const localProjects = customProjects.filter((p) => p.source !== "room");
-  const defaultTemplateItem: PlanCardItem = {
+  for (const project of customProjects) {
+    if (project.source === "room") {
+      if (project.roomId) cachedRooms.set(project.roomId, project);
+      continue;
+    }
+    device.push({
+      id: project.id,
+      name: project.name,
+      kind: "local",
+      list: "device",
+      taskCount: project.data?.tasks?.length ?? 0,
+      updatedAt: project.updatedAt,
+      data: project.data,
+      isActive: activeProjectId === project.id
+    });
+  }
+  device.push({
     id: "default",
     name: DEFAULT_TEMPLATE.name,
-    type: "template",
-    taskCount: DEFAULT_TEMPLATE.data.tasks?.length || 0,
-    updatedAt: "Built-in",
+    kind: "template",
+    list: "device",
+    taskCount: DEFAULT_TEMPLATE.data.tasks?.length ?? 0,
     data: DEFAULT_TEMPLATE.data,
+    badge: "Built-in sample",
     isActive: activeProjectId === "default"
-  };
-
-  const localItems: PlanCardItem[] = [
-    defaultTemplateItem,
-    ...localProjects.map((p) => ({
-      id: p.id,
-      name: p.name,
-      type: "local" as const,
-      taskCount: p.data?.tasks?.length || 0,
-      updatedAt: p.updatedAt ? formatRelativeTime(p.updatedAt) : "Recently",
-      data: p.data,
-      rawProject: p,
-      isActive: activeProjectId === p.id
-    }))
-  ];
-
-  // 2. Owned Cloud Rooms
-  const ownedItems: PlanCardItem[] = ownedRooms.map((r) => {
-    const matchingProj = customProjects.find((p) => p.id === `room-${r.roomId}`);
-    return {
-      id: `room-${r.roomId}`,
-      roomId: r.roomId,
-      name: r.title,
-      type: "owned_room" as const,
-      role: "Owner",
-      taskCount: matchingProj?.data?.tasks?.length || (r as any).taskCount || 0,
-      updatedAt: r.updatedAt ? formatRelativeTime(r.updatedAt) : "Recently",
-      data: matchingProj?.data,
-      rawRoom: r,
-      isActive: activeProjectId === `room-${r.roomId}`
-    };
   });
 
-  // 3. Shared With Me Rooms
-  const sharedItems: PlanCardItem[] = sharedRooms.map((r) => {
-    const matchingProj = customProjects.find((p) => p.id === `room-${r.roomId}`);
+  const listedRoomIds = new Set<string>();
+  const toRoomItem = (
+    pointer: UserRoomPointer,
+    kind: "owned_room" | "shared_room",
+    list: PlanListId,
+    roleLabel: string
+  ): PlanCardItem => {
+    listedRoomIds.add(pointer.roomId);
+    const cached = cachedRooms.get(pointer.roomId);
+    const id = cached?.id ?? `room-${pointer.roomId}`;
     return {
-      id: `room-${r.roomId}`,
-      roomId: r.roomId,
-      name: r.title,
-      type: "shared_room" as const,
-      role: r.role === "editor" ? "Editor" : "Viewer",
-      ownerUsername: r.ownerUsername,
-      taskCount: matchingProj?.data?.tasks?.length || (r as any).taskCount || 0,
-      updatedAt: r.updatedAt ? formatRelativeTime(r.updatedAt) : "Recently",
-      data: matchingProj?.data,
-      rawRoom: r,
-      isActive: activeProjectId === `room-${r.roomId}`
+      id,
+      name: pointer.title || cached?.name || `Room ${pointer.roomId}`,
+      kind,
+      list,
+      roomId: pointer.roomId,
+      taskCount: cached?.data?.tasks?.length ?? pointer.taskCount ?? null,
+      updatedAt: latestTimestamp(cached?.updatedAt, pointer.updatedAt),
+      data: cached?.data,
+      roleLabel,
+      ownerUsername: kind === "shared_room" ? pointer.ownerUsername : undefined,
+      isActive: activeProjectId === id
     };
-  });
-
-  // Filter items by search query
-  const matchesSearch = (item: PlanCardItem) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(q) ||
-      (item.roomId && item.roomId.toLowerCase().includes(q)) ||
-      (item.ownerUsername && item.ownerUsername.toLowerCase().includes(q))
-    );
   };
 
-  const filteredLocal = localItems.filter(matchesSearch);
-  const filteredOwned = ownedItems.filter(matchesSearch);
-  const filteredShared = sharedItems.filter(matchesSearch);
+  const cloud = ownedRooms.map((r) => toRoomItem(r, "owned_room", "cloud", "Owner"));
+  const shared = sharedRooms
+    .filter((r) => !listedRoomIds.has(r.roomId))
+    .map((r) => toRoomItem(r, "shared_room", "shared", r.role === "editor" ? "Editor" : "Viewer"));
 
-  // Action handlers
-  const handleStartRename = (id: string, currentName: string) => {
-    setRenamingId(id);
-    setRenameValue(currentName);
-  };
+  for (const [roomId, project] of cachedRooms) {
+    if (listedRoomIds.has(roomId)) continue;
+    shared.push({
+      id: project.id,
+      name: project.name,
+      kind: "cached_room",
+      list: "shared",
+      roomId,
+      taskCount: project.data?.tasks?.length ?? 0,
+      updatedAt: project.updatedAt,
+      data: project.data,
+      roleLabel: project.role === "collaborator" ? "Editor" : "Viewer",
+      badge: isLoggedIn ? "Opened via link" : "Saved offline",
+      isActive: activeProjectId === project.id
+    });
+  }
 
-  const handleCommitRename = (id: string) => {
-    if (renameValue.trim() && renamingId === id) {
-      onRenameProject(id, renameValue.trim());
+  return { device, cloud, shared };
+}
+
+/**
+ * Every transfer a card can offer, grouped by target list, with an explanation for targets that
+ * are not possible. Transfers never delete or leave a cloud room: rooms are only copied to the
+ * device, and only a device plan can be moved (copied to the cloud, then removed locally).
+ */
+export function getTransferOptions(kind: PlanItemKind, cloudBlockedReason?: string): TransferOption[] {
+  const toCloud = (label: string, transfer: TransferKind): TransferOption =>
+    cloudBlockedReason
+      ? { list: "cloud", label, disabledReason: cloudBlockedReason }
+      : { list: "cloud", label, kind: transfer };
+
+  switch (kind) {
+    case "template":
+      return [
+        toCloud("Copy into a new cloud room", "copy_to_cloud"),
+        { list: "shared", label: "Not possible", disabledReason: SHARED_LIST_RULE }
+      ];
+    case "local":
+      return [
+        toCloud("Copy to My cloud (keeps it on this device)", "copy_to_cloud"),
+        toCloud("Move to My cloud (removes it from this device)", "move_to_cloud"),
+        { list: "shared", label: "Not possible", disabledReason: SHARED_LIST_RULE }
+      ];
+    case "owned_room":
+      return [
+        { list: "device", label: "Save a copy to this device (room stays in the cloud)", kind: "copy_to_device" },
+        { list: "shared", label: "Not possible", disabledReason: "you own this room" }
+      ];
+    case "shared_room":
+    case "cached_room":
+      return [
+        { list: "device", label: "Save a copy to this device (room stays shared)", kind: "copy_to_device" },
+        toCloud("Copy into a new room you own", "copy_to_cloud")
+      ];
+  }
+}
+
+/** A transfer that never removes anything. Drops may only perform these. */
+export type CopyTransferKind = Exclude<TransferKind, "move_to_cloud">;
+
+/** The transfer a drop onto `list` performs: always the non-destructive copy, never a move. */
+export function getDropTransfer(
+  kind: PlanItemKind,
+  list: PlanListId,
+  cloudBlockedReason?: string
+): CopyTransferKind | null {
+  for (const option of getTransferOptions(kind, cloudBlockedReason)) {
+    if (option.list === list && option.kind && option.kind !== "move_to_cloud") return option.kind;
+  }
+  return null;
+}
+
+/* --------------------------------------------------------------------------
+   Presentation
+   -------------------------------------------------------------------------- */
+
+const LIST_META: Record<PlanListId, { title: string; description: string; icon: React.ReactNode; accent: string }> = {
+  device: {
+    title: "This device",
+    description: "Saved in this browser only",
+    icon: <HardDrive size={16} style={{ color: "#38BDF8" }} />,
+    accent: "#38BDF8"
+  },
+  cloud: {
+    title: "My cloud",
+    description: "Rooms you own, synced live",
+    icon: <Crown size={16} style={{ color: "#F59E0B" }} />,
+    accent: "#F59E0B"
+  },
+  shared: {
+    title: "Shared with me",
+    description: "Rooms others shared with you",
+    icon: <Users size={16} style={{ color: "#A855F7" }} />,
+    accent: "#C084FC"
+  }
+};
+
+const DROP_HINTS: Record<CopyTransferKind, string> = {
+  copy_to_cloud: "Drop to copy into a new cloud room",
+  copy_to_device: "Drop to save a copy on this device"
+};
+
+/** Private drag type: only plan cards dragged inside this dialog are accepted as drops. */
+const PLAN_DRAG_MIME = "application/x-jantt-plan";
+
+const hasDragType = (event: { dataTransfer: DataTransfer | null }, type: string) =>
+  Array.from(event.dataTransfer?.types ?? []).includes(type);
+
+const TARGET_ICONS: Record<PlanListId, React.ReactNode> = {
+  device: <HardDrive size={13} style={{ color: "#38BDF8" }} />,
+  cloud: <Cloud size={13} style={{ color: "#F59E0B" }} />,
+  shared: <Users size={13} style={{ color: "#A855F7" }} />
+};
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+const KIND_ICONS: Record<PlanItemKind, React.ReactNode> = {
+  template: <Sparkles size={16} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} />,
+  local: <HardDrive size={16} style={{ color: "#38BDF8", flexShrink: 0 }} />,
+  owned_room: <Crown size={16} style={{ color: "#F59E0B", flexShrink: 0 }} />,
+  shared_room: <Users size={16} style={{ color: "#A855F7", flexShrink: 0 }} />,
+  cached_room: <Link2 size={16} style={{ color: "#A855F7", flexShrink: 0 }} />
+};
+
+const pillStyle = (background: string, color: string): React.CSSProperties => ({
+  padding: "1px 6px",
+  borderRadius: "4px",
+  fontSize: "10px",
+  fontWeight: 600,
+  textTransform: "uppercase",
+  background,
+  color,
+  whiteSpace: "nowrap"
+});
+
+const hintStyle = (allowed: boolean): React.CSSProperties => ({
+  margin: "8px 12px 0",
+  padding: "6px 10px",
+  borderRadius: "6px",
+  fontSize: "11px",
+  fontWeight: 600,
+  border: `1px dashed ${allowed ? "rgba(16, 185, 129, 0.5)" : "rgba(148, 163, 184, 0.4)"}`,
+  background: allowed ? "rgba(16, 185, 129, 0.1)" : "rgba(148, 163, 184, 0.08)",
+  color: allowed ? "#10B981" : "var(--jantt-text-muted)"
+});
+
+const noticeStyle: React.CSSProperties = {
+  margin: "8px 12px 0",
+  padding: "8px 10px",
+  borderRadius: "8px",
+  fontSize: "11.5px",
+  lineHeight: 1.4,
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+  background: "rgba(245, 158, 11, 0.08)",
+  border: "1px solid rgba(245, 158, 11, 0.25)",
+  color: "var(--jantt-text)"
+};
+
+const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** Every action that removes something; each one is confirmed exactly once, here, before it runs. */
+type ConfirmAction = "delete_local" | "remove_cached" | "move_to_cloud" | "delete_room" | "leave_room";
+
+interface ConfirmRequest {
+  action: ConfirmAction;
+  item: PlanCardItem;
+}
+
+/** A published "Move to My cloud" whose device copy is removed once the new room is listed. */
+interface PendingMove {
+  localId: string;
+  roomId: string;
+  name: string;
+  startedAt: number;
+}
+
+/** A move whose room never shows up in the plan list keeps the device copy. */
+const PENDING_MOVE_TIMEOUT_MS = 60_000;
+
+interface MenuEntry {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  tone?: "danger";
+  /** Secondary line, e.g. why the entry is unavailable. */
+  description?: string;
+  /** Stays focusable (so its reason can be read) but cannot be activated. */
+  disabled?: boolean;
+  onSelect: () => void;
+}
+
+interface MenuGroup {
+  label?: string;
+  entries: MenuEntry[];
+}
+
+type CardMenuKind = "actions" | "transfer";
+
+function describeConfirm({ action, item }: ConfirmRequest): Omit<ConfirmDialogProps, "onConfirm" | "onCancel"> {
+  const name = <strong>&ldquo;{item.name}&rdquo;</strong>;
+  switch (action) {
+    case "delete_local":
+      return {
+        title: "Delete plan from this device?",
+        tone: "danger",
+        confirmLabel: "Delete plan",
+        message: (
+          <>
+            This permanently deletes {name} and its version history from this browser. This cannot be undone. Export
+            it first if you may need it again.
+          </>
+        )
+      };
+    case "remove_cached":
+      return {
+        title: "Remove offline copy?",
+        tone: "danger",
+        confirmLabel: "Remove from this device",
+        message: (
+          <>
+            This removes the copy of room {name}
+            {item.roomId ? ` (#${item.roomId})` : ""} saved in this browser. The room, its members and its cloud data
+            are not affected, and you can open the room link again later. Changes made here that have not synced to
+            the room are lost.
+          </>
+        )
+      };
+    case "move_to_cloud":
+      return {
+        title: "Move to My cloud?",
+        confirmLabel: "Move to My cloud",
+        message: (
+          <>
+            A new cloud room you own is created from {name}. Once the room is saved, the plan and its version history
+            are removed from this device. If the room cannot be created, nothing is removed.
+          </>
+        )
+      };
+    case "delete_room":
+      return {
+        title: "Delete cloud room for everyone?",
+        tone: "danger",
+        confirmLabel: "Delete room permanently",
+        confirmPhrase: item.name,
+        message: (
+          <>
+            This permanently deletes room {name} (#{item.roomId}) and all of its data. Every collaborator loses access
+            immediately. This cannot be undone. Use &ldquo;Save a copy to this device&rdquo; first if you want to keep
+            the plan.
+          </>
+        )
+      };
+    case "leave_room":
+      return {
+        title: "Leave shared room?",
+        tone: "danger",
+        confirmLabel: "Leave room",
+        message: (
+          <>
+            You lose access to {name}
+            {item.ownerUsername ? ` (owned by @${item.ownerUsername})` : ""} and its copy on this device is removed.
+            You can only rejoin if you are invited again. Save a copy to this device first if you want to keep the
+            plan.
+          </>
+        )
+      };
+  }
+}
+
+/** Positions a menu inside `container` (its containing block): below the anchor, or above when roomier. */
+function computeMenuPosition(menu: HTMLElement, container: HTMLElement, anchorEl: HTMLElement) {
+  const margin = 8;
+  const gap = 4;
+  const bounds = container.getBoundingClientRect();
+  const originTop = bounds.top + container.clientTop;
+  const originLeft = bounds.left + container.clientLeft;
+  const innerHeight = container.clientHeight;
+  const innerWidth = container.clientWidth;
+  const anchor = anchorEl.getBoundingClientRect();
+  const spaceBelow = originTop + innerHeight - anchor.bottom - margin - gap;
+  const spaceAbove = anchor.top - originTop - margin - gap;
+  const openUp = menu.scrollHeight > spaceBelow && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(120, openUp ? spaceAbove : spaceBelow);
+  const height = Math.min(menu.scrollHeight, maxHeight);
+  const rawTop = openUp ? anchor.top - originTop - gap - height : anchor.bottom - originTop + gap;
+  const top = Math.min(Math.max(rawTop, margin), Math.max(margin, innerHeight - height - margin));
+  const rawLeft = anchor.right - originLeft - menu.offsetWidth;
+  const left = Math.min(Math.max(rawLeft, margin), Math.max(margin, innerWidth - menu.offsetWidth - margin));
+  return { top, left, maxHeight };
+}
+
+/* --------------------------------------------------------------------------
+   Component
+   -------------------------------------------------------------------------- */
+
+export const PlanManagerModal: React.FC<PlanManagerModalProps> = (props) => {
+  const { customProjects, onDeleteProject, showToast } = props;
+
+  // One plan action at a time, across reopenings too: closing the manager during a publish and
+  // opening it again must not allow a second publish of the same plan.
+  const busyRef = useRef(false);
+
+  // "Move to My cloud" (already confirmed) = publish a room, then remove the device copy. The
+  // removal runs only once the new room is committed to the project list, so it can never act on
+  // a list from before the room existed, and nothing is removed if publishing fails. This lives
+  // outside the dialog because a successful publish closes the dialog.
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+  useEffect(() => {
+    if (!pendingMove) return;
+    const kept = () => showToast(`The cloud room was created; "${pendingMove.name}" was also kept on this device.`, true);
+    if (customProjects.some((p) => p.roomId === pendingMove.roomId)) {
+      setPendingMove(null);
+      if (onDeleteProject(pendingMove.localId, { confirm: false }) === false) kept();
+      else showToast(`Moved "${pendingMove.name}" to My cloud.`);
+      return;
     }
-    setRenamingId(null);
-  };
+    // Measured from the start, so frequent list updates (autosaves) cannot keep postponing it.
+    const timer = window.setTimeout(() => {
+      setPendingMove(null);
+      kept();
+    }, Math.max(0, pendingMove.startedAt + PENDING_MOVE_TIMEOUT_MS - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [pendingMove, customProjects, onDeleteProject, showToast]);
 
-  const handleDownloadPlanJson = (title: string, data?: JanttData) => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.toLowerCase().replace(/[^a-z0-9]/gi, "-")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(`Downloaded "${title}.json"`);
-  };
+  if (!props.show) return null;
+  // Mounted per open: search, menus and confirmations always start fresh.
+  return <PlanManagerDialog {...props} busyRef={busyRef} onMoveCompleted={setPendingMove} />;
+};
 
-  const handleDownloadPlanCsv = (title: string, data?: JanttData) => {
-    if (!data) return;
-    downloadCsv(data, `${title.toLowerCase().replace(/[^a-z0-9]/gi, "-")}.csv`);
-    showToast(`Exported "${title}.csv"`);
-  };
+interface PlanManagerDialogProps extends PlanManagerModalProps {
+  busyRef: React.MutableRefObject<boolean>;
+  onMoveCompleted: (move: PendingMove) => void;
+}
 
-  const handlePublishLocalToCloud = async (title: string, data?: JanttData) => {
-    if (!data) return null;
-    setIsActionBusy(true);
+const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
+  const {
+    setShow,
+    activeProjectId,
+    customProjects,
+    ownedRooms,
+    sharedRooms,
+    userProfile,
+    isCloudVerified = true,
+    isSigningIn = false,
+    onLogin,
+    onRequireVerification,
+    onDuplicateProject,
+    onRenameProject,
+    onDeleteCloudRoom,
+    onLeaveCloudRoom,
+    onOpenShareRoom,
+    onOpenAddPlanModal,
+    onCreateNewRoom,
+    onJoinRoomLink,
+    onSignOut,
+    onImportFile,
+    showToast,
+    busyRef,
+    onMoveCompleted
+  } = props;
+  // Handlers called after an await use the newest props, not the ones from the click's render.
+  const latestRef = useRef(props);
+  latestRef.current = props;
+
+  const isLoggedIn = props.isLoggedIn ?? Boolean(userProfile);
+  const cloudBlockedReason = !isLoggedIn
+    ? "sign in with GitHub first"
+    : !isCloudVerified
+    ? "verify your GitHub account first"
+    : undefined;
+  const isNarrow = useMediaQuery("(max-width: 960px)");
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [narrowList, setNarrowList] = useState<PlanListId>(() =>
+    activeProjectId.startsWith("room-")
+      ? ownedRooms.some((r) => `room-${r.roomId}` === activeProjectId)
+        ? "cloud"
+        : "shared"
+      : "device"
+  );
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renamingIdRef = useRef<string | null>(null);
+  const renameReturnFocusRef = useRef<HTMLElement | null>(null);
+  const [busyItemId, setBusyItemId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ itemId: string; kind: CardMenuKind; anchor: HTMLButtonElement } | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  const [dragging, setDragging] = useState<{ id: string; kind: PlanItemKind; list: PlanListId } | null>(null);
+  const [dragOverList, setDragOverList] = useState<PlanListId | null>(null);
+
+  const lists = useMemo(
+    () => buildPlanLists({ customProjects, ownedRooms, sharedRooms, activeProjectId, isLoggedIn }),
+    [customProjects, ownedRooms, sharedRooms, activeProjectId, isLoggedIn]
+  );
+  const itemsById = useMemo(() => {
+    const map = new Map<string, PlanCardItem>();
+    PLAN_LIST_ORDER.forEach((list) => lists[list].forEach((item) => map.set(item.id, item)));
+    return map;
+  }, [lists]);
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return lists;
+    const matches = (item: PlanCardItem) =>
+      item.name.toLowerCase().includes(query) ||
+      Boolean(item.roomId?.toLowerCase().includes(query)) ||
+      Boolean(item.ownerUsername?.toLowerCase().includes(query));
+    return {
+      device: lists.device.filter(matches),
+      cloud: lists.cloud.filter(matches),
+      shared: lists.shared.filter(matches)
+    };
+  }, [lists, searchQuery]);
+
+  const close = () => setShow(false);
+
+  /* ----- actions ----- */
+
+  // One action at a time across the whole manager: no duplicate rooms from double clicks or drops.
+  const runExclusive = async (itemId: string, task: () => Promise<void> | void) => {
+    if (busyRef.current) {
+      showToast("Another plan action is still running. Please wait a moment.", true);
+      return;
+    }
+    busyRef.current = true;
+    setBusyItemId(itemId);
     try {
-      showToast(`Publishing "${title}" to Cloud Room...`);
-      const roomId = await onPublishToCloud(title, data);
-      if (roomId) {
-        showToast(`Published! Cloud Room #${roomId} created.`);
-      }
-      return roomId;
-    } catch (err: any) {
-      showToast(err.message || "Failed to publish room", true);
-      return null;
+      await task();
+    } catch (err) {
+      showToast(errorMessage(err), true);
     } finally {
-      setIsActionBusy(false);
+      busyRef.current = false;
+      setBusyItemId(null);
     }
   };
 
-  // Card Action Handler
-  const handleCardAction = async (action: string, item: PlanCardItem) => {
+  const resolvePlanData = async (item: PlanCardItem): Promise<JanttData | null> => {
+    const { activePlanData } = latestRef.current;
+    if (item.isActive && activePlanData) return activePlanData;
+    if (item.roomId) {
+      try {
+        const payload = await getRoom(item.roomId);
+        if (payload?.data) return payload.data;
+      } catch (err) {
+        if (!item.data) {
+          showToast(`Could not load "${item.name}" from the cloud: ${errorMessage(err)}`, true);
+          return null;
+        }
+        showToast(`Could not reach the cloud; using the copy of "${item.name}" saved on this device.`, true);
+      }
+    }
+    if (item.data) return item.data;
+    showToast(`No plan data is available for "${item.name}".`, true);
+    return null;
+  };
+
+  const requestCloudAccess = () => {
+    if (!isLoggedIn) {
+      if (!latestRef.current.isSigningIn) onLogin?.();
+    } else {
+      onRequireVerification?.();
+    }
+  };
+
+  // Only reachable through a confirmed `move_to_cloud` request or a non-destructive copy.
+  const performTransfer = (item: PlanCardItem, kind: TransferKind) =>
+    runExclusive(item.id, async () => {
+      if (kind === "copy_to_device") {
+        const data = await resolvePlanData(item);
+        if (data) latestRef.current.onCreateLocalCopy(item.name, data);
+        return;
+      }
+      // Rooms are never moved: only a device plan can leave this device.
+      if (kind === "move_to_cloud" && item.kind !== "local") return;
+      if (cloudBlockedReason) {
+        requestCloudAccess();
+        return;
+      }
+      const data = await resolvePlanData(item);
+      if (!data) return;
+      // Success and failure feedback comes from the room publisher itself.
+      const roomId = await latestRef.current.onPublishToCloud(item.name, data);
+      if (roomId && kind === "move_to_cloud") {
+        onMoveCompleted({ localId: item.id, roomId, name: item.name, startedAt: Date.now() });
+      }
+    });
+
+  /** Every transfer entry point (menu and drop) goes through here; moves are confirmed first. */
+  const requestTransfer = (item: PlanCardItem, kind: TransferKind) => {
+    if (kind === "move_to_cloud") setConfirm({ action: "move_to_cloud", item });
+    else void performTransfer(item, kind);
+  };
+
+  const executeConfirmed = ({ action, item }: ConfirmRequest) => {
+    setConfirm(null);
+    const roomId = item.roomId;
     switch (action) {
-      case "open":
-        onSelectProject(item.id);
-        setShow(false);
-        break;
-      case "publish_cloud":
-        if (item.data) await handlePublishLocalToCloud(item.name, item.data);
-        break;
-      case "copy_local": {
-        let data = item.data;
-        if (!data && item.roomId) {
-          showToast("Fetching room data from cloud...");
-          try {
-            const roomPayload = await getRoom(item.roomId);
-            if (roomPayload?.data) {
-              data = roomPayload.data;
-            }
-          } catch (err: any) {
-            showToast(err.message || "Failed to load cloud room data.", true);
-            return;
-          }
-        }
-        if (data) {
-          onCreateLocalCopy(item.name, data);
-        } else {
-          showToast("Could not retrieve plan data for local copy.", true);
-        }
-        break;
-      }
-      case "rename":
-        handleStartRename(item.id, item.name);
-        break;
-      case "duplicate":
-        onDuplicateProject(item.id);
-        break;
-      case "export_json": {
-        let data = item.data;
-        if (!data && item.roomId) {
-          showToast("Fetching room data for export...");
-          try {
-            const roomPayload = await getRoom(item.roomId);
-            if (roomPayload?.data) {
-              data = roomPayload.data;
-            }
-          } catch (err: any) {
-            showToast(err.message || "Failed to load cloud room data.", true);
-            return;
-          }
-        }
-        if (data) {
-          handleDownloadPlanJson(item.name, data);
-        } else {
-          showToast("No data available to export.", true);
-        }
-        break;
-      }
-      case "export_csv": {
-        let data = item.data;
-        if (!data && item.roomId) {
-          showToast("Fetching room data for export...");
-          try {
-            const roomPayload = await getRoom(item.roomId);
-            if (roomPayload?.data) {
-              data = roomPayload.data;
-            }
-          } catch (err: any) {
-            showToast(err.message || "Failed to load cloud room data.", true);
-            return;
-          }
-        }
-        if (data) {
-          handleDownloadPlanCsv(item.name, data);
-        } else {
-          showToast("No data available to export.", true);
-        }
-        break;
-      }
-      case "share":
-        if (item.roomId && onOpenShareRoom) onOpenShareRoom(item.roomId);
-        break;
       case "delete_local":
-        if (window.confirm(`Delete local plan "${item.name}" from browser storage?`)) {
-          onDeleteProject(item.id);
-        }
+      case "remove_cached":
+        // Confirmed above, so the project hook must not ask a second time.
+        void runExclusive(item.id, () => {
+          latestRef.current.onDeleteProject(item.id, { confirm: false });
+        });
+        break;
+      case "move_to_cloud":
+        void performTransfer(item, "move_to_cloud");
         break;
       case "delete_room":
-        if (item.roomId && onDeleteCloudRoom) {
-          if (window.confirm(`Permanently delete cloud room "${item.name}"? All collaborators will lose access.`)) {
-            await onDeleteCloudRoom(item.roomId);
-          }
+        if (roomId) {
+          void runExclusive(item.id, () => latestRef.current.onDeleteCloudRoom?.(roomId));
         }
         break;
       case "leave_room":
-        if (item.roomId && onLeaveCloudRoom) {
-          if (window.confirm(`Leave shared room "${item.name}"? You can rejoin later if invited.`)) {
-            await onLeaveCloudRoom(item.roomId);
-          }
+        if (roomId) {
+          void runExclusive(item.id, () => latestRef.current.onLeaveCloudRoom?.(roomId));
         }
         break;
-      default:
+    }
+  };
+
+  const exportPlan = (item: PlanCardItem, format: "json" | "csv") =>
+    runExclusive(item.id, async () => {
+      const data = await resolvePlanData(item);
+      if (!data) return;
+      try {
+        downloadPlanExport(item.name, data, format);
+      } catch (err) {
+        showToast(`${format.toUpperCase()} export failed: ${errorMessage(err)}`, true);
+      }
+    });
+
+  const startRename = (item: PlanCardItem, returnFocusTo: HTMLElement | null) => {
+    renamingIdRef.current = item.id;
+    renameReturnFocusRef.current = returnFocusTo;
+    setRenameValue(item.name);
+    setRenamingId(item.id);
+  };
+
+  const finishRename = (item: PlanCardItem, mode: "commit" | "cancel", returnFocus: boolean) => {
+    if (renamingIdRef.current !== item.id) return;
+    renamingIdRef.current = null;
+    setRenamingId(null);
+    const nextName = renameValue.trim();
+    if (mode === "commit" && nextName && nextName !== item.name) onRenameProject(item.id, nextName);
+    const target = renameReturnFocusRef.current;
+    if (returnFocus && target?.isConnected) target.focus();
+  };
+
+  /* ----- card menu ----- */
+
+  const closeMenu = (returnFocus: boolean) => {
+    const anchor = menu?.anchor;
+    setMenu(null);
+    if (returnFocus && anchor?.isConnected) anchor.focus();
+  };
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!menu || !el) return;
+    // Place the menu inside the dialog card, below the trigger or above it when there is more room.
+    const container = (el.offsetParent as HTMLElement | null) ?? el.parentElement;
+    if (container) {
+      setMenuPosition(computeMenuPosition(el, container, menu.anchor));
+    }
+    el.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+  }, [menu]);
+
+  useEffect(() => {
+    if (!menu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (menuRef.current?.contains(target) || menu.anchor.contains(target)) return;
+      setMenu(null);
+    };
+    const handleScroll = (event: Event) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenu(null);
+    };
+    const handleResize = () => setMenu(null);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [menu]);
+
+  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    if (items.length === 0) return;
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    const focusAt = (i: number) => items[(i + items.length) % items.length].focus();
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        focusAt(index + 1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        focusAt(index - 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusAt(0);
+        break;
+      case "End":
+        event.preventDefault();
+        focusAt(items.length - 1);
+        break;
+      case "Escape":
+      case "Tab":
+        // preventDefault also keeps Escape from closing the whole dialog.
+        event.preventDefault();
+        closeMenu(true);
         break;
     }
   };
 
-  // Drag and Drop Handlers with Move vs Copy Logic
-  const handleDropOnCloudColumn = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOverCol(null);
-    if (!draggedPlan) return;
-
-    if (draggedPlan.type === "local" || draggedPlan.type === "template") {
-      if (draggedPlan.data) {
-        const newRoomId = await handlePublishLocalToCloud(draggedPlan.name, draggedPlan.data);
-        if (newRoomId && dragMode === "move" && draggedPlan.type === "local") {
-          onDeleteProject(draggedPlan.id);
-          showToast(`Moved "${draggedPlan.name}" to Cloud Room #${newRoomId}`);
-        }
-      }
-    }
+  const openMenu = (item: PlanCardItem, kind: CardMenuKind, anchor: HTMLButtonElement) => {
+    setMenuPosition(null);
+    setMenu({ itemId: item.id, kind, anchor });
   };
 
-  const handleDropOnLocalColumn = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOverCol(null);
-    if (!draggedPlan) return;
-
-    if (draggedPlan.type === "owned_room" || draggedPlan.type === "shared_room") {
-      let data = draggedPlan.data;
-      if (!data && draggedPlan.roomId) {
-        showToast("Fetching room data from cloud...");
-        try {
-          const roomPayload = await getRoom(draggedPlan.roomId);
-          if (roomPayload?.data) {
-            data = roomPayload.data;
-          }
-        } catch (err: any) {
-          showToast(err.message || "Failed to load cloud room data.", true);
-          return;
-        }
+  // Menu-button pattern: click, Enter, Space or ArrowDown open the menu; nothing runs until an
+  // entry is activated (unlike a native <select>, whose arrow keys fire `change` while closed).
+  const menuTriggerProps = (item: PlanCardItem, kind: CardMenuKind) => {
+    const isOpen = menu?.itemId === item.id && menu.kind === kind;
+    return {
+      "aria-haspopup": "menu" as const,
+      "aria-expanded": isOpen,
+      onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (isOpen) closeMenu(false);
+        else openMenu(item, kind, event.currentTarget);
+      },
+      onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key !== "ArrowDown" || isOpen) return;
+        event.preventDefault();
+        openMenu(item, kind, event.currentTarget);
       }
-
-      if (data) {
-        onCreateLocalCopy(draggedPlan.name, data);
-
-        if (dragMode === "move") {
-          if (draggedPlan.type === "owned_room" && draggedPlan.roomId && onDeleteCloudRoom) {
-            await onDeleteCloudRoom(draggedPlan.roomId);
-            showToast(`Moved "${draggedPlan.name}" from Cloud to Local Offline`);
-          } else if (draggedPlan.type === "shared_room" && draggedPlan.roomId && onLeaveCloudRoom) {
-            await onLeaveCloudRoom(draggedPlan.roomId);
-            showToast(`Moved "${draggedPlan.name}" to Local Offline & left cloud room`);
-          }
-        }
-      } else {
-        showToast("Could not retrieve plan data for offline copy.", true);
-      }
-    }
+    };
   };
 
-  // Helper renderer for a single Plan Card
-  const renderPlanCard = (item: PlanCardItem) => {
-    const isTemplate = item.type === "template";
-    const isLocal = item.type === "local" || isTemplate;
-    const isOwned = item.type === "owned_room";
-    const isShared = item.type === "shared_room";
-    const isBeingRenamed = renamingId === item.id;
-    const isCurrentlyDragged = draggedPlan?.id === item.id;
-    const isMenuOpen = openCardMenuId === item.id;
+  const getTransferGroups = (item: PlanCardItem): MenuGroup[] => {
+    const options = getTransferOptions(item.kind, cloudBlockedReason);
+    return PLAN_LIST_ORDER.filter((list) => list !== item.list).map((list) => ({
+      label: `To ${LIST_META[list].title}`,
+      entries: options
+        .filter((option) => option.list === list)
+        .map((option, index): MenuEntry => {
+          const kind = option.kind;
+          return {
+            key: kind ?? `blocked-${list}-${index}`,
+            label: option.label,
+            icon: TARGET_ICONS[list],
+            description: option.disabledReason ? capitalize(option.disabledReason) : undefined,
+            disabled: !kind,
+            onSelect: () => {
+              if (kind) requestTransfer(item, kind);
+            }
+          };
+        })
+    }));
+  };
+
+  const getActionGroups = (item: PlanCardItem): MenuGroup[] => {
+    const anchor = menu?.anchor ?? null;
+    const editing: MenuEntry[] = [];
+    if (item.kind === "local") {
+      editing.push({ key: "rename", label: "Rename", icon: <Edit2 size={13} style={{ color: "#F59E0B" }} />, onSelect: () => startRename(item, anchor) });
+    }
+    if (item.kind === "local" || item.kind === "template") {
+      editing.push({ key: "duplicate", label: "Duplicate on this device", icon: <Files size={13} style={{ color: "#818CF8" }} />, onSelect: () => onDuplicateProject(item.id) });
+    }
+    const sharing: MenuEntry[] = [
+      { key: "json", label: "Export as JSON", icon: <FileJson size={13} style={{ color: "#38BDF8" }} />, onSelect: () => void exportPlan(item, "json") },
+      { key: "csv", label: "Export as CSV", icon: <FileSpreadsheet size={13} style={{ color: "#10B981" }} />, onSelect: () => void exportPlan(item, "csv") }
+    ];
+    if (item.roomId && onOpenShareRoom && (item.kind === "owned_room" || item.kind === "shared_room")) {
+      const roomId = item.roomId;
+      sharing.push({ key: "share", label: "Teammates & invite links", icon: <Share2 size={13} style={{ color: "#A855F7" }} />, onSelect: () => onOpenShareRoom(roomId) });
+    }
+    const destructive: MenuEntry[] = [];
+    if (item.kind === "local") {
+      destructive.push({ key: "delete", label: "Delete plan...", tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "delete_local", item }) });
+    } else if (item.kind === "owned_room" && onDeleteCloudRoom) {
+      destructive.push({ key: "delete-room", label: "Delete room for everyone...", tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "delete_room", item }) });
+    } else if (item.kind === "shared_room" && onLeaveCloudRoom) {
+      destructive.push({ key: "leave", label: "Leave room...", tone: "danger", icon: <UserMinus size={13} />, onSelect: () => setConfirm({ action: "leave_room", item }) });
+    } else if (item.kind === "cached_room") {
+      destructive.push({ key: "remove", label: "Remove from this device...", tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "remove_cached", item }) });
+    }
+    return [editing, sharing, destructive].filter((entries) => entries.length > 0).map((entries) => ({ entries }));
+  };
+
+  /* ----- drag & drop (copy only; the "Move / copy to..." menu is the keyboard and touch alternative) ----- */
+
+  const clearDrag = () => {
+    setDragging(null);
+    setDragOverList(null);
+  };
+
+  useEffect(() => {
+    // A file dropped anywhere on the dialog would otherwise make the browser navigate to it.
+    const blockFileDrop = (event: DragEvent) => {
+      if (event.defaultPrevented || !hasDragType(event, "Files")) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+    };
+    // Switching windows mid-drag can swallow `dragend`.
+    const handleBlur = () => {
+      setDragging(null);
+      setDragOverList(null);
+    };
+    window.addEventListener("dragover", blockFileDrop);
+    window.addEventListener("drop", blockFileDrop);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("dragover", blockFileDrop);
+      window.removeEventListener("drop", blockFileDrop);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
+  const dropTargetProps = (list: PlanListId) => ({
+    onDragOver: (event: React.DragEvent) => {
+      if (!dragging || !hasDragType(event, PLAN_DRAG_MIME)) return;
+      if (dragging.list === list || !getDropTransfer(dragging.kind, list, cloudBlockedReason)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      if (dragOverList !== list) setDragOverList(list);
+    },
+    onDragLeave: (event: React.DragEvent) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        setDragOverList((current) => (current === list ? null : current));
+      }
+    },
+    onDrop: (event: React.DragEvent) => {
+      const dragged = dragging;
+      if (!dragged || !hasDragType(event, PLAN_DRAG_MIME)) return;
+      event.preventDefault();
+      clearDrag();
+      if (dragged.list === list) return;
+      const kind = getDropTransfer(dragged.kind, list, cloudBlockedReason);
+      const item = itemsById.get(dragged.id);
+      if (kind && item) void performTransfer(item, kind);
+    }
+  });
+
+  const renderDropHint = (list: PlanListId) => {
+    if (!dragging || dragging.list === list) return null;
+    const kind = getDropTransfer(dragging.kind, list, cloudBlockedReason);
+    if (kind) return <div style={hintStyle(true)}>{DROP_HINTS[kind]}</div>;
+    const reason = getTransferOptions(dragging.kind, cloudBlockedReason).find((o) => o.list === list)?.disabledReason;
+    return <div style={hintStyle(false)}>Can&apos;t drop here{reason ? `: ${reason}` : ""}</div>;
+  };
+
+  /* ----- rendering ----- */
+
+  const renderCard = (item: PlanCardItem) => {
+    const isBusy = busyItemId === item.id;
+    const isRenaming = renamingId === item.id;
+    const isActionsMenuOpen = menu?.itemId === item.id && menu.kind === "actions";
+    const isTransferMenuOpen = menu?.itemId === item.id && menu.kind === "transfer";
+    const taskLabel = item.taskCount === null ? "Tasks: unknown" : `${item.taskCount} task${item.taskCount === 1 ? "" : "s"}`;
 
     return (
       <div
         key={item.id}
-        className={`plan-card ${item.isActive ? "is-active-plan" : ""} ${isCurrentlyDragged ? "is-dragging" : ""}`}
-        draggable={!isTemplate}
-        onDragStart={(e) => {
-          setDraggedPlan(item);
-          e.dataTransfer.setData("text/plain", item.id);
-          e.dataTransfer.effectAllowed = dragMode === "move" ? "move" : "copy";
+        className={`plan-card ${item.isActive ? "is-active-plan" : ""} ${dragging?.id === item.id ? "is-dragging" : ""}`}
+        draggable={!isRenaming && !busyItemId}
+        aria-busy={isBusy || undefined}
+        onDragStart={(event) => {
+          if (menu) setMenu(null);
+          event.dataTransfer.effectAllowed = "copy";
+          event.dataTransfer.setData(PLAN_DRAG_MIME, item.id);
+          event.dataTransfer.setData("text/plain", item.name);
+          setDragging({ id: item.id, kind: item.kind, list: item.list });
         }}
-        onDragEnd={() => {
-          setDraggedPlan(null);
-          setDragOverCol(null);
-        }}
+        onDragEnd={clearDrag}
       >
-        {/* Top Row: Icon, Title, Active Badge */}
         <div className="plan-card-top-row">
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                cursor: !isTemplate ? "grab" : "default",
-                color: "var(--jantt-text-muted)",
-                display: "flex",
-                alignItems: "center"
-              }}
-              title={!isTemplate ? `Drag this card to ${dragMode === "move" ? "Move" : "Copy"} across columns` : "Built-in Template"}
-            >
-              {!isTemplate ? <GripVertical size={14} /> : null}
-            </div>
-
-            {isTemplate ? (
-              <Sparkles size={16} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} />
-            ) : isLocal ? (
-              <HardDrive size={16} style={{ color: "#38BDF8", flexShrink: 0 }} />
-            ) : isOwned ? (
-              <Crown size={16} style={{ color: "#F59E0B", flexShrink: 0 }} />
-            ) : (
-              <Users size={16} style={{ color: "#A855F7", flexShrink: 0 }} />
-            )}
-
-            {isBeingRenamed ? (
+            <GripVertical size={14} aria-hidden="true" style={{ color: "var(--jantt-text-muted)", flexShrink: 0, opacity: 0.7 }} />
+            {KIND_ICONS[item.kind]}
+            {isRenaming ? (
               <input
                 type="text"
                 autoFocus
                 className="select-input"
-                style={{
-                  padding: "2px 6px",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  flex: 1,
-                  height: "26px"
-                }}
+                aria-label={`New name for "${item.name}"`}
+                maxLength={120}
+                style={{ padding: "2px 6px", fontSize: "13px", fontWeight: 600, flex: 1, height: "26px", minWidth: 0 }}
                 value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={() => handleCommitRename(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCommitRename(item.id);
-                  if (e.key === "Escape") setRenamingId(null);
+                onChange={(event) => setRenameValue(event.target.value)}
+                onBlur={() => finishRename(item, "commit", false)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    finishRename(item, "commit", true);
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    finishRename(item, "cancel", true);
+                  }
                 }}
               />
             ) : (
@@ -489,91 +1024,51 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               </span>
             )}
           </div>
-
-          {item.isActive && (
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                padding: "2px 7px",
-                borderRadius: "10px",
-                background: "rgba(56, 189, 248, 0.2)",
-                border: "1px solid rgba(56, 189, 248, 0.4)",
-                color: "var(--jantt-accent, #38BDF8)",
-                flexShrink: 0
-              }}
-            >
-              Active
-            </span>
-          )}
-        </div>
-
-        {/* Metadata Row: Task count, updated time, role */}
-        <div className="plan-card-meta-row">
-          <span>{item.taskCount} tasks</span>
-          <span>•</span>
-          <span>{item.updatedAt}</span>
-          {item.roomId && (
-            <>
-              <span>•</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+            {isBusy && <Loader2 size={14} className="spin-sync-icon" aria-label="Working" />}
+            {item.isActive && (
               <span
                 style={{
-                  padding: "1px 5px",
-                  borderRadius: "4px",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  fontFamily: "monospace",
-                  fontSize: "10.5px"
+                  ...pillStyle("rgba(56, 189, 248, 0.2)", "var(--jantt-accent, #38BDF8)"),
+                  border: "1px solid rgba(56, 189, 248, 0.4)",
+                  borderRadius: "10px",
+                  padding: "2px 7px"
                 }}
               >
-                #{item.roomId}
+                Open now
               </span>
-            </>
-          )}
-          {item.role && (
-            <span
-              style={{
-                marginLeft: "auto",
-                padding: "1px 6px",
-                borderRadius: "4px",
-                fontSize: "10px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                background: isOwned
-                  ? "rgba(245, 158, 11, 0.15)"
-                  : "rgba(168, 85, 247, 0.15)",
-                color: isOwned ? "#F59E0B" : "#C084FC"
-              }}
-            >
-              {item.role}
-            </span>
-          )}
-          {item.ownerUsername && (
-            <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-              by @{item.ownerUsername}
-            </span>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Action Bar: Open Plan + Quick Buttons + Delete + Proper SVG Icon Floating Menu */}
-        <div className="plan-card-action-bar">
-          {/* Primary Open Button */}
-          {item.isActive ? (
-            <button
-              type="button"
-              disabled
-              className="btn-nav"
-              style={{
-                padding: "4px 9px",
-                fontSize: "11.5px",
-                gap: "5px",
-                opacity: 0.8,
-                cursor: "default"
-              }}
+        <div className="plan-card-meta-row">
+          <span>{taskLabel}</span>
+          <span aria-hidden="true">&bull;</span>
+          <span>{item.updatedAt ? formatRelativeTime(item.updatedAt) : item.kind === "template" ? "Built-in" : "Not saved yet"}</span>
+          {item.roomId && (
+            <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)", fontFamily: "monospace", fontSize: "10.5px" }}>
+              #{item.roomId}
+            </span>
+          )}
+          {item.roleLabel && (
+            <span
+              style={pillStyle(
+                item.kind === "owned_room" ? "rgba(245, 158, 11, 0.15)" : "rgba(168, 85, 247, 0.15)",
+                item.kind === "owned_room" ? "#F59E0B" : "#C084FC"
+              )}
             >
+              {item.roleLabel}
+            </span>
+          )}
+          {item.badge && <span style={pillStyle("rgba(148, 163, 184, 0.15)", "var(--jantt-text-muted)")}>{item.badge}</span>}
+          {item.ownerUsername && <span style={{ fontSize: "11px" }}>by @{item.ownerUsername}</span>}
+        </div>
+
+        <div className="plan-card-action-bar" style={{ flexWrap: "wrap" }}>
+          {item.isActive ? (
+            <button type="button" disabled className="btn-nav" style={{ padding: "4px 9px", fontSize: "11.5px", gap: "5px", cursor: "default" }}>
               <Check size={12} style={{ color: "var(--jantt-accent, #38BDF8)" }} />
-              <span>Current</span>
+              <span>Open now</span>
             </button>
           ) : (
             <button
@@ -581,813 +1076,448 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
               className="btn-nav btn-nav-primary"
               style={{ padding: "4px 10px", fontSize: "11.5px" }}
               onClick={() => {
-                onSelectProject(item.id);
-                setShow(false);
+                latestRef.current.onSelectProject(item.id);
+                close();
               }}
-              title="Open and edit this plan"
             >
-              Open Plan
+              Open
             </button>
           )}
 
-          {/* Quick Action Buttons */}
-          {isLocal && !isTemplate && (
-            <button
-              type="button"
-              className="btn-nav"
-              style={{ padding: "4px 7px", fontSize: "11px" }}
-              onClick={() => handlePublishLocalToCloud(item.name, item.data)}
-              disabled={isActionBusy}
-              title="Publish to a new Cloud Room"
-            >
-              <CloudUpload size={12} style={{ color: "#38BDF8" }} />
-            </button>
-          )}
+          <button
+            type="button"
+            className={`btn-nav ${isTransferMenuOpen ? "btn-nav-primary" : ""}`}
+            style={{ padding: "4px 9px", fontSize: "11.5px", gap: "5px" }}
+            aria-label={`Move or copy "${item.name}" to another list`}
+            title="Move or copy this plan to another list"
+            disabled={Boolean(busyItemId)}
+            {...menuTriggerProps(item, "transfer")}
+          >
+            <ArrowLeftRight size={12} aria-hidden="true" />
+            <span>Move / copy to...</span>
+            <ChevronDown size={12} aria-hidden="true" />
+          </button>
 
-          {!isLocal && (
-            <button
-              type="button"
-              className="btn-nav"
-              style={{ padding: "4px 7px", fontSize: "11px" }}
-              onClick={() => handleCardAction("copy_local", item)}
-              title="Save an offline local copy"
-            >
-              <Copy size={12} style={{ color: "#10B981" }} />
-            </button>
-          )}
-
-          {item.roomId && onOpenShareRoom && (
-            <button
-              type="button"
-              className="btn-nav"
-              style={{ padding: "4px 7px", fontSize: "11px" }}
-              onClick={() => onOpenShareRoom(item.roomId!)}
-              title="Invite collaborators to room"
-            >
-              <Share2 size={12} style={{ color: "#A855F7" }} />
-            </button>
-          )}
-
-          {/* Direct Visible Delete / Leave Button */}
-          {isLocal && !isTemplate && (
-            <button
-              type="button"
-              className="btn-nav btn-delete-plan"
-              style={{ padding: "4px 7px", fontSize: "11px", color: "#EF4444" }}
-              onClick={() => handleCardAction("delete_local", item)}
-              title="Delete this local plan"
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
-
-          {isOwned && (
-            <button
-              type="button"
-              className="btn-nav btn-delete-plan"
-              style={{ padding: "4px 7px", fontSize: "11px", color: "#EF4444" }}
-              onClick={() => handleCardAction("delete_room", item)}
-              title="Delete cloud room permanently"
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
-
-          {isShared && (
-            <button
-              type="button"
-              className="btn-nav btn-delete-plan"
-              style={{ padding: "4px 7px", fontSize: "11px", color: "#F59E0B" }}
-              onClick={() => handleCardAction("leave_room", item)}
-              title="Leave this shared cloud room"
-            >
-              <UserMinus size={12} />
-            </button>
-          )}
-
-          {/* Proper SVG Icon Floating Menu (Zero emojis) */}
-          <div style={{ position: "relative", marginLeft: "auto" }}>
-            <button
-              type="button"
-              className={`btn-nav ${isMenuOpen ? "btn-nav-primary" : ""}`}
-              style={{ padding: "4px 6px", fontSize: "11px" }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenCardMenuId(isMenuOpen ? null : item.id);
-              }}
-              title="More actions"
-            >
-              <MoreVertical size={13} />
-            </button>
-
-            {isMenuOpen && (
-              <div
-                className="card-floating-actions-menu"
-                style={{
-                  position: "absolute",
-                  bottom: "calc(100% + 4px)",
-                  right: 0,
-                  zIndex: 100,
-                  minWidth: "210px",
-                  background: "var(--jantt-surface-elevated, #1e293b)",
-                  border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.12))",
-                  borderRadius: "8px",
-                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4)",
-                  padding: "5px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  backdropFilter: "blur(12px)"
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="card-menu-item"
-                  onClick={() => {
-                    setOpenCardMenuId(null);
-                    handleCardAction("open", item);
-                  }}
-                >
-                  <ExternalLink size={13} style={{ color: "var(--jantt-accent, #38BDF8)" }} />
-                  <span>Open Plan</span>
-                </button>
-
-                {isLocal && (
-                  <button
-                    type="button"
-                    className="card-menu-item"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("publish_cloud", item);
-                    }}
-                  >
-                    <CloudUpload size={13} style={{ color: "#38BDF8" }} />
-                    <span>Publish to Cloud Room</span>
-                  </button>
-                )}
-
-                {!isLocal && (
-                  <button
-                    type="button"
-                    className="card-menu-item"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("copy_local", item);
-                    }}
-                  >
-                    <Copy size={13} style={{ color: "#10B981" }} />
-                    <span>Save Offline Local Copy</span>
-                  </button>
-                )}
-
-                {!isTemplate && (isLocal || isOwned) && (
-                  <button
-                    type="button"
-                    className="card-menu-item"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("rename", item);
-                    }}
-                  >
-                    <Edit2 size={13} style={{ color: "#F59E0B" }} />
-                    <span>Rename Plan</span>
-                  </button>
-                )}
-
-                {isLocal && !isTemplate && (
-                  <button
-                    type="button"
-                    className="card-menu-item"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("duplicate", item);
-                    }}
-                  >
-                    <Files size={13} style={{ color: "#818CF8" }} />
-                    <span>Duplicate Plan</span>
-                  </button>
-                )}
-
-                <div
-                  style={{
-                    height: "1px",
-                    background: "var(--jantt-border-subtle, rgba(255, 255, 255, 0.08))",
-                    margin: "3px 4px"
-                  }}
-                />
-
-                <button
-                  type="button"
-                  className="card-menu-item"
-                  onClick={() => {
-                    setOpenCardMenuId(null);
-                    handleCardAction("export_json", item);
-                  }}
-                >
-                  <FileJson size={13} style={{ color: "#38BDF8" }} />
-                  <span>Export as JSON</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="card-menu-item"
-                  onClick={() => {
-                    setOpenCardMenuId(null);
-                    handleCardAction("export_csv", item);
-                  }}
-                >
-                  <FileSpreadsheet size={13} style={{ color: "#10B981" }} />
-                  <span>Export as CSV</span>
-                </button>
-
-                {item.roomId && (
-                  <button
-                    type="button"
-                    className="card-menu-item"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("share", item);
-                    }}
-                  >
-                    <Share2 size={13} style={{ color: "#A855F7" }} />
-                    <span>Invite &amp; Share</span>
-                  </button>
-                )}
-
-                <div
-                  style={{
-                    height: "1px",
-                    background: "var(--jantt-border-subtle, rgba(255, 255, 255, 0.08))",
-                    margin: "3px 4px"
-                  }}
-                />
-
-                {isLocal && !isTemplate && (
-                  <button
-                    type="button"
-                    className="card-menu-item is-danger"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("delete_local", item);
-                    }}
-                  >
-                    <Trash2 size={13} style={{ color: "#EF4444" }} />
-                    <span style={{ color: "#EF4444" }}>Delete Plan</span>
-                  </button>
-                )}
-
-                {isOwned && (
-                  <button
-                    type="button"
-                    className="card-menu-item is-danger"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("delete_room", item);
-                    }}
-                  >
-                    <Trash2 size={13} style={{ color: "#EF4444" }} />
-                    <span style={{ color: "#EF4444" }}>Delete Cloud Room</span>
-                  </button>
-                )}
-
-                {isShared && (
-                  <button
-                    type="button"
-                    className="card-menu-item is-warning"
-                    onClick={() => {
-                      setOpenCardMenuId(null);
-                      handleCardAction("leave_room", item);
-                    }}
-                  >
-                    <UserMinus size={13} style={{ color: "#F59E0B" }} />
-                    <span style={{ color: "#F59E0B" }}>Leave Room</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            className={`btn-nav ${isActionsMenuOpen ? "btn-nav-primary" : ""}`}
+            style={{ padding: "4px 6px", fontSize: "11px", marginLeft: "auto" }}
+            aria-label={`More actions for "${item.name}"`}
+            title="More actions"
+            disabled={isBusy}
+            {...menuTriggerProps(item, "actions")}
+          >
+            <MoreVertical size={13} />
+          </button>
         </div>
       </div>
     );
   };
 
-  return (
-    <div className="prompt-modal-backdrop" onClick={() => setShow(false)}>
-      <div
-        className="prompt-modal-card"
-        style={{
-          maxWidth: "1180px",
-          width: "96vw",
-          height: "88vh",
-          display: "flex",
-          flexDirection: "column",
-          borderRadius: "14px",
-          overflow: "hidden"
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div
-          className="prompt-modal-header"
-          style={{
-            padding: "16px 22px",
-            borderBottom: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.08))",
-            flexShrink: 0
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "10px",
-                background: "var(--jantt-accent-glow, rgba(56, 189, 248, 0.15))",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--jantt-accent, #38BDF8)"
-              }}
-            >
-              <Layers size={20} />
-            </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--jantt-text, #F8FAFC)" }}>
-                Plan &amp; Project Manager
-              </h3>
-              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--jantt-text-muted, #94A3B8)" }}>
-                Drag and drop between columns to move or copy, or choose actions from any card.
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {/* User Profile / Status Indicator */}
-            {userProfile?.username ? (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "4px 10px",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
-                  borderRadius: "20px",
-                  fontSize: "12px"
-                }}
-              >
-                <div
-                  style={{
-                    width: "18px",
-                    height: "18px",
-                    borderRadius: "50%",
-                    background: "var(--jantt-accent, #38BDF8)",
-                    color: "#0F172A",
-                    fontSize: "10px",
-                    fontWeight: 700,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center"
-                  }}
-                >
-                  {userProfile.username[0].toUpperCase()}
-                </div>
-                <span style={{ fontWeight: 600 }}>@{userProfile.username}</span>
-                {onSignOut && (
-                  <button
-                    type="button"
-                    onClick={onSignOut}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--jantt-text-muted)",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      fontSize: "11px",
-                      padding: "2px 4px"
-                    }}
-                    title="Sign Out"
-                  >
-                    <LogOut size={12} />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <span
-                style={{
-                  fontSize: "11.5px",
-                  color: "var(--jantt-text-muted)",
-                  padding: "4px 8px",
-                  background: "rgba(255, 255, 255, 0.04)",
-                  borderRadius: "6px"
-                }}
-              >
-                Local Mode
-              </span>
-            )}
-
-            {/* Universal Project Import Button (.json, .xml, .xer, .csv) */}
-            <input
-              type="file"
-              ref={modalFileInputRef}
-              accept=".json,.xml,.xer,.csv,application/json,text/xml,text/csv"
-              style={{ display: "none" }}
-              onChange={onImportJsonFile}
-            />
-            <button
-              type="button"
-              className="btn-nav"
-              style={{ padding: "6px 11px", fontSize: "12px", gap: "6px" }}
-              onClick={() => modalFileInputRef.current?.click()}
-              title="Import file (.json, MS Project .xml, Primavera .xer, .csv)"
-            >
-              <Upload size={13} style={{ color: "#38BDF8" }} />
-              <span>Import Project</span>
-            </button>
-
-            {/* Quick New Plan Button */}
+  const renderEmptyState = (list: PlanListId) => {
+    if (searchQuery.trim()) {
+      return (
+        <div className="plan-board-empty-zone">
+          <Search size={20} style={{ opacity: 0.5 }} />
+          <span>No plans here match &ldquo;{searchQuery.trim()}&rdquo;.</span>
+        </div>
+      );
+    }
+    if (list === "cloud" && !isLoggedIn) {
+      return (
+        <div className="plan-board-empty-zone">
+          <Cloud size={24} style={{ opacity: 0.5 }} />
+          <span style={{ fontWeight: 600 }}>Sign in to use cloud rooms</span>
+          <span style={{ fontSize: "11px", maxWidth: "240px", lineHeight: 1.4 }}>
+            Cloud rooms sync live across devices and can be shared with teammates.
+          </span>
+          {onLogin && (
             <button
               type="button"
               className="btn-nav btn-nav-primary"
-              style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
-              onClick={() => {
-                setShow(false);
-                onOpenAddPlanModal();
-              }}
-              title="Create a new plan"
+              style={{ fontSize: "12px", gap: "6px" }}
+              onClick={onLogin}
+              disabled={isSigningIn}
+              aria-busy={isSigningIn || undefined}
             >
-              <Plus size={14} style={{ color: "#10B981" }} />
-              <span>New Plan</span>
+              {isSigningIn ? <Loader2 size={13} className="spin-sync-icon" aria-hidden="true" /> : <Github size={13} />}
+              <span>{isSigningIn ? "Signing in..." : "Sign in with GitHub"}</span>
             </button>
+          )}
+        </div>
+      );
+    }
+    if (list === "cloud") {
+      return (
+        <div className="plan-board-empty-zone">
+          <Cloud size={24} style={{ opacity: 0.5 }} />
+          <span style={{ fontWeight: 500 }}>No cloud rooms yet.</span>
+          <span style={{ fontSize: "11px", maxWidth: "240px", lineHeight: 1.4 }}>
+            Use &ldquo;Move / copy to...&rdquo; on a plan, drag a plan here, or create a new room.
+          </span>
+        </div>
+      );
+    }
+    if (list === "shared") {
+      return (
+        <div className="plan-board-empty-zone">
+          <Users size={24} style={{ opacity: 0.5 }} />
+          <span style={{ fontWeight: 500 }}>Nothing shared with you yet.</span>
+          <span style={{ fontSize: "11px", maxWidth: "240px", lineHeight: 1.4 }}>
+            {isLoggedIn
+              ? "Rooms appear here when teammates invite you or you open a room link."
+              : "Sign in to see rooms other people share with you."}
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="plan-board-empty-zone">
+        <HardDrive size={22} style={{ opacity: 0.5 }} />
+        <span>No plans on this device yet.</span>
+      </div>
+    );
+  };
 
-            {/* Close Button */}
+  const renderColumn = (list: PlanListId) => {
+    const meta = LIST_META[list];
+    const items = filtered[list];
+    const isDragOver = dragOverList === list;
+    return (
+      <section
+        key={list}
+        id={`plan-list-panel-${list}`}
+        role={isNarrow ? "tabpanel" : undefined}
+        aria-labelledby={isNarrow ? `plan-list-tab-${list}` : `plan-list-title-${list}`}
+        className={`plan-board-column ${isDragOver ? (list === "device" ? "is-drag-over-emerald" : "is-drag-over") : ""}`}
+        {...dropTargetProps(list)}
+      >
+        <div className="plan-board-column-header" style={{ gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+            {meta.icon}
+            <div style={{ minWidth: 0 }}>
+              <h3
+                id={`plan-list-title-${list}`}
+                style={{ margin: 0, fontWeight: 700, fontSize: "13.5px", color: "var(--jantt-text)", display: "flex", alignItems: "center", gap: "6px" }}
+              >
+                {meta.title}
+                <span
+                  style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "10px", background: "rgba(148, 163, 184, 0.15)", color: meta.accent, fontWeight: 600 }}
+                >
+                  {items.length}
+                </span>
+              </h3>
+              <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>{meta.description}</div>
+            </div>
+          </div>
+          {list === "cloud" && isLoggedIn && onCreateNewRoom && (
+            <button
+              type="button"
+              className="btn-nav"
+              style={{ padding: "3px 8px", fontSize: "11px", gap: "4px", flexShrink: 0 }}
+              onClick={() => {
+                close();
+                onCreateNewRoom();
+              }}
+            >
+              <Plus size={12} />
+              <span>New room</span>
+            </button>
+          )}
+          {list === "shared" && onJoinRoomLink && (
+            <button
+              type="button"
+              className="btn-nav"
+              style={{ padding: "3px 8px", fontSize: "11px", gap: "4px", flexShrink: 0 }}
+              title="Open a room someone shared with you from its link or room ID"
+              onClick={() => {
+                close();
+                onJoinRoomLink();
+              }}
+            >
+              <Link2 size={12} aria-hidden="true" />
+              <span>Join by link</span>
+            </button>
+          )}
+        </div>
+
+        {renderDropHint(list)}
+
+        {list === "cloud" && isLoggedIn && !isCloudVerified && (
+          <div style={noticeStyle}>
+            <ShieldCheck size={14} style={{ color: "#F59E0B", flexShrink: 0 }} />
+            <span style={{ flex: "1 1 160px" }}>Verify your GitHub account to create rooms or copy plans to the cloud.</span>
+            {onRequireVerification && (
+              <button type="button" className="btn-nav" style={{ fontSize: "11px", padding: "3px 8px" }} onClick={onRequireVerification}>
+                Verify
+              </button>
+            )}
+          </div>
+        )}
+        {list === "shared" && !isLoggedIn && items.length > 0 && (
+          <div style={noticeStyle}>
+            <span style={{ flex: "1 1 160px" }}>These rooms are saved in this browser. Sign in to see every room shared with you.</span>
+          </div>
+        )}
+
+        <div className="plan-board-column-body">{items.length > 0 ? items.map(renderCard) : renderEmptyState(list)}</div>
+      </section>
+    );
+  };
+
+  const menuItem = menu ? itemsById.get(menu.itemId) : undefined;
+  const visibleLists = isNarrow ? [narrowList] : PLAN_LIST_ORDER;
+
+  const headerActions = (
+    <>
+      {userProfile?.username ? (
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "3px 6px 3px 10px",
+            background: "rgba(255, 255, 255, 0.05)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            borderRadius: "20px",
+            fontSize: "12px",
+            fontWeight: 600
+          }}
+        >
+          <span>@{userProfile.username}</span>
+          {onSignOut && (
             <button
               type="button"
               className="prompt-modal-close-btn"
-              onClick={() => setShow(false)}
-              title="Close"
-              style={{ marginLeft: "4px" }}
+              style={{ padding: "3px" }}
+              onClick={() => void onSignOut()}
+              aria-label="Sign out"
+              title="Sign out"
             >
-              <X size={18} />
+              <LogOut size={12} />
             </button>
-          </div>
+          )}
         </div>
+      ) : !isLoggedIn && onLogin ? (
+        <button
+          type="button"
+          className="btn-nav"
+          style={{ padding: "6px 11px", fontSize: "12px", gap: "6px" }}
+          onClick={onLogin}
+          disabled={isSigningIn}
+          aria-busy={isSigningIn || undefined}
+        >
+          {isSigningIn ? <Loader2 size={13} className="spin-sync-icon" aria-hidden="true" /> : <Github size={13} />}
+          <span>{isSigningIn ? "Signing in..." : "Sign in"}</span>
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="btn-nav"
+        style={{ padding: "6px 11px", fontSize: "12px", gap: "6px" }}
+        onClick={onImportFile}
+        title="Import a .json, MS Project .xml, Primavera .xer or .csv file onto this device"
+      >
+        <Upload size={13} style={{ color: "#38BDF8" }} />
+        <span>Import file</span>
+      </button>
+      <button
+        type="button"
+        className="btn-nav btn-nav-primary"
+        style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
+        onClick={() => {
+          close();
+          onOpenAddPlanModal();
+        }}
+      >
+        <Plus size={14} />
+        <span>New plan</span>
+      </button>
+    </>
+  );
 
-        {/* Search Bar & Drag Mode Selector Strip */}
+  const confirmDetails = confirm ? describeConfirm(confirm) : null;
+
+  return (
+    <>
+      <Modal onClose={close} maxWidth={1180} tall>
+        <ModalHeader
+          icon={<Layers size={18} />}
+          title="Plan manager"
+          subtitle={
+            isNarrow
+              ? "Pick a list, then use “Move / copy to...” on a plan to transfer it."
+              : "Drag a plan onto another list, or use “Move / copy to...” on its card."
+          }
+          actions={headerActions}
+        />
+
         <div
           style={{
-            padding: "10px 22px",
-            background: "rgba(255, 255, 255, 0.015)",
+            padding: "10px 20px",
             borderBottom: "1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.06))",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
-            gap: "16px",
+            gap: "10px",
+            flexWrap: "wrap",
             flexShrink: 0
           }}
         >
-          {/* Search Input */}
-          <div style={{ position: "relative", flex: 1, maxWidth: "380px" }}>
+          <div style={{ position: "relative", flex: "1 1 240px", maxWidth: isNarrow ? undefined : "380px" }}>
             <Search
               size={14}
-              style={{
-                position: "absolute",
-                left: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "var(--jantt-text-muted)"
-              }}
+              aria-hidden="true"
+              style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--jantt-text-muted)" }}
             />
             <input
-              type="text"
+              type="search"
               className="select-input"
-              style={{
-                width: "100%",
-                paddingLeft: "32px",
-                paddingRight: "10px",
-                fontSize: "12px",
-                height: "32px"
-              }}
-              placeholder="Filter plans by name, room ID, or teammate..."
+              aria-label="Filter plans"
+              style={{ width: "100%", paddingLeft: "32px", paddingRight: "10px", fontSize: "12px", height: "32px", boxSizing: "border-box" }}
+              placeholder="Filter by plan name, room ID or owner..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              // Start in the filter on desktop; on phones a focused input would pop up the keyboard.
+              data-autofocus={isNarrow ? undefined : true}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && searchQuery) {
+                  event.preventDefault();
+                  setSearchQuery("");
+                }
+              }}
             />
           </div>
 
-          {/* Drag Action Toggle: Move (Default) vs Copy (Clean Segmented Selector) */}
+          {isNarrow && (
+            <div
+              role="tablist"
+              aria-label="Plan lists"
+              style={{ display: "flex", gap: "6px", flex: "1 1 100%", overflowX: "auto" }}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+                event.preventDefault();
+                const step = event.key === "ArrowRight" ? 1 : -1;
+                const next = PLAN_LIST_ORDER[(PLAN_LIST_ORDER.indexOf(narrowList) + step + PLAN_LIST_ORDER.length) % PLAN_LIST_ORDER.length];
+                setNarrowList(next);
+                document.getElementById(`plan-list-tab-${next}`)?.focus();
+              }}
+            >
+              {PLAN_LIST_ORDER.map((list) => {
+                const selected = narrowList === list;
+                return (
+                  <button
+                    key={list}
+                    id={`plan-list-tab-${list}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={`plan-list-panel-${list}`}
+                    tabIndex={selected ? 0 : -1}
+                    data-autofocus={selected ? true : undefined}
+                    className={`btn-nav ${selected ? "btn-nav-primary" : ""}`}
+                    style={{
+                      flex: "1 0 auto",
+                      justifyContent: "center",
+                      fontSize: "12px",
+                      padding: "5px 10px",
+                      gap: "6px",
+                      outline: dragOverList === list ? "2px dashed var(--jantt-accent, #38BDF8)" : undefined
+                    }}
+                    onClick={() => setNarrowList(list)}
+                    {...dropTargetProps(list)}
+                  >
+                    {LIST_META[list].title}
+                    <span style={{ opacity: 0.75 }}>{filtered[list].length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className={`plan-board-container ${dragging ? "is-dragging-card" : ""}`}>{visibleLists.map(renderColumn)}</div>
+
+        {menu && menuItem && (
           <div
+            ref={menuRef}
+            role="menu"
+            aria-label={menu.kind === "transfer" ? `Move or copy "${menuItem.name}"` : `Actions for "${menuItem.name}"`}
+            className="card-floating-actions-menu"
+            onKeyDown={handleMenuKeyDown}
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-              background: "rgba(255, 255, 255, 0.05)",
-              padding: "3px 6px",
+              position: "absolute",
+              top: menuPosition?.top ?? 0,
+              left: menuPosition?.left ?? 0,
+              maxHeight: menuPosition?.maxHeight,
+              opacity: menuPosition ? 1 : 0,
+              overflowY: "auto",
+              zIndex: 5,
+              minWidth: "220px",
+              maxWidth: "min(340px, calc(100% - 16px))",
+              background: "var(--jantt-surface-elevated, #1e293b)",
+              border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.12))",
               borderRadius: "8px",
-              border: "1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.08))"
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4)",
+              padding: "5px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "2px"
             }}
           >
-            <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--jantt-text-muted)", marginRight: "4px" }}>
-              Drag Action:
-            </span>
-
-            {/* Move Button (Default) */}
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "5px",
-                fontSize: "11.5px",
-                cursor: "pointer",
-                padding: "3px 9px",
-                borderRadius: "6px",
-                background: dragMode === "move" ? "var(--jantt-accent, #38BDF8)" : "transparent",
-                color: dragMode === "move" ? "#0F172A" : "var(--jantt-text)",
-                fontWeight: dragMode === "move" ? 700 : 500,
-                transition: "all 0.15s ease",
-                userSelect: "none"
-              }}
-            >
-              <input
-                type="radio"
-                name="dragMode"
-                value="move"
-                checked={dragMode === "move"}
-                onChange={() => setDragMode("move")}
-                style={{ display: "none" }}
-              />
-              <span>Move (Default)</span>
-            </label>
-
-            {/* Copy Button */}
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "5px",
-                fontSize: "11.5px",
-                cursor: "pointer",
-                padding: "3px 9px",
-                borderRadius: "6px",
-                background: dragMode === "copy" ? "var(--jantt-accent, #38BDF8)" : "transparent",
-                color: dragMode === "copy" ? "#0F172A" : "var(--jantt-text)",
-                fontWeight: dragMode === "copy" ? 700 : 500,
-                transition: "all 0.15s ease",
-                userSelect: "none"
-              }}
-            >
-              <input
-                type="radio"
-                name="dragMode"
-                value="copy"
-                checked={dragMode === "copy"}
-                onChange={() => setDragMode("copy")}
-                style={{ display: "none" }}
-              />
-              <span>Copy</span>
-            </label>
-          </div>
-        </div>
-
-        {/* 3-List Board Container */}
-        <div className={`plan-board-container ${draggedPlan ? "is-dragging-card" : ""}`}>
-          {/* ========================================================= */}
-          {/* Column 1: Local Offline Plans                             */}
-          {/* ========================================================= */}
-          <div
-            className={`plan-board-column ${dragOverCol === "local" ? "is-drag-over-emerald" : ""}`}
-            onDragOver={(e) => {
-              if (draggedPlan && (draggedPlan.type === "owned_room" || draggedPlan.type === "shared_room")) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = dragMode === "move" ? "move" : "copy";
-                if (dragOverCol !== "local") setDragOverCol("local");
-              }
-            }}
-            onDragLeave={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                setDragOverCol(null);
-              }
-            }}
-            onDrop={handleDropOnLocalColumn}
-          >
-            {/* Column Header */}
-            <div className="plan-board-column-header">
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <HardDrive size={16} style={{ color: "#38BDF8" }} />
-                <span style={{ fontWeight: 700, fontSize: "13.5px", color: "var(--jantt-text)" }}>
-                  Local Offline
-                </span>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    padding: "1px 6px",
-                    borderRadius: "10px",
-                    background: "rgba(56, 189, 248, 0.15)",
-                    color: "#38BDF8",
-                    fontWeight: 600
-                  }}
-                >
-                  {localItems.length}
-                </span>
-
-                {dragOverCol === "local" && (
-                  <span
-                    style={{
-                      fontSize: "10.5px",
-                      fontWeight: 700,
-                      padding: "2px 7px",
-                      borderRadius: "6px",
-                      background: "rgba(16, 185, 129, 0.2)",
-                      color: "#10B981",
-                      border: "1px solid rgba(16, 185, 129, 0.4)"
-                    }}
-                  >
-                    Drop to {dragMode === "move" ? "Move" : "Copy"} Here
-                  </span>
+            {(menu.kind === "transfer" ? getTransferGroups(menuItem) : getActionGroups(menuItem)).map((group, groupIndex) => (
+              <React.Fragment key={group.label ?? groupIndex}>
+                {groupIndex > 0 && (
+                  <div role="separator" style={{ height: "1px", background: "var(--jantt-border-subtle, rgba(255, 255, 255, 0.08))", margin: "3px 4px" }} />
                 )}
-              </div>
-
-              <button
-                type="button"
-                className="btn-nav"
-                style={{ padding: "3px 8px", fontSize: "11px", gap: "4px" }}
-                onClick={() => {
-                  setShow(false);
-                  onOpenAddPlanModal();
-                }}
-                title="Create a new local offline plan"
-              >
-                <Plus size={12} />
-                <span>Plan</span>
-              </button>
-            </div>
-
-            {/* Column Body: Cards stay completely stable without shifting layout! */}
-            <div className="plan-board-column-body">
-              {filteredLocal.map(renderPlanCard)}
-
-              {filteredLocal.length === 0 && (
-                <div className="plan-board-empty-zone">
-                  <HardDrive size={22} style={{ opacity: 0.5 }} />
-                  <span>No matching local plans found.</span>
+                <div role="group" aria-label={group.label} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  {group.label && (
+                    <div
+                      aria-hidden="true"
+                      style={{ padding: "4px 10px 2px", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--jantt-text-muted)" }}
+                    >
+                      {group.label}
+                    </div>
+                  )}
+                  {group.entries.map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      role="menuitem"
+                      tabIndex={-1}
+                      aria-disabled={entry.disabled || undefined}
+                      className={`card-menu-item ${entry.tone === "danger" ? "is-danger" : ""}`}
+                      style={{
+                        alignItems: entry.description ? "flex-start" : undefined,
+                        ...(entry.tone === "danger" ? { color: "#EF4444" } : null),
+                        ...(entry.disabled ? { opacity: 0.6, cursor: "not-allowed" } : null)
+                      }}
+                      onClick={() => {
+                        if (entry.disabled) return;
+                        closeMenu(true);
+                        entry.onSelect();
+                      }}
+                    >
+                      {entry.icon}
+                      <span style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0 }}>
+                        <span>{entry.label}</span>
+                        {entry.description && (
+                          <span style={{ fontSize: "10.5px", lineHeight: 1.35, color: "var(--jantt-text-muted)", whiteSpace: "normal" }}>
+                            {entry.description}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
+              </React.Fragment>
+            ))}
           </div>
+        )}
+      </Modal>
 
-          {/* ========================================================= */}
-          {/* Column 2: My Cloud Rooms                                  */}
-          {/* ========================================================= */}
-          <div
-            className={`plan-board-column ${dragOverCol === "owned" ? "is-drag-over" : ""}`}
-            onDragOver={(e) => {
-              if (draggedPlan && (draggedPlan.type === "local" || draggedPlan.type === "template")) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = dragMode === "move" ? "move" : "copy";
-                if (dragOverCol !== "owned") setDragOverCol("owned");
-              }
-            }}
-            onDragLeave={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                setDragOverCol(null);
-              }
-            }}
-            onDrop={handleDropOnCloudColumn}
-          >
-            {/* Column Header */}
-            <div className="plan-board-column-header">
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Crown size={16} style={{ color: "#F59E0B" }} />
-                <span style={{ fontWeight: 700, fontSize: "13.5px", color: "var(--jantt-text)" }}>
-                  My Cloud Rooms
-                </span>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    padding: "1px 6px",
-                    borderRadius: "10px",
-                    background: "rgba(245, 158, 11, 0.15)",
-                    color: "#F59E0B",
-                    fontWeight: 600
-                  }}
-                >
-                  {ownedItems.length}
-                </span>
-
-                {dragOverCol === "owned" && (
-                  <span
-                    style={{
-                      fontSize: "10.5px",
-                      fontWeight: 700,
-                      padding: "2px 7px",
-                      borderRadius: "6px",
-                      background: "rgba(56, 189, 248, 0.2)",
-                      color: "#38BDF8",
-                      border: "1px solid rgba(56, 189, 248, 0.4)"
-                    }}
-                  >
-                    Drop to {dragMode === "move" ? "Move" : "Copy"} Here
-                  </span>
-                )}
-              </div>
-
-              {onCreateNewRoom && (
-                <button
-                  type="button"
-                  className="btn-nav"
-                  style={{ padding: "3px 8px", fontSize: "11px", gap: "4px" }}
-                  onClick={() => {
-                    setShow(false);
-                    onCreateNewRoom();
-                  }}
-                  title="Create or host a new cloud room"
-                >
-                  <Plus size={12} />
-                  <span>Room</span>
-                </button>
-              )}
-            </div>
-
-            {/* Column Body: Cards stay completely stable without shifting layout! */}
-            <div className="plan-board-column-body">
-              {filteredOwned.map(renderPlanCard)}
-
-              {filteredOwned.length === 0 && (
-                <div className="plan-board-empty-zone">
-                  <Cloud size={24} style={{ opacity: 0.5 }} />
-                  <span style={{ fontWeight: 500 }}>No owned cloud rooms yet.</span>
-                  <span style={{ fontSize: "11px", maxWidth: "220px", lineHeight: "1.4" }}>
-                    Drag any local plan here to {dragMode} it to the cloud, or click + Room above.
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ========================================================= */}
-          {/* Column 3: Shared With Me                                  */}
-          {/* ========================================================= */}
-          <div className="plan-board-column">
-            {/* Column Header */}
-            <div className="plan-board-column-header">
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Users size={16} style={{ color: "#A855F7" }} />
-                <span style={{ fontWeight: 700, fontSize: "13.5px", color: "var(--jantt-text)" }}>
-                  Shared With Me
-                </span>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    padding: "1px 6px",
-                    borderRadius: "10px",
-                    background: "rgba(168, 85, 247, 0.15)",
-                    color: "#C084FC",
-                    fontWeight: 600
-                  }}
-                >
-                  {sharedItems.length}
-                </span>
-              </div>
-            </div>
-
-            {/* Column Body */}
-            <div className="plan-board-column-body">
-              {filteredShared.map(renderPlanCard)}
-
-              {filteredShared.length === 0 && (
-                <div className="plan-board-empty-zone">
-                  <Users size={24} style={{ opacity: 0.5 }} />
-                  <span style={{ fontWeight: 500 }}>No shared rooms yet.</span>
-                  <span style={{ fontSize: "11px", maxWidth: "220px", lineHeight: "1.4" }}>
-                    When teammates invite you to their rooms, they will appear here automatically.
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Modal Footer */}
-        <div
-          className="prompt-modal-footer"
-          style={{
-            padding: "12px 22px",
-            justifyContent: "space-between",
-            borderTop: "1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.06))",
-            flexShrink: 0
-          }}
-        >
-          <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
-            Total Plans: <strong>{localItems.length + ownedItems.length + sharedItems.length}</strong> • Local:{" "}
-            <strong>{localItems.length}</strong> • Owned Rooms: <strong>{ownedItems.length}</strong> • Shared:{" "}
-            <strong>{sharedItems.length}</strong> • Drag Mode: <strong>{dragMode.toUpperCase()}</strong>
-          </div>
-          <button type="button" className="btn-nav" onClick={() => setShow(false)}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+      {confirm && confirmDetails && (
+        <ConfirmDialog {...confirmDetails} onCancel={() => setConfirm(null)} onConfirm={() => executeConfirmed(confirm)} />
+      )}
+    </>
   );
 };

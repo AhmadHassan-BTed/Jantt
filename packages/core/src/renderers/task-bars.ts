@@ -3,7 +3,7 @@ import { InteractionController } from "../controller";
 import { TooltipController } from "./tooltip";
 import { formatHumanDate } from "../date-math";
 import { resolveTaskAssignee } from "../team-resolver";
-import { isTaskDone } from "../utils";
+import { isTaskDone, sanitizeCssColor } from "../utils";
 
 export interface TaskBarsProps {
   taskLayouts: TaskLayout[];
@@ -17,6 +17,8 @@ export interface TaskBarsProps {
   controller: InteractionController;
   tooltip: TooltipController;
 }
+
+const DONE_BACKGROUND = "var(--jantt-bar-done, #64748B)";
 
 /**
  * Renders task bars, milestone diamonds, baseline ghost bars, progress indicators, and link ports.
@@ -68,7 +70,16 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     });
   };
 
+  // Hover cards are suppressed while any button is held (drags, pans, marquee) so re-rendered
+  // bars passing under the pointer do not flash cards over the area being edited.
+  const showTooltip = (e: MouseEvent, item: TaskLayout) => {
+    if (e.buttons) return;
+    props.tooltip.show(item.task, item.category, e, item.scheduleMetrics);
+  };
+
   props.taskLayouts.forEach((item) => {
+    const fillColor = sanitizeCssColor(item.task.color, item.category.color);
+
     // 1. Baseline Ghost Bar
     if (item.baselineLayout && props.showBaselines) {
       const baseBar = document.createElement("div");
@@ -93,17 +104,20 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       mStone.style.width = `${item.width}px`;
       mStone.style.height = `${item.height}px`;
       mStone.style.transform = "translate(-50%, -50%) rotate(45deg)";
-      mStone.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : ((item.task.color as string) || item.category.color);
+      mStone.style.background = isDone ? DONE_BACKGROUND : fillColor;
       mStone.setAttribute("data-task-id", item.task.id);
       mStone.setAttribute("tabindex", "0");
       mStone.setAttribute("role", "button");
-      mStone.setAttribute("aria-label", `Milestone: ${item.displayLabel}, Date: ${item.task.start}`);
+      mStone.setAttribute("aria-label", `Milestone: ${item.displayLabel}, Date: ${formatHumanDate(item.task.start)}`);
 
       mStone.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "move", mStone);
       });
+      mStone.addEventListener("keydown", (e) => {
+        props.controller.handleKeyDown(e, item.task);
+      });
       mStone.addEventListener("mouseenter", (e) => {
-        props.tooltip.show(item.task, item.category, e, item.scheduleMetrics);
+        showTooltip(e, item);
         activateDeps(item.task.id);
       });
       mStone.addEventListener("mouseleave", () => {
@@ -133,7 +147,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     bar.style.top = `${item.y}px`;
     bar.style.width = `${item.width}px`;
     bar.style.height = `${item.height}px`;
-    bar.style.background = isDone ? "var(--jantt-bar-done, #64748B)" : ((item.task.color as string) || item.category.color);
+    bar.style.background = isDone ? DONE_BACKGROUND : fillColor;
     bar.setAttribute("data-task-id", item.task.id);
     bar.setAttribute("tabindex", "0");
     bar.setAttribute("role", "button");
@@ -179,7 +193,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       aAvatar.style.height = "16px";
       aAvatar.style.minWidth = "16px";
       aAvatar.style.borderRadius = "50%";
-      aAvatar.style.background = assigneeInfo.avatarColor || "rgba(0, 0, 0, 0.35)";
+      aAvatar.style.background = sanitizeCssColor(assigneeInfo.avatarColor, "rgba(0, 0, 0, 0.35)");
       aAvatar.style.color = "#FFFFFF";
       aAvatar.style.fontSize = "8px";
       aAvatar.style.fontWeight = "700";
@@ -216,6 +230,10 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       lockBtn.className = `jantt-task-lock-btn ${item.task.locked ? "is-locked" : ""}`;
       lockBtn.title = item.task.locked ? "Locked in place (Click to unlock)" : "Unlocked (Click to lock in place)";
       lockBtn.setAttribute("type", "button");
+      lockBtn.setAttribute("aria-label", item.task.locked ? "Unlock task" : "Lock task");
+      lockBtn.setAttribute("aria-pressed", String(Boolean(item.task.locked)));
+      // The bar itself is the keyboard target; keep the nested pointer shortcut out of the tab order.
+      lockBtn.tabIndex = -1;
       lockBtn.innerHTML = item.task.locked
         ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`
         : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.6"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>`;
@@ -274,7 +292,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
     // Hover Tooltip & Dependency Highlight Wire Sync
     bar.addEventListener("mouseenter", (e) => {
-      props.tooltip.show(item.task, item.category, e, item.scheduleMetrics);
+      showTooltip(e, item);
       activateDeps(item.task.id);
     });
 

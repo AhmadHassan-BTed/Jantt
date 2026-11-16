@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import {
   type JanttData,
   type Person,
@@ -14,8 +14,17 @@ import {
 } from "@jantt/interop";
 import type { SavedProject } from "../types";
 import { DEFAULT_TEMPLATE, STORAGE_KEYS } from "../constants";
-import { saveCustomProjects, createBlankPlan, loadSavedProjects } from "../utils";
-import masterTemplateFixture from "../../../../examples/master-template.json";
+import {
+  createBlankPlan,
+  loadSavedProjects,
+  updateStoredProjects,
+  generateId,
+  cloneTemplateData,
+  loadDefaultPlanData,
+  purgeProjectStorage
+} from "../utils";
+import { storageService } from "../services/storage";
+import { commandBus } from "../services/bus";
 
 interface UseProjectStateOptions {
   initialProjects: SavedProject[];
@@ -35,19 +44,35 @@ interface UseProjectStateOptions {
   onUpdateExistingRoom?: (roomId: string, data: JanttData) => Promise<boolean>;
 }
 
-function cleanUrlForLocalProject() {
+const STORAGE_FULL_MESSAGE =
+  "Browser storage is full: the plan list could not be saved and only lives in this tab. Export your plans (JSON) or delete old ones.";
+
+/**
+ * Mirrors the active plan in the address bar. A room's editor secret is never written there:
+ * anyone the URL is copied to would get editor rights.
+ */
+function syncUrlForProject(project?: SavedProject) {
   if (typeof window === "undefined") return;
   try {
     const url = new URL(window.location.href);
-    url.searchParams.delete("room");
-    url.searchParams.delete("cloud");
-    url.searchParams.delete("url");
-    url.searchParams.delete("data");
-    url.searchParams.delete("name");
-    url.searchParams.delete("plan");
+    ["url", "data", "name", "plan", "cloud"].forEach((key) => url.searchParams.delete(key));
+    if (project?.source === "room" && project.roomId) {
+      url.searchParams.set("room", project.roomId);
+    } else {
+      url.searchParams.delete("room");
+    }
     url.hash = "";
     window.history.replaceState(null, "", url.toString());
   } catch {}
+}
+
+function deepCopy<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/** Retitles a plan copy that this hook owns (callers pass a deep copy, never live data). */
+function withTitle(copy: JanttData, title: string): JanttData {
+  return { ...copy, meta: { ...(copy.meta || {}), title } };
 }
 
 export function useProjectState({
@@ -73,9 +98,13 @@ export function useProjectState({
   customProjectsRef.current = customProjects;
   const activeProjectIdRef = useRef(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
+  const parsedDataRef = useRef(parsedData);
+  parsedDataRef.current = parsedData;
 
   const flushPendingSaveRef = useRef(flushPendingSave);
   flushPendingSaveRef.current = flushPendingSave;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
   const [newPlanTemplateType, setNewPlanTemplateType] = useState<"blank" | "master" | "clone">("blank");
@@ -90,84 +119,67 @@ export function useProjectState({
     return activeProject?.name || parsedData?.meta?.title || "Project Plan";
   }, [activeProjectId, activeProject, parsedData]);
 
-  const handleSelectProject = useCallback(
-    (projectId: string) => {
-      // Synchronously flush unpersisted edits of current project before switching
-      flushPendingSaveRef.current?.();
+  // Persist and announce every active-plan change, whichever code path made it
+  const previousActiveIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    storageService.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, activeProjectId);
+    const previousId = previousActiveIdRef.current;
+    previousActiveIdRef.current = activeProjectId;
+    if (previousId !== null && previousId !== activeProjectId) {
+      commandBus.emit("ACTIVE_PROJECT_CHANGED", { projectId: activeProjectId, previousId });
+    }
+  }, [activeProjectId]);
 
-      setActiveProjectId(projectId);
-      activeProjectIdRef.current = projectId;
-      try {
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, projectId);
-      } catch {}
+  // Another tab changed the plan list: adopt it so this tab never writes a stale list back
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== STORAGE_KEYS.CUSTOM_PROJECTS) return;
+      const fresh = loadSavedProjects();
+      customProjectsRef.current = fresh;
+      setCustomProjects(fresh);
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
-      let targetData: JanttData = DEFAULT_TEMPLATE.data;
-      const found =
-        projectId !== "default"
-          ? customProjectsRef.current.find((p) => p.id === projectId) ||
-            loadSavedProjects().find((p) => p.id === projectId)
-          : null;
-      if (found) {
-        targetData = found.data;
-      }
+  /**
+   * Applies one list mutation to both browser storage (read-modify-write of the latest stored
+   * list) and React state. Returns false when the list could not be stored durably.
+   */
+  const commitProjects = useCallback((mutate: (projects: SavedProject[]) => SavedProject[]): boolean => {
+    const ok = updateStoredProjects(mutate);
+    customProjectsRef.current = mutate(customProjectsRef.current);
+    setCustomProjects((prev) => mutate(prev));
+    if (!ok) showToastRef.current(STORAGE_FULL_MESSAGE, true);
+    return ok;
+  }, []);
 
-      if (typeof window !== "undefined") {
-        try {
-          const url = new URL(window.location.href);
-          if (found && found.source === "linked" && found.sourceUrl) {
-            url.searchParams.set("url", found.sourceUrl);
-            url.searchParams.delete("data");
-            url.searchParams.delete("name");
-            url.searchParams.delete("room");
-            url.searchParams.delete("cloud");
-            url.searchParams.delete("plan");
-            url.hash = "";
-          } else if (found && found.source === "room" && found.roomId) {
-            url.searchParams.set("room", found.roomId);
-            url.searchParams.delete("url");
-            url.searchParams.delete("data");
-            url.searchParams.delete("name");
-            url.searchParams.delete("plan");
-            if (found.secretKey) {
-              url.hash = `key=${encodeURIComponent(found.secretKey)}`;
-            } else {
-              url.hash = "";
-            }
-          } else {
-            url.searchParams.delete("url");
-            url.searchParams.delete("room");
-            url.searchParams.delete("cloud");
-            url.searchParams.delete("data");
-            url.searchParams.delete("name");
-            url.searchParams.delete("plan");
-            url.hash = "";
-          }
-          window.history.replaceState(null, "", url.toString());
-        } catch {}
-      }
-
-      const formatted = JSON.stringify(targetData, null, 2);
+  /** Loads plan data into the editor, people/teams registries and view toggles. */
+  const loadIntoEditor = useCallback(
+    (data: JanttData) => {
+      const formatted = JSON.stringify(data, null, 2);
       setJsonText(formatted);
+      let parsed: JanttData | null = null;
       try {
-        const parsed = JSON.parse(formatted);
-        const val = validate(parsed);
-        setValidationResult(val);
-        if (val.valid) {
-          setParsedData(parsed);
-          setPeople(parsed.people || []);
-          setTeams(parsed.teams || []);
-          if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
-          if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
-          if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
-        } else {
-          setParsedData(null);
-        }
+        parsed = JSON.parse(formatted);
       } catch {
-        setParsedData(null);
+        parsed = null;
       }
+      const val = validate(parsed || {});
+      setValidationResult(val);
+      if (!parsed || !val.valid) {
+        setParsedData(null);
+        return;
+      }
+      setParsedData(parsed);
+      setPeople(parsed.people || []);
+      setTeams(parsed.teams || []);
+      if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
+      if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
+      if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
     },
     [
-      customProjects,
       setJsonText,
       setParsedData,
       setValidationResult,
@@ -177,6 +189,52 @@ export function useProjectState({
       setShowCriticalPath,
       setShowBaselines
     ]
+  );
+
+  /**
+   * Makes a plan the active one. Pending edits of the outgoing plan are flushed first so they
+   * are written to the plan they belong to.
+   */
+  const activateProject = useCallback(
+    (projectId: string, data: JanttData, project?: SavedProject) => {
+      flushPendingSaveRef.current?.();
+      activeProjectIdRef.current = projectId;
+      setActiveProjectId(projectId);
+      syncUrlForProject(project);
+      loadIntoEditor(data);
+    },
+    [loadIntoEditor]
+  );
+
+  /** Adds a new local plan to the list and opens it. */
+  const addAndOpenProject = useCallback(
+    (newProj: SavedProject) => {
+      commitProjects((list) => [newProj, ...list.filter((p) => p.id !== newProj.id)]);
+      activateProject(newProj.id, newProj.data, newProj);
+    },
+    [commitProjects, activateProject]
+  );
+
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      // Flush before reading the target: re-selecting the open plan must load the edits just
+      // saved, not the older stored copy (which the next autosave would write back)
+      flushPendingSaveRef.current?.();
+      if (projectId === "default") {
+        activateProject("default", loadDefaultPlanData());
+        return;
+      }
+      const found =
+        customProjectsRef.current.find((p) => p.id === projectId) ||
+        loadSavedProjects().find((p) => p.id === projectId);
+      if (!found) {
+        showToastRef.current("That plan no longer exists in this browser. Opened the default plan instead.", true);
+        activateProject("default", loadDefaultPlanData());
+        return;
+      }
+      activateProject(projectId, found.data, found);
+    },
+    [activateProject]
   );
 
   const handleOpenAddPlanModal = useCallback(() => {
@@ -201,23 +259,10 @@ export function useProjectState({
       if (templateType === "blank") {
         data = createBlankPlan(title);
       } else if (templateType === "master") {
-        data = {
-          ...JSON.parse(JSON.stringify(masterTemplateFixture)),
-          meta: {
-            ...(masterTemplateFixture.meta || {}),
-            title
-          }
-        };
+        data = withTitle(cloneTemplateData(), title);
       } else {
-        data = parsedData
-          ? {
-              ...JSON.parse(JSON.stringify(parsedData)),
-              meta: {
-                ...(parsedData.meta || {}),
-                title
-              }
-            }
-          : createBlankPlan(title);
+        const source = parsedDataRef.current;
+        data = source ? withTitle(deepCopy(source), title) : createBlankPlan(title);
       }
 
       if (destination === "new_room") {
@@ -236,259 +281,139 @@ export function useProjectState({
 
       // Default Destination: "local"
       const newProj: SavedProject = {
-        id: `plan-${Date.now().toString(36)}`,
+        id: generateId("plan"),
         name: title,
         updatedAt: new Date().toISOString(),
         data,
         source: "local"
       };
-
-      const updated = [newProj, ...customProjects.filter((p) => p.id !== newProj.id)];
-      customProjectsRef.current = updated;
-      activeProjectIdRef.current = newProj.id;
-      setCustomProjects(updated);
-      saveCustomProjects(updated);
-      setActiveProjectId(newProj.id);
-      try {
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
-      } catch {}
-      cleanUrlForLocalProject();
-      setJsonText(JSON.stringify(data, null, 2));
-      setParsedData(data);
-      setPeople(data.people || []);
-      setTeams(data.teams || []);
-      setValidationResult(validate(data));
+      addAndOpenProject(newProj);
       setShowAddPlanModal(false);
       showToast(`Created local plan "${newProj.name}"`);
     },
-    [
-      newPlanTitle,
-      newPlanTemplateType,
-      parsedData,
-      customProjects,
-      onCreateCloudRoom,
-      onUpdateExistingRoom,
-      setJsonText,
-      setParsedData,
-      setPeople,
-      setTeams,
-      setValidationResult,
-      showToast
-    ]
+    [newPlanTitle, newPlanTemplateType, onCreateCloudRoom, onUpdateExistingRoom, addAndOpenProject, showToast]
   );
 
   const handleForkToLocalPlan = useCallback(() => {
-    const activeProj = customProjects.find((p) => p.id === activeProjectId);
+    const activeProj = customProjectsRef.current.find((p) => p.id === activeProjectIdRef.current);
     if (!activeProj) return;
 
-    const forkedData = parsedData
-      ? JSON.parse(JSON.stringify(parsedData))
-      : JSON.parse(JSON.stringify(activeProj.data));
-
+    const forkedName = `${activeProj.name} (Editable Copy)`;
     const newProj: SavedProject = {
-      id: `plan-${Date.now().toString(36)}`,
-      name: `${activeProj.name} (Editable Copy)`,
+      id: generateId("plan"),
+      name: forkedName,
       updatedAt: new Date().toISOString(),
-      data: forkedData,
+      data: withTitle(deepCopy(parsedDataRef.current || activeProj.data), forkedName),
       source: "local"
     };
-
-    const updated = [newProj, ...customProjects];
-    customProjectsRef.current = updated;
-    activeProjectIdRef.current = newProj.id;
-    setCustomProjects(updated);
-    saveCustomProjects(updated);
-    setActiveProjectId(newProj.id);
-    try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
-    } catch {}
-    cleanUrlForLocalProject();
-    setJsonText(JSON.stringify(forkedData, null, 2));
-    setParsedData(forkedData);
-    setValidationResult(validate(forkedData));
-    if (forkedData.meta?.showCriticalPath !== undefined) setShowCriticalPath(forkedData.meta.showCriticalPath);
+    addAndOpenProject(newProj);
     showToast(`Created independent local copy: "${newProj.name}"`);
-  }, [
-    customProjects,
-    activeProjectId,
-    parsedData,
-    setJsonText,
-    setParsedData,
-    setValidationResult,
-    setShowCriticalPath,
-    showToast
-  ]);
+  }, [addAndOpenProject, showToast]);
 
   const handleCreateLocalCopyFromData = useCallback(
     (title: string, data: JanttData) => {
       const copyTitle = title.endsWith("(Local Copy)") ? title : `${title} (Local Copy)`;
-      const copyData = {
-        ...JSON.parse(JSON.stringify(data)),
-        meta: {
-          ...(data.meta || {}),
-          title: copyTitle
-        }
-      };
-
       const newProj: SavedProject = {
-        id: `plan-${Date.now().toString(36)}`,
+        id: generateId("plan"),
         name: copyTitle,
         updatedAt: new Date().toISOString(),
-        data: copyData,
+        data: withTitle(deepCopy(data), copyTitle),
         source: "local"
       };
-
-      const updated = [newProj, ...customProjects];
-      customProjectsRef.current = updated;
-      activeProjectIdRef.current = newProj.id;
-      setCustomProjects(updated);
-      saveCustomProjects(updated);
-      setActiveProjectId(newProj.id);
-      try {
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
-      } catch {}
-      cleanUrlForLocalProject();
-      setJsonText(JSON.stringify(copyData, null, 2));
-      setParsedData(copyData);
-      setPeople(copyData.people || []);
-      setTeams(copyData.teams || []);
-      setValidationResult(validate(copyData));
-      if (copyData.meta?.showCriticalPath !== undefined) setShowCriticalPath(copyData.meta.showCriticalPath);
+      addAndOpenProject(newProj);
       showToast(`Saved local offline copy: "${copyTitle}"`);
     },
-    [
-      customProjects,
-      setJsonText,
-      setParsedData,
-      setPeople,
-      setTeams,
-      setValidationResult,
-      setShowCriticalPath,
-      showToast
-    ]
+    [addAndOpenProject, showToast]
   );
 
   const handleRenameProject = useCallback(
     (projectId: string, newName: string) => {
       const trimmed = newName.trim();
       if (!trimmed) return;
-      setCustomProjects((prev) => {
-        const updated = prev.map((p) => {
-          if (p.id === projectId) {
-            const nextData = p.data
-              ? { ...p.data, meta: { ...(p.data.meta || {}), title: trimmed } }
-              : p.data;
-            return {
-              ...p,
-              name: trimmed,
-              data: nextData,
-              updatedAt: new Date().toISOString()
-            };
-          }
-          return p;
-        });
-        customProjectsRef.current = updated;
-        saveCustomProjects(updated);
-        return updated;
-      });
+      const updatedAt = new Date().toISOString();
+      commitProjects((list) =>
+        list.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                name: trimmed,
+                data: p.data ? { ...p.data, meta: { ...(p.data.meta || {}), title: trimmed } } : p.data,
+                updatedAt
+              }
+            : p
+        )
+      );
 
-      if (activeProjectId === projectId && parsedData) {
+      const current = parsedDataRef.current;
+      if (activeProjectIdRef.current === projectId && current) {
         const updatedActiveData = {
-          ...parsedData,
-          meta: { ...(parsedData.meta || {}), title: trimmed }
+          ...current,
+          meta: { ...(current.meta || {}), title: trimmed }
         };
         setParsedData(updatedActiveData);
         setJsonText(JSON.stringify(updatedActiveData, null, 2));
       }
       showToast(`Renamed plan to "${trimmed}"`);
     },
-    [activeProjectId, parsedData, setParsedData, setJsonText, showToast]
+    [commitProjects, setParsedData, setJsonText, showToast]
   );
 
   const handleDuplicateProject = useCallback(
     (projectId: string) => {
-      let sourceData: JanttData | null = null;
+      // The active plan is duplicated from the editor so unsaved edits are included
+      const isActive = projectId === activeProjectIdRef.current && parsedDataRef.current;
+      let sourceData: JanttData | null = isActive ? parsedDataRef.current : null;
       let baseName = "Plan";
       if (projectId === "default") {
-        sourceData = DEFAULT_TEMPLATE.data;
+        sourceData = sourceData || loadDefaultPlanData();
         baseName = DEFAULT_TEMPLATE.name;
       } else {
-        const found = customProjects.find((p) => p.id === projectId);
+        const found = customProjectsRef.current.find((p) => p.id === projectId);
         if (found) {
-          sourceData = found.data;
+          sourceData = sourceData || found.data;
           baseName = found.name;
         }
       }
       if (!sourceData) return;
 
       const copyTitle = `${baseName} (Copy)`;
-      const copyData = {
-        ...JSON.parse(JSON.stringify(sourceData)),
-        meta: {
-          ...(sourceData.meta || {}),
-          title: copyTitle
-        }
-      };
-
       const newProj: SavedProject = {
-        id: `plan-${Date.now().toString(36)}`,
+        id: generateId("plan"),
         name: copyTitle,
         updatedAt: new Date().toISOString(),
-        data: copyData,
+        data: withTitle(deepCopy(sourceData), copyTitle),
         source: "local"
       };
-
-      const updated = [newProj, ...customProjects];
-      customProjectsRef.current = updated;
-      activeProjectIdRef.current = newProj.id;
-      setCustomProjects(updated);
-      saveCustomProjects(updated);
-      setActiveProjectId(newProj.id);
-      try {
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
-      } catch {}
-      cleanUrlForLocalProject();
-      setJsonText(JSON.stringify(copyData, null, 2));
-      setParsedData(copyData);
-      setPeople(copyData.people || []);
-      setTeams(copyData.teams || []);
-      setValidationResult(validate(copyData));
+      addAndOpenProject(newProj);
       showToast(`Duplicated into "${copyTitle}"`);
     },
-    [
-      customProjects,
-      setJsonText,
-      setParsedData,
-      setPeople,
-      setTeams,
-      setValidationResult,
-      showToast
-    ]
+    [addAndOpenProject, showToast]
   );
 
+  /**
+   * Removes a plan from this device. Asks for confirmation unless `options.confirm` is false
+   * (for flows that already confirmed, or that keep the plan elsewhere, e.g. a move to the cloud).
+   */
   const handleDeleteProject = useCallback(
-    (projectId: string) => {
+    (projectId: string, options?: { confirm?: boolean }) => {
       if (projectId === "default") return;
-      const projToDelete = customProjects.find((p) => p.id === projectId);
-      const isLinked = projToDelete?.source === "linked";
-      const promptMsg = isLinked
-        ? `Unlink cloud plan "${projToDelete?.name || projectId}" from this browser? (Your original file on GitHub remains untouched).`
-        : `Delete local plan "${projToDelete?.name || projectId}" from browser storage?`;
-      const confirmed = window.confirm(promptMsg);
-      if (!confirmed) return;
-      if (activeProjectId === projectId) {
-        flushPendingSaveRef.current?.();
+      const projToDelete = customProjectsRef.current.find((p) => p.id === projectId);
+      const name = projToDelete?.name || projectId;
+      const isRoom = projToDelete?.source === "room";
+      const promptMsg = isRoom
+        ? `Remove the offline copy of cloud room "${name}" from this device?\n\nThe room itself, its members and its cloud data are not affected. To leave or delete the room, use the Plan Manager.`
+        : `Permanently delete the local plan "${name}" and its version history from this browser?\n\nThis cannot be undone. Export it first if you may need it again.`;
+      if (options?.confirm !== false && !window.confirm(promptMsg)) return;
+
+      // Switch away first (this flushes pending edits), then remove the plan and its storage
+      if (activeProjectIdRef.current === projectId) {
+        activateProject("default", loadDefaultPlanData());
       }
-      const updated = customProjects.filter((p) => p.id !== projectId);
-      customProjectsRef.current = updated;
-      setCustomProjects(updated);
-      saveCustomProjects(updated);
-      if (activeProjectId === projectId) {
-        handleSelectProject("default");
-      }
-      showToast(isLinked ? "Unlinked cloud plan." : "Deleted local plan.");
+      commitProjects((list) => list.filter((p) => p.id !== projectId));
+      purgeProjectStorage(projectId);
+      showToast(isRoom ? `Removed the offline copy of "${name}" from this device.` : `Deleted local plan "${name}".`);
     },
-    [customProjects, activeProjectId, handleSelectProject, showToast]
+    [activateProject, commitProjects, showToast]
   );
 
   const handleImportJsonFile = useCallback(
@@ -496,6 +421,9 @@ export function useProjectState({
       const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
+      reader.onerror = () => {
+        showToast(`Could not read "${file.name}".`, true);
+      };
       reader.onload = (event) => {
         try {
           const content = event.target?.result as string;
@@ -513,102 +441,64 @@ export function useProjectState({
           }
 
           const val = validate(parsed);
-          if (val.valid) {
-            const cleanBase = file.name.replace(/\.(json|xml|xer|csv)$/i, "");
-            const projName = parsed.meta?.title || cleanBase;
-            const newProj: SavedProject = {
-              id: `proj-${Date.now().toString(36)}`,
-              name: projName,
-              updatedAt: new Date().toISOString(),
-              data: parsed,
-              source: "local"
-            };
-            const updated = [newProj, ...customProjects];
-            customProjectsRef.current = updated;
-            activeProjectIdRef.current = newProj.id;
-            setCustomProjects(updated);
-            saveCustomProjects(updated);
-            setActiveProjectId(newProj.id);
-            try {
-              localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, newProj.id);
-            } catch {}
-            setJsonText(JSON.stringify(parsed, null, 2));
-            setParsedData(parsed);
-            setPeople(parsed.people || []);
-            setTeams(parsed.teams || []);
-            setValidationResult(val);
-            if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
-            showToast(`Imported "${newProj.name}"`);
-          } else {
-            alert(
-              "The imported file has schema errors:\n" +
-                val.errors.map((err) => `${err.path}: ${err.message}`).join("\n")
-            );
+          if (!val.valid) {
+            const shown = val.errors.slice(0, 3).map((err) => `${err.path}: ${err.message}`).join(" | ");
+            const more = val.errors.length > 3 ? ` (+${val.errors.length - 3} more)` : "";
+            showToast(`"${file.name}" was not imported: ${shown}${more}`, true);
+            return;
           }
+
+          const cleanBase = file.name.replace(/\.(json|xml|xer|csv)$/i, "");
+          const newProj: SavedProject = {
+            id: generateId("proj"),
+            name: parsed.meta?.title || cleanBase,
+            updatedAt: new Date().toISOString(),
+            data: parsed,
+            source: "local"
+          };
+          addAndOpenProject(newProj);
+          showToast(`Imported "${newProj.name}"`);
         } catch (err: any) {
-          alert("Failed to parse imported file: " + err.message);
+          showToast(`Failed to parse "${file.name}": ${err?.message || err}`, true);
         }
       };
       reader.readAsText(file);
       e.target.value = "";
     },
-    [
-      customProjects,
-      setJsonText,
-      setParsedData,
-      setPeople,
-      setTeams,
-      setValidationResult,
-      setShowCriticalPath,
-      showToast
-    ]
+    [addAndOpenProject, showToast]
   );
 
+  /**
+   * Reverts the active plan to its last saved state, discarding unsaved edits. The default plan
+   * is persisted like any other plan, so it reverts to its saved copy (the built-in template
+   * only when it was never saved), never silently wiping saved work.
+   */
   const handleResetActiveProject = useCallback(() => {
-    let targetData = DEFAULT_TEMPLATE.data;
-    if (activeProjectId !== "default") {
-      const found = customProjects.find((p) => p.id === activeProjectId);
-      if (found) targetData = found.data;
+    const projectId = activeProjectIdRef.current;
+    const target =
+      projectId === "default"
+        ? loadDefaultPlanData()
+        : customProjectsRef.current.find((p) => p.id === projectId)?.data;
+    if (!target) return;
+    const before = parsedDataRef.current;
+    loadIntoEditor(deepCopy(target));
+    if (before) {
+      // Recorded like any local edit, so Ctrl+Z brings the discarded changes back
+      commandBus.emit("LOCAL_COMMIT", { before, after: target });
+      showToast("Reset to the last saved state. Press Ctrl+Z to undo.");
     }
-    const formatted = JSON.stringify(targetData, null, 2);
-    setJsonText(formatted);
-    try {
-      const parsed = JSON.parse(formatted);
-      const val = validate(parsed);
-      setValidationResult(val);
-      if (val.valid) {
-        setParsedData(parsed);
-        setPeople(parsed.people || []);
-        setTeams(parsed.teams || []);
-        if (parsed.meta?.scale) setCurrentScale(parsed.meta.scale);
-        if (parsed.meta?.showBaselines !== undefined) setShowBaselines(parsed.meta.showBaselines);
-        if (parsed.meta?.showCriticalPath !== undefined) setShowCriticalPath(parsed.meta.showCriticalPath);
-      }
-    } catch {}
-  }, [
-    activeProjectId,
-    customProjects,
-    setJsonText,
-    setParsedData,
-    setPeople,
-    setTeams,
-    setValidationResult,
-    setCurrentScale,
-    setShowCriticalPath,
-    setShowBaselines
-  ]);
+  }, [loadIntoEditor, showToast]);
 
-  const saveProjectData = useCallback((projectId: string, data: JanttData) => {
-    setCustomProjects((prev) => {
-      const updated = prev.map((p) =>
-        p.id === projectId
-          ? { ...p, data, updatedAt: new Date().toISOString() }
-          : p
-      );
-      customProjectsRef.current = updated;
-      saveCustomProjects(updated);
-      return updated;
-    });
+  /** Persists a plan's data. Returns false when it could not be stored durably. */
+  const saveProjectData = useCallback((projectId: string, data: JanttData): boolean => {
+    const updatedAt = new Date().toISOString();
+    // Only plans that still exist are updated: never resurrect a removed plan
+    const apply = (list: SavedProject[]) =>
+      list.map((p) => (p.id === projectId ? { ...p, data, updatedAt } : p));
+    const ok = updateStoredProjects(apply);
+    customProjectsRef.current = apply(customProjectsRef.current);
+    setCustomProjects((prev) => apply(prev));
+    return ok;
   }, []);
 
   return {
