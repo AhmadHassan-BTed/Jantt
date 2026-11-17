@@ -415,14 +415,9 @@ describe("Stress & Boundary Tests", () => {
 
   describe("Dynamic Today's Line Intra-Day Progress", () => {
     it("starts at column left edge at 00:00 and moves rightward as day progresses", () => {
-      const midnight = new Date();
-      midnight.setHours(0, 0, 0, 0);
-
-      const noon = new Date();
-      noon.setHours(12, 0, 0, 0);
-
-      const evening = new Date();
-      evening.setHours(18, 0, 0, 0);
+      const midnight = new Date(2026, 8, 4, 0, 0, 0, 0);
+      const noon = new Date(2026, 8, 4, 12, 0, 0, 0);
+      const evening = new Date(2026, 8, 4, 18, 0, 0, 0);
 
       const resMidnight = layout(basicJson as JanttData, { dayWidth: 40, currentTime: midnight });
       const resNoon = layout(basicJson as JanttData, { dayWidth: 40, currentTime: noon });
