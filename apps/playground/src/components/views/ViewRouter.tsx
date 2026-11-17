@@ -163,14 +163,6 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               data={ganttDisplayData}
               onCommit={handleGanttCommit}
               readOnly={isViewer}
-              onTaskClick={(task) => taskDetail.openTaskDetailSidebar(task)}
-              onTaskAdd={() => {
-                if (isViewer) {
-                  onPromptFork?.();
-                  return;
-                }
-                tasks.handleAddNewTask();
-              }}
               showDateFilterBadge={false}
               filterTasksByDate={false}
               disableDragOnTouch={Boolean(isMobile)}

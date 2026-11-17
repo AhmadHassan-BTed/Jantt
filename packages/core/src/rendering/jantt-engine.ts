@@ -370,7 +370,8 @@ export class JanttRendererEngine {
       customContainer = this.currentOptions.sidebarContainer;
     }
 
-    this.activeSidebarInstance = createTaskSidebar({
+    let inst: ReturnType<typeof createTaskSidebar>;
+    inst = createTaskSidebar({
       task,
       allTasks: this.currentData.tasks,
       categories: this.currentData.categories || {},
@@ -385,7 +386,9 @@ export class JanttRendererEngine {
         this.notifyError(error);
       },
       onClose: () => {
-        this.activeSidebarInstance = null;
+        if (this.activeSidebarInstance === inst) {
+          this.activeSidebarInstance = null;
+        }
       },
       onSave: (updatedTask) => {
         if (this.currentOptions.readOnly) return;
@@ -402,6 +405,7 @@ export class JanttRendererEngine {
         this.emitCommit();
       }
     });
+    this.activeSidebarInstance = inst;
   };
 
   private handleAddTask = () => {
@@ -741,7 +745,10 @@ export class JanttRendererEngine {
       showCritical: this.state.showCritical,
       people: this.currentData.people,
       teams: this.currentData.teams,
-      onTaskClick: this.openTaskSidebar,
+      onTaskClick: (task: Task) => {
+        this.currentOptions.onTaskClick?.(task);
+        this.openTaskSidebar(task);
+      },
       onAddTask: this.currentOptions.readOnly ? undefined : this.handleAddTask,
       onLabelWidthChange: this.handleLabelWidthChange
     });

@@ -217,6 +217,12 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
   }
 
   const mountTarget = container || document.body;
+  if (!isCustomContainer && typeof document !== "undefined") {
+    // A document-level task drawer is a singleton modal. If one is already open, remove it.
+    document.querySelectorAll(".jantt-sidebar-backdrop").forEach((el) => {
+      el.remove();
+    });
+  }
   mountTarget.appendChild(backdrop);
 
   if (!isCustomContainer) {

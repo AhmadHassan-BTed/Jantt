@@ -241,11 +241,11 @@ export const Jantt: React.FC<JanttProps> = ({
       callbacksRef.current.onCommit?.(final);
     },
     onViewportChange: (vp: ViewportOptions) => callbacksRef.current.onViewportChange?.(vp),
-    onTaskClick: (t: Task) => callbacksRef.current.onTaskClick?.(t),
-    onTaskDelete: (id: string) => callbacksRef.current.onTaskDelete?.(id),
-    onTaskAdd: (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask),
-    onLinkCreate: (fromId: string, toId: string) => callbacksRef.current.onLinkCreate?.(fromId, toId),
-    onLinkDelete: (fromId: string, toId: string) => callbacksRef.current.onLinkDelete?.(fromId, toId),
+    onTaskClick: onTaskClick ? (t: Task) => callbacksRef.current.onTaskClick?.(t) : undefined,
+    onTaskDelete: onTaskDelete ? (id: string) => callbacksRef.current.onTaskDelete?.(id) : undefined,
+    onTaskAdd: onTaskAdd ? (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask) : undefined,
+    onLinkCreate: onLinkCreate ? (fromId: string, toId: string) => callbacksRef.current.onLinkCreate?.(fromId, toId) : undefined,
+    onLinkDelete: onLinkDelete ? (fromId: string, toId: string) => callbacksRef.current.onLinkDelete?.(fromId, toId) : undefined,
     // Optional features are forwarded only when provided: the engine shows the detail renderer and
     // the toolbar's data menu entries based on their presence.
     renderDetail: renderDetail
