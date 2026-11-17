@@ -40,3 +40,5 @@ Thumbs.db
 !.vscode/extensions.json
 
 .awb
+
+.npmrc

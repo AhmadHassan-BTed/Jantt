@@ -1,6 +1,6 @@
 {
   "name": "@jantt/cli",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "CLI tool for opening, converting, auditing, and editing Jantt JSON Gantt charts locally",
   "type": "module",
   "bin": {
@@ -17,8 +17,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@jantt/core": "^1.1.0",
-    "@jantt/interop": "^1.1.0"
+    "@jantt/core": "^1.1.1",
+    "@jantt/interop": "^1.1.1"
   },
   "devDependencies": {
     "vitest": "^1.6.0"

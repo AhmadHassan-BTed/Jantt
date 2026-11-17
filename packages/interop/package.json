@@ -1,6 +1,6 @@
 {
   "name": "@jantt/interop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Enterprise interoperability engine for Jantt: Microsoft Project XML, Primavera P6 XER, and CSV/Spreadsheet ingest & export",
   "publishConfig": {
     "access": "public"
@@ -25,7 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@jantt/core": "^1.1.0"
+    "@jantt/core": "^1.1.1"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

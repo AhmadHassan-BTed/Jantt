@@ -1,6 +1,6 @@
 {
   "name": "@jantt/mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Official Model Context Protocol (MCP) server for Jantt project timelines and Gantt charts",
   "publishConfig": {
     "access": "public"
@@ -30,7 +30,7 @@
     "start": "node ./bin/jantt-mcp.js"
   },
   "dependencies": {
-    "@jantt/core": "^1.1.0"
+    "@jantt/core": "^1.1.1"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

@@ -1,6 +1,6 @@
 {
   "name": "@jantt/elements",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Standard Custom Elements & Web Components for Jantt JSON Gantt chart engine (<jantt-timeline>)",
   "publishConfig": {
     "access": "public"
@@ -25,7 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@jantt/core": "^1.1.0"
+    "@jantt/core": "^1.1.1"
   },
   "devDependencies": {
     "typescript": "^5.4.5",
