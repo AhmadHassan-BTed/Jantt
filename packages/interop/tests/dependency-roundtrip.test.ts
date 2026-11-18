@@ -89,4 +89,26 @@ describe("dependency interchange", () => {
     expect(relations("t4")).toEqual([{ id: "t1", type: "FF", lagDays: -1 }, { id: "t2", type: "SF", lagDays: 2 }]);
     expect(getTaskDependencyRelations(result.tasks.find((t) => t.id === "t3")!)[1].explicitLag).toBe(true);
   });
+  it("sanitizes untrusted keys and rejects malformed structured CSV dependencies", () => {
+    const cleanCsv = [
+      "ID,Label,Start,End,Depends On",
+      "a,A,2026-11-02,2026-11-03,",
+      'b,B,2026-11-03,2026-11-04,"json:[{""id"":""a"",""type"":""SS"",""lagDays"":1,""extra"":""drop"",""__proto__"":{""polluted"":true}}]"'
+    ].join("\n");
+    const warnings: string[] = [];
+    const parsed = importSpreadsheetCsv(cleanCsv, { onWarning: (m) => warnings.push(m) });
+    expect(warnings).toEqual([]);
+    expect(parsed.tasks[1].dependsOn).toEqual([{ id: "a", type: "SS", lagDays: 1 }]);
+    expect(Object.keys((parsed.tasks[1].dependsOn as Array<Record<string, unknown>>)[0])).toEqual(["id", "type", "lagDays"]);
+
+    const badCsv = [
+      "ID,Label,Start,End,Depends On",
+      "a,A,2026-11-02,2026-11-03,",
+      'b,B,2026-11-03,2026-11-04,"json:[{""id"":""a"",""type"":""INVALID"",""lagDays"":0}]"'
+    ].join("\n");
+    const badWarnings: string[] = [];
+    const badParsed = importSpreadsheetCsv(badCsv, { onWarning: (m) => badWarnings.push(m) });
+    expect(badParsed.tasks[1].dependsOn).toBeUndefined();
+    expect(badWarnings.some((w) => /malformed structured dependencies/i.test(w))).toBe(true);
+  });
 });

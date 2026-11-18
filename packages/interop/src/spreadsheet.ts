@@ -8,7 +8,7 @@
  * spreadsheet formulas (CSV injection) and prefixes a UTF-8 BOM for Excel.
  */
 
-import type { JanttData, Task, DependencyRelation, DependsOnValue } from "@jantt/core";
+import type { JanttData, Task, DependencyRelation, DependsOnValue, DependencyObject, DependencyType } from "@jantt/core";
 import { getTaskDependencyRelations, getEffectiveGap, resolveRelationLag, isValidISODate, addDays } from "@jantt/core";
 
 export interface SpreadsheetExportOptions {
@@ -200,11 +200,9 @@ export function importSpreadsheetCsv(content: string | ArrayBuffer | Uint8Array,
 
     let dependsOn: DependsOnValue | undefined;
     if (dependsOnRaw.startsWith("json:[")) {
-      try {
-        const parsed: unknown = JSON.parse(dependsOnRaw.slice(5));
-        if (Array.isArray(parsed) && parsed.every((item) => item && typeof item === "object" && typeof item.id === "string")) dependsOn = parsed;
-        else warn(`Row ${rowNumber}: malformed structured dependencies were ignored.`);
-      } catch { warn(`Row ${rowNumber}: malformed structured dependencies were ignored.`); }
+      const sanitized = parseStructuredDependencies(dependsOnRaw);
+      if (sanitized) dependsOn = sanitized;
+      else warn(`Row ${rowNumber}: malformed structured dependencies were ignored.`);
     } else if (dependsOnRaw) {
       const parts = dependsOnRaw.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
       if (parts.length === 1) {
@@ -439,4 +437,42 @@ function parseCsv(text: string, delimiter: string): string[][] {
   }
 
   return rows;
+}
+
+const VALID_DEPENDENCY_TYPES = new Set<DependencyType>(["FS", "SS", "FF", "SF"]);
+
+function parseStructuredDependencies(raw: string): DependencyObject[] | null {
+  try {
+    const parsed: unknown = JSON.parse(raw.slice(5));
+    if (!Array.isArray(parsed)) return null;
+    const out: DependencyObject[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const rec = item as Record<string, unknown>;
+      if (typeof rec.id !== "string" || !rec.id.trim()) return null;
+
+      let type: DependencyType | undefined;
+      if (rec.type !== undefined) {
+        if (typeof rec.type !== "string" || !VALID_DEPENDENCY_TYPES.has(rec.type as DependencyType)) {
+          return null;
+        }
+        type = rec.type as DependencyType;
+      }
+
+      const rawLag = rec.lagDays !== undefined ? rec.lagDays : rec.lag;
+      let lagDays: number | undefined;
+      if (rawLag !== undefined) {
+        if (typeof rawLag !== "number" || !Number.isFinite(rawLag)) return null;
+        lagDays = rawLag;
+      }
+
+      const entry: DependencyObject = { id: rec.id };
+      if (type !== undefined) entry.type = type;
+      if (lagDays !== undefined) entry.lagDays = lagDays;
+      out.push(entry);
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }

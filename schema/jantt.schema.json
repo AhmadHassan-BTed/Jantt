@@ -160,6 +160,19 @@
           "default": 2,
           "description": "Default gap (in days) between a predecessor's end and the start of a finish-to-start successor, used when neither the link nor the task sets its own lag/gapDays. Negative values allow overlap."
         },
+        "defaultResourceCapacity": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Default resource capacity in allocation units (1 = 100%)."
+        },
+        "resourceCapacities": {
+          "type": "object",
+          "description": "Resource-specific capacities keyed by person ID or name (1 = 100%).",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
         "targetDate": {
           "$ref": "#/definitions/isoDate",
           "description": "Contractual completion deadline used for float (negative when breached) and PERT on-time probability."
