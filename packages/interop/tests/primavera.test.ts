@@ -48,7 +48,7 @@ describe("Oracle Primavera P6 XER Interoperability", () => {
     expect(m1?.progress).toBe(1.0);
 
     const m2 = parsed.tasks.find((t) => t.id === "M2");
-    expect(m2?.dependsOn).toBe("M1");
+    expect(m2?.dependsOn).toEqual([{ id: "M1", type: "FS", lagDays: 2 }]);
 
     const m3 = parsed.tasks.find((t) => t.id === "M3");
     expect(m3?.dependsOn).toEqual([{ id: "M2", type: "SS", lagDays: 1 }]);
@@ -113,11 +113,11 @@ describe("Oracle Primavera P6 XER Interoperability", () => {
 
     const pred = lines.slice(lines.indexOf("%T\tTASKPRED") + 2).find((l) => l.startsWith("%R"))!;
     expect(pred.split("\t").slice(2, 4)).toEqual(["2002", "2001"]);
-    expect(pred.endsWith("\tPR_FS\t0.0")).toBe(true);
+    expect(pred.endsWith("\tPR_FS\t16.0")).toBe(true);
 
     const parsed = importPrimaveraXer(xer);
     expect(parsed.tasks[0].milestone).toBeUndefined();
-    expect(parsed.tasks[1].dependsOn).toBe("render-3d");
+    expect(parsed.tasks[1].dependsOn).toEqual([{ id: "render-3d", type: "FS", lagDays: 2 }]);
   });
 
   it("skips tombstones on export", () => {
@@ -172,10 +172,10 @@ describe("Oracle Primavera P6 XER Interoperability", () => {
     // 20h lag on a 10h/day calendar = 2 days
     expect(byName["Piping"].dependsOn).toEqual([{ id: "A1000", type: "SS", lagDays: 2 }]);
     // Finish milestone: single date, project-node WBS -> default category; unknown pred_type -> FS
-    expect(byName["Mechanical Completion"]).toMatchObject({ start: "2026-11-27", end: "2026-11-27", milestone: true, category: "default", dependsOn: "A1010" });
+    expect(byName["Mechanical Completion"]).toMatchObject({ start: "2026-11-27", end: "2026-11-27", milestone: true, category: "default", dependsOn: [{ id: "A1010", type: "FS", lagDays: 0 }] });
     // Duplicate task_code from the second project is renamed, links still resolve by task_id
     expect(byName["Survey"].id).toBe("A1000-BETA");
-    expect(byName["Survey"].dependsOn).toBe("A1020");
+    expect(byName["Survey"].dependsOn).toEqual([{ id: "A1020", type: "FS", lagDays: 0 }]);
     expect(warnings.join("\n")).toMatch(/2 projects/);
     expect(warnings.join("\n")).toMatch(/duplicated/);
   });

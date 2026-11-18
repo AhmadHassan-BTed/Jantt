@@ -12,7 +12,7 @@
  */
 
 import type { JanttData, Task, DependencyObject, DependencyType } from "@jantt/core";
-import { getTaskDependencyRelations, isValidISODate } from "@jantt/core";
+import { getTaskDependencyRelations, getEffectiveGap, resolveRelationLag, isValidISODate } from "@jantt/core";
 import { decodeTextBytes } from "./spreadsheet.js";
 
 export interface MsProjectExportOptions {
@@ -128,7 +128,7 @@ export function exportMsProjectXml(plan: JanttData, options: MsProjectExportOpti
       xml += `        <PredecessorUID>${predUid}</PredecessorUID>\n`;
       xml += `        <Type>${TYPE_TO_MS[dep.type] ?? 1}</Type>\n`;
       xml += `        <CrossProject>0</CrossProject>\n`;
-      xml += `        <LinkLag>${Math.round((dep.lagDays || 0) * MINUTES_PER_DAY * 10)}</LinkLag>\n`;
+      xml += `        <LinkLag>${Math.round(resolveRelationLag(dep, getEffectiveGap(task, plan.meta?.defaultGapDays)) * MINUTES_PER_DAY * 10)}</LinkLag>\n`;
       xml += `        <LagFormat>7</LagFormat>\n`;
       xml += `      </PredecessorLink>\n`;
     }
@@ -292,9 +292,7 @@ export function importMsProjectXml(content: string | ArrayBuffer | Uint8Array, o
         droppedLinks++;
       }
     }
-    if (deps.length === 1 && deps[0].type === "FS" && !deps[0].lagDays) {
-      task.dependsOn = deps[0].id;
-    } else if (deps.length > 0) {
+    if (deps.length > 0) {
       task.dependsOn = deps;
     }
     return task;
@@ -349,12 +347,9 @@ export function sanitizeXmlText(value: string): string {
   );
 }
 
-/**
- * Imported link. A zero lag is left out so every zero-lag FS link uses the plan's gap, exactly
- * like the plain-id form a single FS link collapses to (an explicit 0 would override the gap).
- */
+/** External formats specify an explicit lag, including zero. */
 export function dependencyObject(id: string, type: DependencyType, lagDays: number): DependencyObject {
-  return lagDays ? { id, type, lagDays } : { id, type };
+  return { id, type, lagDays };
 }
 
 function extendedAttributeXml(fieldId: string, value: string): string {

@@ -31,6 +31,11 @@ Every exporter skips soft-deleted (`_deleted`) tasks and uses `label`, then `nam
 | `status` | – | `TK_Active` → `in-progress`, `TK_Complete` → `completed` | `Status` |
 | `estimatedCost` | – | – | `EstimatedCost` (finite numbers only) |
 
+Exports write each dependency's effective lag, including a task or project default gap,
+so schedule relationships survive import into formats without Jantt's gap settings. Imported
+MS Project and Primavera links retain explicit zero lags. CSV uses a `json:`-prefixed
+structured dependency field when task IDs contain commas or semicolons.
+
 Not mapped: resources and assignments, costs (except the CSV `EstimatedCost` column), baselines, custom calendars (exports use a standard 5-day, 8-hour week) and P6 activity codes. MS Project summary rows, blank rows and inactive tasks are skipped on import.
 
 ---

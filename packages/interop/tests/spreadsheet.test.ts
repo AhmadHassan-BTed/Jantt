@@ -118,7 +118,7 @@ describe("Spreadsheet CSV Interoperability", () => {
         { id: "qa", category: "dev", start: "2026-11-05", end: "2026-11-06", dependsOn: "render-3d" }
       ]
     });
-    expect(importSpreadsheetCsv(csv).tasks[1].dependsOn).toBe("render-3d");
+    expect(importSpreadsheetCsv(csv).tasks[1].dependsOn).toBe("render-3d:FS+2d");
 
     const warnings: string[] = [];
     const [task] = importSpreadsheetCsv("ID,Start,Cost\na,2026-11-01,lots", { onWarning: (m) => warnings.push(m) }).tasks;
@@ -148,8 +148,8 @@ describe("Spreadsheet CSV Interoperability", () => {
     };
     const parsed = importSpreadsheetCsv(exportSpreadsheetCsv(depPlan));
     expect(parsed.tasks[1].dependsOn).toBe("a:SS+2d");
-    expect(parsed.tasks[2].dependsOn).toEqual(["a", "b"]);
-    expect(parsed.tasks[3].dependsOn).toEqual(["a:FF-1d", "b"]);
+    expect(parsed.tasks[2].dependsOn).toEqual(["a:FS+2d", "b:FS+2d"]);
+    expect(parsed.tasks[3].dependsOn).toEqual(["a:FF-1d", "b:FS+2d"]);
   });
 
   it("skips tombstones and uses the name alias on export", () => {

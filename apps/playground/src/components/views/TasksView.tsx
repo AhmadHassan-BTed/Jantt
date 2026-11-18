@@ -20,6 +20,7 @@ import {
   sanitizeCssColor,
   type TaskIdLookup
 } from "@jantt/core";
+import { ResourceLevelingPanel } from "./ResourceLevelingPanel";
 import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
 import { getPeerId, isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
 import { TaskStatusSelect, applyTaskStatus, getStatusValue, onActivateKey, tintColor } from "./KanbanView";
@@ -88,6 +89,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const [showResourceLeveling, setShowResourceLeveling] = React.useState(false);
   const activeTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
   const matchingDateFilterTasks = activeTasks.filter(isTaskMatchingDateFilter);
 
@@ -217,6 +219,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </div>
 
         <div className="tasks-view-toolbar">
+          <button type="button" className="btn-nav" onClick={() => setShowResourceLeveling((shown) => !shown)} aria-expanded={showResourceLeveling}>Resource leveling</button>
           {/* Search Filter */}
           <div className="tasks-search-wrap">
             <input
@@ -280,6 +283,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
           )}
         </div>
       </div>
+
+      {showResourceLeveling && <ResourceLevelingPanel data={parsedData} onCommit={handleChartCommit} readOnly={isViewer} onPromptFork={onPromptFork} />}
 
       {/* Tasks Content: Checklist or Cards */}
       {(() => {

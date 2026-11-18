@@ -19,6 +19,10 @@ export interface JanttMeta {
   chartStart?: string; // Backwards-compatible alias for start
   chartEnd?: string; // Backwards-compatible alias for end
   defaultGapDays?: number;
+  /** Default resource capacity in allocation units (1 = 100%). */
+  defaultResourceCapacity?: number;
+  /** Resource-specific capacities keyed by person ID or name. */
+  resourceCapacities?: Record<string, number>;
   scale?: TimeScale;
   linkRouting?: LinkRoutingStyle;
   showCriticalPath?: boolean;
