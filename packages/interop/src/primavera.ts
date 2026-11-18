@@ -10,7 +10,7 @@
  */
 
 import type { JanttData, Task, DependencyType } from "@jantt/core";
-import { getTaskDependencyRelations } from "@jantt/core";
+import { getTaskDependencyRelations, getEffectiveGap, resolveRelationLag } from "@jantt/core";
 import { countWorkdays, dependencyObject, isoDay } from "./ms-project.js";
 import { decodeTextBytes } from "./spreadsheet.js";
 
@@ -146,7 +146,7 @@ export function exportPrimaveraXer(plan: JanttData, options: PrimaveraExportOpti
       const predTaskId = taskCodeToP6Id.get(dep.id);
       if (!predTaskId || predTaskId === currentTaskId) continue;
       const predType = TYPE_TO_P6[dep.type] || "PR_FS";
-      const lagHours = (dep.lagDays || 0) * HOURS_PER_DAY;
+      const lagHours = resolveRelationLag(dep, getEffectiveGap(t, plan.meta?.defaultGapDays)) * HOURS_PER_DAY;
       lines.push(`%R\t${predIdCounter++}\t${currentTaskId}\t${predTaskId}\t${PROJECT_ID}\t${PROJECT_ID}\t${predType}\t${lagHours.toFixed(1)}`);
     }
   });
@@ -282,17 +282,7 @@ export function importPrimaveraXer(content: string | ArrayBuffer | Uint8Array, o
     }
   }
 
-  // Normalize single FS dependencies
-  const tasks: Task[] = Array.from(p6IdToTask.values()).map((t) => {
-    if (Array.isArray(t.dependsOn) && t.dependsOn.length === 1) {
-      const single = t.dependsOn[0];
-      if (typeof single === "object" && single !== null && single.type === "FS" && !single.lagDays) {
-        return { ...t, dependsOn: single.id };
-      }
-    }
-    return t;
-  });
-
+  const tasks: Task[] = Array.from(p6IdToTask.values());
   if (tasks.length === 0) {
     throw new Error("The XER file contains no dated activities for the selected project.");
   }

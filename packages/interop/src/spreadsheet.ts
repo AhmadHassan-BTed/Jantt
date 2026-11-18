@@ -8,8 +8,8 @@
  * spreadsheet formulas (CSV injection) and prefixes a UTF-8 BOM for Excel.
  */
 
-import type { JanttData, Task, DependencyRelation } from "@jantt/core";
-import { getTaskDependencyRelations, isValidISODate, addDays } from "@jantt/core";
+import type { JanttData, Task, DependencyRelation, DependsOnValue } from "@jantt/core";
+import { getTaskDependencyRelations, getEffectiveGap, resolveRelationLag, isValidISODate, addDays } from "@jantt/core";
 
 export interface SpreadsheetExportOptions {
   /** Prefix a UTF-8 byte-order mark so Excel opens non-ASCII text correctly (default `true`). */
@@ -66,7 +66,12 @@ export function exportSpreadsheetCsv(plan: JanttData, options: SpreadsheetExport
     const progress = typeof t.progress === "number" && Number.isFinite(t.progress) ? Math.min(1, Math.max(0, t.progress)) : 0;
     // One decimal keeps sub-percent progress (0.5%) from collapsing to 0% or 1%.
     const progressPct = `${Number((progress * 100).toFixed(1))}%`;
-    const depsStr = getTaskDependencyRelations(t, knownIds).map(formatDependency).join("; ");
+    const deps = getTaskDependencyRelations(t, knownIds).map((dep) => ({
+      id: dep.id, type: dep.type, lagDays: resolveRelationLag(dep, getEffectiveGap(t, plan.meta?.defaultGapDays))
+    }));
+    const depsStr = deps.some((dep) => /[,;]/.test(dep.id) || dep.id.startsWith("json:["))
+      ? `json:${JSON.stringify(deps)}`
+      : deps.map((dep) => formatDependency({ ...dep, explicitLag: true })).join("; ");
     const priorityVal = typeof t.priority === "string" ? t.priority : "";
     const ownerVal = typeof t.owner === "string" ? t.owner : (typeof t.assignee === "string" ? t.assignee : "");
     const notesVal = typeof t.notes === "string" && t.notes ? t.notes : (typeof t.description === "string" ? t.description : "");
@@ -193,8 +198,14 @@ export function importSpreadsheetCsv(content: string | ArrayBuffer | Uint8Array,
       warn(`Row ${rowNumber}: could not read cost "${costRaw}"; it was left out.`);
     }
 
-    let dependsOn: string | string[] | undefined;
-    if (dependsOnRaw) {
+    let dependsOn: DependsOnValue | undefined;
+    if (dependsOnRaw.startsWith("json:[")) {
+      try {
+        const parsed: unknown = JSON.parse(dependsOnRaw.slice(5));
+        if (Array.isArray(parsed) && parsed.every((item) => item && typeof item === "object" && typeof item.id === "string")) dependsOn = parsed;
+        else warn(`Row ${rowNumber}: malformed structured dependencies were ignored.`);
+      } catch { warn(`Row ${rowNumber}: malformed structured dependencies were ignored.`); }
+    } else if (dependsOnRaw) {
       const parts = dependsOnRaw.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
       if (parts.length === 1) {
         dependsOn = parts[0];

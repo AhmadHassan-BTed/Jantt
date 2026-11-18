@@ -48,7 +48,7 @@ describe("Microsoft Project XML Interoperability", () => {
 
     expect(parsed.tasks[1].label).toBe("Avionics Integration");
     expect(parsed.tasks[1].progress).toBe(0.5);
-    expect(parsed.tasks[1].dependsOn).toBe("t1");
+    expect(parsed.tasks[1].dependsOn).toEqual([{ id: "t1", type: "FS", lagDays: 2 }]);
 
     expect(parsed.tasks[2].label).toBe("Cryogenic Static Fire");
     expect(parsed.tasks[2].dependsOn).toEqual([{ id: "t2", type: "FS", lagDays: 2 }]);
@@ -69,9 +69,9 @@ describe("Microsoft Project XML Interoperability", () => {
 
     const parsed = importMsProjectXml(xml);
     expect(parsed.tasks[1].dependsOn).toEqual([{ id: "a", type: "SS", lagDays: 1 }]);
-    // Zero lags are left out so links keep the plan's default gap semantics.
-    expect(parsed.tasks[2].dependsOn).toEqual([{ id: "a", type: "SF" }]);
-    expect(parsed.tasks[3].dependsOn).toEqual([{ id: "a", type: "FF" }]);
+    // External links retain their explicit zero lag.
+    expect(parsed.tasks[2].dependsOn).toEqual([{ id: "a", type: "SF", lagDays: 0 }]);
+    expect(parsed.tasks[3].dependsOn).toEqual([{ id: "a", type: "FF", lagDays: 0 }]);
   });
 
   it("writes task elements in MSPDI schema order (Active and Manual right after Name)", () => {
@@ -121,8 +121,8 @@ describe("Microsoft Project XML Interoperability", () => {
       ]
     });
     expect(xml).toContain("<PredecessorUID>1</PredecessorUID>");
-    expect(xml).toContain("<LinkLag>0</LinkLag>");
-    expect(importMsProjectXml(xml).tasks[1].dependsOn).toBe("render-3d");
+    expect(xml).toContain("<LinkLag>9600</LinkLag>");
+    expect(importMsProjectXml(xml).tasks[1].dependsOn).toEqual([{ id: "render-3d", type: "FS", lagDays: 2 }]);
   });
 
   it("round-trips non t<n> ids, categories, notes, milestones and the name alias", () => {
@@ -139,11 +139,11 @@ describe("Microsoft Project XML Interoperability", () => {
     expect(parsed.tasks[0].category).toBe("design");
     expect(parsed.tasks[0].notes).toBe("Line 1\nLine 2");
     expect(parsed.tasks[1].milestone).toBe(true);
-    expect(parsed.tasks[1].dependsOn).toBe("design-1");
-    // Several zero-lag FS links use the gap exactly like the single-link plain-id form.
+    expect(parsed.tasks[1].dependsOn).toEqual([{ id: "design-1", type: "FS", lagDays: 2 }]);
+    // Export materializes the plan gap so it survives an external round trip.
     expect(parsed.tasks[2].dependsOn).toEqual([
-      { id: "design-1", type: "FS" },
-      { id: "gate.A", type: "FS" }
+      { id: "design-1", type: "FS", lagDays: 2 },
+      { id: "gate.A", type: "FS", lagDays: 2 }
     ]);
   });
 
