@@ -69,3 +69,18 @@ jobs:
 
       - name: Run Python Tests
         run: python -m unittest discover -s python/tests
+
+  ci-gate:
+    name: CI Gate
+    needs: [validate, python]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify all CI jobs passed
+        run: |
+          if [ "${{ needs.validate.result }}" != "success" ] || [ "${{ needs.python.result }}" != "success" ]; then
+            echo "CI failed: validate=${{ needs.validate.result }}, python=${{ needs.python.result }}"
+            exit 1
+          fi
+          echo "All CI jobs passed (validate=${{ needs.validate.result }}, python=${{ needs.python.result }})."
