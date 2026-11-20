@@ -52,6 +52,9 @@ export const STORAGE_KEYS = {
   DISMISS_ORIENTATION_BANNER: "jantt_dismiss_orientation_banner",
   GH_ACCESS_TOKEN: "jantt_gh_access_token",
   AUTH_REDIRECT_PENDING: "jantt_auth_redirect_pending",
+  COPILOT_PROVIDER: "jantt_copilot_provider",
+  COPILOT_MODEL: "jantt_copilot_model",
+  COPILOT_TEMPERATURE: "jantt_copilot_temperature",
   /** Prefix for quarantined, unreadable project-list entries (suffix: content hash). */
   CORRUPT_PROJECTS_PREFIX: "jantt_custom_projects_corrupt_"
 };

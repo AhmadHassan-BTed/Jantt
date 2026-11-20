@@ -29,6 +29,7 @@ interface MobileNavbarProps {
   selectedThemeId: string;
   setSelectedThemeId: (id: string) => void;
   onOpenPromptModal: () => void;
+  onToggleCopilot?: () => void;
   onOpenJsonEditor: () => void;
   onImportFile?: () => void;
   currentUser?: FirebaseUser | null;
@@ -67,6 +68,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   selectedThemeId,
   setSelectedThemeId,
   onOpenPromptModal,
+  onToggleCopilot,
   onOpenJsonEditor,
   onImportFile,
   currentUser,
@@ -101,6 +103,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
       snapshotsCount={snapshotsCount}
       onOpenVersionHistory={onOpenVersionHistory}
       onOpenPromptModal={onOpenPromptModal}
+      onToggleCopilot={onToggleCopilot}
       onOpenPlanManager={onOpenPlanManager}
       onOpenPeopleModal={() => setShowPeopleModal(true)}
       onOpenJsonEditor={onOpenJsonEditor}

@@ -37,6 +37,7 @@ import { ENABLE_GITHUB_VERIFICATION_GATE, type UserRoomPointer } from "./firebas
 import { commandBus } from "./services";
 import { useMobileDetection } from "./hooks/useMobileDetection";
 import { useUndoRedo } from "./hooks/useUndoRedo";
+import { useCopilot } from "./hooks/useCopilot";
 import { exportMsProjectXml, exportPrimaveraXer, exportExecutiveReportHtml } from "@jantt/interop";
 import { OPEN_JSON_EDITOR_EVENT } from "./components/common/EmptyChartState";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
@@ -57,6 +58,7 @@ import {
   CommandPalette,
   ShortcutsModal,
   ConfirmDialog,
+  CopilotDrawer,
   type ConfirmDialogProps
 } from "./components";
 
@@ -73,7 +75,7 @@ const DEFAULT_ZOOM_SCALE: TimeScale = "week";
 
 /** Any open dialog, sheet, drawer or Navbar popover: single-key shortcuts must not act behind it. */
 const OPEN_DIALOG_SELECTOR =
-  '.prompt-modal-backdrop, .modal-backdrop, .mobile-sheet-backdrop, .jantt-sidebar-backdrop, .nav-popover-panel, [aria-modal="true"]';
+  '.prompt-modal-backdrop, .modal-backdrop, .mobile-sheet-backdrop, .jantt-sidebar-backdrop, .jantt-copilot-backdrop, .nav-popover-panel, [aria-modal="true"]';
 
 /** Targets that own the keyboard (typing, type-ahead, sliders...). */
 const EDITABLE_SELECTOR =
@@ -104,6 +106,7 @@ export function App() {
   const [showEditorLoginModal, setShowEditorLoginModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showCopilot, setShowCopilot] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
   // Firebase Authentication & Cloud User Identity
@@ -645,6 +648,14 @@ export function App() {
     autoCascade: viewport.autoCascade
   });
 
+  // AI Copilot Live Assistant
+  const copilot = useCopilot({
+    parsedData: editor.parsedData,
+    commitPlan,
+    showToast: toast.showToast,
+    isReadOnly
+  });
+
   // Share Plan Modal & URL Generation
   const sharing = useSharing({
     activeProjectId: project.activeProjectId,
@@ -747,6 +758,7 @@ export function App() {
     setShowCommandPalette(false);
     setShowShortcutsModal(false);
     setShowPromptModal(false);
+    setShowCopilot(false);
     setShowPlanManagerModal(false);
     setShowReadOnlyForkModal(false);
     setShowEditorLoginModal(false);
@@ -807,6 +819,12 @@ export function App() {
         if (dialogOpen && !a.isPaletteOpen) return;
         e.preventDefault();
         setShowCommandPalette((prev) => !prev);
+        return;
+      }
+
+      if (hasCommandModifier && !e.altKey && key === "j") {
+        e.preventDefault();
+        setShowCopilot((prev) => !prev);
         return;
       }
 
@@ -1014,6 +1032,7 @@ export function App() {
           selectedThemeId={viewport.selectedThemeId}
           setSelectedThemeId={viewport.setSelectedThemeId}
           onOpenPromptModal={() => setShowPromptModal(true)}
+          onToggleCopilot={() => setShowCopilot((prev) => !prev)}
           onOpenJsonEditor={openJsonEditor}
           onImportFile={openImportDialog}
           currentUser={auth.currentUser}
@@ -1049,6 +1068,8 @@ export function App() {
           selectedThemeId={viewport.selectedThemeId}
           setSelectedThemeId={viewport.setSelectedThemeId}
           setShowPromptModal={setShowPromptModal}
+          onToggleCopilot={() => setShowCopilot((prev) => !prev)}
+          showCopilot={showCopilot}
           currentUser={auth.currentUser}
           userProfile={auth.userProfile}
           isLoadingAuth={auth.isLoadingAuth}
@@ -1157,6 +1178,13 @@ export function App() {
           </div>
         </section>
       </main>
+
+      <CopilotDrawer
+        isOpen={showCopilot}
+        onClose={() => setShowCopilot(false)}
+        copilot={copilot}
+        isMobile={mobile.isMobile}
+      />
 
       {/* Mobile Bottom Navigation Bar (Hidden in Immersive Landscape to maximize chart space) */}
       {mobile.isMobile && !mobile.isImmersiveLandscape && (

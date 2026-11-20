@@ -13,3 +13,5 @@ export * from "./cloud";
 export * from "./modals";
 export * from "./views";
 export * from "./common";
+export * from "./copilot";
+

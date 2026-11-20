@@ -1,0 +1,396 @@
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { validate, type JanttData } from "@jantt/core";
+import type {
+  CopilotMessage,
+  CopilotConfig,
+  PendingPlanChange,
+  ModelDefinition,
+  ProviderDefinition
+} from "../services/ai/types";
+import {
+  getActiveProvider,
+  setActiveProvider,
+  getApiKey,
+  setApiKey,
+  getModelForProvider,
+  setModelForProvider,
+  getCustomBaseUrl,
+  setCustomBaseUrl,
+  getProxyUrl,
+  setProxyUrl,
+  getTemperature,
+  setTemperature
+} from "../services/ai/storage";
+import {
+  getProviderAdapter,
+  getModelsForProvider,
+  getAllProviders,
+  PROVIDER_CATALOG
+} from "../services/ai/provider-registry";
+import { buildSystemPrompt } from "../services/ai/system-prompt";
+import { extractJsonFromResponse } from "../services/ai/json-extractor";
+import { computePlanDiff } from "../services/ai/plan-differ";
+
+export interface UseCopilotOptions {
+  parsedData: JanttData | null;
+  commitPlan: (data: JanttData) => void;
+  showToast: (message: string, isError?: boolean) => void;
+  isReadOnly: boolean;
+}
+
+export interface UseCopilotReturn {
+  messages: CopilotMessage[];
+  isStreaming: boolean;
+  config: CopilotConfig;
+  isConfigured: boolean;
+  pendingDiff: PendingPlanChange | null;
+  sendMessage: (text: string) => void;
+  stopGeneration: () => void;
+  acceptChange: () => void;
+  rejectChange: () => void;
+  clearHistory: () => void;
+  updateConfig: (partial: Partial<CopilotConfig>) => void;
+  availableProviders: ProviderDefinition[];
+  availableModels: ModelDefinition[];
+  currentModelLabel: string;
+}
+
+export function useCopilot({
+  parsedData,
+  commitPlan,
+  showToast,
+  isReadOnly
+}: UseCopilotOptions): UseCopilotReturn {
+  // 1. Configuration State
+  const [config, setConfigState] = useState<CopilotConfig>(() => {
+    const providerId = getActiveProvider();
+    const defaultModel = PROVIDER_CATALOG[providerId]?.models[0]?.id || "gemini-2.5-flash";
+    return {
+      providerId,
+      apiKey: getApiKey(providerId),
+      modelId: getModelForProvider(providerId, defaultModel),
+      customBaseUrl: getCustomBaseUrl(providerId),
+      proxyUrl: getProxyUrl(providerId),
+      temperature: getTemperature()
+    };
+  });
+
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  const parsedDataRef = useRef(parsedData);
+  parsedDataRef.current = parsedData;
+
+  const commitPlanRef = useRef(commitPlan);
+  commitPlanRef.current = commitPlan;
+
+  const isReadOnlyRef = useRef(isReadOnly);
+  isReadOnlyRef.current = isReadOnly;
+
+  // 2. Chat & Execution State
+  const [messages, setMessages] = useState<CopilotMessage[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [pendingDiff, setPendingDiff] = useState<PendingPlanChange | null>(null);
+
+  const activeAbortRef = useRef<AbortController | null>(null);
+
+  // Sync provider switch helper
+  const updateConfig = useCallback((partial: Partial<CopilotConfig>) => {
+    setConfigState((prev) => {
+      const nextProvider = partial.providerId || prev.providerId;
+      const isProviderSwitch = partial.providerId !== undefined && partial.providerId !== prev.providerId;
+
+      let nextModel = partial.modelId !== undefined ? partial.modelId : prev.modelId;
+      let nextKey = partial.apiKey !== undefined ? partial.apiKey : prev.apiKey;
+      let nextBaseUrl = partial.customBaseUrl !== undefined ? partial.customBaseUrl : prev.customBaseUrl;
+      let nextProxy = partial.proxyUrl !== undefined ? partial.proxyUrl : prev.proxyUrl;
+
+      if (isProviderSwitch) {
+        setActiveProvider(nextProvider);
+        const defaultModel = PROVIDER_CATALOG[nextProvider]?.models[0]?.id || "";
+        nextModel = getModelForProvider(nextProvider, defaultModel);
+        nextKey = getApiKey(nextProvider);
+        nextBaseUrl = getCustomBaseUrl(nextProvider);
+        nextProxy = getProxyUrl(nextProvider);
+      } else {
+        if (partial.apiKey !== undefined) setApiKey(nextProvider, partial.apiKey);
+        if (partial.modelId !== undefined) setModelForProvider(nextProvider, partial.modelId);
+        if (partial.customBaseUrl !== undefined) setCustomBaseUrl(nextProvider, partial.customBaseUrl);
+        if (partial.proxyUrl !== undefined) setProxyUrl(nextProvider, partial.proxyUrl);
+        if (partial.temperature !== undefined) setTemperature(partial.temperature);
+      }
+
+      return {
+        providerId: nextProvider,
+        apiKey: nextKey,
+        modelId: nextModel,
+        customBaseUrl: nextBaseUrl,
+        proxyUrl: nextProxy,
+        temperature: partial.temperature !== undefined ? partial.temperature : prev.temperature
+      };
+    });
+  }, []);
+
+  const isConfigured = useMemo(() => {
+    if (config.providerId === "openai-compatible") {
+      // Local ollama endpoint doesn't strictly require an API key
+      const isLocal = config.customBaseUrl?.includes("localhost") || config.customBaseUrl?.includes("127.0.0.1");
+      return Boolean(isLocal || config.apiKey);
+    }
+    return Boolean(config.apiKey.trim());
+  }, [config.providerId, config.apiKey, config.customBaseUrl]);
+
+  const availableProviders = useMemo(() => getAllProviders(), []);
+  const availableModels = useMemo(() => getModelsForProvider(config.providerId), [config.providerId]);
+
+  const currentModelLabel = useMemo(() => {
+    const found = availableModels.find((m) => m.id === config.modelId);
+    return found ? found.label : config.modelId || "Select Model";
+  }, [availableModels, config.modelId]);
+
+  // Stop Generation
+  const stopGeneration = useCallback(() => {
+    if (activeAbortRef.current) {
+      activeAbortRef.current.abort();
+      activeAbortRef.current = null;
+    }
+    setIsStreaming(false);
+    setMessages((prev) =>
+      prev.map((msg) => (msg.isStreaming ? { ...msg, isStreaming: false, content: msg.content + " [Stopped]" } : msg))
+    );
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (activeAbortRef.current) {
+        activeAbortRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Send Message
+  const sendMessage = useCallback(
+    (text: string) => {
+      const cleanPrompt = text.trim();
+      if (!cleanPrompt) return;
+
+      if (isReadOnlyRef.current) {
+        showToast("Read-only mode: changes cannot be committed to this plan.", true);
+        return;
+      }
+
+      if (isStreaming) {
+        return;
+      }
+
+      const activeConfig = configRef.current;
+      const isLocal =
+        activeConfig.providerId === "openai-compatible" &&
+        (activeConfig.customBaseUrl?.includes("localhost") || activeConfig.customBaseUrl?.includes("127.0.0.1"));
+
+      if (!activeConfig.apiKey.trim() && !isLocal) {
+        showToast(`Please enter an API key for ${PROVIDER_CATALOG[activeConfig.providerId]?.label || "the AI provider"}.`, true);
+        return;
+      }
+
+      const userMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const assistantMessageId = `msg-reply-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+      const userMessage: CopilotMessage = {
+        id: userMessageId,
+        role: "user",
+        content: cleanPrompt,
+        timestamp: Date.now()
+      };
+
+      const assistantMessage: CopilotMessage = {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        timestamp: Date.now(),
+        isStreaming: true
+      };
+
+      setMessages((prev) => [...prev, userMessage, assistantMessage]);
+      setIsStreaming(true);
+
+      // Build chat conversation array
+      const systemPrompt = buildSystemPrompt(parsedDataRef.current);
+      const conversationPayload: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        { role: "system", content: systemPrompt }
+      ];
+
+      // Add recent chat context (up to last 6 messages)
+      const recentHistory = messages.slice(-6);
+      for (const m of recentHistory) {
+        if (m.role === "user" || m.role === "assistant") {
+          conversationPayload.push({
+            role: m.role,
+            content: m.content
+          });
+        }
+      }
+      conversationPayload.push({ role: "user", content: cleanPrompt });
+
+      const adapter = getProviderAdapter(activeConfig.providerId);
+      let accumulatedResponse = "";
+
+      const effectiveBaseUrl =
+        activeConfig.providerId === "anthropic" && activeConfig.proxyUrl
+          ? activeConfig.proxyUrl
+          : activeConfig.customBaseUrl;
+
+      const abortCtrl = adapter.streamChat(
+        conversationPayload,
+        activeConfig.modelId,
+        activeConfig.apiKey,
+        {
+          onToken: (chunk) => {
+            accumulatedResponse += chunk;
+            setMessages((prev) =>
+              prev.map((msg) => (msg.id === assistantMessageId ? { ...msg, content: accumulatedResponse } : msg))
+            );
+          },
+          onDone: (fullText) => {
+            setIsStreaming(false);
+            activeAbortRef.current = null;
+
+            const finalContent = fullText || accumulatedResponse;
+            const extraction = extractJsonFromResponse(finalContent);
+
+            if (extraction.data) {
+              const validation = validate(extraction.data);
+              if (validation.valid) {
+                const diff = computePlanDiff(parsedDataRef.current, extraction.data);
+                const pending: PendingPlanChange = {
+                  plan: extraction.data,
+                  diff,
+                  messageId: assistantMessageId
+                };
+                setPendingDiff(pending);
+
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? {
+                          ...msg,
+                          content: extraction.textContent || "I have prepared the updated project plan according to your specifications.",
+                          extractedPlan: extraction.data,
+                          diff,
+                          isStreaming: false
+                        }
+                      : msg
+                  )
+                );
+              } else {
+                const errors = validation.errors.map((e) => `${e.path}: ${e.message}`);
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? {
+                          ...msg,
+                          content: extraction.textContent || "The plan was generated with structural schema validation errors.",
+                          validationErrors: errors,
+                          isStreaming: false
+                        }
+                      : msg
+                  )
+                );
+              }
+            } else {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? {
+                        ...msg,
+                        content: finalContent,
+                        isStreaming: false
+                      }
+                    : msg
+                )
+              );
+            }
+          },
+          onError: (err) => {
+            setIsStreaming(false);
+            activeAbortRef.current = null;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMessageId
+                  ? {
+                      ...msg,
+                      error: err.message,
+                      isStreaming: false
+                    }
+                  : msg
+              )
+            );
+          }
+        },
+        {
+          baseUrl: effectiveBaseUrl,
+          temperature: activeConfig.temperature
+        }
+      );
+
+      activeAbortRef.current = abortCtrl;
+    },
+    [isStreaming, messages, showToast]
+  );
+
+  // Accept AI Plan Change
+  const acceptChange = useCallback(() => {
+    if (!pendingDiff) return;
+
+    if (isReadOnlyRef.current) {
+      showToast("Cannot apply plan in read-only mode.", true);
+      return;
+    }
+
+    try {
+      commitPlanRef.current(pendingDiff.plan);
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === pendingDiff.messageId ? { ...msg, applied: true } : msg))
+      );
+      showToast(`Applied plan changes: ${pendingDiff.diff.summary}`);
+      setPendingDiff(null);
+    } catch (err: unknown) {
+      showToast(`Failed to commit plan: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  }, [pendingDiff, showToast]);
+
+  // Reject AI Plan Change
+  const rejectChange = useCallback(() => {
+    if (!pendingDiff) return;
+    setMessages((prev) =>
+      prev.map((msg) => (msg.id === pendingDiff.messageId ? { ...msg, applied: false } : msg))
+    );
+    setPendingDiff(null);
+    showToast("Changes dismissed.");
+  }, [pendingDiff, showToast]);
+
+  // Clear History
+  const clearHistory = useCallback(() => {
+    stopGeneration();
+    setMessages([]);
+    setPendingDiff(null);
+  }, [stopGeneration]);
+
+  return {
+    messages,
+    isStreaming,
+    config,
+    isConfigured,
+    pendingDiff,
+    sendMessage,
+    stopGeneration,
+    acceptChange,
+    rejectChange,
+    clearHistory,
+    updateConfig,
+    availableProviders,
+    availableModels,
+    currentModelLabel
+  };
+}

@@ -41,6 +41,7 @@ interface MobileActionMenuSheetProps {
   snapshotsCount?: number;
   onOpenVersionHistory?: () => void;
   onOpenPromptModal: () => void;
+  onToggleCopilot?: () => void;
   onOpenPlanManager: () => void;
   onOpenPeopleModal: () => void;
   onOpenJsonEditor: () => void;
@@ -93,6 +94,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
   snapshotsCount = 0,
   onOpenVersionHistory,
   onOpenPromptModal,
+  onToggleCopilot,
   onOpenPlanManager,
   onOpenPeopleModal,
   onOpenJsonEditor,
@@ -320,8 +322,15 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                 </button>
               )}
 
+              {onToggleCopilot && (
+                <button type="button" className="mobile-menu-tile" onClick={act(onToggleCopilot)}>
+                  <Sparkles size={16} style={{ color: "var(--jantt-accent)" }} aria-hidden="true" />
+                  <span>AI Copilot</span>
+                </button>
+              )}
+
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPromptModal)}>
-                <Sparkles size={16} style={{ color: "#A855F7" }} aria-hidden="true" />
+                <FileJson size={16} style={{ color: "#A855F7" }} aria-hidden="true" />
                 <span>Prompt AI</span>
               </button>
             </div>

@@ -20,6 +20,7 @@ export interface ShortcutsModalProps {
 /** Mirrors the global key handler in App.tsx; keep the two in sync. */
 const SHORTCUTS: ShortcutRow[] = [
   { keys: ["Mod", "K"], description: "Open the command palette", category: "General" },
+  { keys: ["Mod", "J"], description: "Toggle AI Copilot sidebar", category: "General" },
   { keys: ["?"], description: "Show this list of shortcuts", category: "General" },
   { keys: ["Esc"], description: "Close the open dialog", category: "General" },
 

@@ -439,6 +439,8 @@ interface NavbarProps {
   selectedThemeId: string;
   setSelectedThemeId: (themeId: string) => void;
   setShowPromptModal: (show: boolean) => void;
+  onToggleCopilot?: () => void;
+  showCopilot?: boolean;
   currentUser?: FirebaseUser | null;
   userProfile?: UserProfile | null;
   /** While true and signed out, no sign-in button is shown (avoids a "Connect" flash on load). */
@@ -504,6 +506,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   selectedThemeId,
   setSelectedThemeId,
   setShowPromptModal,
+  onToggleCopilot,
+  showCopilot = false,
   currentUser,
   userProfile,
   isLoadingAuth = false,
@@ -837,15 +841,29 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
+        {onToggleCopilot && (
+          <button
+            type="button"
+            className={`btn-prompt ${showCopilot ? "is-active" : ""}`}
+            onClick={onToggleCopilot}
+            title={`AI Copilot: chat with AI to edit your plan live (${PRIMARY_MODIFIER_LABEL}+J)`}
+            aria-label={showCopilot ? "Close AI Copilot" : "Open AI Copilot"}
+            aria-expanded={showCopilot}
+            aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+J" : "Control+J"}
+          >
+            <Sparkles size={14} aria-hidden="true" />
+            <span className="nav-label">Copilot</span>
+          </button>
+        )}
+
         <button
           type="button"
-          className="btn-prompt"
+          className="btn-nav nav-icon-btn nav-optional"
           onClick={() => setShowPromptModal(true)}
-          title="Generate an AI prompt that produces a Jantt plan"
-          aria-label="AI prompt"
+          title="AI prompt reference & JSON schema specification"
+          aria-label="AI prompt reference"
         >
-          <Sparkles size={14} aria-hidden="true" />
-          <span className="nav-label">AI Prompt</span>
+          <FileJson size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
         </button>
 
         {currentUser ? (
