@@ -281,7 +281,7 @@ export class InteractionController {
     } else if (state.mode === "split" && state.moved && state.origLabelWidth !== undefined) {
       this.queueSplitResize(state.origLabelWidth, true);
     }
-    if (state.origTasks && this.data.tasks !== state.origTasks) {
+    if (state.origTasks && (this.data.tasks !== state.origTasks || state.mode === "progress")) {
       this.applyTasks(state.origTasks);
       this.renderNow(true);
     }
@@ -394,7 +394,13 @@ export class InteractionController {
       barWidth
     });
 
-    if (DATA_MODES.has(mode)) el?.classList.add("is-dragging");
+    if (DATA_MODES.has(mode)) {
+      if (mode === "progress") {
+        el?.classList.add("is-dragging-progress");
+      } else {
+        el?.classList.add("is-dragging");
+      }
+    }
   }
 
   public startSplitterDrag(e: PointerEvent, currentWidth: number) {
@@ -571,6 +577,9 @@ export class InteractionController {
     window.addEventListener("pointercancel", this.onPointerCancel);
     window.addEventListener("keydown", this.onDragKeyDown, true);
     window.addEventListener("blur", this.onPointerCancel);
+    if (state.mode === "progress" && typeof document !== "undefined" && document.body) {
+      document.body.style.cursor = "ew-resize";
+    }
   }
 
   /** Detaches every gesture listener and visual and returns the state that was active. */
@@ -608,8 +617,18 @@ export class InteractionController {
 
     state.selectionBoxEl?.remove();
     if (state.canvasEl) state.canvasEl.style.cursor = "";
-    state.element?.classList.remove("is-dragging");
-    if (state.taskId) this.findTaskElement(state.taskId)?.classList.remove("is-dragging");
+    state.element?.classList.remove("is-dragging", "is-dragging-progress");
+    if (state.taskId) {
+      const taskEl = this.findTaskElement(state.taskId);
+      taskEl?.classList.remove("is-dragging", "is-dragging-progress");
+      const handle = taskEl?.querySelector<HTMLElement>(".jantt-progress-handle");
+      handle?.classList.remove("is-active");
+    }
+    if (typeof document !== "undefined" && document.body) {
+      if (document.body.style.cursor === "ew-resize") {
+        document.body.style.cursor = "";
+      }
+    }
     return state;
   }
 
@@ -864,7 +883,12 @@ export class InteractionController {
     this.paintedTasks = this.data.tasks;
     // The render replaced the dragged bar: restore its drag styling.
     if (state.taskId && DATA_MODES.has(state.mode)) {
-      this.findTaskElement(state.taskId)?.classList.add("is-dragging");
+      const taskEl = this.findTaskElement(state.taskId);
+      if (state.mode === "progress") {
+        taskEl?.classList.add("is-dragging-progress");
+      } else {
+        taskEl?.classList.add("is-dragging");
+      }
     }
   }
 

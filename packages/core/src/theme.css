@@ -1676,7 +1676,7 @@
   cursor: grab;
   touch-action: none;
   z-index: 6;
-  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  transition: opacity 0.25s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   outline: none;
 }
@@ -1687,10 +1687,15 @@
 
 .jantt-task-bar.is-dragging {
   cursor: grabbing;
-  opacity: 0.92;
+  opacity: 0.95;
   z-index: 30;
-  transform: scale(1.02);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.jantt-task-bar.is-dragging-progress {
+  cursor: ew-resize !important;
+  z-index: 30;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 /* Critical ring drawn with box-shadow so the bar keeps its exact date-aligned size.
@@ -1754,8 +1759,29 @@
 }
 
 .jantt-task-bar.is-done .jantt-task-progress {
-  background: rgba(0, 0, 0, 0.18);
+  background-color: rgba(255, 255, 255, 0.12);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.20),
+    rgba(255, 255, 255, 0.20) 4px,
+    transparent 4px,
+    transparent 8px
+  );
   border-radius: var(--jantt-bar-radius);
+  border-right: none;
+}
+
+.jantt-theme-light .jantt-task-bar.is-done .jantt-task-progress {
+  background-color: rgba(0, 0, 0, 0.08);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.16),
+    rgba(0, 0, 0, 0.16) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-radius: var(--jantt-bar-radius);
+  border-right: none;
 }
 
 /* Milestone Diamond Pin (border-box keeps link anchors on the diamond tips) */
@@ -1868,9 +1894,36 @@
   top: 0;
   bottom: 0;
   left: 0;
-  background: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.16);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.28),
+    rgba(255, 255, 255, 0.28) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-right: 2px solid rgba(255, 255, 255, 0.55);
   pointer-events: none;
   border-radius: var(--jantt-bar-radius) 0 0 var(--jantt-bar-radius);
+  box-sizing: border-box;
+  transition: none;
+}
+
+.jantt-task-progress.is-complete {
+  border-radius: var(--jantt-bar-radius);
+  border-right: none;
+}
+
+.jantt-theme-light .jantt-task-progress {
+  background-color: rgba(0, 0, 0, 0.10);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.22),
+    rgba(0, 0, 0, 0.22) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-right: 2px solid rgba(0, 0, 0, 0.40);
 }
 
 .jantt-progress-handle {
@@ -1890,8 +1943,13 @@
   z-index: 4;
 }
 
-.jantt-progress-handle:hover {
-  transform: translateY(-50%) scale(1.3);
+.jantt-progress-handle:hover,
+.jantt-progress-handle.is-active,
+.jantt-task-bar.is-dragging-progress .jantt-progress-handle {
+  transform: translateY(-50%) scale(1.35) !important;
+  box-shadow: 0 0 10px var(--jantt-accent-glow, rgba(56, 189, 248, 0.6)) !important;
+  opacity: 1 !important;
+  transition: none !important;
 }
 
 .jantt-task-bar:hover .jantt-progress-handle {

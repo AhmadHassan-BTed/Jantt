@@ -159,7 +159,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     // Progress Fill
     const progressRatio = isDone ? 1.0 : (item.task.progress ?? 0);
     const progressFill = document.createElement("div");
-    progressFill.className = "jantt-task-progress";
+    progressFill.className = `jantt-task-progress ${progressRatio >= 1 ? "is-complete" : ""}`;
     progressFill.style.width = `${Math.min(progressRatio * 100, 100)}%`;
 
     // Inline Progress Drag Handle
