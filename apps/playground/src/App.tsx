@@ -1062,12 +1062,8 @@ export function App() {
           setShowVersionHistoryModal={vault.setShowVersionHistoryModal}
           isSidebarCollapsed={sidebar.isSidebarCollapsed}
           setIsSidebarCollapsed={sidebar.setIsSidebarCollapsed}
-          activeView={viewport.activeView}
-          setActiveView={viewport.setActiveView}
-          notesCount={notesCount}
           selectedThemeId={viewport.selectedThemeId}
           setSelectedThemeId={viewport.setSelectedThemeId}
-          setShowPromptModal={setShowPromptModal}
           onToggleCopilot={() => setShowCopilot((prev) => !prev)}
           showCopilot={showCopilot}
           currentUser={auth.currentUser}
@@ -1159,6 +1155,8 @@ export function App() {
             <ErrorBoundary scope="pane" resetKey={`${viewport.activeView}:${project.activeProjectId}`}>
               <ViewRouter
                 activeView={viewport.activeView}
+                setActiveView={viewport.setActiveView}
+                notesCount={notesCount}
                 parsedData={editor.parsedData}
                 ganttDisplayData={ganttDisplayData}
                 handleGanttCommit={handleGanttCommit}
@@ -1184,6 +1182,7 @@ export function App() {
         onClose={() => setShowCopilot(false)}
         copilot={copilot}
         isMobile={mobile.isMobile}
+        onOpenPromptModal={() => setShowPromptModal(true)}
       />
 
       {/* Mobile Bottom Navigation Bar (Hidden in Immersive Landscape to maximize chart space) */}

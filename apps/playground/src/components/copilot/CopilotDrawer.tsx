@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, X, Settings, Trash2, ArrowLeft, Zap } from "lucide-react";
+import { Sparkles, X, Settings, Trash2, ArrowLeft, Zap, BookOpen } from "lucide-react";
 import type { UseCopilotReturn } from "../../hooks/useCopilot";
 import { CopilotMessages } from "./CopilotMessages";
 import { CopilotInput } from "./CopilotInput";
@@ -11,13 +11,15 @@ interface CopilotDrawerProps {
   copilot: UseCopilotReturn;
   themeClassName?: string;
   isMobile: boolean;
+  onOpenPromptModal?: () => void;
 }
 
 export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
   isOpen,
   onClose,
   copilot,
-  isMobile
+  isMobile,
+  onOpenPromptModal
 }) => {
   const [showSettings, setShowSettings] = useState(false);
 
@@ -78,6 +80,18 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
                   <Zap size={11} className={copilot.config.autoApply ? "is-active-icon" : ""} />
                   <span>{copilot.config.autoApply ? "Live" : "Review"}</span>
                 </button>
+
+                 {onOpenPromptModal && (
+                   <button
+                     type="button"
+                     className="copilot-icon-btn"
+                     onClick={onOpenPromptModal}
+                     title="Prompt reference & JSON schema specification"
+                     aria-label="Prompt reference"
+                   >
+                     <BookOpen size={14} />
+                   </button>
+                 )}
 
                 <button
                   type="button"

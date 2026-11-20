@@ -16,7 +16,12 @@ import {
   Settings as SettingsIcon,
   FileJson,
   Upload,
-  Download
+  Download,
+  Layers,
+  Kanban,
+  CheckSquare,
+  Activity,
+  StickyNote
 } from "lucide-react";
 import {
   getTodayISODate,
@@ -33,6 +38,86 @@ import type { useGanttViewport } from "../../hooks/useGanttViewport";
 import type { useDateFilter } from "../../hooks/useDateFilter";
 import type { usePeopleTeams } from "../../hooks/usePeopleTeams";
 
+export interface ViewNavBarProps {
+  activeView: ActiveView;
+  setActiveView: (view: ActiveView) => void;
+  notesCount?: number;
+  viewport?: ReturnType<typeof useGanttViewport>;
+}
+
+/**
+ * Tier 2 View Bar: switches the active visualization lens (Gantt, Canvas, Kanban, Tasks,
+ * Health & PM, Notes) and hosts view-level scale controls for the timeline.
+ * Reflects the control hierarchy: Global / Project (Navbar) -> View (ViewNavBar) -> Task / Data (ViewToolbar).
+ */
+export const ViewNavBar: React.FC<ViewNavBarProps> = ({
+  activeView,
+  setActiveView,
+  notesCount,
+  viewport
+}) => {
+  const viewTabs: Array<{ id: ActiveView; label: string; title: string; icon: React.ReactNode; badge?: number }> = [
+    { id: "gantt", label: "Gantt", title: "Gantt timeline schedule (1)", icon: <Layers size={14} style={{ color: "#38BDF8" }} /> },
+    { id: "canvas", label: "Canvas", title: "High-performance canvas engine for very large plans (2)", icon: <Zap size={14} style={{ color: "#A855F7" }} /> },
+    { id: "kanban", label: "Kanban", title: "Kanban task board (3)", icon: <Kanban size={14} style={{ color: "#F59E0B" }} /> },
+    { id: "tasks", label: "Tasks", title: "Task checklist and grid (4)", icon: <CheckSquare size={14} style={{ color: "#10B981" }} /> },
+    { id: "summary", label: "Health & PM", title: "Project health, schedule buffers, EVM and budget (5)", icon: <Activity size={14} style={{ color: "#F43F5E" }} /> },
+    {
+      id: "notes",
+      label: "Notes",
+      title: "Shared project notes, specs and documentation (6)",
+      icon: <StickyNote size={14} style={{ color: "#06B6D4" }} />,
+      badge: typeof notesCount === "number" && notesCount > 0 ? notesCount : undefined
+    }
+  ];
+
+  return (
+    <div className="view-nav-bar">
+      <nav className="view-nav-tabs" aria-label="Views">
+        <div className="jantt-scale-group">
+          {viewTabs.map((tab) => {
+            const isActive = activeView === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`jantt-scale-btn ${isActive ? "is-active" : ""}`}
+                onClick={() => setActiveView(tab.id)}
+                title={tab.title}
+                aria-label={tab.badge ? `${tab.label} (${tab.badge})` : tab.label}
+                aria-pressed={isActive}
+              >
+                {tab.icon}
+                <span className="nav-tab-label">{tab.label}</span>
+                {tab.badge !== undefined && <span className="nav-tab-badge">{tab.badge}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {activeView === "gantt" && viewport && (
+        <div className="view-nav-scale">
+          <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
+            {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
+                aria-pressed={viewport.currentScale === s}
+                onClick={() => viewport.setCurrentScale(s)}
+                title={`Switch timeline to ${s} scale view`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export interface ViewToolbarProps {
   activeView: ActiveView;
   taskCount: number;
@@ -48,6 +133,8 @@ export interface ViewToolbarProps {
   onExportJson?: () => void;
   onExportCsv?: () => void;
   readOnly?: boolean;
+  /** Shows the timeline scale control inline in this bar (used on mobile where ViewNavBar is hidden). */
+  showScaleInline?: boolean;
 }
 
 export const ViewToolbar: React.FC<ViewToolbarProps> = ({
@@ -64,7 +151,8 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   onImportJson,
   onExportJson,
   onExportCsv,
-  readOnly = false
+  readOnly = false,
+  showScaleInline = false
 }) => {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
@@ -337,10 +425,10 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          ZONE 2: CENTER (Timeline Time Scale - Centered on Gantt View)
+          ZONE 2: CENTER (Timeline Time Scale — only inline on mobile when ViewNavBar is hidden)
           ───────────────────────────────────────────────────────────────────────────── */}
-      <div className="view-toolbar-center">
-        {activeView === "gantt" && viewport && (
+      {showScaleInline && activeView === "gantt" && viewport && (
+        <div className="view-toolbar-center">
           <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
             {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
               <button
@@ -355,13 +443,14 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ─────────────────────────────────────────────────────────────────────────────
           ZONE 3: RIGHT (Grouped Filters & Viewport Settings)
           ───────────────────────────────────────────────────────────────────────────── */}
       <div className="view-toolbar-right">
+        <div className="toolbar-action-cluster">
         {/* Filters Popover Trigger */}
         <div className="toolbar-popover-container">
           <button
@@ -947,6 +1036,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

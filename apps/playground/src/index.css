@@ -71,7 +71,7 @@ body {
   transition: background 0.2s ease, color 0.2s ease;
 }
 
-/* Header Navbar - Full Screen Width with Responsive Adaptive Spacing */
+/* Header Navbar — Tier 1: Global / Project chrome (identity left, clusters right) */
 .navbar {
   display: flex;
   align-items: center;
@@ -79,47 +79,106 @@ body {
   width: 100%;
   max-width: 100vw;
   box-sizing: border-box;
-  padding: 8px clamp(12px, 1.5vw, 24px);
+  padding: 7px clamp(12px, 1.5vw, 24px);
   background: var(--jantt-surface, #F8FAFC);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--jantt-border, #E2E8F0);
   z-index: var(--z-chrome);
   flex-shrink: 0;
-  min-height: 52px;
+  min-height: 50px;
   overflow: visible;
   position: relative;
-  gap: clamp(10px, 1.5vw, 24px);
-  /* Never clip controls: on narrow desktop windows the zones wrap onto a second row. */
+  gap: clamp(10px, 1.4vw, 20px);
   flex-wrap: wrap;
   row-gap: 6px;
 }
 
-.brand-section,
-.nav-group-left {
+.nav-zone {
   display: flex;
   align-items: center;
-  gap: clamp(8px, 0.8vw, 14px);
-  flex-shrink: 0;
-  overflow: visible;
-}
-
-.nav-group-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  overflow: visible;
-}
-
-.nav-group-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: clamp(6px, 0.6vw, 12px);
-  flex-shrink: 1;
   min-width: 0;
   overflow: visible;
+}
+
+.nav-zone-left {
+  justify-content: flex-start;
+  gap: clamp(8px, 0.8vw, 12px);
+  flex: 0 1 auto;
+}
+
+.nav-zone-right {
+  justify-content: flex-end;
+  gap: clamp(6px, 0.55vw, 10px);
+  flex: 0 1 auto;
+  margin-left: auto;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* A cluster is one bordered surface holding related controls. */
+.nav-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 34px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--jantt-surface-solid, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  flex-shrink: 0;
+}
+
+.playground-app[data-mode="light"] .nav-cluster {
+  background: #FFFFFF;
+  border-color: #CBD5E1;
+}
+
+.nav-cluster .btn-nav,
+.nav-cluster .nav-popover-trigger,
+.nav-cluster .btn-autosave-badge,
+.nav-cluster .btn-version-history,
+.nav-cluster .btn-prompt {
+  height: 28px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.nav-cluster .btn-prompt {
+  padding: 0 11px;
+  background: var(--jantt-accent, #0284C7);
+}
+
+.nav-cluster .btn-nav:hover,
+.nav-cluster .nav-popover-trigger:hover,
+.nav-cluster .nav-popover-trigger.is-open,
+.nav-cluster .btn-autosave-badge:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.playground-app[data-mode="light"] .nav-cluster .btn-nav:hover,
+.playground-app[data-mode="light"] .nav-cluster .nav-popover-trigger:hover,
+.playground-app[data-mode="light"] .nav-cluster .nav-popover-trigger.is-open,
+.playground-app[data-mode="light"] .nav-cluster .btn-autosave-badge:hover {
+  background: #F1F5F9;
+}
+
+.nav-cluster .btn-prompt:hover {
+  background: var(--jantt-accent, #0284C7);
+  transform: none;
+}
+
+.nav-cluster-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--jantt-border, #E2E8F0);
+  flex-shrink: 0;
 }
 
 .brand-logo {
@@ -231,118 +290,52 @@ body {
 }
 
 
-.nav-controls {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: clamp(6px, 0.6vw, 12px);
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: visible;
-  padding-bottom: 0;
-}
-
-/* Grouped Navbar Status, Collaboration & Tools Clusters */
-.nav-status-capsule {
-  display: inline-flex;
-  align-items: center;
-  background: var(--jantt-surface-solid, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--jantt-border, #E2E8F0);
-  border-radius: 8px;
-  padding: 2px 4px;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.nav-status-capsule .btn-autosave-badge,
-.nav-status-capsule .nav-cloud-trigger,
-.nav-status-capsule .btn-version-history {
-  border: none;
-  background: transparent;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 6px;
-}
-
-.nav-status-capsule .btn-autosave-badge:hover,
-.nav-status-capsule .nav-cloud-trigger:hover,
-.nav-status-capsule .btn-version-history:hover {
-  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
-}
-
-.nav-collab-group {
-  display: inline-flex;
-  align-items: center;
-  background: var(--jantt-surface-solid, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--jantt-border, #E2E8F0);
-  border-radius: 8px;
-  padding: 2px;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.nav-collab-group .btn-nav {
-  border: none;
-  background: transparent;
-  height: 28px;
-  padding: 0 9px;
-  border-radius: 6px;
-}
-
-.nav-collab-group .btn-nav:hover {
-  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
-}
-
-.nav-tools-group,
-.nav-search-ai-group,
-.nav-user-group {
+/* Sidebar toggle (left zone): always visible, active while the pane is open */
+.btn-sidebar-toggle {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  background: var(--jantt-surface-solid, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 8px;
+  height: 32px;
+  padding: 0 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--jantt-text, #F8FAFC);
+  cursor: pointer;
+  transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
-.nav-theme-capsule {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--jantt-surface-solid, #121A2C);
-  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.15));
-  border-radius: 8px;
-  padding: 0 8px 0 10px;
-  height: 32px;
-  transition: all 0.15s ease;
+.btn-sidebar-toggle:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--jantt-accent, #38BDF8);
+  color: var(--jantt-accent, #38BDF8);
 }
 
-.playground-app[data-mode="light"] .nav-theme-capsule {
+.btn-sidebar-toggle.is-active {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--jantt-border-strong, rgba(255, 255, 255, 0.28));
+  color: var(--jantt-accent, #38BDF8);
+}
+
+.playground-app[data-mode="light"] .btn-sidebar-toggle {
   background: #FFFFFF;
   border-color: #CBD5E1;
+  color: #1E293B;
 }
 
-.nav-theme-capsule:hover {
-  border-color: var(--jantt-accent, #0284C7);
+.playground-app[data-mode="light"] .btn-sidebar-toggle:hover {
+  background: #F1F5F9;
+  border-color: #0284C7;
+  color: #0284C7;
 }
 
-.nav-theme-icon {
-  color: var(--jantt-accent, #38BDF8);
-  flex-shrink: 0;
-}
-
-.nav-theme-capsule .nav-theme-select {
-  border: none !important;
-  background: transparent !important;
-  height: 100% !important;
-  padding: 0 !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  color: var(--jantt-text, #F8FAFC) !important;
-  outline: none !important;
-  cursor: pointer !important;
-  max-width: 125px;
-}
-
-.playground-app[data-mode="light"] .nav-theme-capsule .nav-theme-select {
-  color: #0F172A !important;
+.playground-app[data-mode="light"] .btn-sidebar-toggle.is-active {
+  background: #E0F2FE;
+  border-color: #0284C7;
+  color: #0284C7;
 }
 
 .jantt-scale-btn {
@@ -350,9 +343,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 12.5px;
+  height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
   line-height: 1;
   white-space: nowrap;
 }
@@ -360,6 +353,108 @@ body {
 .jantt-scale-btn svg {
   display: block;
   flex-shrink: 0;
+}
+
+/* Theme picker (popover with live color swatches) */
+.nav-theme-icon {
+  color: var(--jantt-accent, #38BDF8);
+  flex-shrink: 0;
+}
+
+.nav-popover-panel.is-theme-menu {
+  width: 296px;
+}
+
+.theme-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.theme-menu-group-label {
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--jantt-text-dim, #94A3B8);
+}
+
+.theme-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--jantt-text, #F8FAFC);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.theme-menu-item:hover,
+.theme-menu-item:focus-visible {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.07));
+}
+
+.theme-menu-item.is-active {
+  border-color: var(--jantt-border-strong, rgba(255, 255, 255, 0.28));
+  background: var(--jantt-accent-glow, rgba(56, 189, 248, 0.12));
+}
+
+.theme-menu-swatch {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+
+.theme-menu-swatch-accent {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.theme-menu-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.theme-menu-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.theme-menu-meta {
+  font-size: 10.5px;
+  color: var(--jantt-text-muted, #94A3B8);
+}
+
+.theme-menu-check {
+  flex-shrink: 0;
+  color: var(--jantt-accent, #38BDF8);
 }
 
 .nav-select-group {
@@ -2099,28 +2194,61 @@ select option,
 }
 
 /* ==========================================================================
-   Unified View Toolbar (Single cohesive bar across Gantt, Canvas, Kanban, Tasks, Health)
+   Tier 2: View Switcher & View Scale Bar (Hierarchy: Project -> View -> Tasks)
+   ========================================================================== */
+.view-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 16px;
+  min-height: 40px;
+  background: var(--jantt-surface, #F8FAFC);
+  border-bottom: 1px solid var(--jantt-border, #E2E8F0);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.view-nav-tabs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.view-nav-scale {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Tier 3: Task & Data Toolbar (Create, Search, Active Filter Chips, Filters/Settings)
    ========================================================================== */
 .view-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 16px;
-  min-height: 42px;
-  background: var(--jantt-surface, #F8FAFC);
+  padding: 5px 16px;
+  min-height: 40px;
+  background: var(--jantt-bg, #FFFFFF);
   border-bottom: 1px solid var(--jantt-border, #E2E8F0);
   flex-shrink: 0;
   position: relative;
   z-index: 20;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 /* Zone 1: Left */
 .view-toolbar-left {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .toolbar-add-task-btn {
@@ -2306,6 +2434,36 @@ select option,
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Filters + chart settings share one surface, mirroring the navbar clusters. */
+.toolbar-action-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 35px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--jantt-surface-solid, #FFFFFF);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+}
+
+.toolbar-action-cluster .toolbar-btn {
+  height: 29px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+}
+
+.toolbar-action-cluster .toolbar-btn:hover {
+  background: var(--jantt-surface-hover, #F1F5F9);
+  border-color: transparent;
+}
+
+.toolbar-action-cluster .toolbar-btn.is-active {
+  background: var(--jantt-accent-glow, rgba(2, 132, 199, 0.08));
+  color: var(--jantt-accent, #0284C7);
 }
 
 .toolbar-critical-btn {
@@ -7111,48 +7269,21 @@ path.jantt-dep-path.jantt-task-dimmed {
 }
 
 /* ==========================================================================
-   Responsive desktop navbar: labels collapse to icons before anything clips
+   Responsive desktop navbar: labels collapse cleanly before wrapping or clipping
    ========================================================================== */
-@media (max-width: 1599px) {
+@media (max-width: 1340px) {
   .navbar .nav-label {
     display: none;
   }
 }
 
-@media (max-width: 1799px) {
-  /* Inactive views show their icon only; the active view keeps its name. */
-  .navbar .jantt-scale-btn:not(.is-active) .nav-tab-label {
-    display: none;
-  }
-
-  .navbar .jantt-scale-btn {
-    padding: 0 10px;
-  }
-
-  .navbar .nav-plan-trigger-name {
-    max-width: 160px;
-  }
-}
-
-@media (max-width: 1439px) {
-  .navbar .jantt-scale-btn .nav-tab-label,
-  .navbar .nav-optional,
-  .navbar .nav-divider {
-    display: none;
-  }
-
-  .navbar .nav-theme-select {
-    max-width: 130px;
-  }
-}
-
 @media (max-width: 1199px) {
   .navbar .nav-plan-trigger-name {
-    max-width: 120px;
+    max-width: 140px;
   }
 
-  .navbar .nav-theme-select {
-    max-width: 110px;
+  .view-nav-bar .jantt-scale-btn:not(.is-active) .nav-tab-label {
+    display: none;
   }
 }
 

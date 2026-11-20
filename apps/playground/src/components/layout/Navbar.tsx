@@ -2,21 +2,15 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import {
   Sparkles,
   CheckCircle2,
-  FileJson,
   Layers,
-  Kanban,
   Clock,
   RefreshCw,
-  CheckSquare,
-  Activity,
-  StickyNote,
   History,
   Star,
   Cloud,
   LogOut,
   Eye,
   KeyRound,
-  Zap,
   Search,
   HelpCircle,
   ChevronDown,
@@ -29,14 +23,16 @@ import {
   FolderKanban,
   DoorOpen,
   Loader2,
-  Palette
+  Palette,
+  PanelLeft
 } from "lucide-react";
+import { themeManager } from "@jantt/core";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile, UserRoomPointer } from "../../firebase/types";
 import type { RoomSyncStatus } from "../../hooks/useRoomSync";
 import { JanttLogo } from "../common/JanttLogo";
 import { PRIMARY_MODIFIER_LABEL } from "../common/CommandPalette";
-import type { ActiveView, SavedProject } from "../../types";
+import type { SavedProject } from "../../types";
 import { AVAILABLE_THEMES, DEFAULT_TEMPLATE } from "../../constants";
 import { getTrustedAvatarUrl } from "../../room-storage";
 
@@ -407,6 +403,75 @@ const PlanSwitcherBody: React.FC<PlanSwitcherBodyProps> = ({
 };
 
 /* -------------------------------------------------------------------------- */
+/* Theme menu                                                                  */
+/* -------------------------------------------------------------------------- */
+
+interface ThemeMenuBodyProps {
+  selectedThemeId: string;
+  onSelectTheme: (themeId: string) => void;
+  close: (restoreFocus?: boolean) => void;
+}
+
+const ThemeMenuBody: React.FC<ThemeMenuBodyProps> = ({ selectedThemeId, onSelectTheme, close }) => {
+  const renderGroup = (mode: "dark" | "light") => {
+    const themes = AVAILABLE_THEMES.filter((theme) => theme.mode === mode);
+    if (themes.length === 0) return null;
+    return (
+      <div className="theme-menu-group" role="group" aria-label={mode === "dark" ? "Dark themes" : "Light themes"}>
+        <div className="theme-menu-group-label">{mode === "dark" ? "Dark" : "Light"}</div>
+        {themes.map((theme) => {
+          const isActive = theme.id === selectedThemeId;
+          return (
+            <button
+              key={theme.id}
+              type="button"
+              className={`theme-menu-item ${isActive ? "is-active" : ""}`}
+              aria-current={isActive ? "true" : undefined}
+              data-popover-item
+              title={theme.description}
+              onClick={() => {
+                onSelectTheme(theme.id);
+                close(true);
+              }}
+            >
+              <span
+                className="theme-menu-swatch"
+                style={{
+                  background: theme.vars["--jantt-bg"],
+                  borderColor: theme.vars["--jantt-border-strong"] || theme.vars["--jantt-border"]
+                }}
+                aria-hidden="true"
+              >
+                <span
+                  className="theme-menu-swatch-accent"
+                  style={{ background: theme.vars["--jantt-accent"] }}
+                />
+              </span>
+              <span className="theme-menu-copy">
+                <span className="theme-menu-name">{theme.label}</span>
+                <span className="theme-menu-meta">{theme.mode === "dark" ? "Dark" : "Light"} mode</span>
+              </span>
+              {isActive && <Check size={14} className="theme-menu-check" aria-hidden="true" />}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="theme-menu">
+      <div className="nav-popover-header">
+        <span className="nav-popover-title">Appearance</span>
+        <span className="nav-popover-subtitle">{AVAILABLE_THEMES.length} themes</span>
+      </div>
+      {renderGroup("dark")}
+      {renderGroup("light")}
+    </div>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
 /* Navbar                                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -434,12 +499,8 @@ interface NavbarProps {
   setShowVersionHistoryModal?: (show: boolean) => void;
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
-  activeView: ActiveView;
-  setActiveView: (view: ActiveView) => void;
-  notesCount?: number;
   selectedThemeId: string;
   setSelectedThemeId: (themeId: string) => void;
-  setShowPromptModal: (show: boolean) => void;
   onToggleCopilot?: () => void;
   showCopilot?: boolean;
   currentUser?: FirebaseUser | null;
@@ -501,12 +562,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setShowVersionHistoryModal,
   isSidebarCollapsed,
   setIsSidebarCollapsed,
-  activeView,
-  setActiveView,
-  notesCount,
   selectedThemeId,
   setSelectedThemeId,
-  setShowPromptModal,
   onToggleCopilot,
   showCopilot = false,
   currentUser,
@@ -549,23 +606,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isRoomActive = Boolean(activeRoomId);
   // In a room the badge only reflects the local browser backup; cloud state lives on the Cloud chip.
   const saveLabel = isRoomActive ? autoSaveLabel.replace(/^Saved/, "Saved locally") : autoSaveLabel;
+  // Keep the chip short; the relative time stays in its title.
+  const saveChipLabel = saveStatus === "saved" ? (isRoomActive ? "Saved locally" : "Saved") : saveLabel;
   const syncLabel = SYNC_STATE_LABEL[syncStatus] || syncStatus;
   const isSyncProblem = SYNC_PROBLEM_STATES.has(syncStatus);
 
-  const viewTabs: Array<{ id: ActiveView; label: string; title: string; icon: React.ReactNode; badge?: number }> = [
-    { id: "gantt", label: "Gantt", title: "Gantt timeline schedule (1)", icon: <Layers size={13} style={{ color: "#38BDF8" }} /> },
-    { id: "canvas", label: "Canvas", title: "High-performance canvas engine for very large plans (2)", icon: <Zap size={13} style={{ color: "#A855F7" }} /> },
-    { id: "kanban", label: "Kanban", title: "Kanban task board (3)", icon: <Kanban size={13} style={{ color: "#F59E0B" }} /> },
-    { id: "tasks", label: "Tasks", title: "Task checklist and grid (4)", icon: <CheckSquare size={13} style={{ color: "#10B981" }} /> },
-    { id: "summary", label: "Health & PM", title: "Project health, schedule buffers, EVM and budget (5)", icon: <Activity size={13} style={{ color: "#F43F5E" }} /> },
-    {
-      id: "notes",
-      label: "Notes",
-      title: "Shared project notes, specs and documentation (6)",
-      icon: <StickyNote size={13} style={{ color: "#06B6D4" }} />,
-      badge: typeof notesCount === "number" && notesCount > 0 ? notesCount : undefined
-    }
-  ];
+  // Plans can store a legacy theme alias (e.g. "noir"): resolve it before showing the label.
+  const activeTheme = themeManager.getTheme(selectedThemeId);
+  const activeThemeLabel = activeTheme?.label || "Theme";
+  const activeThemeId = activeTheme?.id || selectedThemeId;
 
   const accountName = userProfile?.username ? `@${userProfile.username}` : currentUser?.displayName || "Account";
   // Only GitHub-hosted avatars are loaded (profile fields are self-written); otherwise initials.
@@ -573,9 +622,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="navbar">
-      {/* 1. Left Zone: Brand, active plan context (plan, cloud, share, people) and save state */}
-      <div className="brand-section nav-group-left">
+      {/* 1. Left Zone: brand, JSON sidebar toggle, and active plan switcher */}
+      <div className="nav-zone nav-zone-left">
         <JanttLogo size={28} showWordmark={false} />
+
+        <button
+          type="button"
+          className={`btn-nav btn-sidebar-toggle nav-icon-btn ${!isSidebarCollapsed ? "is-active" : ""}`}
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          title={isSidebarCollapsed ? "Show JSON editor sidebar (split pane)" : "Hide JSON editor sidebar"}
+          aria-label={isSidebarCollapsed ? "Show JSON editor sidebar" : "Hide JSON editor sidebar"}
+          aria-expanded={!isSidebarCollapsed}
+          aria-controls="editor-pane"
+        >
+          <PanelLeft
+            size={14}
+            style={{ color: !isSidebarCollapsed ? "var(--jantt-accent, #38BDF8)" : undefined }}
+            aria-hidden="true"
+          />
+          <span className="nav-label">JSON</span>
+        </button>
 
         <NavPopover
           id="nav-plan-switcher"
@@ -608,9 +674,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             />
           )}
         </NavPopover>
+      </div>
 
-        {/* Group 1: Storage, Cloud & Persistence Capsule */}
-        <div className="nav-status-capsule">
+      {/* 2. Right Zone: document state, collaboration, tools, preferences and account */}
+      <div className="nav-zone nav-zone-right">
+        {/* Cluster 1: This plan's live state and the people you share it with */}
+        <div className="nav-cluster nav-cluster-workspace">
           <NavPopover
             id="nav-cloud-panel"
             label="Cloud collaboration"
@@ -627,13 +696,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             }
             triggerContent={
               <>
-                {isRoomActive ? <span className="nav-cloud-dot" aria-hidden="true" /> : <Cloud size={14} aria-hidden="true" />}
+                {isRoomActive ? (
+                  <span className="nav-cloud-dot" aria-hidden="true" />
+                ) : (
+                  <Cloud size={14} style={{ color: "#38BDF8" }} aria-hidden="true" />
+                )}
                 <span className="nav-label">{isRoomActive ? (isSyncProblem ? syncLabel : "Live") : "Cloud"}</span>
                 {isRoomActive && onlineCount > 0 && <span className="nav-count-pill">{onlineCount}</span>}
                 <ChevronDown size={12} className="nav-popover-chevron" aria-hidden="true" />
               </>
             }
-            align="start"
+            align="end"
             panelClassName="is-cloud-panel"
           >
             {(close) => (
@@ -702,7 +775,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               ) : (
                 <CheckCircle2 size={11} aria-hidden="true" />
               )}
-              <span className="nav-label">{saveLabel}</span>
+              <span className="nav-label">{saveChipLabel}</span>
             </button>
           )}
 
@@ -714,19 +787,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Version history: roll back to an earlier snapshot"
               aria-label={`Version history${snapshotsCount > 0 ? ` (${snapshotsCount} snapshots)` : ""}`}
             >
-              <History size={12} style={{ color: "#818CF8" }} aria-hidden="true" />
+              <History size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
               {snapshotsCount > 0 && <span className="history-count-badge">{snapshotsCount}</span>}
             </button>
           )}
-        </div>
 
-        {/* Announce only sync problems; routine "syncing / in sync" flips would be noise. */}
-        <span className="sr-only" role="status">
-          {isRoomActive && isSyncProblem ? `Cloud sync problem: ${syncMessage || syncLabel}` : ""}
-        </span>
+          <span className="nav-cluster-divider" aria-hidden="true" />
 
-        {/* Group 2: Collaboration Group (Share & People) */}
-        <div className="nav-collab-group">
           <button
             type="button"
             className="btn-nav nav-icon-btn nav-share-btn"
@@ -749,80 +816,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Users size={13} style={{ color: "#F59E0B" }} aria-hidden="true" />
           </button>
         </div>
-      </div>
 
-      {/* 2. Center Zone: Primary View Switcher */}
-      <nav className="nav-group-center" aria-label="Views">
-        <div className="jantt-scale-group">
-          {viewTabs.map((tab) => {
-            const isActive = activeView === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={`jantt-scale-btn ${isActive ? "is-active" : ""}`}
-                onClick={() => setActiveView(tab.id)}
-                title={tab.title}
-                aria-label={tab.badge ? `${tab.label} (${tab.badge})` : tab.label}
-                aria-pressed={isActive}
-              >
-                {tab.icon}
-                <span className="nav-tab-label">{tab.label}</span>
-                {tab.badge !== undefined && <span className="nav-tab-badge">{tab.badge}</span>}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-
-      {/* 3. Right Zone: Tools, Theme, Search, AI and Account */}
-      <div className="nav-controls nav-group-right">
-        {/* Cluster 1: Workspace Tools (JSON editor & Theme) */}
-        <div className="nav-tools-group">
-          {isSidebarCollapsed && (
-            <button
-              type="button"
-              className="btn-nav btn-restore-sidebar nav-icon-btn"
-              onClick={() => setIsSidebarCollapsed(false)}
-              title="Show the JSON code editor (split pane)"
-              aria-label="Show JSON editor"
-              aria-controls="editor-pane"
-              aria-expanded="false"
-            >
-              <FileJson size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
-              <span className="nav-label">JSON</span>
-            </button>
-          )}
-
-          <div className="nav-theme-capsule" title="Visual Theme">
-            <Palette size={13} className="nav-theme-icon" aria-hidden="true" />
-            <select
-              id="theme-select"
-              className="select-input nav-theme-select"
-              value={selectedThemeId}
-              onChange={(e) => setSelectedThemeId(e.target.value)}
-              aria-label="Visual theme"
-            >
-              <optgroup label="Dark Modes">
-                {AVAILABLE_THEMES.filter((t) => t.mode === "dark").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Light Modes">
-                {AVAILABLE_THEMES.filter((t) => t.mode === "light").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
-        </div>
-
-        {/* Cluster 2: Global Search & AI Copilot */}
-        <div className="nav-search-ai-group">
+        {/* Cluster 2: Global search and AI */}
+        <div className="nav-cluster nav-cluster-tools">
           {onOpenCommandPalette && (
             <button
               type="button"
@@ -832,7 +828,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-label="Open command palette"
               aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+K" : "Control+K"}
             >
-              <Search size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
+              <Search size={14} style={{ color: "#38BDF8" }} aria-hidden="true" />
               <kbd className="nav-kbd nav-label">{PRIMARY_MODIFIER_LABEL} K</kbd>
             </button>
           )}
@@ -851,33 +847,50 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="nav-label">Copilot</span>
             </button>
           )}
-
-          <button
-            type="button"
-            className="btn-nav nav-icon-btn nav-optional"
-            onClick={() => setShowPromptModal(true)}
-            title="AI prompt reference & JSON schema specification"
-            aria-label="AI prompt reference"
-          >
-            <FileJson size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
-          </button>
         </div>
 
-        {/* Cluster 3: User Account & Help */}
-        <div className="nav-user-group">
+        {/* Cluster 3: Appearance and help */}
+        <div className="nav-cluster nav-cluster-preferences">
+          <NavPopover
+            id="nav-theme-menu"
+            label="Choose a theme"
+            triggerClassName="nav-theme-trigger"
+            triggerTitle={`Theme: ${activeThemeLabel}`}
+            triggerAriaLabel={`Theme: ${activeThemeLabel}. Choose a theme`}
+            triggerContent={
+              <>
+                <Palette size={14} className="nav-theme-icon" aria-hidden="true" />
+                <span className="nav-label">{activeThemeLabel}</span>
+                <ChevronDown size={12} className="nav-popover-chevron" aria-hidden="true" />
+              </>
+            }
+            align="end"
+            panelClassName="is-theme-menu"
+          >
+            {(close) => (
+              <ThemeMenuBody
+                selectedThemeId={activeThemeId}
+                onSelectTheme={setSelectedThemeId}
+                close={close}
+              />
+            )}
+          </NavPopover>
+
           {onOpenShortcuts && (
             <button
               type="button"
-              className="btn-nav nav-icon-btn nav-optional"
+              className="btn-nav nav-icon-btn"
               onClick={onOpenShortcuts}
               title="Keyboard shortcuts (?)"
               aria-label="Keyboard shortcuts"
               aria-keyshortcuts="Shift+?"
             >
-              <HelpCircle size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
+              <HelpCircle size={14} style={{ color: "#818CF8" }} aria-hidden="true" />
             </button>
           )}
+        </div>
 
+        {/* Identity: account (or sign-in when signed out) */}
         {currentUser ? (
           <div className="nav-account">
             <button
@@ -954,8 +967,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{isSigningIn ? "Signing in…" : isPendingLoginEditor ? "Sign in to Edit" : "Sign in"}</span>
           </button>
         ) : null}
-        </div>
       </div>
+
+      {/* Announce only sync problems; routine "syncing / in sync" flips would be noise. */}
+      <span className="sr-only" role="status">
+        {isRoomActive && isSyncProblem ? `Cloud sync problem: ${syncMessage || syncLabel}` : ""}
+      </span>
     </header>
   );
 };

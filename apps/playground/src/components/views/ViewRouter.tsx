@@ -13,7 +13,7 @@ import type { useProjectState } from "../../hooks/useProjectState";
 import { KanbanView } from "./KanbanView";
 import { TasksView } from "./TasksView";
 import { NotesView } from "./NotesView";
-import { ViewToolbar } from "../layout/ViewToolbar";
+import { ViewNavBar, ViewToolbar } from "../layout/ViewToolbar";
 import { EmptyChartState } from "../common/EmptyChartState";
 
 // Heavy, less-used views load on first use: the canvas renderer and the EVM / schedule-health
@@ -30,6 +30,8 @@ const viewLoadingFallback = (
 
 export interface ViewRouterProps {
   activeView: ActiveView;
+  setActiveView?: (view: ActiveView) => void;
+  notesCount?: number;
   parsedData: JanttData | null;
   ganttDisplayData: JanttData | null;
   /**
@@ -108,6 +110,8 @@ class ViewErrorBoundary extends React.Component<ViewErrorBoundaryProps, { error:
 
 export const ViewRouter: React.FC<ViewRouterProps> = ({
   activeView,
+  setActiveView,
+  notesCount,
   parsedData,
   ganttDisplayData,
   handleGanttCommit,
@@ -133,6 +137,15 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
   return (
     <>
+      {!isMobile && setActiveView && (
+        <ViewNavBar
+          activeView={activeView}
+          setActiveView={setActiveView}
+          notesCount={notesCount}
+          viewport={viewport}
+        />
+      )}
+
       {activeView !== "notes" && (
         <ViewToolbar
           activeView={activeView}
@@ -149,6 +162,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           onExportJson={editor?.handleDownloadJson}
           onExportCsv={editor?.handleExportCsv}
           readOnly={isViewer}
+          showScaleInline={Boolean(isMobile)}
         />
       )}
 
