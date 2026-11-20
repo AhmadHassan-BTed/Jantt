@@ -1277,7 +1277,9 @@ select option,
   min-width: 260px;
   max-width: 80vw;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
+  z-index: 25;
 }
 
 .editor-pane.is-collapsed {
@@ -1303,9 +1305,9 @@ select option,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  padding: 9px 14px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 7px 10px;
   background: var(--jantt-surface, #0D1527);
   border-bottom: 1px solid var(--jantt-border, #1E2D4A);
   font-size: 11.5px;
@@ -1314,6 +1316,8 @@ select option,
   letter-spacing: 0.05em;
   color: var(--jantt-text-muted, #94A3B8);
   flex-shrink: 0;
+  position: relative;
+  z-index: 30;
 }
 
 .sync-pulse-badge {
@@ -1329,6 +1333,7 @@ select option,
   font-weight: 700;
   text-transform: none;
   letter-spacing: 0;
+  flex-shrink: 0;
   animation: jantt-pulse-glow 0.8s ease-in-out infinite alternate;
 }
 
@@ -1340,9 +1345,14 @@ select option,
 .pane-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.pane-title-icon {
+  flex-shrink: 0;
+  color: var(--jantt-accent, #38BDF8);
 }
 
 .pane-title-text {
@@ -1355,8 +1365,118 @@ select option,
 .pane-actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pane-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pane-action-btn.is-open {
+  border-color: var(--jantt-border-strong, rgba(255, 255, 255, 0.28));
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-text, #FFFFFF);
+}
+
+.pane-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+/* Dynamically collapse editor button labels to icons-only as sidebar shrinks */
+.editor-pane.is-compact .pane-btn-label {
+  display: none;
+}
+
+.editor-pane.is-compact .pane-action-btn {
+  padding: 0 6px;
+  min-width: 26px;
+}
+
+.editor-pane.is-narrow .pane-title-text {
+  display: none;
+}
+
+/* Import / Export dropdown anchored cleanly inside viewport with theme surface */
+.editor-import-export-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.editor-import-export-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1050;
+  min-width: 230px;
+  max-width: calc(100vw - 24px);
+  background: var(--jantt-surface-solid, #101012);
+  border: 1px solid var(--jantt-border-strong, var(--jantt-border, rgba(255, 255, 255, 0.16)));
+  border-radius: 10px;
+  box-shadow: var(--jantt-shadow, 0 12px 30px -4px rgba(0, 0, 0, 0.45));
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.is-mobile-device .editor-import-export-popup {
+  left: auto;
+  right: 0;
+}
+
+.editor-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--jantt-text, #F8FAFC);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.editor-popup-item:hover,
+.editor-popup-item:focus-visible {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.editor-popup-divider {
+  height: 1px;
+  background: var(--jantt-border, rgba(255, 255, 255, 0.08));
+  margin: 3px 4px;
 }
 
 .editor-wrapper {
@@ -2714,6 +2834,7 @@ select option,
 
 .toolbar-segmented-control {
   display: flex;
+  flex: 1 1 auto;
   background: var(--jantt-surface, #F1F5F9);
   border: 1px solid var(--jantt-border, #E2E8F0);
   border-radius: 8px;
@@ -2722,8 +2843,9 @@ select option,
 }
 
 .toolbar-segmented-btn {
-  flex: 1;
+  flex: 1 0 auto;
   height: 28px;
+  padding: 0 8px;
   font-size: 11.5px;
   font-weight: 600;
   border: none;
@@ -2735,6 +2857,7 @@ select option,
   align-items: center;
   justify-content: center;
   gap: 4px;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 

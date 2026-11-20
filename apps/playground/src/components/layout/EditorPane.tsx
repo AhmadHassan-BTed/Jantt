@@ -13,6 +13,7 @@ import {
   Upload,
   FileSpreadsheet,
   ArrowDownUp,
+  AlignLeft,
   X,
   Eye,
   KeyRound,
@@ -103,10 +104,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
     };
   }, [showImportExportMenu]);
 
+  const isCompact = isMobile || sidebarWidth < 510;
+  const isNarrow = !isMobile && sidebarWidth < 310;
+
   return (
     <section
       id="editor-pane"
-      className={`editor-pane ${isSidebarCollapsed ? "is-collapsed" : ""}`}
+      className={`editor-pane ${isSidebarCollapsed ? "is-collapsed" : ""} ${isCompact ? "is-compact" : ""} ${isNarrow ? "is-narrow" : ""}`}
       style={{ width: isSidebarCollapsed ? "0px" : `${sidebarWidth}px` }}
       aria-label="Plan JSON editor"
       aria-hidden={isSidebarCollapsed || undefined}
@@ -115,18 +119,19 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
     >
       <div className="pane-header">
         <div className="pane-title" title="JSON plan: the source of truth for every view">
-          <FileJson size={15} aria-hidden="true" />
+          <FileJson size={15} className="pane-title-icon" aria-hidden="true" />
           <span className="pane-title-text">JSON Plan</span>
           {isLiveSyncing && (
-            <span className="sync-pulse-badge">
+            <span className="sync-pulse-badge" title="Live synced with views">
               <Zap size={11} />
-              <span>Live Synced</span>
+              <span className="pane-btn-label">Live Synced</span>
             </span>
           )}
         </div>
+
         <div className="pane-actions">
           {/* Consolidated Import / Export Dropdown with Sub-Popup */}
-          <div ref={importExportMenuRef} style={{ position: "relative" }}>
+          <div ref={importExportMenuRef} className="editor-import-export-wrap">
             {handleImportJsonFile && (
               <input
                 type="file"
@@ -144,15 +149,15 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             )}
             <button
               type="button"
-              className={`btn-nav ${showImportExportMenu ? "btn-nav-primary" : ""}`}
-              style={{ padding: "3px 8px", fontSize: "11px", gap: "5px", display: "flex", alignItems: "center" }}
+              className={`btn-nav pane-action-btn ${showImportExportMenu ? "is-open" : ""}`}
               onClick={() => setShowImportExportMenu((prev) => !prev)}
               title="Import or export plan data"
+              aria-label="Import or export plan data"
               aria-haspopup="menu"
               aria-expanded={showImportExportMenu}
             >
-              <ArrowDownUp size={12} />
-              <span>Import / Export</span>
+              <ArrowDownUp size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
+              <span className="pane-btn-label">Import / Export</span>
               <ChevronDown
                 size={11}
                 style={{
@@ -160,6 +165,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                   transform: showImportExportMenu ? "rotate(180deg)" : "none",
                   transition: "transform 0.15s ease"
                 }}
+                aria-hidden="true"
               />
             </button>
 
@@ -168,22 +174,6 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 className="editor-import-export-popup"
                 role="menu"
                 aria-label="Import or export"
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 5px)",
-                  right: 0,
-                  zIndex: 100,
-                  minWidth: "210px",
-                  background: "var(--jantt-surface-elevated, #1e293b)",
-                  border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.14))",
-                  borderRadius: "8px",
-                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4)",
-                  padding: "6px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "2px",
-                  backdropFilter: "blur(12px)"
-                }}
               >
                 {/* 1. Import JSON Plan */}
                 {handleImportJsonFile && (
@@ -191,37 +181,17 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                     type="button"
                     className="editor-popup-item"
                     role="menuitem"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      width: "100%",
-                      padding: "7px 10px",
-                      fontSize: "12px",
-                      color: "var(--jantt-text, #f8fafc)",
-                      background: "transparent",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      textAlign: "left"
-                    }}
                     onClick={() => {
                       setShowImportExportMenu(false);
                       fileInputRef.current?.click();
                     }}
                   >
-                    <Upload size={13} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} />
-                    <span style={{ fontWeight: 500 }}>Import plan file (.json, .xml, .xer, .csv)</span>
+                    <Upload size={13} style={{ color: "#38BDF8", flexShrink: 0 }} aria-hidden="true" />
+                    <span>Import plan file (.json, .xml, .xer, .csv)</span>
                   </button>
                 )}
 
-                <div
-                  style={{
-                    height: "1px",
-                    background: "var(--jantt-border, rgba(255, 255, 255, 0.08))",
-                    margin: "3px 4px"
-                  }}
-                />
+                <div className="editor-popup-divider" />
 
                 {/* 2. Export as JSON */}
                 {handleDownloadJson && (
@@ -229,27 +199,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                     type="button"
                     className="editor-popup-item"
                     role="menuitem"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      width: "100%",
-                      padding: "7px 10px",
-                      fontSize: "12px",
-                      color: "var(--jantt-text, #f8fafc)",
-                      background: "transparent",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      textAlign: "left"
-                    }}
                     onClick={() => {
                       setShowImportExportMenu(false);
                       handleDownloadJson();
                     }}
                   >
-                    <FileJson size={13} style={{ color: "#34D399", flexShrink: 0 }} />
-                    <span style={{ fontWeight: 500 }}>Export as JSON (.json)</span>
+                    <FileJson size={13} style={{ color: "#34D399", flexShrink: 0 }} aria-hidden="true" />
+                    <span>Export as JSON (.json)</span>
                   </button>
                 )}
 
@@ -259,27 +215,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                     type="button"
                     className="editor-popup-item"
                     role="menuitem"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      width: "100%",
-                      padding: "7px 10px",
-                      fontSize: "12px",
-                      color: "var(--jantt-text, #f8fafc)",
-                      background: "transparent",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      textAlign: "left"
-                    }}
                     onClick={() => {
                       setShowImportExportMenu(false);
                       handleExportCsv();
                     }}
                   >
-                    <FileSpreadsheet size={13} style={{ color: "#FBBF24", flexShrink: 0 }} />
-                    <span style={{ fontWeight: 500 }}>Export as CSV (.csv)</span>
+                    <FileSpreadsheet size={13} style={{ color: "#FBBF24", flexShrink: 0 }} aria-hidden="true" />
+                    <span>Export as CSV (.csv)</span>
                   </button>
                 )}
               </div>
@@ -288,55 +230,60 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
 
           <button
             type="button"
-            className="btn-nav"
-            style={{ padding: "3px 7px", fontSize: "11px" }}
+            className="btn-nav pane-action-btn"
             onClick={formatJson}
             title="Format JSON"
+            aria-label="Format JSON"
             disabled={isViewer}
           >
-            Format
+            <AlignLeft size={13} aria-hidden="true" />
+            <span className="pane-btn-label">Format</span>
           </button>
           <button
             type="button"
-            className="btn-nav"
-            style={{ padding: "3px 7px", fontSize: "11px" }}
+            className="btn-nav pane-action-btn"
             onClick={() => setConfirmReset(true)}
             title="Discard unsaved editor changes and reload the last saved version of this plan"
+            aria-label="Reset editor changes"
             disabled={isViewer}
           >
-            <RotateCcw size={12} aria-hidden="true" />
-            <span>Reset</span>
+            <RotateCcw size={13} aria-hidden="true" />
+            <span className="pane-btn-label">Reset</span>
           </button>
           <button
             type="button"
-            className="btn-nav"
-            style={{ padding: "3px 7px", fontSize: "11px" }}
+            className="btn-nav pane-action-btn"
             onClick={handleCopyJson}
-            title="Copy JSON"
+            title={copiedJson ? "Copied JSON" : "Copy JSON"}
+            aria-label={copiedJson ? "Copied JSON" : "Copy JSON"}
           >
-            {copiedJson ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
-            <span>{copiedJson ? "Copied" : "Copy"}</span>
-          </button>
-          <button
-            type="button"
-            className="btn-nav"
-            style={{ padding: isMobile ? "3px 8px" : "3px 6px", fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}
-            onClick={() => setIsSidebarCollapsed(true)}
-            title={isMobile ? "Close JSON Editor" : "Collapse JSON Sidebar"}
-            aria-label={isMobile ? "Close JSON editor" : "Collapse JSON sidebar"}
-            aria-controls="editor-pane"
-            aria-expanded="true"
-          >
-            {isMobile ? (
-              <>
-                <X size={13} />
-                <span>Close</span>
-              </>
+            {copiedJson ? (
+              <Check size={13} style={{ color: "#10B981" }} aria-hidden="true" />
             ) : (
-              <ChevronLeft size={13} />
+              <Copy size={13} aria-hidden="true" />
             )}
+            <span className="pane-btn-label">{copiedJson ? "Copied" : "Copy"}</span>
           </button>
         </div>
+
+        <button
+          type="button"
+          className="btn-nav pane-collapse-btn"
+          onClick={() => setIsSidebarCollapsed(true)}
+          title={isMobile ? "Close JSON Editor" : "Collapse JSON Sidebar"}
+          aria-label={isMobile ? "Close JSON editor" : "Collapse JSON sidebar"}
+          aria-controls="editor-pane"
+          aria-expanded="true"
+        >
+          {isMobile ? (
+            <>
+              <X size={13} aria-hidden="true" />
+              <span>Close</span>
+            </>
+          ) : (
+            <ChevronLeft size={14} aria-hidden="true" />
+          )}
+        </button>
       </div>
 
       {isViewer && (
