@@ -33,7 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Dynamic AST pruning (`stripEmptyValues`): drops null, undefined, and empty string properties to save 1,000+ to 2,500+ tokens on large project plans.
   - Strict negative prompting (`[FORBIDDEN]`) preventing circular dependencies, invalid dates (end date < start date), non-schema keys, and unnecessary JSON outputs for analytical inquiries.
 
-Production-readiness hardening pass.
+- **Dynamic, Contextual & Grouped UI/UX Architecture (Elimination of Toolbar Clutter)**:
+  - Consolidated 4 stacked header tiers down to a clean, modern 2-tier structure (Top Navbar + Contextual Gantt Toolbar) matching Linear, Notion, and Figma standards.
+  - Replaced 5 static filter buttons (`Non-matching: [Dim] [Hide]`, `Completed: [Show] [Dim] [Hide]`) and bulky People dropdown with a unified, professional **Filters Popover** with active count badge (`Filters (N)`).
+  - Added dynamic contextual filter chips (`Assignee: Alice [x]`, `Completed: Hidden [x]`, `Non-matching: Hidden [x]`) that appear conditionally when filters are active and allow 1-click removal.
+  - Eliminated duplicate Project Title from the middle Gantt chart toolbar (already prominently featured in the top navbar), freeing up 350+ pixels of horizontal space.
+  - Relocated fine-grained continuous pixel sliders (day width zoom and row height) inside the Chart Settings Popover under a dedicated "Timeline Zoom & Row Sizing" section, keeping only clean, high-velocity preset pills (`Day | Week | Month | Quarter | Year` and `Compact | Default | Spacious | Fit`) on the primary canvas bar.
+  - Enforced single-row zero-wrapping toolbar layout (`flex-wrap: nowrap`), eliminating secondary row drop above table grid headers across all standard desktop viewports.
 
 ### Fixed
 - **Package entry points**: `@jantt/core` now emits `dist/theme.css`, the target of its `./theme.css` and `./style.css` exports (the build had been emitting `core.css`, so every documented stylesheet import failed). `@jantt/core/dist/theme.css` is exported too, so existing imports keep working.

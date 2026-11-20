@@ -100,7 +100,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   (toolbar as any).__dataActionsKey = dataActionsKey(props);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // ZONE 1: LEFT (Schedule Title & Task Count)
+  // ZONE 1: LEFT (Task Count Badge & Primary Add Task Action)
   // ─────────────────────────────────────────────────────────────────────────────
   const leftZone = document.createElement("div");
   leftZone.className = "jantt-toolbar-left";
@@ -109,63 +109,28 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   titleBlock.className = "jantt-title-block";
   const title = escapeHtml(props.meta?.title || "Project Schedule");
   titleBlock.innerHTML = `
-    <span class="jantt-title">${title}</span>
     <span class="jantt-badge">${props.taskCount} tasks</span>
+    <span class="jantt-title" style="display: none;">${title}</span>
   `;
   leftZone.appendChild(titleBlock);
+
+  // Add Task primary action right on the left zone next to task count
+  if (props.onAddTask) {
+    leftZone.appendChild(createAddTaskButton(propsRef));
+  }
+
   toolbar.appendChild(leftZone);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // ZONE 2: CENTER (Unified Zoom Strip, Critical Path, Date Filter Badge)
+  // ZONE 2: CENTER (Scale Presets, Row Density Presets, Active Date Filter Badge)
   // ─────────────────────────────────────────────────────────────────────────────
   const centerZone = document.createElement("div");
   centerZone.className = "jantt-toolbar-center";
 
-  // 2a. Unified Zoom Strip (Continuous Slider + Preset Buttons)
-  const zoomStrip = document.createElement("div");
-  zoomStrip.className = "jantt-zoom-strip";
-  zoomStrip.title = "Timeline Zoom (or Ctrl + Scroll on chart)";
-
-  // Continuous slider element
-  zoomStrip.innerHTML = `
-    <button type="button" class="jantt-zoom-btn is-zoom-out" aria-label="Zoom out" title="Zoom out (−)">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-    </button>
-    <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" aria-label="Timeline zoom (pixels per day)" />
-    <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-    </button>
-    <span class="jantt-zoom-label">${Math.round(props.dayWidth)}px</span>
-    <span class="jantt-zoom-strip-divider"></span>
-    <div class="jantt-scale-group"></div>
-  `;
-
-  const zoomSlider = zoomStrip.querySelector<HTMLInputElement>(".jantt-zoom-slider")!;
-  const zoomOutBtn = zoomStrip.querySelector<HTMLButtonElement>(".is-zoom-out")!;
-  const zoomInBtn = zoomStrip.querySelector<HTMLButtonElement>(".is-zoom-in")!;
-  const scaleGroup = zoomStrip.querySelector<HTMLDivElement>(".jantt-scale-group")!;
-
-  zoomSlider.addEventListener("input", (e) => {
-    const val = parseFloat((e.target as HTMLInputElement).value);
-    if (!isNaN(val) && val > 0) {
-      propsRef.current.onDayWidthChange(val);
-    }
-  });
-
-  zoomOutBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    propsRef.current.onDayWidthChange(Math.max(DAY_WIDTH_MIN, Math.round((propsRef.current.dayWidth / 1.25) * 10) / 10));
-  });
-
-  zoomInBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    propsRef.current.onDayWidthChange(Math.min(DAY_WIDTH_MAX, Math.round((propsRef.current.dayWidth * 1.25) * 10) / 10));
-  });
+  // 2a. Timeline Scale Presets Group
+  const scaleGroup = document.createElement("div");
+  scaleGroup.className = "jantt-scale-group jantt-time-scale-group";
+  scaleGroup.title = "Timeline Scale Presets (Day / Week / Month / Quarter / Year)";
 
   (["day", "week", "month", "quarter", "year"] as TimeScale[]).forEach((s) => {
     const btn = document.createElement("button");
@@ -177,41 +142,20 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     btn.addEventListener("click", () => propsRef.current.onScaleChange(s));
     scaleGroup.appendChild(btn);
   });
+  centerZone.appendChild(scaleGroup);
 
-  centerZone.appendChild(zoomStrip);
-
-  // 2b. Unified Row Height Strip (Vertical Scale & Presets outside)
-  const rowHeightStrip = document.createElement("div");
-  rowHeightStrip.className = "jantt-rowheight-strip";
-  rowHeightStrip.title = "Task Row Height (Vertical Zoom)";
-
-  rowHeightStrip.innerHTML = `
-    <span class="jantt-rowheight-icon" title="Row Height">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M12 3v18M8 6l4-3 4 3M8 18l4 3 4-3"></path>
-      </svg>
-    </span>
-    <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="Drag to adjust task row height (${props.rowHeight}px)" aria-label="Task row height (pixels)" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
-    <span class="jantt-rowheight-label">${props.rowHeightMode === "fit" ? "Fit" : `${props.rowHeight}px`}</span>
-    <span class="jantt-zoom-strip-divider"></span>
-    <div class="jantt-scale-group">
-      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 32 ? "is-active" : ""}" data-val="32" title="Compact task rows (32px)">Compact</button>
-      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 46 ? "is-active" : ""}" data-val="46" title="Default task rows (46px)">Default</button>
-      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 64 ? "is-active" : ""}" data-val="64" title="Spacious task rows (64px)">Spacious</button>
-      <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "fit" ? "is-active" : ""}" data-mode="fit" title="Fit mode: dynamically scale row heights so all tasks fit without vertical scrolling">Fit</button>
-    </div>
+  // 2b. Row Density Presets Group
+  const densityGroup = document.createElement("div");
+  densityGroup.className = "jantt-scale-group jantt-density-group";
+  densityGroup.title = "Task Row Density (Compact / Default / Spacious / Fit)";
+  densityGroup.innerHTML = `
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 32 ? "is-active" : ""}" data-val="32" title="Compact rows (32px)">Compact</button>
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 46 ? "is-active" : ""}" data-val="46" title="Default rows (46px)">Default</button>
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 64 ? "is-active" : ""}" data-val="64" title="Spacious rows (64px)">Spacious</button>
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "fit" ? "is-active" : ""}" data-mode="fit" title="Fit mode: dynamically scale row heights so all tasks fit without scrolling">Fit</button>
   `;
 
-  const rhSlider = rowHeightStrip.querySelector<HTMLInputElement>(".jantt-rowheight-slider")!;
-  rhSlider.addEventListener("input", (e) => {
-    const val = parseInt((e.target as HTMLInputElement).value, 10);
-    if (!isNaN(val)) {
-      propsRef.current.onRowHeightChange(val);
-    }
-  });
-
-  const rhPresetBtns = rowHeightStrip.querySelectorAll<HTMLButtonElement>(".jantt-scale-btn");
-  rhPresetBtns.forEach((btn) => {
+  densityGroup.querySelectorAll<HTMLButtonElement>(".jantt-scale-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const mode = btn.dataset.mode;
@@ -223,25 +167,9 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
       }
     });
   });
+  centerZone.appendChild(densityGroup);
 
-  centerZone.appendChild(rowHeightStrip);
-
-  // 2c. Critical Path Toggle Button
-  const critBtn = document.createElement("button");
-  critBtn.type = "button";
-  critBtn.className = `jantt-critical-btn ${props.showCritical ? "is-active" : ""}`;
-  critBtn.title = "Highlight the critical chain of dependent tasks controlling project duration";
-  critBtn.setAttribute("aria-pressed", String(props.showCritical));
-  critBtn.innerHTML = `
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-    </svg>
-    <span>Critical Path (${props.criticalCount})</span>
-  `;
-  critBtn.addEventListener("click", () => propsRef.current.onCriticalToggle());
-  centerZone.appendChild(critBtn);
-
-  // 2d. Active Date Filter Badge
+  // 2c. Active Date Filter Badge (Conditional)
   if (props.selectedDate && props.showDateFilterBadge !== false) {
     const dateFilterBadge = document.createElement("div");
     dateFilterBadge.className = "jantt-date-filter-badge";
@@ -270,12 +198,27 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   toolbar.appendChild(centerZone);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // ZONE 3: RIGHT (Search Box, Add Task Button, Settings Popover Trigger)
+  // ZONE 3: RIGHT (Critical Path, Search Input Box, Settings Popover Trigger)
   // ─────────────────────────────────────────────────────────────────────────────
   const rightZone = document.createElement("div");
   rightZone.className = "jantt-toolbar-right";
 
-  // 3a. Search Input Box
+  // 3a. Critical Path Toggle Button
+  const critBtn = document.createElement("button");
+  critBtn.type = "button";
+  critBtn.className = `jantt-critical-btn ${props.showCritical ? "is-active" : ""}`;
+  critBtn.title = "Highlight the critical chain of dependent tasks controlling project duration";
+  critBtn.setAttribute("aria-pressed", String(props.showCritical));
+  critBtn.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+    </svg>
+    <span>Critical Path (${props.criticalCount})</span>
+  `;
+  critBtn.addEventListener("click", () => propsRef.current.onCriticalToggle());
+  rightZone.appendChild(critBtn);
+
+  // 3b. Search Input Box
   const searchBox = document.createElement("div");
   searchBox.className = "jantt-search-box";
   searchBox.innerHTML = `
@@ -292,11 +235,6 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
     propsRef.current.onSearchChange((e.target as HTMLInputElement).value);
   });
   rightZone.appendChild(searchBox);
-
-  // 3b. Add Task Primary Button
-  if (props.onAddTask) {
-    rightZone.appendChild(createAddTaskButton(propsRef));
-  }
 
   // 3c. Settings Trigger Button & Popover
   const settingsWrap = document.createElement("div");
@@ -434,7 +372,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   const zoomLabel = toolbar.querySelector<HTMLSpanElement>(".jantt-zoom-label");
   if (zoomLabel) zoomLabel.textContent = `${Math.round(nextProps.dayWidth)}px`;
 
-  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-zoom-strip .jantt-scale-btn").forEach((btn) => {
+  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-time-scale-group .jantt-scale-btn, .jantt-zoom-strip .jantt-scale-btn").forEach((btn) => {
     const isActive = btn.textContent === nextProps.currentScale;
     btn.classList.toggle("is-active", isActive);
     btn.setAttribute("aria-pressed", String(isActive));
@@ -455,7 +393,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
     rhLabel.textContent = nextProps.rowHeightMode === "fit" ? "Fit" : `${nextProps.rowHeight}px`;
   }
 
-  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-rowheight-strip .jantt-scale-btn").forEach((btn) => {
+  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-density-group .jantt-scale-btn, .jantt-rowheight-strip .jantt-scale-btn").forEach((btn) => {
     const isFit = btn.dataset.mode === "fit";
     const val = parseInt(btn.dataset.val || "0", 10);
     const isActive = isFit ? nextProps.rowHeightMode === "fit" : (nextProps.rowHeightMode === "custom" && nextProps.rowHeight === val);
@@ -665,6 +603,38 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
       </button>
     </div>
 
+    <!-- Section 0: Timeline Zoom & Row Sizing -->
+    <div class="jantt-settings-section">
+      <div class="jantt-settings-section-title">Timeline Zoom &amp; Row Sizing</div>
+      <div class="jantt-settings-row">
+        <label class="jantt-settings-label">Day Width</label>
+        <div class="jantt-settings-slider-wrap">
+          <button type="button" class="jantt-zoom-btn is-zoom-out" aria-label="Zoom out" title="Zoom out (−)">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+          <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" aria-label="Timeline zoom (pixels per day)" />
+          <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+          <span class="jantt-zoom-label">${Math.round(props.dayWidth)}px</span>
+        </div>
+      </div>
+      <div class="jantt-settings-row">
+        <label class="jantt-settings-label">Row Height</label>
+        <div class="jantt-settings-slider-wrap">
+          <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="Drag to adjust task row height (${props.rowHeight}px)" aria-label="Task row height (pixels)" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
+          <span class="jantt-rowheight-label">${props.rowHeightMode === "fit" ? "Fit" : `${props.rowHeight}px`}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="jantt-settings-divider"></div>
+
     <!-- Section 1: Dependencies & Routing -->
     <div class="jantt-settings-section">
       <div class="jantt-settings-section-title">Dependencies &amp; Connectors</div>
@@ -721,6 +691,40 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
   closeBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     onClose();
+  });
+
+  // Zoom & Row Sizing continuous sliders inside Settings Popover
+  const zoomSlider = panel.querySelector<HTMLInputElement>(".jantt-zoom-slider");
+  const zoomOutBtn = panel.querySelector<HTMLButtonElement>(".is-zoom-out");
+  const zoomInBtn = panel.querySelector<HTMLButtonElement>(".is-zoom-in");
+  const zoomLabel = panel.querySelector<HTMLSpanElement>(".jantt-zoom-label");
+
+  zoomSlider?.addEventListener("input", (e) => {
+    const val = parseFloat((e.target as HTMLInputElement).value);
+    if (!isNaN(val) && val > 0) {
+      if (zoomLabel) zoomLabel.textContent = `${Math.round(val)}px`;
+      propsRef.current.onDayWidthChange(val);
+    }
+  });
+
+  zoomOutBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    propsRef.current.onDayWidthChange(Math.max(DAY_WIDTH_MIN, Math.round((propsRef.current.dayWidth / 1.25) * 10) / 10));
+  });
+
+  zoomInBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    propsRef.current.onDayWidthChange(Math.min(DAY_WIDTH_MAX, Math.round((propsRef.current.dayWidth * 1.25) * 10) / 10));
+  });
+
+  const rhSlider = panel.querySelector<HTMLInputElement>(".jantt-rowheight-slider");
+  const rhLabel = panel.querySelector<HTMLSpanElement>(".jantt-rowheight-label");
+  rhSlider?.addEventListener("input", (e) => {
+    const val = parseInt((e.target as HTMLInputElement).value, 10);
+    if (!isNaN(val)) {
+      if (rhLabel) rhLabel.textContent = `${val}px`;
+      propsRef.current.onRowHeightChange(val);
+    }
   });
 
   // Link routing buttons
