@@ -600,10 +600,16 @@ export class JanttRendererEngine {
     );
 
     // 3. Toolbar is mounted first so fit sizing measures its real (possibly wrapped) height
-    let toolbar = this.root.querySelector<HTMLElement>(".jantt-toolbar");
-    if (!toolbar || toolbar.parentElement !== this.root) {
-      toolbar = renderToolbar(this.buildToolbarProps(displayTasks.length, criticalCount, this.lastRowHeight));
-      this.root.prepend(toolbar);
+    let toolbar: HTMLElement | null = null;
+    if (this.currentOptions.showToolbar !== false) {
+      toolbar = this.root.querySelector<HTMLElement>(".jantt-toolbar");
+      if (!toolbar || toolbar.parentElement !== this.root) {
+        toolbar = renderToolbar(this.buildToolbarProps(displayTasks.length, criticalCount, this.lastRowHeight));
+        this.root.prepend(toolbar);
+      }
+    } else {
+      const existingToolbar = this.root.querySelector<HTMLElement>(".jantt-toolbar");
+      if (existingToolbar) existingToolbar.remove();
     }
 
     // 4. Dynamic Row Height Calculation & Coordinate Layout
@@ -686,7 +692,9 @@ export class JanttRendererEngine {
     }
 
     // 6. Update Toolbar Subsystem in-place
-    updateToolbar(toolbar, this.buildToolbarProps(displayTasks.length, criticalCount, effectiveRowHeight));
+    if (toolbar) {
+      updateToolbar(toolbar, this.buildToolbarProps(displayTasks.length, criticalCount, effectiveRowHeight));
+    }
 
     // 7. Right Timeline Area Container
     const timelineArea = document.createElement("div");
@@ -878,6 +886,9 @@ export class JanttRendererEngine {
         }
         this.currentData = { ...newData, tasks: this.resolveTasks(newData) };
         if (newOpts) {
+          if (newOpts.searchQuery !== undefined) {
+            this.state.filterQuery = newOpts.searchQuery;
+          }
           if (newOpts.themeClassName !== undefined || newOpts.className !== undefined) {
             this.root.className = `jantt-container ${this.currentOptions.themeClassName || ""} ${this.currentOptions.className || ""}`.trim();
           }

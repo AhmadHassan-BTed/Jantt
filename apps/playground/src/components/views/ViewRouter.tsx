@@ -13,7 +13,7 @@ import type { useProjectState } from "../../hooks/useProjectState";
 import { KanbanView } from "./KanbanView";
 import { TasksView } from "./TasksView";
 import { NotesView } from "./NotesView";
-import { DateFilterBar } from "../layout/DateFilterBar";
+import { ViewToolbar } from "../layout/ViewToolbar";
 import { EmptyChartState } from "../common/EmptyChartState";
 
 // Heavy, less-used views load on first use: the canvas renderer and the EVM / schedule-health
@@ -134,25 +134,21 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
   return (
     <>
       {activeView !== "notes" && (
-        <DateFilterBar
-          dateFilterMode={dateFilter.dateFilterMode}
-          setDateFilterMode={dateFilter.setDateFilterMode}
-          dateFilterValue={dateFilter.dateFilterValue}
-          setDateFilterValue={dateFilter.setDateFilterValue}
-          dateFilterRangeStart={dateFilter.dateFilterRangeStart}
-          setDateFilterRangeStart={dateFilter.setDateFilterRangeStart}
-          dateFilterRangeEnd={dateFilter.dateFilterRangeEnd}
-          setDateFilterRangeEnd={dateFilter.setDateFilterRangeEnd}
-          dateFilterActiveSummary={dateFilter.dateFilterActiveSummary}
-          dateFilterBehavior={dateFilter.dateFilterBehavior}
-          setDateFilterBehavior={dateFilter.setDateFilterBehavior}
-          completedFilterMode={dateFilter.completedFilterMode}
-          setCompletedFilterMode={dateFilter.setCompletedFilterMode}
-          selectedPersonFilter={people.selectedPersonFilter}
-          setSelectedPersonFilter={people.setSelectedPersonFilter}
-          effectivePeople={people.effectivePeople}
-          teams={people.teams}
+        <ViewToolbar
+          activeView={activeView}
+          taskCount={parsedData.tasks.length}
+          onAddTask={!isViewer ? tasks.handleAddNewTask : undefined}
+          dateFilter={dateFilter}
+          people={people}
           tasks={parsedData.tasks}
+          viewport={viewport}
+          searchQuery={tasks.tasksSearchQuery}
+          onSearchChange={tasks.setTasksSearchQuery}
+          onOpenAutoSave={() => autoSave?.setShowAutoSaveModal?.(true)}
+          onImportJson={() => project?.fileInputRef?.current?.click()}
+          onExportJson={editor?.handleDownloadJson}
+          onExportCsv={editor?.handleExportCsv}
+          readOnly={isViewer}
         />
       )}
 
@@ -163,6 +159,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               data={ganttDisplayData}
               onCommit={handleGanttCommit}
               readOnly={isViewer}
+              showToolbar={false}
+              searchQuery={tasks.tasksSearchQuery}
               showDateFilterBadge={false}
               filterTasksByDate={false}
               disableDragOnTouch={Boolean(isMobile)}

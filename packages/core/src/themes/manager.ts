@@ -47,12 +47,6 @@ export class ThemeManager {
   constructor() {
     // Register standard out-of-the-box themes
     this.registerTheme(swissDarkTheme);
-    this.registerTheme({
-      ...swissDarkTheme,
-      id: "noir",
-      name: "Swiss Noir",
-      label: "Swiss Noir"
-    });
     this.registerTheme(swissLightTheme);
     this.registerTheme(cyberEmeraldTheme);
     this.registerTheme(midnightRoseTheme);

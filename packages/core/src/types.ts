@@ -509,6 +509,8 @@ export interface JanttLayoutResult {
 
 export interface JanttOptions {
   viewport?: ViewportOptions;
+  /** When explicitly set to false, disables rendering the built-in toolbar element. Default true. */
+  showToolbar?: boolean;
   theme?: Record<string, string>;
   themeClassName?: string;
   className?: string;

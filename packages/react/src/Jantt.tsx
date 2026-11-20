@@ -15,6 +15,7 @@ export interface JanttProps {
   selectedDate?: string | null;
   showDateFilterBadge?: boolean;
   filterTasksByDate?: boolean;
+  showToolbar?: boolean;
   autoCascade?: boolean;
   /** Initial toolbar search text; later changes are made by the user in the toolbar. */
   searchQuery?: string;
@@ -105,6 +106,7 @@ interface SyncedProps {
   viewport?: ViewportOptions;
   selectedDate?: string | null;
   autoCascade?: boolean;
+  searchQuery?: string;
   config: unknown[];
 }
 
@@ -124,6 +126,7 @@ export const Jantt: React.FC<JanttProps> = ({
   selectedDate,
   showDateFilterBadge,
   filterTasksByDate,
+  showToolbar = true,
   autoCascade,
   searchQuery,
   onDateClick,
@@ -205,6 +208,7 @@ export const Jantt: React.FC<JanttProps> = ({
     sidebarContainer,
     showDateFilterBadge,
     filterTasksByDate,
+    showToolbar,
     disableDragOnTouch,
     isMobile,
     Boolean(renderDetail),
@@ -227,6 +231,7 @@ export const Jantt: React.FC<JanttProps> = ({
     sidebarContainer,
     showDateFilterBadge,
     filterTasksByDate,
+    showToolbar,
     disableDragOnTouch,
     isMobile,
     onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
@@ -261,7 +266,7 @@ export const Jantt: React.FC<JanttProps> = ({
   const mount = () => {
     const container = containerRef.current;
     if (!container) return;
-    syncedRef.current = { data, viewport, selectedDate, autoCascade, config };
+    syncedRef.current = { data, viewport, selectedDate, autoCascade, searchQuery, config };
     lastEmittedRef.current = null;
     try {
       instanceRef.current = renderJantt(container, data, {
@@ -299,8 +304,16 @@ export const Jantt: React.FC<JanttProps> = ({
     const viewportChanges = viewportUpdate(prev.viewport, viewport, instance ? instance.getDayWidth() : NaN);
     const selectedDateChanged = selectedDate !== prev.selectedDate;
     const autoCascadeChanged = autoCascade !== prev.autoCascade;
-    if (!dataChanged && !configChanged && !viewportChanges && !selectedDateChanged && !autoCascadeChanged) {
-      syncedRef.current = { ...prev, data, viewport };
+    const searchQueryChanged = searchQuery !== prev.searchQuery;
+    if (
+      !dataChanged &&
+      !configChanged &&
+      !viewportChanges &&
+      !selectedDateChanged &&
+      !autoCascadeChanged &&
+      !searchQueryChanged
+    ) {
+      syncedRef.current = { ...prev, data, viewport, searchQuery };
       return;
     }
 
@@ -309,11 +322,12 @@ export const Jantt: React.FC<JanttProps> = ({
       return;
     }
 
-    syncedRef.current = { data, viewport, selectedDate, autoCascade, config };
+    syncedRef.current = { data, viewport, selectedDate, autoCascade, searchQuery, config };
     const options: Partial<JanttOptions> = getForwardingOptions();
     if (viewportChanges) options.viewport = viewportChanges;
     if (selectedDateChanged) options.selectedDate = selectedDate;
     if (autoCascadeChanged) options.autoCascade = autoCascade;
+    if (searchQueryChanged) options.searchQuery = searchQuery;
     if (dataChanged) lastEmittedRef.current = null;
     try {
       // Unchanged data means the engine's own plan is the newest; never revert it to the prop.
@@ -326,6 +340,7 @@ export const Jantt: React.FC<JanttProps> = ({
     ...WATCHED_VIEWPORT_KEYS.map((key) => viewport?.[key]),
     selectedDate,
     autoCascade,
+    searchQuery,
     ...config
   ]);
 
