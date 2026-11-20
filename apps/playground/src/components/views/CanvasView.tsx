@@ -224,7 +224,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
 
   useEffect(
     () => () => {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
     },
     []
   );
@@ -520,8 +523,9 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       style={{
         display: "flex",
         flexDirection: "column",
+        flex: "1 1 0%",
+        minHeight: 0,
         width: "100%",
-        height: "100%",
         position: "relative",
         background: "var(--jantt-bg, #080D18)",
         overflow: "hidden",
@@ -538,6 +542,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           borderBottom: "1px solid var(--jantt-border, #1E293B)",
           background: "var(--jantt-surface, #0E1626)",
           zIndex: 10,
+          flexShrink: 0,
           flexWrap: "wrap",
           gap: "8px"
         }}
@@ -614,8 +619,8 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           </button>
           <button
             type="button"
-            className={`btn-nav ${showMinimap ? "btn-nav-primary" : ""}`}
-            style={{ fontSize: "11px", padding: "4px 8px" }}
+            className={`toolbar-btn ${showMinimap ? "is-active" : ""}`}
+            style={{ fontSize: "11px", padding: "0 9px", height: "28px" }}
             onClick={() => setShowMinimap((prev) => !prev)}
             aria-pressed={showMinimap}
             title="Toggle Radar Minimap Navigator"
@@ -635,8 +640,8 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           </button>
           <button
             type="button"
-            className={`btn-nav ${showCritical ? "btn-nav-primary" : ""}`}
-            style={{ fontSize: "11px", padding: "4px 8px" }}
+            className={`toolbar-critical-btn ${showCritical ? "is-active" : ""}`}
+            style={{ fontSize: "11px", padding: "0 9px", height: "28px" }}
             onClick={() => setShowCritical((prev) => !prev)}
             aria-pressed={showCritical}
             title={`Highlight the critical path (${criticalTaskIds.size} task${criticalTaskIds.size === 1 ? "" : "s"} with no float)`}
@@ -671,6 +676,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         ref={containerRef}
         style={{
           flex: 1,
+          minHeight: 0,
           width: "100%",
           position: "relative",
           cursor: isPanning ? "grabbing" : "grab",
@@ -707,13 +713,13 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
               position: "absolute",
               left: tooltipLeft,
               top: tooltipTop,
-              background: "rgba(15, 23, 42, 0.95)",
-              color: "#F8FAFC",
-              border: "1px solid #334155",
-              borderRadius: "6px",
+              background: "var(--jantt-surface-solid, #101012)",
+              color: "var(--jantt-text, #F8FAFC)",
+              border: "1px solid var(--jantt-border-strong, #334155)",
+              borderRadius: "8px",
               padding: "8px 12px",
               fontSize: "11px",
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
+              boxShadow: "var(--jantt-shadow, 0 10px 15px -3px rgba(0, 0, 0, 0.5))",
               pointerEvents: "none",
               zIndex: 20,
               maxWidth: `${TOOLTIP_WIDTH}px`
@@ -722,10 +728,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             <div style={{ fontWeight: 700, fontSize: "12px", marginBottom: "3px" }}>
               {hoveredTask.task.label || hoveredTask.task.name || hoveredTask.task.id}
             </div>
-            <div style={{ color: "#94A3B8" }}>
+            <div style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>
               Dates: {hoveredTask.task.start} &rarr; {hoveredTask.task.end}
             </div>
-            <div style={{ color: "#94A3B8" }}>
+            <div style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>
               Progress: {Math.round(clamp(Number(hoveredTask.task.progress) || 0, 0, 1) * 100)}%
             </div>
             {criticalTaskIds.has(hoveredTask.task.id) && (
@@ -736,7 +742,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
                 Category: {hoveredTask.task.category}
               </div>
             )}
-            <div style={{ fontSize: "10px", color: "#64748B", marginTop: "4px" }}>
+            <div style={{ fontSize: "10px", color: "var(--jantt-text-dim, #64748B)", marginTop: "4px" }}>
               Click to open activity details
             </div>
           </div>

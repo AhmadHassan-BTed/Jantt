@@ -105,7 +105,10 @@ export const ViewNavBar: React.FC<ViewNavBarProps> = ({
                 type="button"
                 className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
                 aria-pressed={viewport.currentScale === s}
-                onClick={() => viewport.setCurrentScale(s)}
+                onClick={() => {
+                  viewport.setCurrentDayWidth(undefined);
+                  viewport.setCurrentScale(s);
+                }}
                 title={`Switch timeline to ${s} scale view`}
               >
                 {s}
@@ -436,7 +439,10 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                 type="button"
                 className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
                 aria-pressed={viewport.currentScale === s}
-                onClick={() => viewport.setCurrentScale(s)}
+                onClick={() => {
+                  viewport.setCurrentDayWidth(undefined);
+                  viewport.setCurrentScale(s);
+                }}
                 title={`Switch timeline to ${s} scale view`}
               >
                 {s}

@@ -83,14 +83,25 @@ const WATCHED_VIEWPORT_KEYS: (keyof ViewportOptions)[] = [
 function viewportUpdate(
   prev: ViewportOptions | undefined,
   next: ViewportOptions | undefined,
-  engineDayWidth: number
+  engineDayWidth: number,
+  emittedDayWidths: Set<number>
 ): ViewportOptions | null {
   const changed = new Set(WATCHED_VIEWPORT_KEYS.filter((key) => prev?.[key] !== next?.[key]));
-  // The engine already shows this zoom (it reported it through onDayWidthChange/onViewportChange).
-  // A scale forwarded without its dayWidth would snap the zoom to the scale's default.
-  if (changed.has("dayWidth") && next?.dayWidth === engineDayWidth) {
+  // The engine already applied this zoom (reported through onDayWidthChange/onViewportChange).
+  // Ignoring stale echoes (e.g. async React commit during rapid wheel zoom) prevents rubber-banding.
+  if (
+    changed.has("dayWidth") &&
+    next?.dayWidth !== undefined &&
+    (next.dayWidth === engineDayWidth || emittedDayWidths.has(next.dayWidth))
+  ) {
     changed.delete("dayWidth");
     changed.delete("scale");
+    if (next.dayWidth === engineDayWidth) emittedDayWidths.clear();
+    else emittedDayWidths.delete(next.dayWidth);
+  } else if (changed.has("dayWidth") && next?.dayWidth === undefined && next?.scale !== undefined) {
+    // Clearing an explicit dayWidth (e.g. clicking the active scale preset) snaps back to that scale's width.
+    changed.add("scale");
+    emittedDayWidths.clear();
   }
   if (changed.size === 0) return null;
 
@@ -156,6 +167,8 @@ export const Jantt: React.FC<JanttProps> = ({
    * whenever other data is applied, so returning to it later (e.g. redo) is applied again.
    */
   const lastEmittedRef = useRef<JanttData | null>(null);
+  /** Zoom widths recently emitted by the engine, so delayed React commits never snap the engine backwards. */
+  const emittedDayWidthsRef = useRef<Set<number>>(new Set());
 
   // Keep latest callbacks in ref to eliminate stale closure bugs
   const callbacksRef = useRef({
@@ -236,7 +249,10 @@ export const Jantt: React.FC<JanttProps> = ({
     isMobile,
     onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
     onClearDateFilter: () => callbacksRef.current.onClearDateFilter?.(),
-    onDayWidthChange: (w: number) => callbacksRef.current.onDayWidthChange?.(w),
+    onDayWidthChange: (w: number) => {
+      emittedDayWidthsRef.current.add(w);
+      callbacksRef.current.onDayWidthChange?.(w);
+    },
     onChange: (draft: JanttData) => {
       lastEmittedRef.current = draft;
       callbacksRef.current.onChange?.(draft);
@@ -245,7 +261,10 @@ export const Jantt: React.FC<JanttProps> = ({
       lastEmittedRef.current = final;
       callbacksRef.current.onCommit?.(final);
     },
-    onViewportChange: (vp: ViewportOptions) => callbacksRef.current.onViewportChange?.(vp),
+    onViewportChange: (vp: ViewportOptions) => {
+      if (vp.dayWidth !== undefined) emittedDayWidthsRef.current.add(vp.dayWidth);
+      callbacksRef.current.onViewportChange?.(vp);
+    },
     onTaskClick: onTaskClick ? (t: Task) => callbacksRef.current.onTaskClick?.(t) : undefined,
     onTaskDelete: onTaskDelete ? (id: string) => callbacksRef.current.onTaskDelete?.(id) : undefined,
     onTaskAdd: onTaskAdd ? (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask) : undefined,
@@ -301,7 +320,12 @@ export const Jantt: React.FC<JanttProps> = ({
     const instance = instanceRef.current;
     const dataChanged = data !== prev.data && data !== lastEmittedRef.current;
     const configChanged = config.some((value, i) => value !== prev.config[i]);
-    const viewportChanges = viewportUpdate(prev.viewport, viewport, instance ? instance.getDayWidth() : NaN);
+    const viewportChanges = viewportUpdate(
+      prev.viewport,
+      viewport,
+      instance ? instance.getDayWidth() : NaN,
+      emittedDayWidthsRef.current
+    );
     const selectedDateChanged = selectedDate !== prev.selectedDate;
     const autoCascadeChanged = autoCascade !== prev.autoCascade;
     const searchQueryChanged = searchQuery !== prev.searchQuery;

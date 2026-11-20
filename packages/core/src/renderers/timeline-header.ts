@@ -35,6 +35,7 @@ function startColumnDragSession(
   initialPointerEvt: PointerEvent,
   startDayWidth: number,
   mode: "handle" | "cell",
+  cellDays: number,
   onResize?: (newDayWidth: number, clientX?: number) => void,
   onDragStateChange?: (didMove: boolean) => void,
   onDragStart?: (clientX?: number) => void,
@@ -50,6 +51,7 @@ function startColumnDragSession(
   const startX = initialPointerEvt.clientX;
   const startY = initialPointerEvt.clientY;
   const initialWidth = startDayWidth;
+  const effectiveCellDays = Math.max(1, Number.isFinite(cellDays) ? cellDays : 1);
   let hasMoved = false;
   let lastClientX = startX;
   let framePending = false;
@@ -61,14 +63,19 @@ function startColumnDragSession(
   const computeWidth = (): number => {
     const deltaX = lastClientX - startX;
     if (mode === "handle") {
-      // Direct width delta from border handle between columns:
-      // Calibrated damping (0.35) makes border stretching smooth, responsive, and steady.
-      return clampDayWidth(initialWidth + deltaX * 0.35);
+      // Scale border handle drag to the duration of the grabbed cell so a 1-day, 7-day (week),
+      // or 30-day (month) border tracks the pointer naturally instead of exploding at zoomed-out scales.
+      const gain = effectiveCellDays <= 1 ? 0.35 : 0.85 / effectiveCellDays;
+      if (deltaX >= 0) {
+        return clampDayWidth(initialWidth + deltaX * gain);
+      }
+      // Smooth exponential contraction with identical slope at deltaX = 0 avoids slamming into the min clamp.
+      return clampDayWidth(initialWidth * Math.exp((deltaX * gain) / Math.max(initialWidth, 1)));
     }
-    // Continuous zoom curve when holding the column body:
+    // Continuous exponential zoom curve when holding the column body:
     // Dragging right stretches columns (zooms in), dragging left compresses (zooms out).
-    // A generous 650px travel divisor keeps horizontal scrubbing smooth and gradual.
-    return clampDayWidth(initialWidth * Math.exp(deltaX / 650));
+    // 300px horizontal drag doubles/halves the scale uniformly across every zoom tier.
+    return clampDayWidth(initialWidth * Math.exp(deltaX / 300));
   };
 
   const applyResize = () => {
@@ -89,6 +96,7 @@ function startColumnDragSession(
         onDragStateChange?.(true);
         document.body.style.cursor = "col-resize";
         document.body.style.userSelect = "none";
+        document.body.classList.add("jantt-is-col-resizing");
       }
     }
 
@@ -109,6 +117,7 @@ function startColumnDragSession(
     }
     document.body.style.cursor = prevCursor;
     document.body.style.userSelect = prevUserSelect;
+    document.body.classList.remove("jantt-is-col-resizing");
   };
 
   function onPointerUp() {
@@ -144,7 +153,13 @@ function dayLabel(className: string, text: string): HTMLSpanElement {
   return label;
 }
 
-function buildTierRow(rowClass: string, cellClass: string, cells: TierCell[], withResizeHandles: boolean): HTMLElement {
+function buildTierRow(
+  rowClass: string,
+  cellClass: string,
+  cells: TierCell[],
+  withResizeHandles: boolean,
+  cellDays: number
+): HTMLElement {
   const row = document.createElement("div");
   row.className = rowClass;
   cells.forEach((c) => {
@@ -153,6 +168,7 @@ function buildTierRow(rowClass: string, cellClass: string, cells: TierCell[], wi
     cell.style.width = `${c.width}px`;
     cell.title = c.title;
     cell.dataset.zoomCell = "";
+    cell.dataset.cellDays = String(cellDays);
     const label = document.createElement("span");
     label.className = "jantt-tier-label";
     label.textContent = c.label;
@@ -242,7 +258,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
   if (showDays) {
     // 2. Months tier
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), zoomable)
+      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), zoomable, 30)
     );
 
     // 3. Days tier (click to filter; roving tabindex keeps the header a single tab stop)
@@ -271,6 +287,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
         : `${d.dateStr} (Click to show only tasks on this date)`;
       dCell.setAttribute("data-date", d.dateStr);
       dCell.dataset.zoomCell = "";
+      dCell.dataset.cellDays = "1";
 
       if (options?.onDateClick) {
         dCell.style.cursor = "pointer";
@@ -321,7 +338,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     timelineHeader.appendChild(daysRow);
   } else if (scale === "month") {
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), false)
+      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), false, 30)
     );
     const weeks: TierCell[] = header.weeks.map((w) => ({
       label: w.label,
@@ -329,18 +346,19 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       x: w.x,
       width: w.width
     }));
-    timelineHeader.appendChild(buildTierRow("jantt-header-days", "jantt-week-cell", weeks, zoomable));
+    timelineHeader.appendChild(buildTierRow("jantt-header-days", "jantt-week-cell", weeks, zoomable, 7));
   } else {
     timelineHeader.appendChild(
       buildTierRow(
         "jantt-header-months",
         "jantt-month-cell",
         computeQuarters(header.days, !header.spansMultipleYears),
-        false
+        false,
+        90
       )
     );
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-days", "jantt-month-cell is-compact", monthCells(header, true), zoomable)
+      buildTierRow("jantt-header-days", "jantt-month-cell is-compact", monthCells(header, true), zoomable, 30)
     );
   }
 
@@ -371,11 +389,14 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
   if (zoomable) {
     timelineHeader.addEventListener("pointerdown", (e) => {
       const target = e.target as HTMLElement;
+      const cellEl = target.closest<HTMLElement>("[data-zoom-cell]");
+      const cellDays = Number(cellEl?.dataset.cellDays) || 1;
       if (target.closest(".jantt-col-resize-handle")) {
         startColumnDragSession(
           e,
           currentDayW,
           "handle",
+          cellDays,
           options!.onColumnResize,
           undefined,
           options!.onColumnResizeStart,
@@ -384,13 +405,14 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
         );
         return;
       }
-      if (!target.closest("[data-zoom-cell]")) return;
+      if (!cellEl) return;
       // Allow holding a column to stretch / zoom, while preserving clean clicks to filter dates
       didMoveDrag = false;
       startColumnDragSession(
         e,
         currentDayW,
         "cell",
+        cellDays,
         options!.onColumnResize,
         (moved) => {
           didMoveDrag = moved;

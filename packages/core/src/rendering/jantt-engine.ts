@@ -106,6 +106,8 @@ export class JanttRendererEngine {
   private renderedToday = "";
   /** A Ctrl/Cmd+wheel zoom anchor is pending: the next render consumes and clears it. */
   private wheelZoomAnchored = false;
+  /** True while dragging a timeline header column/handle: defers host viewport broadcasts until release. */
+  private isColumnDragging = false;
 
   constructor(container: HTMLElement, initialData: JanttData, options: JanttOptions = {}) {
     this.container = container;
@@ -288,19 +290,26 @@ export class JanttRendererEngine {
   }
 
   /** Applies a new day width to the viewport state; returns false when nothing changed. */
-  private applyDayWidth(newWidth: number): boolean {
+  private applyDayWidth(newWidth: number, emitHost = true): boolean {
     const clamped = clampDayWidth(newWidth);
     if (!Number.isFinite(clamped) || clamped === this.state.currentDayWidth) return false;
 
     this.state.currentDayWidth = clamped;
     this.state.currentScale = getScaleFromDayWidth(clamped);
-    this.currentOptions.onDayWidthChange?.(clamped);
-    this.broadcastViewport();
+    if (emitHost) {
+      this.currentOptions.onDayWidthChange?.(clamped);
+      this.broadcastViewport();
+    }
     return true;
   }
 
   private handleDayWidthChange = (newWidth: number) => {
-    if (this.applyDayWidth(newWidth)) this.render();
+    if (this.applyDayWidth(newWidth, true)) this.render();
+  };
+
+  /** Fast path during active header column drag: repaints directly without triggering host re-renders per frame. */
+  private handleColumnDragResize = (newWidth: number) => {
+    if (this.applyDayWidth(newWidth, false)) this.render();
   };
 
   /** Keyboard resize of the task table (splitter arrows); the drag gesture uses the controller. */
@@ -709,13 +718,22 @@ export class JanttRendererEngine {
       showToday: viewport.showToday,
       showTodayTag: viewport.showTodayTag,
       signal: this.lifecycle.signal,
-      onColumnResize: (w) => this.handleDayWidthChange(w),
+      onColumnResize: (w) => this.handleColumnDragResize(w),
       // The grabbed date stays under the pointer for the whole drag session
       onColumnResizeStart: (clientX) => {
         this.wheelZoomAnchored = false; // the drag session owns the anchor until it ends
+        this.isColumnDragging = true;
         this.setZoomAnchor(clientX);
       },
-      onColumnResizeEnd: () => this.clearZoomAnchor(),
+      onColumnResizeEnd: () => {
+        this.clearZoomAnchor();
+        if (this.isColumnDragging) {
+          this.isColumnDragging = false;
+          // Persist/sync the settled zoom once on drag release (prevents React round-trip stutter mid-drag)
+          this.currentOptions.onDayWidthChange?.(this.state.currentDayWidth);
+          this.broadcastViewport();
+        }
+      },
       onDateClick: (dateStr: string) => {
         const shouldFilter =
           this.currentOptions.filterTasksByDate !== false &&
@@ -832,6 +850,7 @@ export class JanttRendererEngine {
   private teardown() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.isColumnDragging = false;
     this.lifecycle.abort();
     const oldToolbar = this.root.querySelector<HTMLElement>(".jantt-toolbar");
     (oldToolbar as any)?.__cleanup?.();

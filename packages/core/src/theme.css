@@ -1423,6 +1423,12 @@
   cursor: col-resize;
 }
 
+body.jantt-is-col-resizing,
+body.jantt-is-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .jantt-day-name,
 .jantt-day-num {
   pointer-events: none;

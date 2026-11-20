@@ -1,5 +1,5 @@
 import { Task, Category, TaskScheduleMetrics } from "../types";
-import { formatHumanDate, taskDurationDays } from "../date-math";
+import { diffDays, formatHumanDate, isValidISODate, taskDurationDays } from "../date-math";
 import { escapeHtml, getTaskDisplayName, sanitizeCssColor } from "../utils";
 import { DEFAULT_CATEGORY } from "../constants";
 import { applyThemeVariables } from "../themes/manager";
@@ -68,6 +68,22 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
     const cost = formatCost(task.estimatedCost);
     const dependsOnText = task.dependsOn ? formatDependsOn(task.dependsOn) : "";
 
+    let baselineHtml = "";
+    if (task.baseline && isValidISODate(task.baseline.start) && isValidISODate(task.baseline.end)) {
+      const variance = diffDays(task.baseline.end, task.end);
+      const varianceText =
+        variance > 0 ? `+${variance}d slip` : variance < 0 ? `${variance}d ahead` : "on plan";
+      const varianceColor = variance > 0 ? "#F59E0B" : variance < 0 ? "#10B981" : "var(--jantt-text-muted)";
+      baselineHtml = `
+        <div class="jantt-hover-stat-row">
+          <span class="jantt-hover-stat-label">Baseline Plan</span>
+          <span class="jantt-hover-stat-value">
+            ${escapeHtml(formatHumanDate(task.baseline.start))} → ${escapeHtml(formatHumanDate(task.baseline.end))}
+            <span class="jantt-hover-duration-tag" style="color: ${varianceColor};">(${escapeHtml(varianceText)})</span>
+          </span>
+        </div>`;
+    }
+
     let bufferColor = "#10B981";
     let bufferText = "";
     if (metrics) {
@@ -113,6 +129,8 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
             <span class="jantt-hover-duration-tag">(${escapeHtml(duration)}d)</span>
           </span>
         </div>
+
+        ${baselineHtml}
 
         ${
           !isMilestone
