@@ -31,6 +31,17 @@ export interface ProviderDefinition {
   models: ModelDefinition[];
 }
 
+export interface ProviderAccount {
+  id: string;
+  providerId: ProviderId;
+  label: string;
+  apiKey: string;
+  customBaseUrl?: string;
+  proxyUrl?: string;
+  selectedModelId?: string;
+  createdAt: number;
+}
+
 export interface PlanDiff {
   tasksAdded: string[];
   tasksRemoved: string[];
@@ -96,6 +107,7 @@ export interface ProviderAdapter {
 }
 
 export interface CopilotConfig {
+  activeAccountId?: string;
   providerId: ProviderId;
   apiKey: string;
   modelId: string;

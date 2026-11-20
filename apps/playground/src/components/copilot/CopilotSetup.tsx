@@ -1,10 +1,30 @@
-import React, { useState } from "react";
-import { KeyRound, ShieldCheck, ExternalLink, Save, Check } from "lucide-react";
-import type { CopilotConfig, ProviderDefinition, ProviderId } from "../../services/ai/types";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  KeyRound,
+  ShieldCheck,
+  ExternalLink,
+  Save,
+  Check,
+  ChevronDown,
+  Plus,
+  Trash2,
+  Edit2
+} from "lucide-react";
+import type {
+  CopilotConfig,
+  ProviderDefinition,
+  ProviderId,
+  ProviderAccount
+} from "../../services/ai/types";
 
 interface CopilotSetupProps {
   config: CopilotConfig;
   providers: ProviderDefinition[];
+  accounts?: ProviderAccount[];
+  onAddAccount?: (data: Omit<ProviderAccount, "id" | "createdAt">) => ProviderAccount;
+  onUpdateAccount?: (id: string, partial: Partial<ProviderAccount>) => void;
+  onDeleteAccount?: (id: string) => void;
+  onSelectAccount?: (accountId: string) => void;
   onSaveConfig: (updated: Partial<CopilotConfig>) => void;
   onClose?: () => void;
 }
@@ -12,32 +32,137 @@ interface CopilotSetupProps {
 export const CopilotSetup: React.FC<CopilotSetupProps> = ({
   config,
   providers,
+  accounts = [],
+  onAddAccount,
+  onUpdateAccount,
+  onDeleteAccount,
   onSaveConfig,
   onClose
 }) => {
-  const [selectedProvider, setSelectedProvider] = useState<ProviderId>(config.providerId);
-  const [apiKey, setApiKey] = useState(config.apiKey);
+  // Editing state: whether creating a new account or editing existing
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(
+    config.activeAccountId || (accounts.length > 0 ? accounts[0].id : null)
+  );
+  const [isCreatingNew, setIsCreatingNew] = useState(accounts.length === 0);
+
+  // Form fields
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>(config.providerId || "gemini");
+  const [accountLabel, setAccountLabel] = useState("");
+  const [apiKey, setApiKey] = useState(config.apiKey || "");
   const [customBaseUrl, setCustomBaseUrl] = useState(config.customBaseUrl || "");
   const [proxyUrl, setProxyUrl] = useState(config.proxyUrl || "");
   const [temperature, setTemperature] = useState(config.temperature);
   const [autoApply, setAutoApply] = useState(config.autoApply);
+
+  // Dropdown open state
+  const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Sync when selecting an account to edit
+  useEffect(() => {
+    if (!isCreatingNew && editingAccountId) {
+      const matched = accounts.find((a) => a.id === editingAccountId);
+      if (matched) {
+        setSelectedProvider(matched.providerId);
+        setAccountLabel(matched.label);
+        setApiKey(matched.apiKey);
+        setCustomBaseUrl(matched.customBaseUrl || "");
+        setProxyUrl(matched.proxyUrl || "");
+      }
+    }
+  }, [editingAccountId, isCreatingNew, accounts]);
+
+  // Click outside listener for dropdown
+  useEffect(() => {
+    if (!isProviderDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsProviderDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isProviderDropdownOpen]);
 
   const activeProviderDef = providers.find((p) => p.id === selectedProvider) || providers[0];
 
   const handleProviderChange = (pId: ProviderId) => {
     setSelectedProvider(pId);
+    const def = providers.find((p) => p.id === pId);
+    if (isCreatingNew || !accountLabel.trim()) {
+      setAccountLabel(def ? `${def.label} Account` : `${pId} Account`);
+    }
+  };
+
+  const handleStartAddAccount = () => {
+    setIsCreatingNew(true);
+    setEditingAccountId(null);
+    setSelectedProvider("gemini");
+    const geminiDef = providers.find((p) => p.id === "gemini");
+    setAccountLabel(geminiDef ? `${geminiDef.label} Account` : "Gemini Account");
+    setApiKey("");
+    setCustomBaseUrl("");
+    setProxyUrl("");
+  };
+
+  const handleSelectAccountToEdit = (acc: ProviderAccount) => {
+    setIsCreatingNew(false);
+    setEditingAccountId(acc.id);
+  };
+
+  const handleDeleteAccount = (accId: string) => {
+    onDeleteAccount?.(accId);
+    if (editingAccountId === accId) {
+      const remaining = accounts.filter((a) => a.id !== accId);
+      if (remaining.length > 0) {
+        handleSelectAccountToEdit(remaining[0]);
+      } else {
+        handleStartAddAccount();
+      }
+    }
   };
 
   const handleSave = () => {
+    const cleanKey = apiKey.trim();
+    const cleanUrl = customBaseUrl.trim();
+    const cleanProxy = proxyUrl.trim();
+    const label = accountLabel.trim() || activeProviderDef.label;
+
+    let targetAccountId = editingAccountId;
+
+    if (isCreatingNew && onAddAccount) {
+      const created = onAddAccount({
+        providerId: selectedProvider,
+        label,
+        apiKey: cleanKey,
+        customBaseUrl: cleanUrl,
+        proxyUrl: cleanProxy,
+        selectedModelId: activeProviderDef.models[0]?.id || ""
+      });
+      targetAccountId = created.id;
+      setIsCreatingNew(false);
+      setEditingAccountId(created.id);
+    } else if (editingAccountId && onUpdateAccount) {
+      onUpdateAccount(editingAccountId, {
+        providerId: selectedProvider,
+        label,
+        apiKey: cleanKey,
+        customBaseUrl: cleanUrl,
+        proxyUrl: cleanProxy
+      });
+    }
+
     onSaveConfig({
+      activeAccountId: targetAccountId || undefined,
       providerId: selectedProvider,
-      apiKey: apiKey.trim(),
-      customBaseUrl: customBaseUrl.trim(),
-      proxyUrl: proxyUrl.trim(),
+      apiKey: cleanKey,
+      customBaseUrl: cleanUrl,
+      proxyUrl: cleanProxy,
       temperature,
       autoApply
     });
+
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -52,29 +177,147 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           <KeyRound size={20} />
         </div>
         <div>
-          <h3>AI Provider Configuration</h3>
-          <p>Bring your own API key. Keys are saved securely in your browser&apos;s local storage.</p>
+          <h3>AI Provider Accounts</h3>
+          <p>Add N providers and API keys. Stored securely in your browser.</p>
         </div>
       </div>
 
+      {/* Configured Accounts List */}
+      <div className="copilot-accounts-section">
+        <div className="copilot-accounts-header">
+          <span className="copilot-section-title">
+            Configured Accounts ({accounts.length})
+          </span>
+          <button
+            type="button"
+            className="copilot-add-account-btn"
+            onClick={handleStartAddAccount}
+            title="Add another API key or provider"
+          >
+            <Plus size={12} />
+            <span>Add Account</span>
+          </button>
+        </div>
+
+        {accounts.length > 0 && (
+          <div className="copilot-accounts-list">
+            {accounts.map((acc) => {
+              const isSelected = !isCreatingNew && acc.id === editingAccountId;
+              const isActive = acc.id === config.activeAccountId;
+              const pDef = providers.find((p) => p.id === acc.providerId);
+              const hasKey = acc.providerId === "ollama" || Boolean(acc.apiKey.trim());
+
+              return (
+                <div
+                  key={acc.id}
+                  className={`copilot-account-card ${isSelected ? "is-selected" : ""} ${isActive ? "is-active-account" : ""}`}
+                  onClick={() => handleSelectAccountToEdit(acc)}
+                >
+                  <div className="copilot-acc-info">
+                    <div className="copilot-acc-name-row">
+                      <span className="copilot-acc-name">{acc.label}</span>
+                      {isActive && <span className="copilot-acc-badge-active">Active</span>}
+                    </div>
+                    <span className="copilot-acc-meta">
+                      {pDef?.label || acc.providerId}
+                      {" • "}
+                      {hasKey ? "Key configured" : "Key missing"}
+                    </span>
+                  </div>
+                  <div className="copilot-acc-actions" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="copilot-acc-edit-btn"
+                      onClick={() => handleSelectAccountToEdit(acc)}
+                      title="Edit this account"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    {accounts.length > 1 && (
+                      <button
+                        type="button"
+                        className="copilot-acc-delete-btn"
+                        onClick={() => handleDeleteAccount(acc.id)}
+                        title="Delete this account"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="copilot-setup-form">
+        <div className="copilot-form-section-divider">
+          <span>{isCreatingNew ? "Add New Account" : `Editing: ${accountLabel || activeProviderDef.label}`}</span>
+        </div>
+
+        {/* Account Label */}
         <div className="copilot-form-group">
+          <label className="copilot-form-label" htmlFor="copilot-account-label">
+            Account Nickname / Label
+          </label>
+          <input
+            id="copilot-account-label"
+            type="text"
+            className="copilot-text-input"
+            value={accountLabel}
+            onChange={(e) => setAccountLabel(e.target.value)}
+            placeholder="e.g. Gemini Personal, OpenAI Work, Ollama Local"
+            spellCheck={false}
+          />
+        </div>
+
+        {/* Provider Dropdown */}
+        <div className="copilot-form-group" ref={dropdownRef}>
           <label className="copilot-form-label">Provider</label>
-          <div className="copilot-provider-radios">
-            {providers.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={`copilot-provider-card ${selectedProvider === p.id ? "is-active" : ""}`}
-                onClick={() => handleProviderChange(p.id)}
-              >
-                <span className="copilot-p-label">{p.label}</span>
-                <span className="copilot-p-desc">{p.description}</span>
-              </button>
-            ))}
+          <div className="copilot-dropdown-container">
+            <button
+              type="button"
+              className={`copilot-dropdown-trigger ${isProviderDropdownOpen ? "is-open" : ""}`}
+              onClick={() => setIsProviderDropdownOpen((prev) => !prev)}
+            >
+              <div className="copilot-dropdown-trigger-content">
+                <span className="copilot-dropdown-trigger-title">{activeProviderDef.label}</span>
+                <span className="copilot-dropdown-trigger-desc">{activeProviderDef.description}</span>
+              </div>
+              <ChevronDown size={14} className={`copilot-dropdown-chevron ${isProviderDropdownOpen ? "is-open" : ""}`} />
+            </button>
+
+            {isProviderDropdownOpen && (
+              <div className="copilot-dropdown-menu" role="listbox">
+                {providers.map((p) => {
+                  const isSelected = selectedProvider === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`copilot-dropdown-item ${isSelected ? "is-active" : ""}`}
+                      onClick={() => {
+                        handleProviderChange(p.id);
+                        setIsProviderDropdownOpen(false);
+                      }}
+                      role="option"
+                      aria-selected={isSelected}
+                    >
+                      <div className="copilot-dropdown-item-header">
+                        <span className="copilot-dropdown-item-label">{p.label}</span>
+                        {isSelected && <Check size={13} className="copilot-check-icon" />}
+                      </div>
+                      <span className="copilot-dropdown-item-desc">{p.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
+        {/* API Key */}
         <div className="copilot-form-group">
           <label className="copilot-form-label" htmlFor="copilot-api-key">
             {activeProviderDef.label} API Key
@@ -103,7 +346,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                 : selectedProvider === "xai"
                 ? "xai-..."
                 : selectedProvider === "ollama"
-                ? "No key required (optional)"
+                ? "No key required for local Ollama"
                 : "API Key (if required)"
             }
             autoComplete="off"
@@ -159,6 +402,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           </span>
         </div>
 
+        {/* Custom Base URL */}
         {(selectedProvider === "openai-compatible" || selectedProvider === "ollama" || activeProviderDef.supportsCustomBaseUrl) && (
           <div className="copilot-form-group">
             <label className="copilot-form-label" htmlFor="copilot-base-url">
@@ -180,6 +424,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           </div>
         )}
 
+        {/* Anthropic CORS Proxy */}
         {selectedProvider === "anthropic" && (
           <div className="copilot-form-group">
             <label className="copilot-form-label" htmlFor="copilot-proxy-url">
@@ -200,6 +445,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           </div>
         )}
 
+        {/* Creativity / Temperature */}
         <div className="copilot-form-group">
           <label className="copilot-form-label">
             Creativity & Temperature: {temperature}
@@ -218,6 +464,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           </span>
         </div>
 
+        {/* Live Auto-Commit */}
         <div className="copilot-form-group">
           <label className="copilot-checkbox-row">
             <input
@@ -232,6 +479,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           </label>
         </div>
 
+        {/* Footer */}
         <div className="copilot-setup-footer">
           <div className="copilot-secure-note">
             <ShieldCheck size={14} />
@@ -246,7 +494,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
             ) : (
               <>
                 <Save size={14} />
-                <span>Save Configuration</span>
+                <span>Save Account & Settings</span>
               </>
             )}
           </button>

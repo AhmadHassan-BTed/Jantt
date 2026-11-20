@@ -118,6 +118,11 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
             <CopilotSetup
               config={copilot.config}
               providers={copilot.availableProviders}
+              accounts={copilot.accounts}
+              onAddAccount={copilot.addAccount}
+              onUpdateAccount={copilot.updateAccount}
+              onDeleteAccount={copilot.deleteAccount}
+              onSelectAccount={(accId) => copilot.updateConfig({ activeAccountId: accId })}
               onSaveConfig={(updated) => {
                 copilot.updateConfig(updated);
                 setShowSettings(false);
@@ -142,13 +147,12 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
                 isReadOnly={!isConfigured}
                 currentModelLabel={copilot.currentModelLabel}
                 providers={copilot.availableProviders}
+                configuredAccounts={copilot.configuredAccounts}
+                activeAccountId={copilot.config.activeAccountId}
                 activeProviderId={copilot.config.providerId}
                 activeModelId={copilot.config.modelId}
-                onSelectModel={(providerId, modelId) => {
-                  copilot.updateConfig({
-                    providerId: providerId as any,
-                    modelId
-                  });
+                onSelectAccountAndModel={(accountId, modelId) => {
+                  copilot.selectAccountAndModel(accountId, modelId);
                 }}
                 onOpenSettings={() => setShowSettings(true)}
               />

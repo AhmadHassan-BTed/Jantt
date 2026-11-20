@@ -5,7 +5,8 @@ import type {
   CopilotConfig,
   PendingPlanChange,
   ModelDefinition,
-  ProviderDefinition
+  ProviderDefinition,
+  ProviderAccount
 } from "../services/ai/types";
 import {
   getActiveProvider,
@@ -21,7 +22,14 @@ import {
   getTemperature,
   setTemperature,
   getAutoApply,
-  setAutoApply
+  setAutoApply,
+  getProviderAccounts,
+  addProviderAccount,
+  updateProviderAccount,
+  deleteProviderAccount,
+  getActiveAccountId,
+  setActiveAccountId,
+  isAccountConfigured
 } from "../services/ai/storage";
 import {
   getProviderAdapter,
@@ -56,6 +64,12 @@ export interface UseCopilotReturn {
   availableProviders: ProviderDefinition[];
   availableModels: ModelDefinition[];
   currentModelLabel: string;
+  accounts: ProviderAccount[];
+  configuredAccounts: ProviderAccount[];
+  addAccount: (data: Omit<ProviderAccount, "id" | "createdAt">) => ProviderAccount;
+  updateAccount: (id: string, partial: Partial<ProviderAccount>) => void;
+  deleteAccount: (id: string) => void;
+  selectAccountAndModel: (accountId: string, modelId: string) => void;
 }
 
 export function useCopilot({
@@ -64,8 +78,30 @@ export function useCopilot({
   showToast,
   isReadOnly
 }: UseCopilotOptions): UseCopilotReturn {
+  // Accounts State
+  const [accounts, setAccounts] = useState<ProviderAccount[]>(() => getProviderAccounts());
+  const configuredAccounts = useMemo(() => accounts.filter(isAccountConfigured), [accounts]);
+
   // 1. Configuration State
   const [config, setConfigState] = useState<CopilotConfig>(() => {
+    const allAccounts = getProviderAccounts();
+    const activeAccId = getActiveAccountId();
+    const matched = allAccounts.find((a) => a.id === activeAccId) || allAccounts[0];
+
+    if (matched) {
+      const defaultModel = matched.selectedModelId || PROVIDER_CATALOG[matched.providerId]?.models[0]?.id || "gemini-2.5-flash";
+      return {
+        activeAccountId: matched.id,
+        providerId: matched.providerId,
+        apiKey: matched.apiKey,
+        modelId: defaultModel,
+        customBaseUrl: matched.customBaseUrl,
+        proxyUrl: matched.proxyUrl,
+        temperature: getTemperature(),
+        autoApply: getAutoApply()
+      };
+    }
+
     const providerId = getActiveProvider();
     const defaultModel = PROVIDER_CATALOG[providerId]?.models[0]?.id || "gemini-2.5-flash";
     return {
@@ -90,6 +126,85 @@ export function useCopilot({
 
   const isReadOnlyRef = useRef(isReadOnly);
   isReadOnlyRef.current = isReadOnly;
+
+  // Account Management Actions
+  const addAccount = useCallback((data: Omit<ProviderAccount, "id" | "createdAt">) => {
+    const created = addProviderAccount(data);
+    const updated = getProviderAccounts();
+    setAccounts(updated);
+    setActiveAccountId(created.id);
+    const defaultModel = created.selectedModelId || PROVIDER_CATALOG[created.providerId]?.models[0]?.id || "";
+    setConfigState((prev) => ({
+      ...prev,
+      activeAccountId: created.id,
+      providerId: created.providerId,
+      apiKey: created.apiKey,
+      modelId: defaultModel,
+      customBaseUrl: created.customBaseUrl,
+      proxyUrl: created.proxyUrl
+    }));
+    return created;
+  }, []);
+
+  const updateAccount = useCallback((id: string, partial: Partial<ProviderAccount>) => {
+    updateProviderAccount(id, partial);
+    const updated = getProviderAccounts();
+    setAccounts(updated);
+    const activeId = getActiveAccountId();
+    if (activeId === id) {
+      setConfigState((prev) => ({
+        ...prev,
+        providerId: partial.providerId !== undefined ? partial.providerId : prev.providerId,
+        apiKey: partial.apiKey !== undefined ? partial.apiKey : prev.apiKey,
+        modelId: partial.selectedModelId !== undefined ? partial.selectedModelId : prev.modelId,
+        customBaseUrl: partial.customBaseUrl !== undefined ? partial.customBaseUrl : prev.customBaseUrl,
+        proxyUrl: partial.proxyUrl !== undefined ? partial.proxyUrl : prev.proxyUrl
+      }));
+    }
+  }, []);
+
+  const deleteAccount = useCallback((id: string) => {
+    deleteProviderAccount(id);
+    const updated = getProviderAccounts();
+    setAccounts(updated);
+    const nextActiveId = getActiveAccountId();
+    const nextAcc = updated.find((a) => a.id === nextActiveId) || updated[0];
+    if (nextAcc) {
+      const defaultModel = nextAcc.selectedModelId || PROVIDER_CATALOG[nextAcc.providerId]?.models[0]?.id || "";
+      setConfigState((prev) => ({
+        ...prev,
+        activeAccountId: nextAcc.id,
+        providerId: nextAcc.providerId,
+        apiKey: nextAcc.apiKey,
+        modelId: defaultModel,
+        customBaseUrl: nextAcc.customBaseUrl,
+        proxyUrl: nextAcc.proxyUrl
+      }));
+    } else {
+      setConfigState((prev) => ({
+        ...prev,
+        activeAccountId: undefined,
+        apiKey: ""
+      }));
+    }
+  }, []);
+
+  const selectAccountAndModel = useCallback((accountId: string, modelId: string) => {
+    const acc = getProviderAccounts().find((a) => a.id === accountId);
+    if (!acc) return;
+    setActiveAccountId(accountId);
+    updateProviderAccount(accountId, { selectedModelId: modelId });
+    setAccounts(getProviderAccounts());
+    setConfigState((prev) => ({
+      ...prev,
+      activeAccountId: accountId,
+      providerId: acc.providerId,
+      apiKey: acc.apiKey,
+      modelId,
+      customBaseUrl: acc.customBaseUrl,
+      proxyUrl: acc.proxyUrl
+    }));
+  }, []);
 
   // 2. Chat & Execution State
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
@@ -126,6 +241,7 @@ export function useCopilot({
       }
 
       return {
+        ...prev,
         providerId: nextProvider,
         apiKey: nextKey,
         modelId: nextModel,
@@ -138,24 +254,31 @@ export function useCopilot({
   }, []);
 
   const isConfigured = useMemo(() => {
+    if (configuredAccounts.length > 0) {
+      return true;
+    }
     if (config.providerId === "ollama") {
       return true;
     }
     if (config.providerId === "openai-compatible") {
-      // Local endpoint doesn't strictly require an API key
       const isLocal = config.customBaseUrl?.includes("localhost") || config.customBaseUrl?.includes("127.0.0.1");
       return Boolean(isLocal || config.apiKey);
     }
     return Boolean(config.apiKey.trim());
-  }, [config.providerId, config.apiKey, config.customBaseUrl]);
+  }, [configuredAccounts, config.providerId, config.apiKey, config.customBaseUrl]);
 
   const availableProviders = useMemo(() => getAllProviders(), []);
   const availableModels = useMemo(() => getModelsForProvider(config.providerId), [config.providerId]);
 
   const currentModelLabel = useMemo(() => {
+    const activeAcc = accounts.find((a) => a.id === config.activeAccountId);
     const found = availableModels.find((m) => m.id === config.modelId);
-    return found ? found.label : config.modelId || "Select Model";
-  }, [availableModels, config.modelId]);
+    const modelName = found ? found.label : config.modelId || "Select Model";
+    if (activeAcc && accounts.length > 1) {
+      return `${activeAcc.label} • ${modelName}`;
+    }
+    return modelName;
+  }, [accounts, config.activeAccountId, availableModels, config.modelId]);
 
   // Stop Generation
   const stopGeneration = useCallback(() => {
@@ -453,6 +576,12 @@ export function useCopilot({
     updateConfig,
     availableProviders,
     availableModels,
-    currentModelLabel
+    currentModelLabel,
+    accounts,
+    configuredAccounts,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    selectAccountAndModel
   };
 }

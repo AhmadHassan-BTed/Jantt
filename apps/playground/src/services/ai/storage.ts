@@ -1,9 +1,11 @@
-import type { ProviderId } from "./types";
+import type { ProviderAccount, ProviderId } from "./types";
 
 const STORAGE_PREFIX = "jantt_copilot_";
 
 const KEYS = {
   ACTIVE_PROVIDER: `${STORAGE_PREFIX}provider`,
+  ACTIVE_ACCOUNT_ID: `${STORAGE_PREFIX}active_account_id`,
+  ACCOUNTS: `${STORAGE_PREFIX}accounts`,
   ACTIVE_MODEL_PREFIX: `${STORAGE_PREFIX}model_`,
   CUSTOM_MODELS_PREFIX: `${STORAGE_PREFIX}custom_models_`,
   API_KEY_PREFIX: `${STORAGE_PREFIX}key_`,
@@ -166,12 +168,119 @@ export function addCustomModel(provider: ProviderId, modelId: string): void {
   }
 }
 
-export function hasAnyApiKey(): boolean {
+export function isAccountConfigured(account: ProviderAccount): boolean {
+  if (account.providerId === "ollama") return true;
+  return Boolean(account.apiKey && account.apiKey.trim().length > 0);
+}
+
+export function getProviderAccounts(): ProviderAccount[] {
   const storage = getStorage();
-  if (!storage) return false;
-  // Ollama runs locally without requiring an API key
-  if (getActiveProvider() === "ollama") return true;
-  return VALID_PROVIDERS.some((p) => Boolean(getApiKey(p)));
+  if (!storage) return [];
+  const stored = storage.getItem(KEYS.ACCOUNTS);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    } catch {
+      // fall through to migration
+    }
+  }
+
+  // Auto-migration from legacy single-provider keys
+  const migrated: ProviderAccount[] = [];
+  for (const p of VALID_PROVIDERS) {
+    const key = getApiKey(p);
+    if (key || p === "ollama") {
+      migrated.push({
+        id: `acc_${p}_legacy`,
+        providerId: p,
+        label: p === "ollama" ? "Local Ollama" : `${p.charAt(0).toUpperCase() + p.slice(1)} Account`,
+        apiKey: key,
+        customBaseUrl: getCustomBaseUrl(p),
+        proxyUrl: getProxyUrl(p),
+        selectedModelId: getModelForProvider(p, ""),
+        createdAt: Date.now()
+      });
+    }
+  }
+
+  if (migrated.length > 0) {
+    storage?.setItem(KEYS.ACCOUNTS, JSON.stringify(migrated));
+    return migrated;
+  }
+
+  return [];
+}
+
+export function saveProviderAccounts(accounts: ProviderAccount[]): void {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(KEYS.ACCOUNTS, JSON.stringify(accounts));
+}
+
+export function addProviderAccount(data: Omit<ProviderAccount, "id" | "createdAt">): ProviderAccount {
+  const accounts = getProviderAccounts();
+  const newAccount: ProviderAccount = {
+    ...data,
+    id: `acc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    createdAt: Date.now()
+  };
+  accounts.push(newAccount);
+  saveProviderAccounts(accounts);
+  setActiveAccountId(newAccount.id);
+  return newAccount;
+}
+
+export function updateProviderAccount(id: string, partial: Partial<ProviderAccount>): void {
+  const accounts = getProviderAccounts();
+  const idx = accounts.findIndex((a) => a.id === id);
+  if (idx !== -1) {
+    accounts[idx] = { ...accounts[idx], ...partial };
+    saveProviderAccounts(accounts);
+  }
+}
+
+export function deleteProviderAccount(id: string): void {
+  const accounts = getProviderAccounts();
+  const filtered = accounts.filter((a) => a.id !== id);
+  saveProviderAccounts(filtered);
+  const activeId = getActiveAccountId();
+  if (activeId === id) {
+    if (filtered.length > 0) {
+      setActiveAccountId(filtered[0].id);
+    } else {
+      const storage = getStorage();
+      storage?.removeItem(KEYS.ACTIVE_ACCOUNT_ID);
+    }
+  }
+}
+
+export function getActiveAccountId(): string {
+  const storage = getStorage();
+  if (!storage) return "";
+  const stored = storage.getItem(KEYS.ACTIVE_ACCOUNT_ID);
+  if (stored) return stored;
+  const accounts = getProviderAccounts();
+  if (accounts.length > 0) {
+    return accounts[0].id;
+  }
+  return "";
+}
+
+export function setActiveAccountId(id: string): void {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(KEYS.ACTIVE_ACCOUNT_ID, id);
+}
+
+export function getConfiguredAccounts(): ProviderAccount[] {
+  return getProviderAccounts().filter(isAccountConfigured);
+}
+
+export function hasAnyApiKey(): boolean {
+  return getConfiguredAccounts().length > 0;
 }
 
 export function clearAllCopilotStorage(): void {

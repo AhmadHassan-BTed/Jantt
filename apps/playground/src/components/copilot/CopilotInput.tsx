@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ChevronDown, ArrowUp, Square, Plus } from "lucide-react";
 import { CopilotModelSelector } from "./CopilotModelSelector";
-import type { ProviderDefinition } from "../../services/ai/types";
+import type { ProviderDefinition, ProviderAccount } from "../../services/ai/types";
 
 interface CopilotInputProps {
   onSendMessage: (text: string) => void;
@@ -10,9 +10,11 @@ interface CopilotInputProps {
   isReadOnly: boolean;
   currentModelLabel: string;
   providers: ProviderDefinition[];
+  configuredAccounts: ProviderAccount[];
+  activeAccountId?: string;
   activeProviderId: string;
   activeModelId: string;
-  onSelectModel: (providerId: string, modelId: string) => void;
+  onSelectAccountAndModel: (accountId: string, modelId: string) => void;
   onOpenSettings: () => void;
 }
 
@@ -23,9 +25,11 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
   isReadOnly,
   currentModelLabel,
   providers,
+  configuredAccounts,
+  activeAccountId,
   activeProviderId,
   activeModelId,
-  onSelectModel,
+  onSelectAccountAndModel,
   onOpenSettings
 }) => {
   const [text, setText] = useState("");
@@ -91,9 +95,11 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
               isOpen={isModelSelectorOpen}
               onClose={() => setIsModelSelectorOpen(false)}
               providers={providers}
+              configuredAccounts={configuredAccounts}
+              activeAccountId={activeAccountId}
               activeProviderId={activeProviderId}
               activeModelId={activeModelId}
-              onSelectModel={onSelectModel}
+              onSelectAccountAndModel={onSelectAccountAndModel}
               onOpenSettings={onOpenSettings}
             />
           </div>
