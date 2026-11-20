@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **In-App AI Copilot Sidebar (Antigravity-Inspired Interactive Engine)**:
+  - Client-side Bring-Your-Own-Key (BYOK) AI Copilot integrated directly into the Jantt Playground (`apps/playground`).
+  - Accessible via the top navbar Copilot button and the global shortcut `Ctrl+J` / `Cmd+J`.
+  - Antigravity-styled sliding drawer with dark obsidian input card (`#1C1C1E`), auto-expanding multi-line textarea, model selector pill, and dual send/stop streaming indicator.
+- **Multi-Provider & Multi-Account Architecture (N Providers & N Keys)**:
+  - 10 first-class AI providers out of the box: Google Gemini, OpenAI, Anthropic Claude, Groq, DeepSeek, OpenRouter, Mistral AI, xAI (Grok), Local Ollama, and Custom OpenAI-Compatible.
+  - Multi-profile support: users can configure N distinct accounts and API keys (e.g. separate Personal and Work Gemini keys, or multiple Ollama network hosts).
+  - Clean Provider Dropdown selector in Settings, eliminating vertical radio-card clutter.
+  - Dynamic Custom Model ID input on the fly (`+ Add Custom Model ID...`).
+  - Credentials-Only Chat Gating: the chat model selector strictly filters down to only those providers and accounts for which credentials have actually been configured, eliminating menu clutter.
+  - Native browser CORS support via OpenRouter (single key for 200+ models with zero backend).
+  - Offline local model execution via Ollama (`http://localhost:11434`) with zero API key requirement.
+- **Zero-Pollution Schema Sanitizer & Partial State Reconciler**:
+  - `sanitizeAndReconcilePlan()` engine: purges non-schema commentary keys (`explanation`, `thought`, `summary`, `changes_made`, `reasoning`) from the plan AST.
+  - Protects task `notes` and `label` from being overwritten by AI changelog commentary.
+  - Partial updates reconciler: merges partial modifications (e.g. updating 1 or 2 tasks) into the master schedule without dropping existing tasks, categories, people, or notes.
+- **Live Auto-Commit vs. Manual Review Mode & 1-Click Revert**:
+  - Live Auto-Commit mode: immediately validates and applies clean AI plan edits live to both the interactive Gantt chart canvas and the split JSON code editor.
+  - Manual Review mode: generates structural diff preview cards (`+ Added`, `Modified`, `- Removed`) with explicit Accept / Dismiss buttons.
+  - 1-click snapshot reversion: every assistant message records the exact prior plan snapshot, enabling instant rollback at any time.
+- **Token-Dense Prompt Engineering & Strict Negative Constraints**:
+  - Hyper-compact TypeScript interface contract reducing schema prompt tokens by 66% (from ~650 tokens down to ~220 tokens).
+  - Dynamic AST pruning (`stripEmptyValues`): drops null, undefined, and empty string properties to save 1,000+ to 2,500+ tokens on large project plans.
+  - Strict negative prompting (`[FORBIDDEN]`) preventing circular dependencies, invalid dates (end date < start date), non-schema keys, and unnecessary JSON outputs for analytical inquiries.
+
 Production-readiness hardening pass.
 
 ### Fixed

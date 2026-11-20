@@ -254,18 +254,8 @@ export function useCopilot({
   }, []);
 
   const isConfigured = useMemo(() => {
-    if (configuredAccounts.length > 0) {
-      return true;
-    }
-    if (config.providerId === "ollama") {
-      return true;
-    }
-    if (config.providerId === "openai-compatible") {
-      const isLocal = config.customBaseUrl?.includes("localhost") || config.customBaseUrl?.includes("127.0.0.1");
-      return Boolean(isLocal || config.apiKey);
-    }
-    return Boolean(config.apiKey.trim());
-  }, [configuredAccounts, config.providerId, config.apiKey, config.customBaseUrl]);
+    return configuredAccounts.length > 0;
+  }, [configuredAccounts]);
 
   const availableProviders = useMemo(() => getAllProviders(), []);
   const availableModels = useMemo(() => getModelsForProvider(config.providerId), [config.providerId]);

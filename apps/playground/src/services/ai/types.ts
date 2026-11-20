@@ -39,6 +39,7 @@ export interface ProviderAccount {
   customBaseUrl?: string;
   proxyUrl?: string;
   selectedModelId?: string;
+  isExplicit?: boolean;
   createdAt: number;
 }
 

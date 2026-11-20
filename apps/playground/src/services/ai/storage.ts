@@ -169,7 +169,10 @@ export function addCustomModel(provider: ProviderId, modelId: string): void {
 }
 
 export function isAccountConfigured(account: ProviderAccount): boolean {
-  if (account.providerId === "ollama") return true;
+  if (!account) return false;
+  if (account.providerId === "ollama") {
+    return Boolean(account.isExplicit || account.customBaseUrl || (account.apiKey && account.apiKey.trim().length > 0));
+  }
   return Boolean(account.apiKey && account.apiKey.trim().length > 0);
 }
 
@@ -180,27 +183,37 @@ export function getProviderAccounts(): ProviderAccount[] {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        // Filter out phantom unconfigured accounts
+        const valid = parsed.filter((a: ProviderAccount) => isAccountConfigured(a));
+        if (valid.length > 0) {
+          if (valid.length !== parsed.length) {
+            storage.setItem(KEYS.ACCOUNTS, JSON.stringify(valid));
+          }
+          return valid;
+        }
+        storage.removeItem(KEYS.ACCOUNTS);
       }
     } catch {
-      // fall through to migration
+      // ignore
     }
   }
 
-  // Auto-migration from legacy single-provider keys
+  // Only migrate if user ACTUALLY entered a real non-empty API key previously
   const migrated: ProviderAccount[] = [];
   for (const p of VALID_PROVIDERS) {
+    if (p === "ollama") continue; // Never auto-migrate ollama without explicit configuration
     const key = getApiKey(p);
-    if (key || p === "ollama") {
+    if (key && key.trim().length > 0) {
       migrated.push({
-        id: `acc_${p}_legacy`,
+        id: `acc_${p}_migrated`,
         providerId: p,
-        label: p === "ollama" ? "Local Ollama" : `${p.charAt(0).toUpperCase() + p.slice(1)} Account`,
-        apiKey: key,
+        label: `${p.charAt(0).toUpperCase() + p.slice(1)} Account`,
+        apiKey: key.trim(),
         customBaseUrl: getCustomBaseUrl(p),
         proxyUrl: getProxyUrl(p),
         selectedModelId: getModelForProvider(p, ""),
+        isExplicit: true,
         createdAt: Date.now()
       });
     }
@@ -225,6 +238,7 @@ export function addProviderAccount(data: Omit<ProviderAccount, "id" | "createdAt
   const newAccount: ProviderAccount = {
     ...data,
     id: `acc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    isExplicit: true,
     createdAt: Date.now()
   };
   accounts.push(newAccount);

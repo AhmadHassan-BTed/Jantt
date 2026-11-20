@@ -6905,6 +6905,16 @@ path.jantt-dep-path.jantt-task-dimmed {
   border-bottom: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
 }
 
+.copilot-error-banner {
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #EF4444;
+  font-size: 11.5px;
+  margin-top: 4px;
+}
+
 /* Provider Dropdown */
 .copilot-dropdown-container {
   position: relative;

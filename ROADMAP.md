@@ -65,6 +65,10 @@ To be the world's most capable, lightweight Gantt chart engine - designed specif
 - [x] **AI Agent Protocol**: `@jantt/mcp` Model Context Protocol server with deterministic planning tools.
 
 ### Phase 5: Hierarchy, Customization & Release Engineering (Upcoming) [Planned]
+- [x] **AI Natural Language Commands & Interactive Copilot Sidebar**:
+  - In-app AI Copilot sidebar in the playground with Bring-Your-Own-Key (BYOK) multi-provider support (Gemini, OpenAI, Claude, Groq, DeepSeek, OpenRouter, Mistral, xAI, Ollama, Custom).
+  - Live auto-commit and review modes, structural diffing, and 1-click snapshot rollback.
+  - Zero-pollution AST sanitizer, partial state reconciler, and token-dense prompt engineering.
 - [ ] **Hierarchical Grouping & Subtasks**:
   - Parent summary tasks spanning across subtasks with accordion collapse/expand.
   - Category and Assignee lane grouping.
@@ -72,8 +76,6 @@ To be the world's most capable, lightweight Gantt chart engine - designed specif
   - Declarative column definitions stored in the plan, building on the existing `viewport.columns` option.
 - [ ] **Angular Wrapper**:
   - Lightweight wrapper alongside the React, Vue, Svelte, and Web Component adapters.
-- [ ] **AI Natural Language Commands**:
-  - Stream natural-language timeline edits into Jantt state, building on the MCP tools.
 - [ ] **Faster Playground Loads**:
   - Lazy-load secondary views and the cloud (Firebase) features so local-only users download less.
 - [ ] **Release Automation**:

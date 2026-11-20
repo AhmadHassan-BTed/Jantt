@@ -58,6 +58,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
   const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Sync when selecting an account to edit
   useEffect(() => {
@@ -69,6 +70,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         setApiKey(matched.apiKey);
         setCustomBaseUrl(matched.customBaseUrl || "");
         setProxyUrl(matched.proxyUrl || "");
+        setErrorMessage("");
       }
     }
   }, [editingAccountId, isCreatingNew, accounts]);
@@ -129,6 +131,12 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
     const cleanProxy = proxyUrl.trim();
     const label = accountLabel.trim() || activeProviderDef.label;
 
+    if (selectedProvider !== "ollama" && !cleanKey) {
+      setErrorMessage(`Please enter an API key for ${activeProviderDef.label}.`);
+      return;
+    }
+    setErrorMessage("");
+
     let targetAccountId = editingAccountId;
 
     if (isCreatingNew && onAddAccount) {
@@ -136,8 +144,9 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         providerId: selectedProvider,
         label,
         apiKey: cleanKey,
-        customBaseUrl: cleanUrl,
+        customBaseUrl: selectedProvider === "ollama" ? (cleanUrl || "http://localhost:11434/v1") : cleanUrl,
         proxyUrl: cleanProxy,
+        isExplicit: true,
         selectedModelId: activeProviderDef.models[0]?.id || ""
       });
       targetAccountId = created.id;
@@ -148,8 +157,9 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         providerId: selectedProvider,
         label,
         apiKey: cleanKey,
-        customBaseUrl: cleanUrl,
-        proxyUrl: cleanProxy
+        customBaseUrl: selectedProvider === "ollama" ? (cleanUrl || "http://localhost:11434/v1") : cleanUrl,
+        proxyUrl: cleanProxy,
+        isExplicit: true
       });
     }
 
@@ -400,6 +410,11 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
               <span>Supports vLLM, LM Studio, Together, or any self-hosted OpenAI-compatible server.</span>
             )}
           </span>
+          {errorMessage && (
+            <div className="copilot-error-banner">
+              <span>{errorMessage}</span>
+            </div>
+          )}
         </div>
 
         {/* Custom Base URL */}
