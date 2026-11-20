@@ -871,6 +871,7 @@
 
 .jantt-toggle-switch.is-active .jantt-toggle-thumb {
   transform: translateX(16px);
+  background: var(--jantt-accent-contrast, #FFFFFF);
 }
 
 /* View-only charts: the rule is shown but cannot be toggled */

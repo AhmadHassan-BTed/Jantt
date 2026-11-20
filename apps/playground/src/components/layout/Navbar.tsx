@@ -687,7 +687,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             triggerTitle={
               isRoomActive
                 ? `Live cloud room${roomRoleLabel ? ` • ${roomRoleLabel}` : ""} • ${syncMessage || syncLabel}`
-                : "Cloud collaboration: start or join a live room"
+                : "Cloud collaboration: sign in, start or join a live room"
             }
             triggerAriaLabel={
               isRoomActive
@@ -942,7 +942,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
-        ) : onLogin && !isLoadingAuth ? (
+        ) : (isPendingLoginEditor || isSigningIn) && onLogin && !isLoadingAuth ? (
           <button
             type="button"
             className={`btn-connect-cloud ${isPendingLoginEditor ? "is-pending-editor" : ""}`}
@@ -952,19 +952,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             title={
               isSigningIn
                 ? "Finish signing in in the GitHub window"
-                : isPendingLoginEditor
-                ? "Editor invitation: sign in with GitHub to activate your editor permissions"
-                : "Sign in with GitHub to collaborate in real-time cloud rooms"
+                : "Editor invitation: sign in with GitHub to activate your editor permissions"
             }
           >
             {isSigningIn ? (
               <Loader2 size={14} className="spin-sync-icon" aria-hidden="true" />
-            ) : isPendingLoginEditor ? (
-              <KeyRound size={14} aria-hidden="true" />
             ) : (
-              <Cloud size={14} aria-hidden="true" />
+              <KeyRound size={14} aria-hidden="true" />
             )}
-            <span>{isSigningIn ? "Signing in…" : isPendingLoginEditor ? "Sign in to Edit" : "Sign in"}</span>
+            <span>{isSigningIn ? "Signing in…" : "Sign in to Edit"}</span>
           </button>
         ) : null}
       </div>

@@ -2592,7 +2592,7 @@ select option,
 
 .toolbar-badge-count {
   background: var(--jantt-accent, #0284C7);
-  color: #FFFFFF;
+  color: var(--jantt-accent-contrast, #FFFFFF);
   font-size: 10px;
   font-weight: 700;
   border-radius: 10px;
@@ -2966,6 +2966,7 @@ select option,
 
 .toolbar-toggle-switch.is-active .toolbar-toggle-thumb {
   transform: translateX(16px);
+  background: var(--jantt-accent-contrast, #FFFFFF);
 }
 
 .toolbar-action-full-btn {
@@ -3033,6 +3034,21 @@ select option,
 .jantt-theme-dark .toolbar-popover-card,
 .jantt-theme-noir .toolbar-popover-card {
   box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.6), 0 6px 14px -4px rgba(0, 0, 0, 0.4);
+}
+
+/* Swiss Noir: keep active toggles, segmented controls, and toolbar buttons crisp instead of washed-out full white */
+.jantt-theme-dark .toolbar-action-cluster .toolbar-btn.is-active,
+.jantt-theme-dark .toolbar-btn.is-active,
+.jantt-theme-dark .theme-menu-item.is-active,
+.jantt-theme-dark .plan-switcher-item.is-active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #FFFFFF;
+}
+
+.jantt-theme-dark .toolbar-segmented-btn.is-active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #FFFFFF;
 }
 
 /* ==========================================================================
