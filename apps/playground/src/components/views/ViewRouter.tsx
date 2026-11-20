@@ -15,6 +15,8 @@ import { TasksView } from "./TasksView";
 import { NotesView } from "./NotesView";
 import { ViewNavBar, ViewToolbar } from "../layout/ViewToolbar";
 import { EmptyChartState } from "../common/EmptyChartState";
+import { STORAGE_KEYS } from "../../constants";
+import { storageService } from "../../services/storage";
 
 // Heavy, less-used views load on first use: the canvas renderer and the EVM / schedule-health
 // dashboard stay out of the startup bundle. (They are deliberately not re-exported from the
@@ -129,6 +131,18 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const [jumpToTodayCount, setJumpToTodayCount] = React.useState(0);
+  const handleJumpToToday = React.useCallback(() => {
+    setJumpToTodayCount((c) => c + 1);
+  }, []);
+  const ganttScrollRef = React.useRef<{ scrollLeft: number; scrollTop: number } | null>(
+    storageService.getItem<{ scrollLeft: number; scrollTop: number }>(STORAGE_KEYS.GANTT_SCROLL)
+  );
+  const handleSaveGanttScroll = React.useCallback((pos: { scrollLeft: number; scrollTop: number }) => {
+    ganttScrollRef.current = pos;
+    storageService.setItem(STORAGE_KEYS.GANTT_SCROLL, pos);
+  }, []);
+
   if (!parsedData) {
     return <EmptyChartState />;
   }
@@ -143,6 +157,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           setActiveView={setActiveView}
           notesCount={notesCount}
           viewport={viewport}
+          onJumpToToday={handleJumpToToday}
         />
       )}
 
@@ -163,6 +178,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           onExportCsv={editor?.handleExportCsv}
           readOnly={isViewer}
           showScaleInline={Boolean(isMobile)}
+          onJumpToToday={handleJumpToToday}
         />
       )}
 
@@ -231,6 +247,9 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               }}
               theme={viewport.activeTheme.vars}
               themeClassName={viewport.activeTheme.className}
+              scrollToTodayTrigger={jumpToTodayCount}
+              initialScroll={ganttScrollRef.current}
+              onSaveScroll={handleSaveGanttScroll}
               onOpenAutoSave={() => autoSave.setShowAutoSaveModal(true)}
               onImportJson={() => project.fileInputRef.current?.click()}
               onExportJson={editor.handleDownloadJson}
@@ -245,6 +264,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               activeTheme={viewport.activeTheme}
               isViewer={isViewer}
               onOpenScratchPlan={project.handleCreateLocalCopyFromData}
+              scrollToTodayTrigger={jumpToTodayCount}
             />
           )}
 

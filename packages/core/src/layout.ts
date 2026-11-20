@@ -189,7 +189,7 @@ const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime"
   showTodayTag: false,
   showWeekends: true,
   showCriticalPath: false,
-  showBaselines: true,
+  showBaselines: false,
   autoCascade: true
 };
 
@@ -219,7 +219,7 @@ export function layout(
     scale,
     linkRouting: viewportOptions.linkRouting || data.meta?.linkRouting || "orthogonal",
     showCriticalPath: viewportOptions.showCriticalPath ?? (data.meta?.showCriticalPath ?? false),
-    showBaselines: viewportOptions.showBaselines ?? (data.meta?.showBaselines ?? true),
+    showBaselines: viewportOptions.showBaselines ?? (data.meta?.showBaselines ?? false),
     showToday: viewportOptions.showToday ?? true,
     showTodayTag: viewportOptions.showTodayTag ?? false,
     showWeekends: viewportOptions.showWeekends ?? true,

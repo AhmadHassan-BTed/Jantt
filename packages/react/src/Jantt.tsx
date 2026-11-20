@@ -43,6 +43,12 @@ export interface JanttProps {
   onError?: (error: Error) => void;
   disableDragOnTouch?: boolean;
   isMobile?: boolean;
+  /** Increment this counter to smoothly scroll the timeline viewport to the Today line. */
+  scrollToTodayTrigger?: number;
+  /** Optional scroll position restored when the chart mounts (e.g. returning from another view). */
+  initialScroll?: { scrollLeft: number; scrollTop: number } | null;
+  /** Invoked on unmount with the final scroll position so hosts can remember viewport position across views. */
+  onSaveScroll?: (pos: { scrollLeft: number; scrollTop: number }) => void;
 }
 
 /**
@@ -156,7 +162,10 @@ export const Jantt: React.FC<JanttProps> = ({
   onExportCsv,
   onError,
   disableDragOnTouch,
-  isMobile
+  isMobile,
+  scrollToTodayTrigger,
+  initialScroll,
+  onSaveScroll
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<JanttInstance | null>(null);
@@ -169,6 +178,10 @@ export const Jantt: React.FC<JanttProps> = ({
   const lastEmittedRef = useRef<JanttData | null>(null);
   /** Zoom widths recently emitted by the engine, so delayed React commits never snap the engine backwards. */
   const emittedDayWidthsRef = useRef<Set<number>>(new Set());
+  const lastTodayTriggerRef = useRef(scrollToTodayTrigger);
+  const initialScrollRef = useRef(initialScroll);
+  const onSaveScrollRef = useRef(onSaveScroll);
+  onSaveScrollRef.current = onSaveScroll;
 
   // Keep latest callbacks in ref to eliminate stale closure bugs
   const callbacksRef = useRef({
@@ -295,6 +308,9 @@ export const Jantt: React.FC<JanttProps> = ({
         autoCascade,
         searchQuery
       });
+      if (initialScrollRef.current && (initialScrollRef.current.scrollLeft > 0 || initialScrollRef.current.scrollTop > 0)) {
+        instanceRef.current.setScrollPosition(initialScrollRef.current.scrollLeft, initialScrollRef.current.scrollTop);
+      }
     } catch (error) {
       instanceRef.current = null;
       reportError(error);
@@ -305,6 +321,9 @@ export const Jantt: React.FC<JanttProps> = ({
   useEffect(() => {
     mount();
     return () => {
+      if (instanceRef.current) {
+        onSaveScrollRef.current?.(instanceRef.current.getScrollPosition());
+      }
       instanceRef.current?.destroy();
       instanceRef.current = null;
       syncedRef.current = null;
@@ -367,6 +386,14 @@ export const Jantt: React.FC<JanttProps> = ({
     searchQuery,
     ...config
   ]);
+
+  // Scroll to Today line when host increments scrollToTodayTrigger
+  useEffect(() => {
+    if (scrollToTodayTrigger !== undefined && scrollToTodayTrigger !== lastTodayTriggerRef.current) {
+      lastTodayTriggerRef.current = scrollToTodayTrigger;
+      instanceRef.current?.scrollToToday();
+    }
+  }, [scrollToTodayTrigger]);
 
   return (
     <div

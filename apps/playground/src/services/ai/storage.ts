@@ -260,12 +260,13 @@ export function deleteProviderAccount(id: string): void {
   const accounts = getProviderAccounts();
   const filtered = accounts.filter((a) => a.id !== id);
   saveProviderAccounts(filtered);
+  const storage = getStorage();
+  storage?.removeItem(`${STORAGE_PREFIX}discovered_models_${id}`);
   const activeId = getActiveAccountId();
   if (activeId === id) {
     if (filtered.length > 0) {
       setActiveAccountId(filtered[0].id);
     } else {
-      const storage = getStorage();
       storage?.removeItem(KEYS.ACTIVE_ACCOUNT_ID);
     }
   }

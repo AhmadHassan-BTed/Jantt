@@ -361,6 +361,23 @@ export class CanvasTimelineRenderer {
       ctx.lineTo(x, bottom);
     }
     ctx.stroke();
+
+    // Vertical Today indicator line
+    const now = new Date();
+    const todayEpochDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / DAY_MS;
+    const todayFraction = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+    const todayOffset = todayEpochDay - this.timelineStartDay + todayFraction;
+    if (todayOffset >= horiz.startDayOffset - 1 && todayOffset <= horiz.endDayOffset + 1) {
+      const tx = todayOffset * dayWidth;
+      ctx.save();
+      ctx.strokeStyle = colors.critical || "#EF4444";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(tx, top);
+      ctx.lineTo(tx, Math.max(bottom, top + 2000));
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   private drawTaskBars(

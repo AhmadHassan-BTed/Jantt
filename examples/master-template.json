@@ -11,7 +11,7 @@
     "scale": "week",
     "linkRouting": "orthogonal",
     "showCriticalPath": false,
-    "showBaselines": true,
+    "showBaselines": false,
     "currency": "USD",
     "budget": 385000,
     "version": "1.2.0",

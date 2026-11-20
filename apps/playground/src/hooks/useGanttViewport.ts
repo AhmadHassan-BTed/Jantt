@@ -37,7 +37,12 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
   const selectedThemeId = planThemeId ?? personalThemeId;
   const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
   const [currentScale, setCurrentScale] = useState<TimeScale>(options.initialScale);
-  const [currentDayWidth, setCurrentDayWidth] = useState<number | undefined>(undefined);
+  const [currentDayWidth, setCurrentDayWidth] = useState<number | undefined>(() => {
+    const raw = storageService.getItem<string>(STORAGE_KEYS.DAY_WIDTH);
+    if (!raw) return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  });
   const [linkRouting, setLinkRouting] = useState<LinkRoutingStyle>(options.initialRouting);
   const [rowHeightMode, setRowHeightMode] = useState<RowHeightMode>(options.initialRowHeightMode);
   const [rowHeight, setRowHeight] = useState<number>(options.initialRowHeight);
@@ -74,6 +79,11 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
   useEffect(() => {
     storageService.setItem(STORAGE_KEYS.THEME, personalThemeId);
     storageService.setItem(STORAGE_KEYS.SCALE, currentScale);
+    if (currentDayWidth !== undefined && Number.isFinite(currentDayWidth)) {
+      storageService.setItem(STORAGE_KEYS.DAY_WIDTH, String(currentDayWidth));
+    } else {
+      storageService.removeItem(STORAGE_KEYS.DAY_WIDTH);
+    }
     storageService.setItem(STORAGE_KEYS.ROUTING, linkRouting);
     storageService.setItem(STORAGE_KEYS.ROW_HEIGHT_MODE, rowHeightMode);
     storageService.setItem(STORAGE_KEYS.ROW_HEIGHT, String(rowHeight));
@@ -84,6 +94,7 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
   }, [
     personalThemeId,
     currentScale,
+    currentDayWidth,
     linkRouting,
     rowHeightMode,
     rowHeight,

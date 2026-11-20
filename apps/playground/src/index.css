@@ -1133,9 +1133,25 @@ select option,
   border-color: #EC4899;
 }
 
-.btn-nav-primary:hover {
-  filter: brightness(1.1);
+.btn-nav-primary:hover,
+.btn-nav.btn-nav-primary:hover {
+  background: var(--jantt-accent, #38BDF8);
+  color: var(--jantt-accent-contrast, #FFFFFF);
+  border-color: var(--jantt-accent, #38BDF8);
+  filter: brightness(1.08);
   box-shadow: 0 0 16px var(--jantt-accent-glow, rgba(56, 189, 248, 0.45));
+}
+
+.jantt-theme-dark .btn-nav-primary:hover,
+.jantt-theme-dark .btn-nav.btn-nav-primary:hover,
+.jantt-theme-cyber-emerald .btn-nav-primary:hover,
+.jantt-theme-cyber-emerald .btn-nav.btn-nav-primary:hover {
+  color: #000000;
+}
+
+.jantt-theme-nordic-frost .btn-nav-primary:hover,
+.jantt-theme-nordic-frost .btn-nav.btn-nav-primary:hover {
+  color: #031326;
 }
 
 /* Modal and Action Buttons (Standard Design System) */
@@ -2339,8 +2355,37 @@ select option,
 .view-nav-scale {
   display: flex;
   align-items: center;
+  gap: 8px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.toolbar-today-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--jantt-surface-solid, #FFFFFF);
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  color: var(--jantt-text, #0F172A);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.toolbar-today-jump-btn:hover {
+  background: var(--jantt-surface-hover, #F1F5F9);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: var(--jantt-text, #0F172A);
+}
+
+.toolbar-today-jump-btn:active {
+  transform: scale(0.97);
 }
 
 /* ==========================================================================
@@ -2509,6 +2554,7 @@ select option,
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   flex: 1 1 auto;
 }
 
@@ -2542,7 +2588,8 @@ select option,
   background: var(--jantt-surface-hover, #F1F5F9);
 }
 
-.toolbar-scale-btn.is-active {
+.toolbar-scale-btn.is-active,
+.toolbar-scale-btn.is-active:hover {
   background: var(--jantt-accent, #0284C7);
   color: var(--jantt-accent-contrast, #FFFFFF);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -3167,6 +3214,19 @@ select option,
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.28);
   color: #FFFFFF;
+}
+
+.jantt-theme-dark .toolbar-action-cluster .toolbar-btn.is-active:hover,
+.jantt-theme-dark .toolbar-btn.is-active:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #FFFFFF;
+}
+
+.jantt-theme-dark .toolbar-critical-btn.is-active:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.55);
+  color: #FBBF24;
 }
 
 .jantt-theme-dark .toolbar-segmented-btn.is-active {
@@ -8017,33 +8077,177 @@ path.jantt-dep-path.jantt-task-dimmed {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  width: 280px;
-  max-height: 360px;
-  overflow-y: auto;
-  background: #1C1C1E;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  width: 316px;
+  max-width: calc(100vw - 32px);
+  max-height: 410px;
+  background: var(--jantt-surface-solid, #141418);
+  border: 1px solid var(--jantt-border-strong, rgba(255, 255, 255, 0.16));
   border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--jantt-shadow, 0 14px 32px rgba(0, 0, 0, 0.5));
   z-index: 100;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.copilot-model-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
+}
+
+.copilot-model-search-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.12));
+  background: var(--jantt-bg, rgba(0, 0, 0, 0.25));
+}
+
+.copilot-model-search-box:focus-within {
+  border-color: var(--jantt-accent, #38BDF8);
+}
+
+.copilot-model-search-icon {
+  color: var(--jantt-text-muted, #94A3B8);
+  flex-shrink: 0;
+}
+
+.copilot-model-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--jantt-text, #F8FAFC);
+  font-size: 11.5px;
+}
+
+.copilot-model-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--jantt-text-muted, #94A3B8);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.copilot-model-search-clear:hover {
+  color: var(--jantt-text, #FFFFFF);
+}
+
+.copilot-model-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--jantt-text-muted, #94A3B8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copilot-model-refresh-btn:hover:not(:disabled) {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-text, #FFFFFF);
+  border-color: var(--jantt-border-strong, rgba(255, 255, 255, 0.25));
+}
+
+.copilot-model-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.copilot-model-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 268px;
+  overflow-y: auto;
 }
 
 .copilot-model-group {
   padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.06));
 }
 
 .copilot-group-header {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 12px;
+  padding: 4px 10px 4px 12px;
   font-size: 10.5px;
   font-weight: 600;
-  color: #9CA3AF;
+  color: var(--jantt-text-muted, #9CA3AF);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
+}
+
+.copilot-group-status-pill {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--jantt-border-subtle, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-text-muted, #94A3B8);
+  white-space: nowrap;
+}
+
+.copilot-group-status-pill.is-live {
+  background: rgba(16, 185, 129, 0.14);
+  color: #10B981;
+}
+
+.copilot-group-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--jantt-text-muted, #94A3B8);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.copilot-group-refresh-btn:hover:not(:disabled) {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-text, #FFFFFF);
+}
+
+.copilot-group-error-hint {
+  margin: 2px 12px 4px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #F59E0B;
+  font-size: 10.5px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .copilot-model-option {
@@ -8052,28 +8256,76 @@ path.jantt-dep-path.jantt-task-dimmed {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 7px 12px;
+  gap: 8px;
+  padding: 6px 12px;
   background: transparent;
   border: none;
-  color: #D1D5DB;
+  color: var(--jantt-text, #D1D5DB);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.12s;
 }
 
+.copilot-model-option-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.copilot-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copilot-model-id-sub {
+  font-family: var(--jantt-font-mono, monospace);
+  font-size: 10px;
+  color: var(--jantt-text-dim, #64748B);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copilot-model-option-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.copilot-model-ctx-tag {
+  font-family: var(--jantt-font-mono, monospace);
+  font-size: 9.5px;
+  color: var(--jantt-text-dim, #64748B);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--jantt-border-subtle, rgba(255, 255, 255, 0.06));
+}
+
 .copilot-model-option:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #FFFFFF;
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--jantt-text, #FFFFFF);
 }
 
 .copilot-model-option.is-selected {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
   color: var(--jantt-accent, #38BDF8);
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.copilot-model-no-matches {
+  padding: 16px 12px;
+  font-size: 11.5px;
+  color: var(--jantt-text-muted, #94A3B8);
+  text-align: center;
 }
 
 .copilot-custom-model-box {
   padding: 6px 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
 }
 
 .copilot-custom-model-toggle-btn {
@@ -8084,7 +8336,7 @@ path.jantt-dep-path.jantt-task-dimmed {
   padding: 6px 8px;
   border-radius: 6px;
   background: transparent;
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border: 1px dashed var(--jantt-border-strong, rgba(255, 255, 255, 0.18));
   color: var(--jantt-accent, #38BDF8);
   font-size: 11.5px;
   cursor: pointer;
@@ -8092,7 +8344,7 @@ path.jantt-dep-path.jantt-task-dimmed {
 }
 
 .copilot-custom-model-toggle-btn:hover {
-  background: rgba(56, 189, 248, 0.08);
+  background: var(--jantt-surface-hover, rgba(56, 189, 248, 0.08));
   border-color: var(--jantt-accent, #38BDF8);
 }
 
@@ -8104,9 +8356,10 @@ path.jantt-dep-path.jantt-task-dimmed {
 
 .copilot-custom-model-field {
   flex: 1;
-  background: rgba(0, 0, 0, 0.25);
+  min-width: 0;
+  background: var(--jantt-bg, rgba(0, 0, 0, 0.25));
   border: 1px solid var(--jantt-accent, #38BDF8);
-  color: #FFFFFF;
+  color: var(--jantt-text, #FFFFFF);
   border-radius: 6px;
   padding: 5px 8px;
   font-size: 11.5px;
@@ -8115,7 +8368,7 @@ path.jantt-dep-path.jantt-task-dimmed {
 
 .copilot-custom-model-submit {
   background: var(--jantt-accent, #38BDF8);
-  color: #0F172A;
+  color: var(--jantt-accent-contrast, #0F172A);
   border: none;
   border-radius: 6px;
   padding: 5px 8px;
@@ -8127,7 +8380,8 @@ path.jantt-dep-path.jantt-task-dimmed {
 
 .copilot-model-footer {
   padding: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
 }
 
 .copilot-footer-settings-btn {
@@ -8139,14 +8393,14 @@ path.jantt-dep-path.jantt-task-dimmed {
   border-radius: 6px;
   background: transparent;
   border: none;
-  color: #9CA3AF;
+  color: var(--jantt-text-muted, #9CA3AF);
   font-size: 11.5px;
   cursor: pointer;
 }
 
 .copilot-footer-settings-btn:hover {
-  color: #E5E7EB;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--jantt-text, #E5E7EB);
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.05));
 }
 
 /* Setup Screen */

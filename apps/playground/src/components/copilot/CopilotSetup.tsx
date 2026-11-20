@@ -498,7 +498,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         <div className="copilot-setup-footer">
           <div className="copilot-secure-note">
             <ShieldCheck size={14} />
-            <span>Keys remain on your device only</span>
+            <span>Keys stay on your device; available models are fetched live from your provider API</span>
           </div>
           <button type="button" className="copilot-save-btn" onClick={handleSave}>
             {savedSuccess ? (

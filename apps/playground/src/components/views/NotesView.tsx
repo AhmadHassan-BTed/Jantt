@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import type { JanttData, NoteItem, Task, Team } from "@jantt/core";
 import type { EffectivePerson } from "../../types";
 import { storageService } from "../../services/storage";
+import { STORAGE_KEYS } from "../../constants";
 import {
   DEFAULT_NOTE_COLOR,
   getCaretTextOffset,
@@ -82,16 +83,33 @@ export const NotesView: React.FC<NotesViewProps> = ({
     }
   }, [notes, activeNoteId, setActiveNoteId]);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedColor, setSelectedColor] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const saved = storageService.getItem<{ searchQuery?: string }>(STORAGE_KEYS.NOTES_VIEW_STATE);
+    return typeof saved?.searchQuery === "string" ? saved.searchQuery : "";
+  });
+  const [selectedColor, setSelectedColor] = useState<string>(() => {
+    const saved = storageService.getItem<{ selectedColor?: string }>(STORAGE_KEYS.NOTES_VIEW_STATE);
+    return typeof saved?.selectedColor === "string" && saved.selectedColor ? saved.selectedColor : "all";
+  });
 
   // Local state for the active note being edited
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editColor, setEditColor] = useState(DEFAULT_NOTE_COLOR);
   const [editPinned, setEditPinned] = useState(false);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState<boolean>(() => {
+    const saved = storageService.getItem<{ isPreviewMode?: boolean }>(STORAGE_KEYS.NOTES_VIEW_STATE);
+    return Boolean(saved?.isPreviewMode);
+  });
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
+
+  useEffect(() => {
+    storageService.setItem(STORAGE_KEYS.NOTES_VIEW_STATE, {
+      searchQuery,
+      selectedColor,
+      isPreviewMode
+    });
+  }, [searchQuery, selectedColor, isPreviewMode]);
 
   const activeNote = useMemo(
     () => notes.find((n) => n.id === activeNoteId) || null,

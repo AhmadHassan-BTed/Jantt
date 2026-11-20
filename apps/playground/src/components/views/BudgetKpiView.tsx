@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { STORAGE_KEYS } from "../../constants";
+import { storageService } from "../../services/storage";
 import {
   ArrowUp,
   ArrowDown,
@@ -112,9 +114,20 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   onOpenMonteCarlo
 }) => {
   // Mode switcher: "essential" (simple/hobbyist/team lead) vs "advanced" (senior PM/EVM/audit)
-  const [viewMode, setViewMode] = useState<"essential" | "advanced">("essential");
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [viewMode, setViewMode] = useState<"essential" | "advanced">(() => {
+    const saved = storageService.getItem<{ viewMode?: string }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
+    return saved?.viewMode === "advanced" ? "advanced" : "essential";
+  });
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => {
+    const saved = storageService.getItem<{ quickFilter?: QuickFilter }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
+    return saved?.quickFilter || "all";
+  });
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
+
+  useEffect(() => {
+    const prev = storageService.getItem<Record<string, unknown>>(STORAGE_KEYS.SUMMARY_VIEW_STATE) || {};
+    storageService.setItem(STORAGE_KEYS.SUMMARY_VIEW_STATE, { ...prev, viewMode, quickFilter });
+  }, [viewMode, quickFilter]);
 
   const currency = getPlanCurrency(parsedData);
   const money = (val: number) => formatMoney(val, currency);

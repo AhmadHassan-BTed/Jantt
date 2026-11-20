@@ -45,6 +45,9 @@ export interface JanttInstance {
   getSelectedDate: () => string | null;
   setDayWidth: (dayWidth: number) => void;
   getDayWidth: () => number;
+  scrollToToday: () => void;
+  getScrollPosition: () => { scrollLeft: number; scrollTop: number };
+  setScrollPosition: (scrollLeft: number, scrollTop: number) => void;
 }
 
 /** Elements whose keyboard focus survives a re-render (matched by their identifying attribute). */
@@ -125,7 +128,7 @@ export class JanttRendererEngine {
     const initialShowCritical =
       this.currentOptions.viewport?.showCriticalPath ?? (this.currentData.meta?.showCriticalPath ?? false);
     const initialShowBaselines =
-      this.currentOptions.viewport?.showBaselines ?? (this.currentData.meta?.showBaselines ?? true);
+      this.currentOptions.viewport?.showBaselines ?? (this.currentData.meta?.showBaselines ?? false);
     const initialLabelWidth = this.currentOptions.viewport?.labelWidth || DEFAULT_LABEL_WIDTH;
     const initialFilterQuery = this.currentOptions.searchQuery || "";
     const initialSelectedDate: string | null =
@@ -348,6 +351,16 @@ export class JanttRendererEngine {
 
   /** Canvas background press: drag to pan, Shift/Ctrl/Cmd drag for marquee selection. */
   private handleCanvasPointerDown = (e: PointerEvent) => {
+    const wrap = this.bodyWrap;
+    if (wrap) {
+      const rect = wrap.getBoundingClientRect();
+      const hasHScroll = wrap.scrollWidth > wrap.clientWidth;
+      const hasVScroll = wrap.scrollHeight > wrap.clientHeight;
+      // Never hijack native scrollbar drags (or slight misses right along the bottom/right scrollbar lip)
+      // into inverted canvas panning.
+      if (hasHScroll && e.clientY >= rect.top + wrap.clientHeight - 6) return;
+      if (hasVScroll && e.clientX >= rect.left + wrap.clientWidth - 4) return;
+    }
     const target = e.target instanceof Element ? e.target : null;
     const canvas = target?.closest<HTMLElement>(".jantt-grid-container");
     if (!target || !canvas || target.closest(CANVAS_OWN_GESTURE_SELECTOR)) return;
@@ -433,6 +446,25 @@ export class JanttRendererEngine {
     if (!this.applyEdit(TaskScheduleCoordinator.removeDependency(this.currentData, fromId, toId, run), run)) return;
     this.currentOptions.onLinkDelete?.(fromId, toId);
     this.emitCommit();
+  };
+
+  /** Smoothly centers the timeline scroll viewport on the Today vertical line. */
+  public scrollToToday = () => {
+    if (this.destroyed || !this.bodyWrap || !this.state.renderedStartDate || this.lastLayoutDayWidth <= 0) return;
+    const now = this.currentOptions.viewport?.currentTime || new Date();
+    const todayStr = getTodayISODate(now);
+    const dayOffset = diffDays(this.state.renderedStartDate, todayStr) + getTodayProgressFraction(now);
+    const todayX = dayOffset * this.lastLayoutDayWidth;
+    const labelCol = this.bodyWrap.querySelector<HTMLElement>(".jantt-label-column");
+    const labelW = labelCol ? labelCol.offsetWidth : this.state.labelWidth;
+    const visibleTimelineW = Math.max(0, this.bodyWrap.clientWidth - labelW);
+    const maxScroll = Math.max(0, this.bodyWrap.scrollWidth - this.bodyWrap.clientWidth);
+    const target = Math.max(0, Math.min(maxScroll, Math.round(todayX - visibleTimelineW / 2)));
+    if (typeof this.bodyWrap.scrollTo === "function") {
+      this.bodyWrap.scrollTo({ left: target, behavior: "smooth" });
+    } else {
+      this.bodyWrap.scrollLeft = target;
+    }
   };
 
   /** Moves the today guide line/pin to the current time; full re-render only when the date rolls over. */
@@ -957,7 +989,17 @@ export class JanttRendererEngine {
         if (this.destroyed) return;
         this.handleDayWidthChange(w);
       },
-      getDayWidth: () => this.state.currentDayWidth
+      getDayWidth: () => this.state.currentDayWidth,
+      scrollToToday: () => this.scrollToToday(),
+      getScrollPosition: () => ({
+        scrollLeft: this.bodyWrap?.scrollLeft || 0,
+        scrollTop: this.bodyWrap?.scrollTop || 0
+      }),
+      setScrollPosition: (scrollLeft: number, scrollTop: number) => {
+        if (this.destroyed || !this.bodyWrap) return;
+        if (Number.isFinite(scrollLeft) && scrollLeft >= 0) this.bodyWrap.scrollLeft = scrollLeft;
+        if (Number.isFinite(scrollTop) && scrollTop >= 0) this.bodyWrap.scrollTop = scrollTop;
+      }
     };
   }
 }

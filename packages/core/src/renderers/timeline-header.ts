@@ -256,9 +256,9 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
   }
 
   if (showDays) {
-    // 2. Months tier
+    // 2. Months tier (active grid granularity is days, so border drags match day-column responsiveness)
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), zoomable, 30)
+      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), zoomable, 1)
     );
 
     // 3. Days tier (click to filter; roving tabindex keeps the header a single tab stop)

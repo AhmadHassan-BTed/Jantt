@@ -21,7 +21,8 @@ import {
   Kanban,
   CheckSquare,
   Activity,
-  StickyNote
+  StickyNote,
+  Crosshair
 } from "lucide-react";
 import {
   getTodayISODate,
@@ -43,6 +44,7 @@ export interface ViewNavBarProps {
   setActiveView: (view: ActiveView) => void;
   notesCount?: number;
   viewport?: ReturnType<typeof useGanttViewport>;
+  onJumpToToday?: () => void;
 }
 
 /**
@@ -54,7 +56,8 @@ export const ViewNavBar: React.FC<ViewNavBarProps> = ({
   activeView,
   setActiveView,
   notesCount,
-  viewport
+  viewport,
+  onJumpToToday
 }) => {
   const viewTabs: Array<{ id: ActiveView; label: string; title: string; icon: React.ReactNode; badge?: number }> = [
     { id: "gantt", label: "Gantt", title: "Gantt timeline schedule (1)", icon: <Layers size={14} style={{ color: "#38BDF8" }} /> },
@@ -96,25 +99,38 @@ export const ViewNavBar: React.FC<ViewNavBarProps> = ({
         </div>
       </nav>
 
-      {activeView === "gantt" && viewport && (
+      {(activeView === "gantt" || activeView === "canvas") && viewport && (
         <div className="view-nav-scale">
-          <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
-            {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
-                aria-pressed={viewport.currentScale === s}
-                onClick={() => {
-                  viewport.setCurrentDayWidth(undefined);
-                  viewport.setCurrentScale(s);
-                }}
-                title={`Switch timeline to ${s} scale view`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          {onJumpToToday && (
+            <button
+              type="button"
+              className="toolbar-today-jump-btn"
+              onClick={onJumpToToday}
+              title="Scroll timeline directly to the Today line"
+            >
+              <Crosshair size={12} style={{ color: "#EF4444" }} />
+              <span>Today</span>
+            </button>
+          )}
+          {activeView === "gantt" && (
+            <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
+              {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
+                  aria-pressed={viewport.currentScale === s}
+                  onClick={() => {
+                    viewport.setCurrentDayWidth(undefined);
+                    viewport.setCurrentScale(s);
+                  }}
+                  title={`Switch timeline to ${s} scale view`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -138,6 +154,7 @@ export interface ViewToolbarProps {
   readOnly?: boolean;
   /** Shows the timeline scale control inline in this bar (used on mobile where ViewNavBar is hidden). */
   showScaleInline?: boolean;
+  onJumpToToday?: () => void;
 }
 
 export const ViewToolbar: React.FC<ViewToolbarProps> = ({
@@ -155,7 +172,8 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   onExportJson,
   onExportCsv,
   readOnly = false,
-  showScaleInline = false
+  showScaleInline = false,
+  onJumpToToday
 }) => {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
@@ -430,25 +448,38 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
       {/* ─────────────────────────────────────────────────────────────────────────────
           ZONE 2: CENTER (Timeline Time Scale — only inline on mobile when ViewNavBar is hidden)
           ───────────────────────────────────────────────────────────────────────────── */}
-      {showScaleInline && activeView === "gantt" && viewport && (
+      {showScaleInline && (activeView === "gantt" || activeView === "canvas") && viewport && (
         <div className="view-toolbar-center">
-          <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
-            {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
-                aria-pressed={viewport.currentScale === s}
-                onClick={() => {
-                  viewport.setCurrentDayWidth(undefined);
-                  viewport.setCurrentScale(s);
-                }}
-                title={`Switch timeline to ${s} scale view`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          {onJumpToToday && (
+            <button
+              type="button"
+              className="toolbar-today-jump-btn"
+              onClick={onJumpToToday}
+              title="Scroll timeline directly to the Today line"
+            >
+              <Crosshair size={12} style={{ color: "#EF4444" }} />
+              <span>Today</span>
+            </button>
+          )}
+          {activeView === "gantt" && (
+            <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
+              {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
+                  aria-pressed={viewport.currentScale === s}
+                  onClick={() => {
+                    viewport.setCurrentDayWidth(undefined);
+                    viewport.setCurrentScale(s);
+                  }}
+                  title={`Switch timeline to ${s} scale view`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -25,6 +25,8 @@ import type {
   EffectivePerson
 } from "../../types";
 import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
+import { STORAGE_KEYS } from "../../constants";
+import { storageService } from "../../services/storage";
 
 /** Workflow statuses offered by every status control (Kanban and Tasks views). */
 export const TASK_STATUS_OPTIONS = [
@@ -181,7 +183,13 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   const isTaskActiveMatch = (t: Task) =>
     isTaskMatchingDateFilter(t) && isTaskMatchingPerson(t);
 
-  const [mobileActiveCol, setMobileActiveCol] = React.useState<string>("not-started");
+  const [mobileActiveCol, setMobileActiveCol] = React.useState<string>(() => {
+    const saved = storageService.getItem<{ mobileActiveCol?: string }>(STORAGE_KEYS.KANBAN_VIEW_STATE);
+    return typeof saved?.mobileActiveCol === "string" && saved.mobileActiveCol ? saved.mobileActiveCol : "not-started";
+  });
+  React.useEffect(() => {
+    storageService.setItem(STORAGE_KEYS.KANBAN_VIEW_STATE, { mobileActiveCol });
+  }, [mobileActiveCol]);
   const [dragTaskId, setDragTaskId] = React.useState<string | null>(null);
   const [dropColumn, setDropColumn] = React.useState<WorkflowStatus | null>(null);
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { calculateCriticalPath, type JanttData, type Task, type ThemeDefinition } from "@jantt/core";
+import { calculateCriticalPath, diffDays, getTodayISODate, getTodayProgressFraction, type JanttData, type Task, type ThemeDefinition } from "@jantt/core";
 import { CanvasTimelineRenderer, type CanvasColorConfig, type ViewportState } from "@jantt/render-canvas";
 import {
   Zap,
@@ -9,8 +9,33 @@ import {
   Activity,
   Layers,
   Compass,
-  Maximize2
+  Maximize2,
+  Crosshair
 } from "lucide-react";
+import { STORAGE_KEYS } from "../../constants";
+import { storageService } from "../../services/storage";
+
+interface PersistedCanvasState {
+  showCritical: boolean;
+  showMinimap: boolean;
+  scrollX: number;
+  scrollY: number;
+  dayWidth: number;
+}
+
+function loadCanvasState(): PersistedCanvasState {
+  const saved = storageService.getItem<Partial<PersistedCanvasState>>(STORAGE_KEYS.CANVAS_STATE);
+  return {
+    showCritical: typeof saved?.showCritical === "boolean" ? saved.showCritical : false,
+    showMinimap: typeof saved?.showMinimap === "boolean" ? saved.showMinimap : true,
+    scrollX: typeof saved?.scrollX === "number" && Number.isFinite(saved.scrollX) ? Math.max(0, saved.scrollX) : 0,
+    scrollY: typeof saved?.scrollY === "number" && Number.isFinite(saved.scrollY) ? Math.max(0, saved.scrollY) : 0,
+    dayWidth:
+      typeof saved?.dayWidth === "number" && Number.isFinite(saved.dayWidth)
+        ? clamp(saved.dayWidth, MIN_DAY_WIDTH, MAX_DAY_WIDTH)
+        : DEFAULT_DAY_WIDTH
+  };
+}
 
 export interface CanvasViewProps {
   parsedData: JanttData;
@@ -23,6 +48,8 @@ export interface CanvasViewProps {
    * overwrite (or sync into) the active plan or room. Without it the benchmark is not offered.
    */
   onOpenScratchPlan?: (title: string, data: JanttData) => void;
+  /** Increment to center the canvas timeline on the Today line. */
+  scrollToTodayTrigger?: number;
 }
 
 const ROW_HEIGHT = 34;
@@ -92,30 +119,58 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   onTaskClick,
   activeTheme,
   isViewer = false,
-  onOpenScratchPlan
+  onOpenScratchPlan,
+  scrollToTodayTrigger
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CanvasTimelineRenderer | null>(null);
 
+  const initialCanvasState = useMemo(() => loadCanvasState(), []);
+
   // Pan/zoom live in refs: panning repaints the canvas without re-rendering React.
-  const viewRef = useRef({ scrollX: 0, scrollY: 0, dayWidth: DEFAULT_DAY_WIDTH });
+  const viewRef = useRef({
+    scrollX: initialCanvasState.scrollX,
+    scrollY: initialCanvasState.scrollY,
+    dayWidth: initialCanvasState.dayWidth
+  });
   /** Day width the renderer was last given; zooming only updates `viewRef` until it is needed. */
-  const appliedDayWidthRef = useRef(DEFAULT_DAY_WIDTH);
+  const appliedDayWidthRef = useRef(initialCanvasState.dayWidth);
   const frameRef = useRef<number | null>(null);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragRef = useRef<{ pointerId: number; x: number; y: number; scrollX: number; scrollY: number; moved: boolean } | null>(null);
   const minimapDragRef = useRef<number | null>(null);
 
-  const [showCritical, setShowCritical] = useState(true);
-  const [showMinimap, setShowMinimap] = useState(true);
+  const [showCritical, setShowCritical] = useState(initialCanvasState.showCritical);
+  const [showMinimap, setShowMinimap] = useState(initialCanvasState.showMinimap);
   const [isPanning, setIsPanning] = useState(false);
   const [hoveredTask, setHoveredTask] = useState<{ task: Task; x: number; y: number } | null>(null);
 
+  const showCriticalRef = useRef(showCritical);
+  showCriticalRef.current = showCritical;
   const showMinimapRef = useRef(showMinimap);
   showMinimapRef.current = showMinimap;
   const onTaskClickRef = useRef(onTaskClick);
   onTaskClickRef.current = onTaskClick;
+
+  const persistCanvasStateNow = useCallback(() => {
+    storageService.setItem<PersistedCanvasState>(STORAGE_KEYS.CANVAS_STATE, {
+      showCritical: showCriticalRef.current,
+      showMinimap: showMinimapRef.current,
+      scrollX: Math.round(viewRef.current.scrollX),
+      scrollY: Math.round(viewRef.current.scrollY),
+      dayWidth: viewRef.current.dayWidth
+    });
+  }, []);
+
+  const schedulePersistCanvasState = useCallback(() => {
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      persistCanvasStateNow();
+    }, 220);
+  }, [persistCanvasStateNow]);
 
   const liveTasks = useMemo(() => (parsedData.tasks || []).filter((t) => !t._deleted), [parsedData.tasks]);
   const targetDate = typeof parsedData.meta?.targetDate === "string" ? parsedData.meta.targetDate : undefined;
@@ -215,12 +270,17 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
 
   /** Coalesces any number of change notifications into one paint on the next frame. */
   const scheduleRender = useCallback(() => {
+    schedulePersistCanvasState();
     if (frameRef.current !== null) return;
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = null;
       renderFrame();
     });
-  }, [renderFrame]);
+  }, [renderFrame, schedulePersistCanvasState]);
+
+  useEffect(() => {
+    persistCanvasStateNow();
+  }, [showCritical, showMinimap, persistCanvasStateNow]);
 
   useEffect(
     () => () => {
@@ -228,8 +288,13 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         cancelAnimationFrame(frameRef.current);
         frameRef.current = null;
       }
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      persistCanvasStateNow();
     },
-    []
+    [persistCanvasStateNow]
   );
 
   // Plan changes (also creates the renderer on first mount)
@@ -301,6 +366,27 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     zoomTo(DEFAULT_DAY_WIDTH, 0);
     scheduleRender();
   }, [zoomTo, scheduleRender]);
+
+  const handleJumpToToday = useCallback(() => {
+    const container = containerRef.current;
+    const renderer = rendererRef.current;
+    if (!container || !renderer) return;
+    syncDayWidth();
+    const bounds = renderer.getWorldBounds();
+    const now = new Date();
+    const dayOffset = diffDays(bounds.timelineStart, getTodayISODate(now)) + getTodayProgressFraction(now);
+    const todayX = dayOffset * viewRef.current.dayWidth;
+    viewRef.current.scrollX = todayX - container.clientWidth / 2;
+    scheduleRender();
+  }, [syncDayWidth, scheduleRender]);
+
+  const lastTodayTriggerRef = useRef(scrollToTodayTrigger);
+  useEffect(() => {
+    if (scrollToTodayTrigger !== undefined && scrollToTodayTrigger !== lastTodayTriggerRef.current) {
+      lastTodayTriggerRef.current = scrollToTodayTrigger;
+      handleJumpToToday();
+    }
+  }, [scrollToTodayTrigger, handleJumpToToday]);
 
   const hitTestAt = (clientX: number, clientY: number) => {
     const container = containerRef.current;
@@ -606,6 +692,16 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           >
             <ZoomOut size={12} style={{ color: "#818CF8" }} />
             <span>Zoom Out</span>
+          </button>
+          <button
+            type="button"
+            className="btn-nav"
+            style={{ fontSize: "11px", padding: "4px 8px" }}
+            onClick={handleJumpToToday}
+            title="Scroll timeline to the Today line"
+          >
+            <Crosshair size={12} style={{ color: "#EF4444" }} />
+            <span>Today</span>
           </button>
           <button
             type="button"

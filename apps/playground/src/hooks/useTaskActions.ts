@@ -19,6 +19,7 @@ import type {
 } from "../types";
 import { PRIORITY_ORDER, STORAGE_KEYS } from "../constants";
 import { generateId, isAutoCascadeEnabled } from "../utils";
+import { storageService } from "../services/storage";
 
 interface UseTaskActionsOptions {
   parsedData: JanttData | null;
@@ -56,10 +57,29 @@ export function useTaskActions({
   summaryBaseTasks,
   autoCascade
 }: UseTaskActionsOptions) {
-  const [tasksViewMode, setTasksViewMode] = useState<"cards" | "todo">("cards");
+  const [tasksViewMode, setTasksViewMode] = useState<"cards" | "todo">(() => {
+    const saved = storageService.getItem<{ tasksViewMode?: string }>(STORAGE_KEYS.TASKS_VIEW_STATE);
+    return saved?.tasksViewMode === "todo" ? "todo" : "cards";
+  });
   const [tasksSearchQuery, setTasksSearchQuery] = useState<string>("");
-  const [summarySortConfig, setSummarySortConfig] = useState<SummarySortConfig>({ column: "", direction: null });
+  const [summarySortConfig, setSummarySortConfig] = useState<SummarySortConfig>(() => {
+    const saved = storageService.getItem<{ sortConfig?: SummarySortConfig }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
+    if (saved?.sortConfig && typeof saved.sortConfig.column === "string") {
+      return saved.sortConfig;
+    }
+    return { column: "", direction: null };
+  });
   const [kanbanSortRules, setKanbanSortRules] = useState<KanbanSortRule[]>(initialKanbanSort);
+
+  useEffect(() => {
+    const prev = storageService.getItem<Record<string, unknown>>(STORAGE_KEYS.TASKS_VIEW_STATE) || {};
+    storageService.setItem(STORAGE_KEYS.TASKS_VIEW_STATE, { ...prev, tasksViewMode });
+  }, [tasksViewMode]);
+
+  useEffect(() => {
+    const prev = storageService.getItem<Record<string, unknown>>(STORAGE_KEYS.SUMMARY_VIEW_STATE) || {};
+    storageService.setItem(STORAGE_KEYS.SUMMARY_VIEW_STATE, { ...prev, sortConfig: summarySortConfig });
+  }, [summarySortConfig]);
 
   useEffect(() => {
     try {

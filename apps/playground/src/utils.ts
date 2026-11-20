@@ -139,7 +139,7 @@ export function createBlankPlan(title: string): JanttData {
       title: title || "New Project Plan",
       scale: "week",
       showCriticalPath: false,
-      showBaselines: true
+      showBaselines: false
     },
     categories: {
       general: {
@@ -735,12 +735,15 @@ export function loadInitialState() {
     if (savedHeight !== null) initialRowHeight = clamp(savedHeight, ROW_HEIGHT_MIN, ROW_HEIGHT_MAX);
   } catch {}
 
-  // Critical path must be off by default
-  const initialCritical = false;
-
-  let initialBaselines = true;
+  // Critical path and baselines are off by default, while remembering the user's preference
+  let initialCritical = false;
   try {
-    initialBaselines = readBooleanPreference(STORAGE_KEYS.BASELINES, true);
+    initialCritical = readBooleanPreference(STORAGE_KEYS.CRITICAL, false);
+  } catch {}
+
+  let initialBaselines = false;
+  try {
+    initialBaselines = readBooleanPreference(STORAGE_KEYS.BASELINES, false);
   } catch {}
 
   let initialAutoCascade = true;

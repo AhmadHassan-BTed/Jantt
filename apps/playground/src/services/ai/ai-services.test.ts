@@ -1,9 +1,16 @@
-import { describe, it, expect, beforeEach, beforeAll } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, vi, afterEach } from "vitest";
 import type { JanttData } from "@jantt/core";
 import { extractJsonFromResponse } from "./json-extractor";
 import { computePlanDiff } from "./plan-differ";
 import { buildSystemPrompt } from "./system-prompt";
 import { getProviderAdapter, getModelsForProvider, getAllProviders } from "./provider-registry";
+import {
+  parseGeminiModelsPayload,
+  parseOpenAiStyleModelsPayload,
+  parseOllamaTagsPayload,
+  fetchLiveModelsForAccount,
+  clearCachedDiscoveredModels
+} from "./model-discovery";
 import {
   getActiveProvider,
   setActiveProvider,
@@ -307,5 +314,99 @@ describe("AI Copilot - storage", () => {
     expect(getAutoApply()).toBe(false);
     setAutoApply(true);
     expect(getAutoApply()).toBe(true);
+  });
+});
+
+describe("AI Copilot - dynamic model-discovery", () => {
+  beforeEach(() => {
+    clearAllCopilotStorage();
+    clearCachedDiscoveredModels();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("filters and ranks Gemini generateContent models while stripping models/ prefix", () => {
+    const models = parseGeminiModelsPayload({
+      models: [
+        { name: "models/text-embedding-004", displayName: "Embedding", supportedGenerationMethods: ["embedContent"] },
+        { name: "models/gemini-1.5-pro", displayName: "Gemini 1.5 Pro", inputTokenLimit: 2097152, outputTokenLimit: 8192, supportedGenerationMethods: ["generateContent"] },
+        { name: "models/gemini-2.5-flash", displayName: "Gemini 2.5 Flash", inputTokenLimit: 1048576, outputTokenLimit: 65536, supportedGenerationMethods: ["generateContent"] },
+        { name: "models/imagen-3.0-generate-002", displayName: "Imagen 3", supportedGenerationMethods: ["generateContent"] }
+      ]
+    });
+    expect(models.map((m) => m.id)).toEqual(["gemini-2.5-flash", "gemini-1.5-pro"]);
+    expect(models[0].outputLimit).toBe(65536);
+  });
+
+  it("filters non-chat OpenAI models and sorts newest first", () => {
+    const models = parseOpenAiStyleModelsPayload("openai", {
+      data: [
+        { id: "whisper-1", created: 1700000000 },
+        { id: "text-embedding-3-large", created: 1710000000 },
+        { id: "gpt-4o", created: 1715000000 },
+        { id: "gpt-5", created: 1755000000 },
+        { id: "o4-mini", created: 1745000000 }
+      ]
+    });
+    expect(models.map((m) => m.id)).toEqual(["gpt-5", "o4-mini", "gpt-4o"]);
+  });
+
+  it("parses Ollama /api/tags payloads with parameter sizes", () => {
+    const models = parseOllamaTagsPayload({
+      models: [
+        { name: "qwen3:14b", details: { parameter_size: "14B" } },
+        { name: "llama3.3:latest" }
+      ]
+    });
+    expect(models.map((m) => m.id)).toEqual(["qwen3:14b", "llama3.3:latest"]);
+    expect(models[0].label).toBe("qwen3:14b (14B)");
+  });
+
+  it("fetches live models, caches them, and falls back gracefully on API error", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        data: [
+          { id: "deepseek-chat" },
+          { id: "deepseek-reasoner" },
+          { id: "deepseek-v4-preview" }
+        ]
+      })
+    } as Response);
+
+    const account = {
+      id: "acc_test_ds",
+      providerId: "deepseek" as const,
+      label: "DeepSeek Test",
+      apiKey: "sk-test",
+      createdAt: Date.now()
+    };
+
+    const live = await fetchLiveModelsForAccount(account, { force: true });
+    expect(live.source).toBe("live");
+    expect(live.models.some((m) => m.id === "deepseek-v4-preview")).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Subsequent non-forced call reads from fresh cache without hitting network
+    const cached = await fetchLiveModelsForAccount(account, { force: false });
+    expect(cached.source).toBe("cache");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Forced fetch failure on uncached account gracefully returns fallback preset models
+    clearCachedDiscoveredModels(account.id);
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: async () => ({ error: { message: "Invalid key" } })
+    } as Response);
+    const fallback = await fetchLiveModelsForAccount(account, { force: true });
+    expect(fallback.source).toBe("fallback");
+    expect(fallback.error).toContain("Invalid key");
+    expect(fallback.models.length).toBeGreaterThan(0);
   });
 });

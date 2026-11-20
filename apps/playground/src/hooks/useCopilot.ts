@@ -37,6 +37,13 @@ import {
   getAllProviders,
   PROVIDER_CATALOG
 } from "../services/ai/provider-registry";
+import {
+  fetchLiveModelsForAccount,
+  getCachedDiscoveredModels,
+  getEffectiveModelsForAccount,
+  mergeCustomModels,
+  type ModelDiscoveryResult
+} from "../services/ai/model-discovery";
 import { buildSystemPrompt } from "../services/ai/system-prompt";
 import { extractJsonFromResponse } from "../services/ai/json-extractor";
 import { computePlanDiff } from "../services/ai/plan-differ";
@@ -66,6 +73,10 @@ export interface UseCopilotReturn {
   currentModelLabel: string;
   accounts: ProviderAccount[];
   configuredAccounts: ProviderAccount[];
+  discoveredModelsByAccount: Record<string, ModelDiscoveryResult>;
+  loadingModelsByAccount: Record<string, boolean>;
+  refreshModelsForAccount: (accountId: string, force?: boolean) => Promise<ModelDiscoveryResult | null>;
+  refreshAllAccountModels: (force?: boolean) => Promise<void>;
   addAccount: (data: Omit<ProviderAccount, "id" | "createdAt">) => ProviderAccount;
   updateAccount: (id: string, partial: Partial<ProviderAccount>) => void;
   deleteAccount: (id: string) => void;
@@ -81,6 +92,24 @@ export function useCopilot({
   // Accounts State
   const [accounts, setAccounts] = useState<ProviderAccount[]>(() => getProviderAccounts());
   const configuredAccounts = useMemo(() => accounts.filter(isAccountConfigured), [accounts]);
+
+  // Dynamic Model Discovery State (hydrated from local cache per account)
+  const [discoveredModelsByAccount, setDiscoveredModelsByAccount] = useState<Record<string, ModelDiscoveryResult>>(() => {
+    const initial: Record<string, ModelDiscoveryResult> = {};
+    for (const acc of getProviderAccounts()) {
+      const cached = getCachedDiscoveredModels(acc.id);
+      if (cached) {
+        initial[acc.id] = {
+          models: mergeCustomModels(acc.providerId, cached.models),
+          source: "cache",
+          fetchedAt: cached.fetchedAt
+        };
+      }
+    }
+    return initial;
+  });
+  const [loadingModelsByAccount, setLoadingModelsByAccount] = useState<Record<string, boolean>>({});
+  const inFlightDiscoveryRef = useRef<Map<string, Promise<ModelDiscoveryResult | null>>>(new Map());
 
   // 1. Configuration State
   const [config, setConfigState] = useState<CopilotConfig>(() => {
@@ -127,46 +156,112 @@ export function useCopilot({
   const isReadOnlyRef = useRef(isReadOnly);
   isReadOnlyRef.current = isReadOnly;
 
-  // Account Management Actions
-  const addAccount = useCallback((data: Omit<ProviderAccount, "id" | "createdAt">) => {
-    const created = addProviderAccount(data);
-    const updated = getProviderAccounts();
-    setAccounts(updated);
-    setActiveAccountId(created.id);
-    const defaultModel = created.selectedModelId || PROVIDER_CATALOG[created.providerId]?.models[0]?.id || "";
-    setConfigState((prev) => ({
-      ...prev,
-      activeAccountId: created.id,
-      providerId: created.providerId,
-      apiKey: created.apiKey,
-      modelId: defaultModel,
-      customBaseUrl: created.customBaseUrl,
-      proxyUrl: created.proxyUrl
-    }));
-    return created;
+  const refreshModelsForAccount = useCallback(async (accountId: string, force = false): Promise<ModelDiscoveryResult | null> => {
+    const acc = getProviderAccounts().find((a) => a.id === accountId);
+    if (!acc || !isAccountConfigured(acc)) return null;
+
+    if (!force && inFlightDiscoveryRef.current.has(accountId)) {
+      return inFlightDiscoveryRef.current.get(accountId)!;
+    }
+
+    const promise = (async () => {
+      setLoadingModelsByAccount((prev) => ({ ...prev, [accountId]: true }));
+      try {
+        const result = await fetchLiveModelsForAccount(acc, { force });
+        setDiscoveredModelsByAccount((prev) => ({ ...prev, [accountId]: result }));
+
+        // If this account has no selected model yet (or placeholder "custom") and live models loaded, pick the first live model.
+        if (result.source === "live" && result.models.length > 0) {
+          const latestAcc = getProviderAccounts().find((a) => a.id === accountId);
+          const currentSelected = latestAcc?.selectedModelId || "";
+          if (!currentSelected || currentSelected === "custom") {
+            const preferred = result.models[0].id;
+            updateProviderAccount(accountId, { selectedModelId: preferred });
+            setAccounts(getProviderAccounts());
+            if (configRef.current.activeAccountId === accountId) {
+              setConfigState((prev) => ({ ...prev, modelId: preferred }));
+            }
+          }
+        }
+        return result;
+      } finally {
+        inFlightDiscoveryRef.current.delete(accountId);
+        setLoadingModelsByAccount((prev) => ({ ...prev, [accountId]: false }));
+      }
+    })();
+
+    inFlightDiscoveryRef.current.set(accountId, promise);
+    return promise;
   }, []);
 
-  const updateAccount = useCallback((id: string, partial: Partial<ProviderAccount>) => {
-    updateProviderAccount(id, partial);
-    const updated = getProviderAccounts();
-    setAccounts(updated);
-    const activeId = getActiveAccountId();
-    if (activeId === id) {
+  const refreshAllAccountModels = useCallback(
+    async (force = false) => {
+      const targets = getProviderAccounts().filter(isAccountConfigured);
+      await Promise.allSettled(targets.map((acc) => refreshModelsForAccount(acc.id, force)));
+    },
+    [refreshModelsForAccount]
+  );
+
+  // Account Management Actions
+  const addAccount = useCallback(
+    (data: Omit<ProviderAccount, "id" | "createdAt">) => {
+      const created = addProviderAccount(data);
+      const updated = getProviderAccounts();
+      setAccounts(updated);
+      setActiveAccountId(created.id);
+      const defaultModel = created.selectedModelId || PROVIDER_CATALOG[created.providerId]?.models[0]?.id || "";
       setConfigState((prev) => ({
         ...prev,
-        providerId: partial.providerId !== undefined ? partial.providerId : prev.providerId,
-        apiKey: partial.apiKey !== undefined ? partial.apiKey : prev.apiKey,
-        modelId: partial.selectedModelId !== undefined ? partial.selectedModelId : prev.modelId,
-        customBaseUrl: partial.customBaseUrl !== undefined ? partial.customBaseUrl : prev.customBaseUrl,
-        proxyUrl: partial.proxyUrl !== undefined ? partial.proxyUrl : prev.proxyUrl
+        activeAccountId: created.id,
+        providerId: created.providerId,
+        apiKey: created.apiKey,
+        modelId: defaultModel,
+        customBaseUrl: created.customBaseUrl,
+        proxyUrl: created.proxyUrl
       }));
-    }
-  }, []);
+      void refreshModelsForAccount(created.id, true);
+      return created;
+    },
+    [refreshModelsForAccount]
+  );
+
+  const updateAccount = useCallback(
+    (id: string, partial: Partial<ProviderAccount>) => {
+      updateProviderAccount(id, partial);
+      const updated = getProviderAccounts();
+      setAccounts(updated);
+      const activeId = getActiveAccountId();
+      if (activeId === id) {
+        setConfigState((prev) => ({
+          ...prev,
+          providerId: partial.providerId !== undefined ? partial.providerId : prev.providerId,
+          apiKey: partial.apiKey !== undefined ? partial.apiKey : prev.apiKey,
+          modelId: partial.selectedModelId !== undefined ? partial.selectedModelId : prev.modelId,
+          customBaseUrl: partial.customBaseUrl !== undefined ? partial.customBaseUrl : prev.customBaseUrl,
+          proxyUrl: partial.proxyUrl !== undefined ? partial.proxyUrl : prev.proxyUrl
+        }));
+      }
+      if (
+        partial.apiKey !== undefined ||
+        partial.providerId !== undefined ||
+        partial.customBaseUrl !== undefined ||
+        partial.proxyUrl !== undefined
+      ) {
+        void refreshModelsForAccount(id, true);
+      }
+    },
+    [refreshModelsForAccount]
+  );
 
   const deleteAccount = useCallback((id: string) => {
     deleteProviderAccount(id);
     const updated = getProviderAccounts();
     setAccounts(updated);
+    setDiscoveredModelsByAccount((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     const nextActiveId = getActiveAccountId();
     const nextAcc = updated.find((a) => a.id === nextActiveId) || updated[0];
     if (nextAcc) {
@@ -258,7 +353,13 @@ export function useCopilot({
   }, [configuredAccounts]);
 
   const availableProviders = useMemo(() => getAllProviders(), []);
-  const availableModels = useMemo(() => getModelsForProvider(config.providerId), [config.providerId]);
+  const availableModels = useMemo(() => {
+    const activeAcc = accounts.find((a) => a.id === config.activeAccountId);
+    if (activeAcc) {
+      return getEffectiveModelsForAccount(activeAcc, discoveredModelsByAccount);
+    }
+    return getModelsForProvider(config.providerId);
+  }, [accounts, config.activeAccountId, config.providerId, discoveredModelsByAccount]);
 
   const currentModelLabel = useMemo(() => {
     const activeAcc = accounts.find((a) => a.id === config.activeAccountId);
@@ -569,6 +670,10 @@ export function useCopilot({
     currentModelLabel,
     accounts,
     configuredAccounts,
+    discoveredModelsByAccount,
+    loadingModelsByAccount,
+    refreshModelsForAccount,
+    refreshAllAccountModels,
     addAccount,
     updateAccount,
     deleteAccount,

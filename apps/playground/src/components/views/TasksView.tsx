@@ -20,6 +20,8 @@ import {
   sanitizeCssColor,
   type TaskIdLookup
 } from "@jantt/core";
+import { STORAGE_KEYS } from "../../constants";
+import { storageService } from "../../services/storage";
 import { ResourceLevelingPanel } from "./ResourceLevelingPanel";
 import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
 import { getPeerId, isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
@@ -89,7 +91,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
-  const [showResourceLeveling, setShowResourceLeveling] = React.useState(false);
+  const [showResourceLeveling, setShowResourceLeveling] = React.useState<boolean>(() => {
+    const saved = storageService.getItem<{ showResourceLeveling?: boolean }>(STORAGE_KEYS.TASKS_VIEW_STATE);
+    return Boolean(saved?.showResourceLeveling);
+  });
+  React.useEffect(() => {
+    const prev = storageService.getItem<Record<string, unknown>>(STORAGE_KEYS.TASKS_VIEW_STATE) || {};
+    storageService.setItem(STORAGE_KEYS.TASKS_VIEW_STATE, { ...prev, showResourceLeveling });
+  }, [showResourceLeveling]);
   const activeTasks = (parsedData.tasks || []).filter((t) => !t._deleted);
   const matchingDateFilterTasks = activeTasks.filter(isTaskMatchingDateFilter);
 

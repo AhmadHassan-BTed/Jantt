@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { STORAGE_KEYS } from "../../constants";
+import { storageService } from "../../services/storage";
 import { ShieldCheck, AlertTriangle, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Lightbulb, CalendarX } from "lucide-react";
 import type { ScheduleHealthIssue, ScheduleHealthReport } from "@jantt/core";
 
@@ -32,7 +34,14 @@ const SEVERITY_RANK: Record<ScheduleHealthIssue["severity"], number> = { high: 0
 const formatPercent = (ratio: number) => `${Math.round(ratio * 1000) / 10}%`;
 
 export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, hasTargetDate = false }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState<boolean>(() => {
+    const saved = storageService.getItem<{ healthExpanded?: boolean }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
+    return Boolean(saved?.healthExpanded);
+  });
+  useEffect(() => {
+    const prev = storageService.getItem<Record<string, unknown>>(STORAGE_KEYS.SUMMARY_VIEW_STATE) || {};
+    storageService.setItem(STORAGE_KEYS.SUMMARY_VIEW_STATE, { ...prev, healthExpanded: expanded });
+  }, [expanded]);
   const [visibleByGroup, setVisibleByGroup] = useState<Record<string, number>>({});
   const panelId = "schedule-health-issues";
 

@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { STORAGE_KEYS } from "../../constants";
+import { storageService } from "../../services/storage";
 import {
   DollarSign,
   TrendingUp,
@@ -65,7 +67,15 @@ interface EvmKpiCardsProps {
 }
 
 export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = DEFAULT_CURRENCY }) => {
-  const [showAdvancedEvm, setShowAdvancedEvm] = useState(false);
+  const [showAdvancedEvm, setShowAdvancedEvm] = useState<boolean>(() => {
+    const saved = storageService.getItem<{ showAdvancedEvm?: boolean }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
+    return Boolean(saved?.showAdvancedEvm);
+  });
+
+  useEffect(() => {
+    const prev = storageService.getItem<Record<string, unknown>>(STORAGE_KEYS.SUMMARY_VIEW_STATE) || {};
+    storageService.setItem(STORAGE_KEYS.SUMMARY_VIEW_STATE, { ...prev, showAdvancedEvm });
+  }, [showAdvancedEvm]);
 
   const money = (val: number) => formatMoney(val, currency);
   const signedMoney = (val: number) => formatMoney(val, currency, true);

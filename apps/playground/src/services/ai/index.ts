@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./storage";
 export * from "./provider-registry";
+export * from "./model-discovery";
 export * from "./system-prompt";
 export * from "./json-extractor";
 export * from "./plan-differ";

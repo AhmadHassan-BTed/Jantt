@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { ChevronDown, ArrowUp, Square, Plus } from "lucide-react";
 import { CopilotModelSelector } from "./CopilotModelSelector";
 import type { ProviderDefinition, ProviderAccount } from "../../services/ai/types";
+import type { ModelDiscoveryResult } from "../../services/ai/model-discovery";
 
 interface CopilotInputProps {
   onSendMessage: (text: string) => void;
@@ -11,6 +12,10 @@ interface CopilotInputProps {
   currentModelLabel: string;
   providers: ProviderDefinition[];
   configuredAccounts: ProviderAccount[];
+  discoveredModelsByAccount?: Record<string, ModelDiscoveryResult>;
+  loadingModelsByAccount?: Record<string, boolean>;
+  onRefreshModelsForAccount?: (accountId: string, force?: boolean) => Promise<ModelDiscoveryResult | null>;
+  onRefreshAllModels?: (force?: boolean) => Promise<void>;
   activeAccountId?: string;
   activeProviderId: string;
   activeModelId: string;
@@ -26,6 +31,10 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
   currentModelLabel,
   providers,
   configuredAccounts,
+  discoveredModelsByAccount,
+  loadingModelsByAccount,
+  onRefreshModelsForAccount,
+  onRefreshAllModels,
   activeAccountId,
   activeProviderId,
   activeModelId,
@@ -96,6 +105,10 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
               onClose={() => setIsModelSelectorOpen(false)}
               providers={providers}
               configuredAccounts={configuredAccounts}
+              discoveredModelsByAccount={discoveredModelsByAccount}
+              loadingModelsByAccount={loadingModelsByAccount}
+              onRefreshModelsForAccount={onRefreshModelsForAccount}
+              onRefreshAllModels={onRefreshAllModels}
               activeAccountId={activeAccountId}
               activeProviderId={activeProviderId}
               activeModelId={activeModelId}

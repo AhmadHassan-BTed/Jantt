@@ -174,42 +174,23 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     }
     bar.appendChild(progressFill);
 
-    // Content Text & Quick Lock Toggle Button
+    // Content Text & Right-Aligned Badges (strict right alignment so long names truncate with "...")
     const content = document.createElement("div");
     content.className = "jantt-bar-content";
 
     const titleSpan = document.createElement("span");
+    titleSpan.className = "jantt-bar-title";
     titleSpan.textContent = item.displayLabel;
     content.appendChild(titleSpan);
 
-    if (item.task.assignee) {
-      const assigneeInfo = resolveTaskAssignee(item.task, props.people, props.teams);
-      const aAvatar = document.createElement("span");
-      aAvatar.className = "jantt-task-avatar-pill";
-      aAvatar.style.display = "inline-flex";
-      aAvatar.style.alignItems = "center";
-      aAvatar.style.justifyContent = "center";
-      aAvatar.style.width = "16px";
-      aAvatar.style.height = "16px";
-      aAvatar.style.minWidth = "16px";
-      aAvatar.style.borderRadius = "50%";
-      aAvatar.style.background = sanitizeCssColor(assigneeInfo.avatarColor, "rgba(0, 0, 0, 0.35)");
-      aAvatar.style.color = "#FFFFFF";
-      aAvatar.style.fontSize = "8px";
-      aAvatar.style.fontWeight = "700";
-      aAvatar.style.flexShrink = "0";
-      aAvatar.title = `${assigneeInfo.displayName}${assigneeInfo.team ? ` (${assigneeInfo.team.name})` : ""}`;
-      aAvatar.textContent = assigneeInfo.initials;
-      content.appendChild(aAvatar);
-    }
+    const badges = document.createElement("div");
+    badges.className = "jantt-bar-badges";
 
     if (item.task.urgent) {
       const uPill = document.createElement("span");
-      uPill.className = "jantt-hover-type-pill is-urgent";
-      uPill.style.fontSize = "8.5px";
-      uPill.style.padding = "1px 4px";
+      uPill.className = "jantt-bar-urgent-pill is-urgent";
       uPill.textContent = "Urgent";
-      content.appendChild(uPill);
+      badges.appendChild(uPill);
     }
 
     if (props.showCritical && item.isCritical) {
@@ -222,7 +203,17 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
         </svg>
         <span>Critical</span>
       `;
-      content.appendChild(critPill);
+      badges.appendChild(critPill);
+    }
+
+    if (item.task.assignee) {
+      const assigneeInfo = resolveTaskAssignee(item.task, props.people, props.teams);
+      const aAvatar = document.createElement("span");
+      aAvatar.className = "jantt-task-avatar-pill";
+      aAvatar.style.background = sanitizeCssColor(assigneeInfo.avatarColor, "#1E293B");
+      aAvatar.title = `${assigneeInfo.displayName}${assigneeInfo.team ? ` (${assigneeInfo.team.name})` : ""}`;
+      aAvatar.textContent = assigneeInfo.initials;
+      badges.appendChild(aAvatar);
     }
 
     if (!props.readOnly) {
@@ -245,7 +236,11 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
         e.stopPropagation();
         props.controller.toggleTaskLock(item.task.id);
       });
-      content.appendChild(lockBtn);
+      badges.appendChild(lockBtn);
+    }
+
+    if (badges.childElementCount > 0) {
+      content.appendChild(badges);
     }
     bar.appendChild(content);
 
