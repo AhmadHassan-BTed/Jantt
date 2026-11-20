@@ -1,153 +1,104 @@
 import type { JanttData } from "@jantt/core";
 
+/**
+ * Hyper-condensed, token-dense Jantt AST contract.
+ * Uses TypeScript interface definitions for maximum model precision with minimal token overhead.
+ */
 export const JANTT_JSON_SCHEMA_RULES = `
-# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION CHEATSHEET
+# JANTT JSON SCHEMA BENCHMARK & SPECIFICATION (COMPACT CONTRACT)
 
-## 1. Top-Level Root Structure
-{
-  "$schema": "https://jantt.dev/schema/v1.json",
-  "meta": {
-    "title": "<Project Title>",
-    "description": "<Project narrative and objectives>",
-    "person": "<Lead Program Manager / Owner>",
-    "organization": "<Enterprise / Organization Name>",
-    "start": "YYYY-MM-DD",
-    "end": "YYYY-MM-DD",
-    "defaultGapDays": 2,
-    "scale": "day" | "week" | "month" | "quarter" | "year",
-    "linkRouting": "orthogonal" | "curved" | "direct",
-    "showCriticalPath": false,
-    "showBaselines": true,
-    "currency": "USD",
-    "budget": 385000,
-    "version": "1.2.0"
-  },
-  "categories": {
-    "<category_id>": {
-      "label": "<Category Display Name>",
-      "color": "#HEX_COLOR",
-      "soft": "#BG_TINT_HEX",
-      "icon": "<lucide_icon_name>"
-    }
-  },
-  "people": [
-    {
-      "id": "person-id",
-      "name": "Alex Mercer",
-      "role": "Lead Architect",
-      "email": "alex@org.com",
-      "teamId": "core-team",
-      "color": "#3B82F6"
-    }
-  ],
-  "teams": [
-    {
-      "id": "core-team",
-      "name": "Core Platform Squad",
-      "color": "#3B82F6",
-      "description": "Backend services and architecture"
-    }
-  ],
-  "notes": [
-    {
-      "id": "note-unique-id",
-      "title": "Architecture RFC & Specs",
-      "content": "Detailed markdown requirements, meeting minutes, and acceptance criteria.",
-      "color": "#3B82F6",
-      "pinned": true,
-      "category": "Architecture",
-      "tags": ["RFC", "Architecture"],
-      "task_ids": ["task-1"],
-      "createdAt": "YYYY-MM-DDTHH:mm:ssZ",
-      "updatedAt": "YYYY-MM-DDTHH:mm:ssZ"
-    }
-  ],
-  "documents": [
-    {
-      "id": "doc-unique-id",
-      "label": "<Document or Deliverable Title>",
-      "status": "have" | "pending" | "missing",
-      "owner": "<Owner Name>",
-      "url": "<Documentation Link>",
-      "note": "<Review notes / status>"
-    }
-  ],
-  "tasks": [
-    {
-      "id": "task-unique-id",
-      "wbs": "1.1",
-      "label": "Task Name / Title",
-      "category": "<matching_category_id>",
-      "start": "YYYY-MM-DD",
-      "end": "YYYY-MM-DD",
-      "assignee": "Team Member Name",
-      "phase": "Phase 1: Foundation",
-      "priority": "low" | "medium" | "high" | "urgent",
-      "estimatedCost": 28000,
-      "actualCost": 15000,
-      "dependsOn": "prereq-id" | ["prereq-1", { "id": "prereq-2", "type": "SS", "lag": 2 }] | null,
-      "gapDays": 2,
-      "locked": false,
-      "progress": 0.75,
-      "milestone": false,
-      "status": "not-started" | "in-progress" | "submitted" | "completed" | "blocked",
-      "urgent": false,
-      "baseline": {
-        "start": "YYYY-MM-DD",
-        "end": "YYYY-MM-DD"
-      },
-      "notes": "Detailed task description, acceptance criteria, and technical specs.",
-      "fields": {
-        "jira": "JANTT-101",
-        "storyPoints": 13,
-        "repo": "github.com/org/repo",
-        "deliverable": "schemas/v1.json"
-      }
-    }
-  ]
+type DateISO = string; // "YYYY-MM-DD"
+type HexColor = string; // "#38BDF8"
+type Dependency = string | { id: string; type?: "FS"|"SS"|"FF"|"SF"; lag?: number };
+
+interface JanttData {
+  $schema?: "https://jantt.dev/schema/v1.json";
+  meta?: {
+    title?: string;
+    description?: string;
+    person?: string;
+    organization?: string;
+    start?: DateISO;
+    end?: DateISO;
+    defaultGapDays?: number; // default 2
+    scale?: "day" | "week" | "month" | "quarter" | "year";
+    linkRouting?: "orthogonal" | "curved" | "direct";
+    showCriticalPath?: boolean;
+    showBaselines?: boolean;
+    currency?: string;
+    budget?: number;
+    version?: string;
+  };
+  categories: Record<string, { label: string; color: HexColor; soft?: HexColor; icon?: string }>;
+  people?: Array<{ id: string; name: string; role?: string; email?: string; teamId?: string; color?: HexColor }>;
+  teams?: Array<{ id: string; name: string; color?: HexColor; description?: string }>;
+  notes?: Array<{ id: string; title: string; content: string; color?: HexColor; pinned?: boolean; category?: string; tags?: string[]; task_ids?: string[] }>;
+  documents?: Array<{ id: string; label: string; status?: "have"|"pending"|"missing"; owner?: string; url?: string; note?: string }>;
+  tasks: Array<{
+    id: string; // unique identifier (e.g. "t1", "t2", "task-qa-1")
+    label: string;
+    category: string; // MUST match a key in categories
+    start: DateISO; // YYYY-MM-DD
+    end: DateISO; // YYYY-MM-DD (must be >= start)
+    wbs?: string;
+    assignee?: string;
+    phase?: string;
+    priority?: "low" | "medium" | "high" | "urgent";
+    estimatedCost?: number;
+    actualCost?: number;
+    dependsOn?: Dependency | Dependency[] | null;
+    gapDays?: number;
+    locked?: boolean;
+    progress?: number; // float 0.0 to 1.0
+    milestone?: boolean; // if true, start must equal end
+    status?: "not-started" | "in-progress" | "submitted" | "completed" | "blocked";
+    urgent?: boolean;
+    baseline?: { start: DateISO; end: DateISO };
+    notes?: string;
+    fields?: Record<string, unknown>;
+  }>;
 }
-
-## 2. Critical Constraints & Validation Rules:
-1. DATES: All dates must be ISO "YYYY-MM-DD" format. "end" must be >= "start".
-2. CATEGORIES: Every task "category" must match an existing key in the "categories" dictionary.
-3. DEPENDENCIES (DAG):
-   - "dependsOn" can be a single task ID string, an array of task IDs and/or dependency objects, or null.
-   - Dependency object: { "id": "t1", "type": "FS" | "SS" | "FF" | "SF", "lag": <whole days, negative = lead> }. "type" defaults to "FS" (finish-to-start).
-   - Without "lag", FS links wait the task's "gapDays" (else meta.defaultGapDays, default 2) and SS/FF/SF links use 0. An explicit "lag" (even 0) replaces the gap.
-   - String shorthand is also accepted: "t1:SS", "t1:FF-1d", "t1+2d".
-   - All referenced dependency IDs must exist in the "tasks" list (no dangling references).
-   - Strict Directed Acyclic Graph: NO circular dependency loops (e.g. A -> B -> C -> A).
-   - Timing Sanity: for finish-to-start links, a task's "start" must be on or after the prerequisite "end" + lag (or + gapDays when no lag is given).
-4. MILESTONES: For zero-duration milestone gates, set "milestone": true and "start" equal to "end".
-5. PROGRESS: Must be a decimal float from 0.0 (0%) to 1.0 (100%).
-6. BASELINES: Optional planned timeframe object { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } for baseline variance tracking.
-7. LOCKED: Set "locked": true on fixed gates or hard-deadline milestones to prevent accidental drag shifts.
 `;
 
-export function summarizePlanContext(plan: JanttData | null): string {
-  if (!plan) {
-    return "No active plan loaded.";
+/**
+ * Strips null, undefined, and empty values from plan objects to preserve maximum prompt context tokens.
+ */
+function stripEmptyValues(obj: unknown): unknown {
+  if (Array.isArray(obj)) {
+    return obj.map(stripEmptyValues);
   }
+  if (obj !== null && typeof obj === "object") {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (v === null || v === undefined || v === "") continue;
+      cleaned[k] = stripEmptyValues(v);
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
+export function summarizePlanContext(plan: JanttData | null): string {
+  if (!plan) return "No active plan loaded.";
 
   const taskCount = plan.tasks?.length || 0;
-  // If plan is small (<60 tasks), serialize the full plan JSON so AI has total fidelity
+  const stripped = stripEmptyValues(plan) as JanttData;
+
+  // For compact plans (<=60 tasks), provide full stripped AST
   if (taskCount <= 60) {
-    return JSON.stringify(plan, null, 2);
+    return JSON.stringify(stripped, null, 2);
   }
 
-  // If plan is very large, condense task descriptions/fields to preserve context window tokens
-  const condensedPlan: JanttData = {
-    ...plan,
-    tasks: (plan.tasks || []).map((t) => ({
+  // For massive plans (>60 tasks), condense non-critical task metadata
+  const condensed: JanttData = {
+    ...stripped,
+    tasks: (stripped.tasks || []).map((t) => ({
       id: t.id,
-      wbs: t.wbs,
       label: t.label,
       category: t.category,
       start: t.start,
       end: t.end,
       assignee: t.assignee,
-      phase: t.phase,
-      priority: t.priority,
       dependsOn: t.dependsOn,
       status: t.status,
       progress: t.progress,
@@ -155,42 +106,38 @@ export function summarizePlanContext(plan: JanttData | null): string {
     }))
   };
 
-  return JSON.stringify(condensedPlan, null, 2);
+  return JSON.stringify(condensed, null, 2);
 }
 
 export function buildSystemPrompt(currentPlan: JanttData | null): string {
   const planContext = summarizePlanContext(currentPlan);
 
-  return `You are Jantt AI Copilot, an elite project management engineer that edits Gantt charts and project schedules live inside the Jantt application.
+  return `You are Jantt AI Copilot, an elite schedule engineer executing precise Gantt modifications in the Jantt engine.
 
-## YOUR CAPABILITIES
-- Add, modify, reschedule, reassign, or remove tasks
-- Manage dependencies, phases, milestones, priorities, progress, and statuses
-- Create and organize categories, team members, squads, notes, and documents
-- Calibrate project metadata (title, dates, budget, routing, scale)
-
-## JANTT SPECIFICATION & RULES
+### SCHEMA CONTRACT
 ${JANTT_JSON_SCHEMA_RULES}
 
-## CURRENT PLAN STATE
+### CURRENT PLAN AST
 \`\`\`json
 ${planContext}
 \`\`\`
 
-## INSTRUCTIONS FOR YOUR OUTPUT & ZERO-POLLUTION DIRECTIVE
-1. DUAL-RESPONSE SEPARATION:
-   - Provide your conversational reply, analytical answers, and high-level summary OUTSIDE of the \`\`\`json block.
-   - When making changes, output the updated plan JSON inside a \`\`\`json ... \`\`\` code block.
-2. STRICT JSON PURITY:
-   - The JSON block must contain 100% PURE, VALID Jantt schema JSON.
-   - NEVER inject conversational keys (e.g. "explanation", "summary", "reasoning", "changes_made", "thought") into the JSON root, meta, or task objects.
-   - NEVER overwrite a task's "notes" or "description" fields with your own commentary about what you changed. Task notes are reserved for actual project requirements.
-3. PRESERVATION & RECONCILIATION:
-   - PRESERVE all existing tasks, IDs, categories, people, and notes unless explicitly requested to remove or modify them.
-   - When adding new tasks, assign them unique IDs like "task-new-1", "task-qa-2", etc.
-4. VALIDATION SANITY:
-   - Strictly adhere to ISO dates (YYYY-MM-DD), valid categories that exist in the "categories" dictionary, and acyclic dependencies.
-5. PURE ANALYTICAL INQUIRIES:
-   - If the user asks a purely analytical or informational question (e.g. "which tasks are on the critical path?", "who has the most workload?"), answer with clear, structured text ONLY without emitting a JSON block.
+### NEGATIVE CONSTRAINTS (STRICTLY FORBIDDEN)
+- [FORBIDDEN] NEVER emit conversational prose, diff explanations, or thoughts INSIDE the \`\`\`json block.
+- [FORBIDDEN] NEVER introduce non-schema keys anywhere (e.g. "explanation", "summary", "changes_made", "thought", "diff", "status_code").
+- [FORBIDDEN] NEVER hijack task "notes" or "label" to log what you changed. Task notes are reserved for actual project deliverables.
+- [FORBIDDEN] NEVER delete untouched tasks, categories, or people unless explicitly ordered to remove them.
+- [FORBIDDEN] NEVER produce invalid temporal order (end date < start date is illegal).
+- [FORBIDDEN] NEVER create cyclic dependencies (A -> B -> A). The dependency graph must remain a strict DAG.
+- [FORBIDDEN] NEVER emit JSON code blocks for purely analytical or informational queries (e.g. "what tasks are on critical path?").
+
+### EXECUTION PROTOCOL
+1. IF MODIFYING SCHEDULE:
+   - Provide exactly 1-2 punchy sentences summarizing changes outside the JSON block.
+   - Follow immediately with the updated valid JSON inside a single \`\`\`json ... \`\`\` block.
+   - Preserve all existing task IDs. Assign new tasks unique IDs like "t-new-1".
+   - Ensure every task "category" exists in the "categories" dictionary.
+2. IF ANSWERING INQUIRY:
+   - Answer directly with concise, structured analytical bullet points. Do NOT output a JSON block.
 `;
 }
