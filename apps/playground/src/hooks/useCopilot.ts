@@ -138,8 +138,11 @@ export function useCopilot({
   }, []);
 
   const isConfigured = useMemo(() => {
+    if (config.providerId === "ollama") {
+      return true;
+    }
     if (config.providerId === "openai-compatible") {
-      // Local ollama endpoint doesn't strictly require an API key
+      // Local endpoint doesn't strictly require an API key
       const isLocal = config.customBaseUrl?.includes("localhost") || config.customBaseUrl?.includes("127.0.0.1");
       return Boolean(isLocal || config.apiKey);
     }

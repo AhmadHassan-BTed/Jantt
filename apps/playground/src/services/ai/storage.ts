@@ -5,12 +5,26 @@ const STORAGE_PREFIX = "jantt_copilot_";
 const KEYS = {
   ACTIVE_PROVIDER: `${STORAGE_PREFIX}provider`,
   ACTIVE_MODEL_PREFIX: `${STORAGE_PREFIX}model_`,
+  CUSTOM_MODELS_PREFIX: `${STORAGE_PREFIX}custom_models_`,
   API_KEY_PREFIX: `${STORAGE_PREFIX}key_`,
   BASE_URL_PREFIX: `${STORAGE_PREFIX}base_url_`,
   PROXY_URL_PREFIX: `${STORAGE_PREFIX}proxy_url_`,
   TEMPERATURE: `${STORAGE_PREFIX}temperature`,
   AUTO_APPLY: `${STORAGE_PREFIX}auto_apply`
 } as const;
+
+export const VALID_PROVIDERS: readonly ProviderId[] = [
+  "gemini",
+  "openai",
+  "anthropic",
+  "groq",
+  "deepseek",
+  "openrouter",
+  "mistral",
+  "xai",
+  "ollama",
+  "openai-compatible"
+];
 
 function getStorage(): Storage | null {
   if (typeof window !== "undefined" && window.localStorage) {
@@ -25,8 +39,8 @@ function getStorage(): Storage | null {
 export function getActiveProvider(): ProviderId {
   const storage = getStorage();
   if (!storage) return "gemini";
-  const stored = storage.getItem(KEYS.ACTIVE_PROVIDER);
-  if (stored === "gemini" || stored === "openai" || stored === "anthropic" || stored === "openai-compatible") {
+  const stored = storage.getItem(KEYS.ACTIVE_PROVIDER) as ProviderId | null;
+  if (stored && VALID_PROVIDERS.includes(stored)) {
     return stored;
   }
   return "gemini";
@@ -127,11 +141,37 @@ export function setAutoApply(val: boolean): void {
   storage.setItem(KEYS.AUTO_APPLY, String(val));
 }
 
+export function getCustomModels(provider: ProviderId): string[] {
+  const storage = getStorage();
+  if (!storage) return [];
+  const stored = storage.getItem(`${KEYS.CUSTOM_MODELS_PREFIX}${provider}`);
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addCustomModel(provider: ProviderId, modelId: string): void {
+  const storage = getStorage();
+  if (!storage) return;
+  const clean = modelId.trim();
+  if (!clean) return;
+  const existing = getCustomModels(provider);
+  if (!existing.includes(clean)) {
+    existing.push(clean);
+    storage.setItem(`${KEYS.CUSTOM_MODELS_PREFIX}${provider}`, JSON.stringify(existing));
+  }
+}
+
 export function hasAnyApiKey(): boolean {
   const storage = getStorage();
   if (!storage) return false;
-  const providers: ProviderId[] = ["gemini", "openai", "anthropic", "openai-compatible"];
-  return providers.some((p) => Boolean(getApiKey(p)));
+  // Ollama runs locally without requiring an API key
+  if (getActiveProvider() === "ollama") return true;
+  return VALID_PROVIDERS.some((p) => Boolean(getApiKey(p)));
 }
 
 export function clearAllCopilotStorage(): void {

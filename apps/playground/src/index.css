@@ -6613,6 +6613,60 @@ path.jantt-dep-path.jantt-task-dimmed {
   font-weight: 500;
 }
 
+.copilot-custom-model-box {
+  padding: 6px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.copilot-custom-model-toggle-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  color: var(--jantt-accent, #38BDF8);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copilot-custom-model-toggle-btn:hover {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: var(--jantt-accent, #38BDF8);
+}
+
+.copilot-custom-model-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.copilot-custom-model-field {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--jantt-accent, #38BDF8);
+  color: #FFFFFF;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  outline: none;
+}
+
+.copilot-custom-model-submit {
+  background: var(--jantt-accent, #38BDF8);
+  color: #0F172A;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .copilot-model-footer {
   padding: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);

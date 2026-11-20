@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from "react";
-import { Check, Settings, Sparkles } from "lucide-react";
-import type { ModelDefinition, ProviderDefinition } from "../../services/ai/types";
+import React, { useEffect, useRef, useState } from "react";
+import { Check, Settings, Sparkles, Plus, CornerDownLeft } from "lucide-react";
+import type { ModelDefinition, ProviderDefinition, ProviderId } from "../../services/ai/types";
+import { addCustomModel } from "../../services/ai/storage";
 
 interface CopilotModelSelectorProps {
   isOpen: boolean;
@@ -22,6 +23,8 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
   onOpenSettings
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [customModelText, setCustomModelText] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -45,6 +48,17 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);
+
+  const handleAddCustomModel = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = customModelText.trim();
+    if (!trimmed) return;
+    addCustomModel(activeProviderId as ProviderId, trimmed);
+    onSelectModel(activeProviderId, trimmed);
+    setCustomModelText("");
+    setShowCustomInput(false);
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -79,6 +93,33 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
             </div>
           );
         })}
+      </div>
+
+      <div className="copilot-custom-model-box">
+        {showCustomInput ? (
+          <form className="copilot-custom-model-form" onSubmit={handleAddCustomModel}>
+            <input
+              type="text"
+              className="copilot-custom-model-field"
+              placeholder={`Enter model ID for ${providers.find(p => p.id === activeProviderId)?.label || activeProviderId}...`}
+              value={customModelText}
+              onChange={(e) => setCustomModelText(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" className="copilot-custom-model-submit" title="Add & Select Model">
+              <CornerDownLeft size={12} />
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="copilot-custom-model-toggle-btn"
+            onClick={() => setShowCustomInput(true)}
+          >
+            <Plus size={12} />
+            <span>Add Custom Model ID...</span>
+          </button>
+        )}
       </div>
 
       <div className="copilot-model-footer">

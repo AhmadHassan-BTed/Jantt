@@ -1,6 +1,16 @@
 import type { JanttData } from "@jantt/core";
 
-export type ProviderId = "gemini" | "openai" | "anthropic" | "openai-compatible";
+export type ProviderId =
+  | "gemini"
+  | "openai"
+  | "anthropic"
+  | "groq"
+  | "deepseek"
+  | "openrouter"
+  | "mistral"
+  | "xai"
+  | "ollama"
+  | "openai-compatible";
 
 export interface ModelDefinition {
   id: string;

@@ -1,7 +1,7 @@
-import type { ProviderAdapter, StreamCallbacks, StreamChatOptions } from "../types";
+import type { ProviderAdapter, ProviderId, StreamCallbacks, StreamChatOptions } from "../types";
 
 export class OpenAiCompatibleAdapter implements ProviderAdapter {
-  constructor(readonly providerId: "openai" | "openai-compatible") {}
+  constructor(readonly providerId: ProviderId, readonly defaultEndpoint?: string) {}
 
   streamChat(
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
@@ -15,33 +15,56 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
     void (async () => {
       try {
         const cleanKey = apiKey.trim();
-        const isLocalEndpoint = options?.baseUrl?.includes("localhost") || options?.baseUrl?.includes("127.0.0.1");
+        const isLocalEndpoint =
+          this.providerId === "ollama" ||
+          options?.baseUrl?.includes("localhost") ||
+          options?.baseUrl?.includes("127.0.0.1");
 
-        if (!cleanKey && !isLocalEndpoint && this.providerId === "openai") {
+        if (!cleanKey && !isLocalEndpoint) {
           callbacks.onError({
             code: "AUTH",
-            message: "OpenAI API key is missing. Add your API key in Copilot settings."
+            message: `${this.providerId.toUpperCase()} API key is missing. Add your API key in Copilot settings.`
           });
           return;
         }
 
-        let baseUrl = options?.baseUrl || (this.providerId === "openai" ? "https://api.openai.com" : "");
+        let baseUrl = options?.baseUrl || this.defaultEndpoint;
         if (!baseUrl) {
-          callbacks.onError({
-            code: "NETWORK",
-            message: "Base URL is required for custom OpenAI-compatible endpoints."
-          });
-          return;
+          if (this.providerId === "openai") baseUrl = "https://api.openai.com/v1";
+          else if (this.providerId === "groq") baseUrl = "https://api.groq.com/openai/v1";
+          else if (this.providerId === "deepseek") baseUrl = "https://api.deepseek.com";
+          else if (this.providerId === "openrouter") baseUrl = "https://openrouter.ai/api/v1";
+          else if (this.providerId === "mistral") baseUrl = "https://api.mistral.ai/v1";
+          else if (this.providerId === "xai") baseUrl = "https://api.x.ai/v1";
+          else if (this.providerId === "ollama") baseUrl = "http://localhost:11434/v1";
+          else {
+            callbacks.onError({
+              code: "NETWORK",
+              message: "Base URL is required for custom OpenAI-compatible endpoints."
+            });
+            return;
+          }
         }
 
         baseUrl = baseUrl.replace(/\/+$/, "");
-        const endpoint = baseUrl.endsWith("/v1") ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+        let endpoint = baseUrl;
+        if (endpoint.endsWith("/chat/completions")) {
+          // already full path
+        } else if (endpoint.endsWith("/v1")) {
+          endpoint = `${endpoint}/chat/completions`;
+        } else {
+          endpoint = `${endpoint}/v1/chat/completions`;
+        }
 
         const headers: Record<string, string> = {
           "Content-Type": "application/json"
         };
         if (cleanKey) {
           headers.Authorization = `Bearer ${cleanKey}`;
+        }
+        if (this.providerId === "openrouter") {
+          headers["HTTP-Referer"] = typeof window !== "undefined" ? window.location.origin : "https://jantt.dev";
+          headers["X-Title"] = "Jantt AI Copilot";
         }
 
         const requestBody = {

@@ -92,7 +92,19 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                 ? "sk-proj-..."
                 : selectedProvider === "anthropic"
                 ? "sk-ant-..."
-                : "API Key (optional for local Ollama)"
+                : selectedProvider === "groq"
+                ? "gsk_..."
+                : selectedProvider === "deepseek"
+                ? "sk-..."
+                : selectedProvider === "openrouter"
+                ? "sk-or-..."
+                : selectedProvider === "mistral"
+                ? "API key from Mistral..."
+                : selectedProvider === "xai"
+                ? "xai-..."
+                : selectedProvider === "ollama"
+                ? "No key required (optional)"
+                : "API Key (if required)"
             }
             autoComplete="off"
             spellCheck={false}
@@ -113,16 +125,44 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                 Get Anthropic API Key <ExternalLink size={10} />
               </a>
             )}
+            {selectedProvider === "groq" && (
+              <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">
+                Get free Groq API Key <ExternalLink size={10} />
+              </a>
+            )}
+            {selectedProvider === "deepseek" && (
+              <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">
+                Get DeepSeek API Key <ExternalLink size={10} />
+              </a>
+            )}
+            {selectedProvider === "openrouter" && (
+              <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">
+                Get OpenRouter API Key (supports 200+ models in-browser) <ExternalLink size={10} />
+              </a>
+            )}
+            {selectedProvider === "mistral" && (
+              <a href="https://console.mistral.ai/api-keys/" target="_blank" rel="noreferrer">
+                Get Mistral API Key <ExternalLink size={10} />
+              </a>
+            )}
+            {selectedProvider === "xai" && (
+              <a href="https://console.x.ai/" target="_blank" rel="noreferrer">
+                Get xAI API Key <ExternalLink size={10} />
+              </a>
+            )}
+            {selectedProvider === "ollama" && (
+              <span>Local Ollama running on your machine. Default: http://localhost:11434</span>
+            )}
             {selectedProvider === "openai-compatible" && (
-              <span>Supports Groq, DeepSeek, OpenRouter, or local Ollama (http://localhost:11434/v1).</span>
+              <span>Supports vLLM, LM Studio, Together, or any self-hosted OpenAI-compatible server.</span>
             )}
           </span>
         </div>
 
-        {selectedProvider === "openai-compatible" && (
+        {(selectedProvider === "openai-compatible" || selectedProvider === "ollama" || activeProviderDef.supportsCustomBaseUrl) && (
           <div className="copilot-form-group">
             <label className="copilot-form-label" htmlFor="copilot-base-url">
-              Custom Endpoint Base URL
+              {selectedProvider === "ollama" ? "Ollama Endpoint URL" : "Custom Endpoint Base URL"}
             </label>
             <input
               id="copilot-base-url"
@@ -130,7 +170,11 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
               className="copilot-text-input"
               value={customBaseUrl}
               onChange={(e) => setCustomBaseUrl(e.target.value)}
-              placeholder="https://api.groq.com/openai or http://localhost:11434"
+              placeholder={
+                selectedProvider === "ollama"
+                  ? "http://localhost:11434/v1"
+                  : activeProviderDef.defaultBaseUrl || "https://api.example.com/v1"
+              }
               spellCheck={false}
             />
           </div>
