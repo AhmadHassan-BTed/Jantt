@@ -6340,6 +6340,9 @@ path.jantt-dep-path.jantt-task-dimmed {
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .copilot-diff-badge.is-applied {

@@ -22,14 +22,24 @@ export const CopilotDiffPreview: React.FC<CopilotDiffPreviewProps> = ({
       <div className="copilot-diff-header">
         <span className="copilot-diff-title">Plan Changes Summary</span>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          {applied === true && <span className="copilot-diff-badge is-applied">Applied to Plan ✓</span>}
+          {applied === true && (
+            <span className="copilot-diff-badge is-applied">
+              <Check size={10} />
+              <span>Applied to Plan</span>
+            </span>
+          )}
           {applied === true && onRevert && (
             <button type="button" className="copilot-btn-revert" onClick={onRevert} title="Revert to previous plan state">
               <RotateCcw size={11} />
               <span>Revert</span>
             </button>
           )}
-          {applied === false && <span className="copilot-diff-badge is-rejected">Dismissed ✗</span>}
+          {applied === false && (
+            <span className="copilot-diff-badge is-rejected">
+              <X size={10} />
+              <span>Dismissed</span>
+            </span>
+          )}
         </div>
       </div>
 
