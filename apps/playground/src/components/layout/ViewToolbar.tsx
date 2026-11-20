@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Plus,
-  Clock,
   Calendar,
   Filter,
   X,
@@ -151,16 +150,20 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   }, [activeView, tasks]);
 
   // Active filter state calculations
+  const isDateActive = dateFilter.dateFilterMode !== "all" || Boolean(dateFilter.dateFilterActiveSummary);
   const isPersonActive = Boolean(people.selectedPersonFilter && people.selectedPersonFilter !== "all");
   const isCompletedActive = Boolean(dateFilter.completedFilterMode && dateFilter.completedFilterMode !== "show");
   const isBehaviorActive = dateFilter.dateFilterBehavior === "hide";
-  const activeSecondaryFilterCount =
-    (isPersonActive ? 1 : 0) + (isCompletedActive ? 1 : 0) + (isBehaviorActive ? 1 : 0);
+  const isCriticalPathActive = Boolean(activeView === "gantt" && viewport?.showCriticalPath);
 
-  const hasAnyActiveFilter =
-    dateFilter.dateFilterMode !== "all" ||
-    activeSecondaryFilterCount > 0 ||
-    Boolean(dateFilter.dateFilterActiveSummary);
+  const totalActiveFiltersCount =
+    (isDateActive ? 1 : 0) +
+    (isPersonActive ? 1 : 0) +
+    (isCompletedActive ? 1 : 0) +
+    (isBehaviorActive ? 1 : 0) +
+    (isCriticalPathActive ? 1 : 0);
+
+  const hasAnyActiveFilter = totalActiveFiltersCount > 0;
 
   const clearAllFilters = () => {
     dateFilter.setDateFilterMode("all");
@@ -170,6 +173,9 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
     dateFilter.setDateFilterBehavior("dim");
     if (people.selectedPersonFilter !== "all") {
       people.setSelectedPersonFilter?.("all");
+    }
+    if (viewport?.showCriticalPath) {
+      viewport.setShowCriticalPath(false);
     }
   };
 
@@ -189,7 +195,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   return (
     <div className="view-toolbar">
       {/* ─────────────────────────────────────────────────────────────────────────────
-          ZONE 1: LEFT (Create, Scope & Time Filter Presets)
+          ZONE 1: LEFT (Create, Search & Conditional Dynamic Filter Chips)
           ───────────────────────────────────────────────────────────────────────────── */}
       <div className="view-toolbar-left">
         {/* Primary Add Task Button */}
@@ -205,102 +211,47 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
           </button>
         )}
 
-        {/* Task Count Badge */}
-        <span className="toolbar-task-badge" title="Total project tasks">
-          {taskCount} tasks
-        </span>
-
-        <span className="toolbar-divider" aria-hidden="true" />
-
-        {/* Date Filter Presets */}
-        <div className="toolbar-date-tabs" role="group" aria-label="Date presets">
-          <button
-            type="button"
-            className={`toolbar-tab-btn ${dateFilter.dateFilterMode === "all" ? "is-active" : ""}`}
-            aria-pressed={dateFilter.dateFilterMode === "all"}
-            onClick={() => dateFilter.setDateFilterMode("all")}
-            title="Show all project tasks without date restrictions"
-          >
-            All Tasks
-          </button>
-          <button
-            type="button"
-            className={`toolbar-tab-btn ${dateFilter.dateFilterMode === "today" ? "is-active" : ""}`}
-            aria-pressed={dateFilter.dateFilterMode === "today"}
-            onClick={() => dateFilter.setDateFilterMode("today")}
-            title={`Filter tasks active today (${getTodayISODate()})`}
-          >
-            <Clock size={11} style={{ color: "#38BDF8" }} />
-            Today
-          </button>
-          <button
-            type="button"
-            className={`toolbar-tab-btn ${dateFilter.dateFilterMode === "week" ? "is-active" : ""}`}
-            aria-pressed={dateFilter.dateFilterMode === "week"}
-            onClick={() => dateFilter.setDateFilterMode("week")}
-            title="Filter tasks active this week (Monday to Sunday)"
-          >
-            <Calendar size={11} style={{ color: "#A78BFA" }} />
-            This Week
-          </button>
-          <button
-            type="button"
-            className={`toolbar-tab-btn ${dateFilter.dateFilterMode === "range" || dateFilter.dateFilterMode === "date" ? "is-active" : ""}`}
-            aria-pressed={dateFilter.dateFilterMode === "range" || dateFilter.dateFilterMode === "date"}
-            onClick={() => {
-              if (dateFilter.dateFilterMode === "range") {
-                dateFilter.setDateFilterMode("all");
-              } else {
-                dateFilter.setDateFilterMode("range");
-                if (!dateFilter.dateFilterRangeStart) dateFilter.setDateFilterRangeStart(getTodayISODate());
-              }
-            }}
-            title="Filter tasks overlapping a custom date range"
-          >
-            <Calendar size={11} style={{ color: "#10B981" }} />
-            Date Range
-          </button>
-        </div>
-
-        {/* Conditional Date Range Pickers */}
-        {dateFilter.dateFilterMode === "range" && (
-          <div className="toolbar-date-range-inputs">
+        {/* Unified Search Input Box */}
+        {onSearchChange && (
+          <div className="toolbar-search-box">
+            <Search size={12} className="toolbar-search-icon" />
             <input
-              type="date"
-              className="toolbar-date-input"
-              value={dateFilter.dateFilterRangeStart}
-              onChange={(e) => dateFilter.setDateFilterRangeStart(e.target.value)}
-              title="Range Start Date"
-              aria-label="Range start date"
+              type="text"
+              className="toolbar-search-input"
+              placeholder={`Search ${taskCount} tasks...`}
+              aria-label="Search tasks in current view"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
             />
-            <span className="toolbar-date-sep" aria-hidden="true">→</span>
-            <input
-              type="date"
-              className="toolbar-date-input"
-              value={dateFilter.dateFilterRangeEnd}
-              onChange={(e) => dateFilter.setDateFilterRangeEnd(e.target.value)}
-              title="Range End Date"
-              aria-label="Range end date"
-            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="toolbar-search-clear"
+                onClick={() => onSearchChange("")}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <X size={10} />
+              </button>
+            )}
           </div>
         )}
 
-        {/* Conditional Single Date Picker */}
-        {dateFilter.dateFilterMode === "date" && (
-          <input
-            type="date"
-            className="toolbar-date-input"
-            value={dateFilter.dateFilterValue}
-            onChange={(e) => dateFilter.setDateFilterValue(e.target.value)}
-            title="Select target date"
-            aria-label="Filter date"
-          />
-        )}
-
-        {/* Active Date Summary Badge */}
-        {dateFilter.dateFilterActiveSummary && (
-          <div className="toolbar-active-date-chip">
-            <span>Showing: <strong>{dateFilter.dateFilterActiveSummary.label}</strong> ({dateFilter.dateFilterActiveSummary.countText})</span>
+        {/* ── Dynamic Contextual Filter Chips (Only visible when active) ── */}
+        {isDateActive && (
+          <div className="toolbar-filter-chip" title="Active date filter - click to clear">
+            <Calendar size={10} style={{ color: "#38BDF8" }} />
+            <span>
+              {dateFilter.dateFilterActiveSummary?.label
+                ? `${dateFilter.dateFilterActiveSummary.label} (${dateFilter.dateFilterActiveSummary.countText})`
+                : dateFilter.dateFilterMode === "today"
+                ? "Today"
+                : dateFilter.dateFilterMode === "week"
+                ? "This Week"
+                : dateFilter.dateFilterMode === "range"
+                ? `${dateFilter.dateFilterRangeStart || "Start"} → ${dateFilter.dateFilterRangeEnd || "End"}`
+                : "Date"}
+            </span>
             <button
               type="button"
               onClick={() => {
@@ -308,56 +259,27 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                 dateFilter.setDateFilterRangeStart("");
                 dateFilter.setDateFilterRangeEnd("");
               }}
-              title="Clear date filter"
               aria-label="Clear date filter"
             >
               <X size={10} />
             </button>
           </div>
         )}
-      </div>
 
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          ZONE 2: CENTER (Timeline Time Scale - Centered on Gantt View)
-          ───────────────────────────────────────────────────────────────────────────── */}
-      <div className="view-toolbar-center">
-        {activeView === "gantt" && viewport && (
-          <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
-            {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
-                aria-pressed={viewport.currentScale === s}
-                onClick={() => viewport.setCurrentScale(s)}
-                title={`Switch timeline to ${s} scale view`}
-              >
-                {s}
-              </button>
-            ))}
+        {isCriticalPathActive && (
+          <div className="toolbar-filter-chip is-amber" title="Critical path highlighting is active - click to toggle off">
+            <Zap size={10} style={{ color: "#D97706" }} />
+            <span>Critical Path ({criticalCount})</span>
+            <button
+              type="button"
+              onClick={() => viewport?.setShowCriticalPath(false)}
+              aria-label="Disable critical path"
+            >
+              <X size={10} />
+            </button>
           </div>
         )}
-      </div>
 
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          ZONE 3: RIGHT (Analysis, Grouped Filters, Search & Settings)
-          ───────────────────────────────────────────────────────────────────────────── */}
-      <div className="view-toolbar-right">
-        {/* Critical Path Toggle (Gantt View) */}
-        {activeView === "gantt" && viewport && (
-          <button
-            type="button"
-            className={`toolbar-critical-btn ${viewport.showCriticalPath ? "is-active" : ""}`}
-            onClick={() => viewport.setShowCriticalPath((prev: boolean) => !prev)}
-            aria-pressed={viewport.showCriticalPath}
-            title="Highlight the critical chain of dependent tasks controlling project duration"
-          >
-            <Zap size={12} />
-            <span>Critical Path ({criticalCount})</span>
-          </button>
-        )}
-
-        {/* Dynamic Contextual Filter Chips */}
         {personFilterLabel && (
           <div className="toolbar-filter-chip" title="Active assignee or team filter - click to clear">
             <Users size={10} style={{ color: "#38BDF8" }} />
@@ -400,7 +322,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
           </div>
         )}
 
-        {/* Clear All Filters Button */}
+        {/* Clear All Active Filters Button */}
         {hasAnyActiveFilter && (
           <button
             type="button"
@@ -412,22 +334,49 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
             <span>Clear all</span>
           </button>
         )}
+      </div>
 
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          ZONE 2: CENTER (Timeline Time Scale - Centered on Gantt View)
+          ───────────────────────────────────────────────────────────────────────────── */}
+      <div className="view-toolbar-center">
+        {activeView === "gantt" && viewport && (
+          <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
+            {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`toolbar-scale-btn ${viewport.currentScale === s ? "is-active" : ""}`}
+                aria-pressed={viewport.currentScale === s}
+                onClick={() => viewport.setCurrentScale(s)}
+                title={`Switch timeline to ${s} scale view`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          ZONE 3: RIGHT (Grouped Filters & Viewport Settings)
+          ───────────────────────────────────────────────────────────────────────────── */}
+      <div className="view-toolbar-right">
         {/* Filters Popover Trigger */}
         <div className="toolbar-popover-container">
           <button
             ref={filterTriggerRef}
             type="button"
-            className={`toolbar-btn ${activeSecondaryFilterCount > 0 ? "is-active" : ""}`}
+            className={`toolbar-btn ${totalActiveFiltersCount > 0 ? "is-active" : ""}`}
             onClick={() => setIsFilterPopoverOpen((prev) => !prev)}
             aria-expanded={isFilterPopoverOpen}
             aria-haspopup="dialog"
-            title="Configure task filters (Assignee, Completed visibility, Non-matching behavior)"
+            title="Configure task filters (Date scope, Assignee, Critical path, Completed visibility)"
           >
             <Filter size={12} />
             <span>Filters</span>
-            {activeSecondaryFilterCount > 0 && (
-              <span className="toolbar-badge-count">{activeSecondaryFilterCount}</span>
+            {totalActiveFiltersCount > 0 && (
+              <span className="toolbar-badge-count">{totalActiveFiltersCount}</span>
             )}
             <ChevronDown size={11} className={`toolbar-chevron ${isFilterPopoverOpen ? "is-open" : ""}`} />
           </button>
@@ -455,7 +404,79 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                 </button>
               </div>
 
-              {/* Group 1: People & Teams */}
+              {/* Group 1: Time Scope / Date Presets */}
+              <div className="toolbar-popover-section">
+                <div className="toolbar-popover-label">
+                  <Calendar size={12} style={{ color: "#38BDF8" }} />
+                  <span>Time Scope</span>
+                </div>
+                <div className="toolbar-segmented-control" role="group" aria-label="Date presets">
+                  <button
+                    type="button"
+                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "all" ? "is-active" : ""}`}
+                    onClick={() => dateFilter.setDateFilterMode("all")}
+                    title="Show all tasks"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "today" ? "is-active" : ""}`}
+                    onClick={() => dateFilter.setDateFilterMode("today")}
+                    title={`Filter tasks active today (${getTodayISODate()})`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "week" ? "is-active" : ""}`}
+                    onClick={() => dateFilter.setDateFilterMode("week")}
+                    title="Filter tasks active this week"
+                  >
+                    This Week
+                  </button>
+                  <button
+                    type="button"
+                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "range" || dateFilter.dateFilterMode === "date" ? "is-active" : ""}`}
+                    onClick={() => {
+                      if (dateFilter.dateFilterMode === "range") {
+                        dateFilter.setDateFilterMode("all");
+                      } else {
+                        dateFilter.setDateFilterMode("range");
+                        if (!dateFilter.dateFilterRangeStart) dateFilter.setDateFilterRangeStart(getTodayISODate());
+                      }
+                    }}
+                    title="Filter custom date range"
+                  >
+                    Custom
+                  </button>
+                </div>
+
+                {/* Conditional Date Range Inputs inside Popover */}
+                {dateFilter.dateFilterMode === "range" && (
+                  <div className="toolbar-popover-date-row" style={{ marginTop: "6px" }}>
+                    <input
+                      type="date"
+                      className="toolbar-date-input"
+                      value={dateFilter.dateFilterRangeStart}
+                      onChange={(e) => dateFilter.setDateFilterRangeStart(e.target.value)}
+                      title="Range Start Date"
+                      aria-label="Range start date"
+                    />
+                    <span className="toolbar-date-sep" aria-hidden="true">→</span>
+                    <input
+                      type="date"
+                      className="toolbar-date-input"
+                      value={dateFilter.dateFilterRangeEnd}
+                      onChange={(e) => dateFilter.setDateFilterRangeEnd(e.target.value)}
+                      title="Range End Date"
+                      aria-label="Range end date"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Group 2: Assignee & Team */}
               {people.setSelectedPersonFilter && (
                 <div className="toolbar-popover-section">
                   <div className="toolbar-popover-label">
@@ -498,7 +519,38 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                 </div>
               )}
 
-              {/* Group 2: Completed Tasks */}
+              {/* Group 3: Schedule Analysis (Critical Path) */}
+              {activeView === "gantt" && viewport && (
+                <div className="toolbar-popover-section">
+                  <div className="toolbar-popover-label">
+                    <Zap size={12} style={{ color: "#F59E0B" }} />
+                    <span>Schedule Analysis</span>
+                  </div>
+                  <div
+                    className="toolbar-switch-row"
+                    onClick={() => viewport.setShowCriticalPath((prev: boolean) => !prev)}
+                    title="Toggle Critical Path Highlighting"
+                  >
+                    <div className="toolbar-switch-info">
+                      <span className="toolbar-switch-title">
+                        Highlight Critical Path {criticalCount > 0 ? `(${criticalCount} tasks)` : ""}
+                      </span>
+                      <span className="toolbar-switch-desc">Emphasize dependent tasks determining project finish date</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`toolbar-toggle-switch ${viewport.showCriticalPath ? "is-active" : ""}`}
+                      role="switch"
+                      aria-checked={viewport.showCriticalPath}
+                      aria-label="Toggle Critical Path"
+                    >
+                      <span className="toolbar-toggle-thumb" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Group 4: Completed Tasks */}
               {dateFilter.setCompletedFilterMode && (
                 <div className="toolbar-popover-section">
                   <div className="toolbar-popover-label">
@@ -537,7 +589,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                 </div>
               )}
 
-              {/* Group 3: Non-Matching Filtered Tasks */}
+              {/* Group 5: Non-Matching Filtered Tasks */}
               <div className="toolbar-popover-section">
                 <div className="toolbar-popover-label">
                   <EyeOff size={12} style={{ color: "#818CF8" }} />
@@ -566,51 +618,21 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
               </div>
 
               {/* Popover Footer: Quick Reset */}
-              {activeSecondaryFilterCount > 0 && (
+              {totalActiveFiltersCount > 0 && (
                 <div className="toolbar-popover-footer">
                   <button
                     type="button"
                     className="toolbar-popover-reset-btn"
-                    onClick={() => {
-                      dateFilter.setCompletedFilterMode?.("show");
-                      dateFilter.setDateFilterBehavior("dim");
-                      people.setSelectedPersonFilter?.("all");
-                    }}
+                    onClick={clearAllFilters}
                   >
                     <RotateCcw size={11} />
-                    <span>Reset filter settings</span>
+                    <span>Reset all filters</span>
                   </button>
                 </div>
               )}
             </div>
           )}
         </div>
-
-        {/* Search Input Box */}
-        {onSearchChange && (
-          <div className="toolbar-search-box">
-            <Search size={12} className="toolbar-search-icon" />
-            <input
-              type="text"
-              className="toolbar-search-input"
-              placeholder="Search tasks..."
-              aria-label="Search tasks in current view"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                className="toolbar-search-clear"
-                onClick={() => onSearchChange("")}
-                title="Clear search"
-                aria-label="Clear search"
-              >
-                <X size={10} />
-              </button>
-            )}
-          </div>
-        )}
 
         {/* Settings Popover (Gantt View) */}
         {activeView === "gantt" && viewport && (

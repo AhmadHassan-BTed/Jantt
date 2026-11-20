@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Dynamic AST pruning (`stripEmptyValues`): drops null, undefined, and empty string properties to save 1,000+ to 2,500+ tokens on large project plans.
   - Strict negative prompting (`[FORBIDDEN]`) preventing circular dependencies, invalid dates (end date < start date), non-schema keys, and unnecessary JSON outputs for analytical inquiries.
 
+- **Minimalist Single-Bar Viewport Architecture & Dynamic Filter Chips**:
+  - Eliminated the duplicate stacked bars beneath the top navbar by introducing a unified `ViewToolbar` and passing `showToolbar={false}` to `@jantt/core` / `@jantt/react`.
+  - Reorganized the toolbar from a cluttered 15-button row down to 4 intuitive anchors: `+ Add Task`, unified `Search`, centered time scale (`Day | Week | Month | Quarter | Year`), and grouped `Filters` & `Settings` popovers.
+  - Grouped Date presets (`All Tasks`, `Today`, `This Week`, `Custom Range`) and Critical Path analysis inside the `Filters` popover card.
+  - Added conditional dynamic chips (`[Date x]`, `[⚡ Critical Path (N) x]`, `[Assignee x]`, `[Completed x]`, `[Non-matching x]`) that appear on the bar only when active and support 1-click removal.
+  - Integrated total task count directly into the search placeholder (`Search 15 tasks...`), saving horizontal space.
+  - Deduplicated "Swiss Noir" in `ThemeManager` so it appears exactly once under dark themes.
+
 - **Dynamic, Contextual & Grouped UI/UX Architecture (Elimination of Toolbar Clutter)**:
   - Consolidated 4 stacked header tiers down to a clean, modern 2-tier structure (Top Navbar + Contextual Gantt Toolbar) matching Linear, Notion, and Figma standards.
   - Replaced 5 static filter buttons (`Non-matching: [Dim] [Hide]`, `Completed: [Show] [Dim] [Hide]`) and bulky People dropdown with a unified, professional **Filters Popover** with active count badge (`Filters (N)`).

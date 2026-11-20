@@ -2248,6 +2248,18 @@ select option,
   white-space: nowrap;
 }
 
+.toolbar-filter-chip.is-amber {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #D97706;
+}
+
+.toolbar-popover-date-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .toolbar-filter-chip button {
   background: transparent;
   border: none;
