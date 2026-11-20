@@ -28,7 +28,8 @@ import {
   Users,
   FolderKanban,
   DoorOpen,
-  Loader2
+  Loader2,
+  Palette
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile, UserRoomPointer } from "../../firebase/types";
@@ -608,156 +609,146 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </NavPopover>
 
-        <NavPopover
-          id="nav-cloud-panel"
-          label="Cloud collaboration"
-          triggerClassName={`nav-cloud-trigger ${isRoomActive ? `is-live is-sync-${syncStatus}` : ""}`}
-          triggerTitle={
-            isRoomActive
-              ? `Live cloud room${roomRoleLabel ? ` • ${roomRoleLabel}` : ""} • ${syncMessage || syncLabel}`
-              : "Cloud collaboration: start or join a live room"
-          }
-          triggerAriaLabel={
-            isRoomActive
-              ? `Cloud room, ${roomRoleLabel || "member"}, ${syncLabel}${onlineCount > 0 ? `, ${onlineCount} online` : ""}`
-              : "Cloud collaboration"
-          }
-          triggerContent={
-            <>
-              {isRoomActive ? <span className="nav-cloud-dot" aria-hidden="true" /> : <Cloud size={14} aria-hidden="true" />}
-              <span className="nav-label">{isRoomActive ? (isSyncProblem ? syncLabel : "Live") : "Cloud"}</span>
-              {isRoomActive && onlineCount > 0 && <span className="nav-count-pill">{onlineCount}</span>}
-              <ChevronDown size={12} className="nav-popover-chevron" aria-hidden="true" />
-            </>
-          }
-          align="start"
-          panelClassName="is-cloud-panel"
-        >
-          {(close) => (
-            <div className="nav-cloud-popover">
-              {/* The panel offers sign-in, a local copy and Leave itself; owner deletion lives here. */}
-              {renderPanelSlot(cloudPanel, () => close(false))}
-              {isRoomActive && (onLeaveRoom || onDeleteRoom) && (
-                <div className="nav-popover-footer">
-                  {onLeaveRoom && (
-                    <button
-                      type="button"
-                      className="nav-popover-action is-danger"
-                      data-popover-item
-                      onClick={() => {
-                        close(false);
-                        onLeaveRoom();
-                      }}
-                    >
-                      <DoorOpen size={14} aria-hidden="true" />
-                      <span>Leave room</span>
-                    </button>
-                  )}
-                  {onDeleteRoom && (
-                    <button
-                      type="button"
-                      className="nav-popover-action is-danger"
-                      data-popover-item
-                      onClick={() => {
-                        close(false);
-                        onDeleteRoom();
-                      }}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                      <span>Delete room for everyone…</span>
-                    </button>
-                  )}
-                </div>
+        {/* Group 1: Storage, Cloud & Persistence Capsule */}
+        <div className="nav-status-capsule">
+          <NavPopover
+            id="nav-cloud-panel"
+            label="Cloud collaboration"
+            triggerClassName={`nav-cloud-trigger ${isRoomActive ? `is-live is-sync-${syncStatus}` : ""}`}
+            triggerTitle={
+              isRoomActive
+                ? `Live cloud room${roomRoleLabel ? ` • ${roomRoleLabel}` : ""} • ${syncMessage || syncLabel}`
+                : "Cloud collaboration: start or join a live room"
+            }
+            triggerAriaLabel={
+              isRoomActive
+                ? `Cloud room, ${roomRoleLabel || "member"}, ${syncLabel}${onlineCount > 0 ? `, ${onlineCount} online` : ""}`
+                : "Cloud collaboration"
+            }
+            triggerContent={
+              <>
+                {isRoomActive ? <span className="nav-cloud-dot" aria-hidden="true" /> : <Cloud size={14} aria-hidden="true" />}
+                <span className="nav-label">{isRoomActive ? (isSyncProblem ? syncLabel : "Live") : "Cloud"}</span>
+                {isRoomActive && onlineCount > 0 && <span className="nav-count-pill">{onlineCount}</span>}
+                <ChevronDown size={12} className="nav-popover-chevron" aria-hidden="true" />
+              </>
+            }
+            align="start"
+            panelClassName="is-cloud-panel"
+          >
+            {(close) => (
+              <div className="nav-cloud-popover">
+                {/* The panel offers sign-in, a local copy and Leave itself; owner deletion lives here. */}
+                {renderPanelSlot(cloudPanel, () => close(false))}
+                {isRoomActive && (onLeaveRoom || onDeleteRoom) && (
+                  <div className="nav-popover-footer">
+                    {onLeaveRoom && (
+                      <button
+                        type="button"
+                        className="nav-popover-action is-danger"
+                        data-popover-item
+                        onClick={() => {
+                          close(false);
+                          onLeaveRoom();
+                        }}
+                      >
+                        <DoorOpen size={14} aria-hidden="true" />
+                        <span>Leave room</span>
+                      </button>
+                    )}
+                    {onDeleteRoom && (
+                      <button
+                        type="button"
+                        className="nav-popover-action is-danger"
+                        data-popover-item
+                        onClick={() => {
+                          close(false);
+                          onDeleteRoom();
+                        }}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        <span>Delete room for everyone…</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </NavPopover>
+
+          {isViewer ? (
+            <button
+              type="button"
+              className="btn-autosave-badge is-viewer"
+              onClick={onPromptFork}
+              title="Read-only cloud room. Click to make a local copy you can edit."
+              aria-label="Read-only room. Make a local copy to edit"
+            >
+              <Eye size={12} aria-hidden="true" />
+              <span className="nav-label">Read-only</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`btn-autosave-badge is-${saveStatus}`}
+              onClick={() => setShowAutoSaveModal(true)}
+              title={`${isRoomActive ? "Local browser backup. " : ""}Last saved: ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • Cadence: ${autoSaveInterval} • Click to configure`}
+              aria-label={`${saveLabel}. Configure auto-save`}
+            >
+              {saveStatus === "saving" ? (
+                <RefreshCw size={11} className="spin-sync-icon" aria-hidden="true" />
+              ) : saveStatus === "pending" ? (
+                <Clock size={11} aria-hidden="true" />
+              ) : (
+                <CheckCircle2 size={11} aria-hidden="true" />
               )}
-            </div>
+              <span className="nav-label">{saveLabel}</span>
+            </button>
           )}
-        </NavPopover>
+
+          {setShowVersionHistoryModal && (
+            <button
+              type="button"
+              className="btn-nav btn-version-history nav-icon-btn"
+              onClick={() => setShowVersionHistoryModal(true)}
+              title="Version history: roll back to an earlier snapshot"
+              aria-label={`Version history${snapshotsCount > 0 ? ` (${snapshotsCount} snapshots)` : ""}`}
+            >
+              <History size={12} style={{ color: "#818CF8" }} aria-hidden="true" />
+              {snapshotsCount > 0 && <span className="history-count-badge">{snapshotsCount}</span>}
+            </button>
+          )}
+        </div>
+
         {/* Announce only sync problems; routine "syncing / in sync" flips would be noise. */}
         <span className="sr-only" role="status">
           {isRoomActive && isSyncProblem ? `Cloud sync problem: ${syncMessage || syncLabel}` : ""}
         </span>
 
-        <button
-          type="button"
-          className="btn-nav nav-icon-btn"
-          onClick={onOpenShare}
-          title={isRoomActive ? "Invite people and share this room" : "Share this plan by link, WhatsApp or JSON"}
-          aria-label={isRoomActive ? "Invite and share room" : "Share plan"}
-        >
-          <Share2 size={13} style={{ color: "#A855F7" }} aria-hidden="true" />
-          <span className="nav-label">{isRoomActive ? "Invite" : "Share"}</span>
-        </button>
-
-        <button
-          type="button"
-          className="btn-nav nav-icon-btn"
-          onClick={onOpenPeople}
-          title="People & teams: members, roles and task assignees"
-          aria-label={`People and teams (${peopleCount})`}
-        >
-          <Users size={13} style={{ color: "#F59E0B" }} aria-hidden="true" />
-          <span className="nav-count-pill">{peopleCount}</span>
-        </button>
-
-        <span className="nav-divider" aria-hidden="true" />
-
-        {isViewer ? (
+        {/* Group 2: Collaboration Group (Share & People) */}
+        <div className="nav-collab-group">
           <button
             type="button"
-            className="btn-autosave-badge is-viewer"
-            onClick={onPromptFork}
-            title="Read-only cloud room. Click to make a local copy you can edit."
-            aria-label="Read-only room. Make a local copy to edit"
+            className="btn-nav nav-icon-btn nav-share-btn"
+            onClick={onOpenShare}
+            title={isRoomActive ? "Invite people and share this room" : "Share this plan by link, WhatsApp or JSON"}
+            aria-label={isRoomActive ? "Invite and share room" : "Share plan"}
           >
-            <Eye size={12} aria-hidden="true" />
-            <span className="nav-label">Read-only</span>
+            <Share2 size={13} style={{ color: "#A855F7" }} aria-hidden="true" />
+            <span className="nav-label">{isRoomActive ? "Invite" : "Share"}</span>
+            {peopleCount > 0 && <span className="nav-count-pill">{peopleCount}</span>}
           </button>
-        ) : (
-          <button
-            type="button"
-            className={`btn-autosave-badge is-${saveStatus}`}
-            onClick={() => setShowAutoSaveModal(true)}
-            title={`${isRoomActive ? "Local browser backup. " : ""}Last saved: ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • Cadence: ${autoSaveInterval} • Click to configure`}
-            aria-label={`${saveLabel}. Configure auto-save`}
-          >
-            {saveStatus === "saving" ? (
-              <RefreshCw size={11} className="spin-sync-icon" aria-hidden="true" />
-            ) : saveStatus === "pending" ? (
-              <Clock size={11} aria-hidden="true" />
-            ) : (
-              <CheckCircle2 size={11} aria-hidden="true" />
-            )}
-            <span className="nav-label">{saveLabel}</span>
-          </button>
-        )}
 
-        {setShowVersionHistoryModal && (
           <button
             type="button"
-            className="btn-nav btn-version-history nav-icon-btn"
-            onClick={() => setShowVersionHistoryModal(true)}
-            title="Version history: roll back to an earlier snapshot"
-            aria-label={`Version history${snapshotsCount > 0 ? ` (${snapshotsCount} snapshots)` : ""}`}
+            className="btn-nav nav-icon-btn"
+            onClick={onOpenPeople}
+            title="People & teams: members, roles and task assignees"
+            aria-label={`People and teams (${peopleCount})`}
           >
-            <History size={12} style={{ color: "#818CF8" }} aria-hidden="true" />
-            {snapshotsCount > 0 && <span className="history-count-badge">{snapshotsCount}</span>}
+            <Users size={13} style={{ color: "#F59E0B" }} aria-hidden="true" />
           </button>
-        )}
-
-        {isSidebarCollapsed && (
-          <button
-            type="button"
-            className="btn-nav btn-restore-sidebar nav-icon-btn"
-            onClick={() => setIsSidebarCollapsed(false)}
-            title="Show the JSON editor"
-            aria-label="Show JSON editor"
-            aria-controls="editor-pane"
-            aria-expanded="false"
-          >
-            <FileJson size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
-            <span className="nav-label">JSON</span>
-          </button>
-        )}
+        </div>
       </div>
 
       {/* 2. Center Zone: Primary View Switcher */}
@@ -784,87 +775,108 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </nav>
 
-      {/* 3. Right Zone: Theme, command palette, help, AI prompt and account */}
+      {/* 3. Right Zone: Tools, Theme, Search, AI and Account */}
       <div className="nav-controls nav-group-right">
-        <div className="nav-select-group">
-          <label htmlFor="theme-select" className="nav-label">
-            Theme
-          </label>
-          <select
-            id="theme-select"
-            className="select-input nav-theme-select"
-            value={selectedThemeId}
-            onChange={(e) => setSelectedThemeId(e.target.value)}
-            title="Visual theme"
-          >
-            <optgroup label="Dark Modes">
-              {AVAILABLE_THEMES.filter((t) => t.mode === "dark").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Light Modes">
-              {AVAILABLE_THEMES.filter((t) => t.mode === "light").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+        {/* Cluster 1: Workspace Tools (JSON editor & Theme) */}
+        <div className="nav-tools-group">
+          {isSidebarCollapsed && (
+            <button
+              type="button"
+              className="btn-nav btn-restore-sidebar nav-icon-btn"
+              onClick={() => setIsSidebarCollapsed(false)}
+              title="Show the JSON code editor (split pane)"
+              aria-label="Show JSON editor"
+              aria-controls="editor-pane"
+              aria-expanded="false"
+            >
+              <FileJson size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
+              <span className="nav-label">JSON</span>
+            </button>
+          )}
+
+          <div className="nav-theme-capsule" title="Visual Theme">
+            <Palette size={13} className="nav-theme-icon" aria-hidden="true" />
+            <select
+              id="theme-select"
+              className="select-input nav-theme-select"
+              value={selectedThemeId}
+              onChange={(e) => setSelectedThemeId(e.target.value)}
+              aria-label="Visual theme"
+            >
+              <optgroup label="Dark Modes">
+                {AVAILABLE_THEMES.filter((t) => t.mode === "dark").map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Light Modes">
+                {AVAILABLE_THEMES.filter((t) => t.mode === "light").map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
         </div>
 
-        {onOpenCommandPalette && (
-          <button
-            type="button"
-            className="btn-nav nav-icon-btn"
-            onClick={onOpenCommandPalette}
-            title={`Command palette & search (${PRIMARY_MODIFIER_LABEL}+K)`}
-            aria-label="Open command palette"
-            aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+K" : "Control+K"}
-          >
-            <Search size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
-            <kbd className="nav-kbd nav-label">{PRIMARY_MODIFIER_LABEL} K</kbd>
-          </button>
-        )}
+        {/* Cluster 2: Global Search & AI Copilot */}
+        <div className="nav-search-ai-group">
+          {onOpenCommandPalette && (
+            <button
+              type="button"
+              className="btn-nav nav-icon-btn"
+              onClick={onOpenCommandPalette}
+              title={`Command palette & search (${PRIMARY_MODIFIER_LABEL}+K)`}
+              aria-label="Open command palette"
+              aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+K" : "Control+K"}
+            >
+              <Search size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
+              <kbd className="nav-kbd nav-label">{PRIMARY_MODIFIER_LABEL} K</kbd>
+            </button>
+          )}
 
-        {onOpenShortcuts && (
+          {onToggleCopilot && (
+            <button
+              type="button"
+              className={`btn-prompt ${showCopilot ? "is-active" : ""}`}
+              onClick={onToggleCopilot}
+              title={`AI Copilot: chat with AI to edit your plan live (${PRIMARY_MODIFIER_LABEL}+J)`}
+              aria-label={showCopilot ? "Close AI Copilot" : "Open AI Copilot"}
+              aria-expanded={showCopilot}
+              aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+J" : "Control+J"}
+            >
+              <Sparkles size={14} aria-hidden="true" />
+              <span className="nav-label">Copilot</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="btn-nav nav-icon-btn nav-optional"
-            onClick={onOpenShortcuts}
-            title="Keyboard shortcuts (?)"
-            aria-label="Keyboard shortcuts"
-            aria-keyshortcuts="Shift+?"
+            onClick={() => setShowPromptModal(true)}
+            title="AI prompt reference & JSON schema specification"
+            aria-label="AI prompt reference"
           >
-            <HelpCircle size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
+            <FileJson size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
           </button>
-        )}
+        </div>
 
-        {onToggleCopilot && (
-          <button
-            type="button"
-            className={`btn-prompt ${showCopilot ? "is-active" : ""}`}
-            onClick={onToggleCopilot}
-            title={`AI Copilot: chat with AI to edit your plan live (${PRIMARY_MODIFIER_LABEL}+J)`}
-            aria-label={showCopilot ? "Close AI Copilot" : "Open AI Copilot"}
-            aria-expanded={showCopilot}
-            aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+J" : "Control+J"}
-          >
-            <Sparkles size={14} aria-hidden="true" />
-            <span className="nav-label">Copilot</span>
-          </button>
-        )}
-
-        <button
-          type="button"
-          className="btn-nav nav-icon-btn nav-optional"
-          onClick={() => setShowPromptModal(true)}
-          title="AI prompt reference & JSON schema specification"
-          aria-label="AI prompt reference"
-        >
-          <FileJson size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
-        </button>
+        {/* Cluster 3: User Account & Help */}
+        <div className="nav-user-group">
+          {onOpenShortcuts && (
+            <button
+              type="button"
+              className="btn-nav nav-icon-btn nav-optional"
+              onClick={onOpenShortcuts}
+              title="Keyboard shortcuts (?)"
+              aria-label="Keyboard shortcuts"
+              aria-keyshortcuts="Shift+?"
+            >
+              <HelpCircle size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
+            </button>
+          )}
 
         {currentUser ? (
           <div className="nav-account">
@@ -942,6 +954,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{isSigningIn ? "Signing in…" : isPendingLoginEditor ? "Sign in to Edit" : "Sign in"}</span>
           </button>
         ) : null}
+        </div>
       </div>
     </header>
   );

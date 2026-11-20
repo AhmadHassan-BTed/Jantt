@@ -253,6 +253,9 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       header.days.find((d) => d.isToday)?.dateStr ||
       header.days[0]?.dateStr;
 
+    let lastRenderedLabelX = -999;
+    const minLabelSpacing = 28; // Minimum pixels between labels to prevent ANY visual overlap
+
     header.days.forEach((d) => {
       const dCell = document.createElement("div");
       const isBoundary = Boolean(d.isTaskBoundary);
@@ -277,15 +280,27 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
         dCell.tabIndex = d.dateStr === focusDate ? 0 : -1;
       }
 
-      if (isCompactWeek && d.width < 22) {
-        // On compact Week scale: show day numbers on task boundaries, Mondays, 1st of month, today, or active selected date
-        if (isSelected || isBoundary || d.isToday || d.dayOfWeek === 1 || d.dayOfMonth === 1) {
+      // Smart collision prevention: prevents labels from colliding or smushing together when column widths contract
+      if (isCompactWeek || d.width < 26) {
+        const wantsLabel =
+          isSelected ||
+          d.isToday ||
+          (d.width >= 16 && (isBoundary || d.dayOfMonth === 1)) ||
+          d.dayOfWeek === 1;
+
+        if (wantsLabel && (isSelected || d.x - lastRenderedLabelX >= minLabelSpacing)) {
           dCell.appendChild(dayLabel(`jantt-day-num${isBoundary || isSelected ? " is-boundary-num" : ""}`, d.label));
+          lastRenderedLabelX = d.x;
         }
       } else {
-        // On standard Day scale: show day name and day number
+        // Standard Day scale with comfortable cell width:
         const todayCls = d.isToday ? " is-today" : "";
-        dCell.append(dayLabel(`jantt-day-name${todayCls}`, d.dayName), dayLabel(`jantt-day-num${todayCls}`, d.label));
+        if (d.width >= 32) {
+          dCell.append(dayLabel(`jantt-day-name${todayCls}`, d.dayName), dayLabel(`jantt-day-num${todayCls}`, d.label));
+        } else {
+          dCell.appendChild(dayLabel(`jantt-day-num${todayCls}`, d.label));
+        }
+        lastRenderedLabelX = d.x;
       }
 
       // Draggable resize handle for day tier (where the cell is at least 6px wide)

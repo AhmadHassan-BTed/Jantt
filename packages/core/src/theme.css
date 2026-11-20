@@ -1343,7 +1343,7 @@
   line-height: 1.15;
   padding: 2px 0;
   position: relative;
-  overflow: visible;
+  overflow: clip;
   cursor: pointer;
   user-select: none;
   touch-action: none;
@@ -1435,8 +1435,13 @@
 }
 
 .jantt-day-num {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: clip;
+  text-overflow: clip;
+  max-width: 100%;
+  text-align: center;
 }
 
 .jantt-day-num.is-boundary-num {

@@ -242,6 +242,109 @@ body {
   padding-bottom: 0;
 }
 
+/* Grouped Navbar Status, Collaboration & Tools Clusters */
+.nav-status-capsule {
+  display: inline-flex;
+  align-items: center;
+  background: var(--jantt-surface-solid, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 8px;
+  padding: 2px 4px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.nav-status-capsule .btn-autosave-badge,
+.nav-status-capsule .nav-cloud-trigger,
+.nav-status-capsule .btn-version-history {
+  border: none;
+  background: transparent;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+
+.nav-status-capsule .btn-autosave-badge:hover,
+.nav-status-capsule .nav-cloud-trigger:hover,
+.nav-status-capsule .btn-version-history:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.nav-collab-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--jantt-surface-solid, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--jantt-border, #E2E8F0);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-collab-group .btn-nav {
+  border: none;
+  background: transparent;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
+}
+
+.nav-collab-group .btn-nav:hover {
+  background: var(--jantt-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.nav-tools-group,
+.nav-search-ai-group,
+.nav-user-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.nav-theme-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--jantt-surface-solid, #121A2C);
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.15));
+  border-radius: 8px;
+  padding: 0 8px 0 10px;
+  height: 32px;
+  transition: all 0.15s ease;
+}
+
+.playground-app[data-mode="light"] .nav-theme-capsule {
+  background: #FFFFFF;
+  border-color: #CBD5E1;
+}
+
+.nav-theme-capsule:hover {
+  border-color: var(--jantt-accent, #0284C7);
+}
+
+.nav-theme-icon {
+  color: var(--jantt-accent, #38BDF8);
+  flex-shrink: 0;
+}
+
+.nav-theme-capsule .nav-theme-select {
+  border: none !important;
+  background: transparent !important;
+  height: 100% !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--jantt-text, #F8FAFC) !important;
+  outline: none !important;
+  cursor: pointer !important;
+  max-width: 125px;
+}
+
+.playground-app[data-mode="light"] .nav-theme-capsule .nav-theme-select {
+  color: #0F172A !important;
+}
+
 .jantt-scale-btn {
   display: inline-flex;
   align-items: center;
