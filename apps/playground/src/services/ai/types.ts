@@ -50,6 +50,7 @@ export interface CopilotMessage {
   diff?: PlanDiff | null;
   applied?: boolean;
   extractedPlan?: JanttData | null;
+  previousPlan?: JanttData | null;
   validationErrors?: string[];
   isStreaming?: boolean;
   error?: string;
@@ -91,4 +92,5 @@ export interface CopilotConfig {
   customBaseUrl?: string;
   proxyUrl?: string;
   temperature: number;
+  autoApply: boolean;
 }

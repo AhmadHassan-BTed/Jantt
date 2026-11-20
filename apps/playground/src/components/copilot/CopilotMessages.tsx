@@ -8,6 +8,7 @@ interface CopilotMessagesProps {
   pendingDiff: PendingPlanChange | null;
   onAcceptDiff: () => void;
   onRejectDiff: () => void;
+  onRevertDiff: (messageId: string) => void;
   onPromptClick: (prompt: string) => void;
 }
 
@@ -24,6 +25,7 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
   pendingDiff,
   onAcceptDiff,
   onRejectDiff,
+  onRevertDiff,
   onPromptClick
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -101,6 +103,7 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
                       applied={msg.applied}
                       onAccept={pendingDiff?.messageId === msg.id ? onAcceptDiff : undefined}
                       onReject={pendingDiff?.messageId === msg.id ? onRejectDiff : undefined}
+                      onRevert={msg.previousPlan ? () => onRevertDiff(msg.id) : undefined}
                     />
                   )}
                 </>

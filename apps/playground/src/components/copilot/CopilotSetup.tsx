@@ -20,6 +20,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
   const [customBaseUrl, setCustomBaseUrl] = useState(config.customBaseUrl || "");
   const [proxyUrl, setProxyUrl] = useState(config.proxyUrl || "");
   const [temperature, setTemperature] = useState(config.temperature);
+  const [autoApply, setAutoApply] = useState(config.autoApply);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const activeProviderDef = providers.find((p) => p.id === selectedProvider) || providers[0];
@@ -34,7 +35,8 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
       apiKey: apiKey.trim(),
       customBaseUrl: customBaseUrl.trim(),
       proxyUrl: proxyUrl.trim(),
-      temperature
+      temperature,
+      autoApply
     });
     setSavedSuccess(true);
     setTimeout(() => {
@@ -170,6 +172,20 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           <span className="copilot-form-hint">
             Lower values (0.1 - 0.3) generate strict, deterministic project schedules.
           </span>
+        </div>
+
+        <div className="copilot-form-group">
+          <label className="copilot-checkbox-row">
+            <input
+              type="checkbox"
+              checked={autoApply}
+              onChange={(e) => setAutoApply(e.target.checked)}
+              className="copilot-checkbox"
+            />
+            <span className="copilot-checkbox-label">
+              <strong>Live Auto-Commit</strong> — Immediately apply clean AI edits to the chart & JSON editor
+            </span>
+          </label>
         </div>
 
         <div className="copilot-setup-footer">

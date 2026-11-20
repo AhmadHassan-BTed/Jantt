@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, X, Settings, Trash2, ArrowLeft } from "lucide-react";
+import { Sparkles, X, Settings, Trash2, ArrowLeft, Zap } from "lucide-react";
 import type { UseCopilotReturn } from "../../hooks/useCopilot";
 import { CopilotMessages } from "./CopilotMessages";
 import { CopilotInput } from "./CopilotInput";
@@ -66,6 +66,21 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
               <>
                 <button
                   type="button"
+                  className={`copilot-auto-apply-pill ${copilot.config.autoApply ? "is-active" : ""}`}
+                  onClick={() => copilot.updateConfig({ autoApply: !copilot.config.autoApply })}
+                  title={
+                    copilot.config.autoApply
+                      ? "Live Auto-Commit active: valid AI changes are immediately applied to the chart"
+                      : "Manual Review active: click Apply Changes before updates take effect"
+                  }
+                  aria-pressed={copilot.config.autoApply}
+                >
+                  <Zap size={11} className={copilot.config.autoApply ? "is-active-icon" : ""} />
+                  <span>{copilot.config.autoApply ? "Live" : "Review"}</span>
+                </button>
+
+                <button
+                  type="button"
                   className="copilot-icon-btn"
                   onClick={copilot.clearHistory}
                   title="Clear conversation"
@@ -116,6 +131,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
                 pendingDiff={copilot.pendingDiff}
                 onAcceptDiff={copilot.acceptChange}
                 onRejectDiff={copilot.rejectChange}
+                onRevertDiff={copilot.revertChange}
                 onPromptClick={(prompt) => copilot.sendMessage(prompt)}
               />
 

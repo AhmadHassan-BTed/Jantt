@@ -11,6 +11,8 @@ import {
   setApiKey,
   getModelForProvider,
   setModelForProvider,
+  getAutoApply,
+  setAutoApply,
   clearAllCopilotStorage
 } from "./storage";
 
@@ -105,6 +107,91 @@ Full schedule:
     expect(result.source).toBe("none");
     expect(result.data).toBeNull();
     expect(result.textContent).toBe(textOnly);
+  });
+
+  it("strictly purges conversational pollution keys from root, meta, and tasks", () => {
+    const pollutedAiResponse = `Here is your updated schedule:
+
+\`\`\`json
+{
+  "$schema": "https://jantt.dev/schema/v1.json",
+  "explanation": "I shifted the schedule by 3 days",
+  "thought": "The user requested a 3 day shift",
+  "changes_made": ["task-1 shifted"],
+  "meta": {
+    "title": "Clean Project",
+    "summary": "This should not be in meta"
+  },
+  "tasks": [
+    {
+      "id": "t1",
+      "label": "Audit",
+      "category": "eng",
+      "start": "2026-11-20",
+      "end": "2026-11-23",
+      "reasoning": "Moved forward",
+      "ai_note": "Pollution"
+    }
+  ]
+}
+\`\`\``;
+
+    const result = extractJsonFromResponse(pollutedAiResponse);
+    expect(result.data).not.toBeNull();
+    const data = result.data as any;
+
+    // Root must NOT have pollution keys
+    expect(data.explanation).toBeUndefined();
+    expect(data.thought).toBeUndefined();
+    expect(data.changes_made).toBeUndefined();
+
+    // Meta must NOT have pollution keys
+    expect(data.meta.title).toBe("Clean Project");
+    expect(data.meta.summary).toBeUndefined();
+
+    // Task must NOT have pollution keys
+    expect(data.tasks[0].id).toBe("t1");
+    expect(data.tasks[0].reasoning).toBeUndefined();
+    expect(data.tasks[0].ai_note).toBeUndefined();
+  });
+
+  it("reconciles partial updates without losing existing categories or other tasks", () => {
+    const currentPlan: JanttData = {
+      meta: { title: "Master Plan" },
+      categories: {
+        eng: { label: "Engineering", color: "#3B82F6" },
+        des: { label: "Design", color: "#A855F7" }
+      },
+      people: [{ id: "p1", name: "Sarah" }],
+      tasks: [
+        { id: "t1", label: "Task 1", category: "eng", start: "2026-11-20", end: "2026-11-22", status: "not-started" },
+        { id: "t2", label: "Task 2", category: "des", start: "2026-11-23", end: "2026-11-25", status: "not-started" }
+      ]
+    };
+
+    // AI only emits update for t2
+    const partialAiResponse = `Marked Task 2 as completed.
+\`\`\`json
+{
+  "tasks": [
+    { "id": "t2", "status": "completed", "progress": 1.0 }
+  ]
+}
+\`\`\``;
+
+    const result = extractJsonFromResponse(partialAiResponse, currentPlan);
+    expect(result.data).not.toBeNull();
+    expect(result.data?.categories).toHaveProperty("eng");
+    expect(result.data?.categories).toHaveProperty("des");
+    expect(result.data?.people?.[0].name).toBe("Sarah");
+    expect(result.data?.tasks?.length).toBe(2);
+
+    const t1 = result.data?.tasks.find((t) => t.id === "t1");
+    const t2 = result.data?.tasks.find((t) => t.id === "t2");
+    expect(t1?.status).toBe("not-started");
+    expect(t2?.status).toBe("completed");
+    expect(t2?.progress).toBe(1.0);
+    expect(t2?.category).toBe("des"); // preserved from master!
   });
 });
 
@@ -212,5 +299,13 @@ describe("AI Copilot - storage", () => {
   it("persists model selection per provider", () => {
     setModelForProvider("gemini", "gemini-2.5-pro");
     expect(getModelForProvider("gemini", "gemini-2.5-flash")).toBe("gemini-2.5-pro");
+  });
+
+  it("persists auto-apply preference (defaults to true for seamless live editing)", () => {
+    expect(getAutoApply()).toBe(true);
+    setAutoApply(false);
+    expect(getAutoApply()).toBe(false);
+    setAutoApply(true);
+    expect(getAutoApply()).toBe(true);
   });
 });

@@ -177,12 +177,20 @@ ${JANTT_JSON_SCHEMA_RULES}
 ${planContext}
 \`\`\`
 
-## INSTRUCTIONS FOR YOUR OUTPUT
-1. If the user asks for changes to the plan, you MUST return the COMPLETE updated plan JSON wrapped inside a \`\`\`json ... \`\`\` code block.
-2. In addition to the JSON block, provide a clear, concise 1-2 sentence explanation of what you updated.
-3. PRESERVE all existing tasks, IDs, notes, and metadata unless the user explicitly asks to remove or change them.
-4. When adding new tasks, assign them unique IDs like "task-new-1", "task-audit-2", etc.
-5. Strictly adhere to ISO dates (YYYY-MM-DD), valid categories that exist in the "categories" dictionary, and acyclic dependencies.
-6. If the user asks a pure analytical question (e.g. "which tasks are on the critical path?", "who has the most workload?"), respond with text analysis only without outputting a JSON block.
+## INSTRUCTIONS FOR YOUR OUTPUT & ZERO-POLLUTION DIRECTIVE
+1. DUAL-RESPONSE SEPARATION:
+   - Provide your conversational reply, analytical answers, and high-level summary OUTSIDE of the \`\`\`json block.
+   - When making changes, output the updated plan JSON inside a \`\`\`json ... \`\`\` code block.
+2. STRICT JSON PURITY:
+   - The JSON block must contain 100% PURE, VALID Jantt schema JSON.
+   - NEVER inject conversational keys (e.g. "explanation", "summary", "reasoning", "changes_made", "thought") into the JSON root, meta, or task objects.
+   - NEVER overwrite a task's "notes" or "description" fields with your own commentary about what you changed. Task notes are reserved for actual project requirements.
+3. PRESERVATION & RECONCILIATION:
+   - PRESERVE all existing tasks, IDs, categories, people, and notes unless explicitly requested to remove or modify them.
+   - When adding new tasks, assign them unique IDs like "task-new-1", "task-qa-2", etc.
+4. VALIDATION SANITY:
+   - Strictly adhere to ISO dates (YYYY-MM-DD), valid categories that exist in the "categories" dictionary, and acyclic dependencies.
+5. PURE ANALYTICAL INQUIRIES:
+   - If the user asks a purely analytical or informational question (e.g. "which tasks are on the critical path?", "who has the most workload?"), answer with clear, structured text ONLY without emitting a JSON block.
 `;
 }

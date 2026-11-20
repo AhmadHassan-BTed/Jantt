@@ -19,7 +19,9 @@ import {
   getProxyUrl,
   setProxyUrl,
   getTemperature,
-  setTemperature
+  setTemperature,
+  getAutoApply,
+  setAutoApply
 } from "../services/ai/storage";
 import {
   getProviderAdapter,
@@ -48,6 +50,7 @@ export interface UseCopilotReturn {
   stopGeneration: () => void;
   acceptChange: () => void;
   rejectChange: () => void;
+  revertChange: (messageId: string) => void;
   clearHistory: () => void;
   updateConfig: (partial: Partial<CopilotConfig>) => void;
   availableProviders: ProviderDefinition[];
@@ -71,7 +74,8 @@ export function useCopilot({
       modelId: getModelForProvider(providerId, defaultModel),
       customBaseUrl: getCustomBaseUrl(providerId),
       proxyUrl: getProxyUrl(providerId),
-      temperature: getTemperature()
+      temperature: getTemperature(),
+      autoApply: getAutoApply()
     };
   });
 
@@ -118,6 +122,7 @@ export function useCopilot({
         if (partial.customBaseUrl !== undefined) setCustomBaseUrl(nextProvider, partial.customBaseUrl);
         if (partial.proxyUrl !== undefined) setProxyUrl(nextProvider, partial.proxyUrl);
         if (partial.temperature !== undefined) setTemperature(partial.temperature);
+        if (partial.autoApply !== undefined) setAutoApply(partial.autoApply);
       }
 
       return {
@@ -126,7 +131,8 @@ export function useCopilot({
         modelId: nextModel,
         customBaseUrl: nextBaseUrl,
         proxyUrl: nextProxy,
-        temperature: partial.temperature !== undefined ? partial.temperature : prev.temperature
+        temperature: partial.temperature !== undefined ? partial.temperature : prev.temperature,
+        autoApply: partial.autoApply !== undefined ? partial.autoApply : prev.autoApply
       };
     });
   }, []);
@@ -257,32 +263,59 @@ export function useCopilot({
             activeAbortRef.current = null;
 
             const finalContent = fullText || accumulatedResponse;
-            const extraction = extractJsonFromResponse(finalContent);
+            const extraction = extractJsonFromResponse(finalContent, parsedDataRef.current);
 
             if (extraction.data) {
               const validation = validate(extraction.data);
               if (validation.valid) {
                 const diff = computePlanDiff(parsedDataRef.current, extraction.data);
-                const pending: PendingPlanChange = {
-                  plan: extraction.data,
-                  diff,
-                  messageId: assistantMessageId
-                };
-                setPendingDiff(pending);
+                const beforePlan = parsedDataRef.current ? JSON.parse(JSON.stringify(parsedDataRef.current)) : null;
 
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? {
-                          ...msg,
-                          content: extraction.textContent || "I have prepared the updated project plan according to your specifications.",
-                          extractedPlan: extraction.data,
-                          diff,
-                          isStreaming: false
-                        }
-                      : msg
-                  )
-                );
+                if (activeConfig.autoApply && !isReadOnlyRef.current) {
+                  try {
+                    commitPlanRef.current(extraction.data);
+                    setMessages((prev) =>
+                      prev.map((msg) =>
+                        msg.id === assistantMessageId
+                          ? {
+                              ...msg,
+                              content: extraction.textContent || "Live changes applied to your project plan.",
+                              extractedPlan: extraction.data,
+                              previousPlan: beforePlan,
+                              diff,
+                              applied: true,
+                              isStreaming: false
+                            }
+                          : msg
+                      )
+                    );
+                    showToast(`Live plan update committed: ${diff.summary}`);
+                  } catch (err: unknown) {
+                    showToast(`Failed to auto-commit plan: ${err instanceof Error ? err.message : String(err)}`, true);
+                  }
+                } else {
+                  const pending: PendingPlanChange = {
+                    plan: extraction.data,
+                    diff,
+                    messageId: assistantMessageId
+                  };
+                  setPendingDiff(pending);
+
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? {
+                            ...msg,
+                            content: extraction.textContent || "I have prepared the updated project plan according to your specifications.",
+                            extractedPlan: extraction.data,
+                            previousPlan: beforePlan,
+                            diff,
+                            isStreaming: false
+                          }
+                        : msg
+                    )
+                  );
+                }
               } else {
                 const errors = validation.errors.map((e) => `${e.path}: ${e.message}`);
                 setMessages((prev) =>
@@ -370,6 +403,31 @@ export function useCopilot({
     showToast("Changes dismissed.");
   }, [pendingDiff, showToast]);
 
+  // Revert an applied change
+  const revertChange = useCallback(
+    (messageId: string) => {
+      const targetMsg = messages.find((m) => m.id === messageId);
+      if (!targetMsg?.previousPlan) {
+        showToast("No restore snapshot available for this change.", true);
+        return;
+      }
+      if (isReadOnlyRef.current) {
+        showToast("Cannot revert plan in read-only mode.", true);
+        return;
+      }
+      try {
+        commitPlanRef.current(targetMsg.previousPlan);
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === messageId ? { ...msg, applied: false } : msg))
+        );
+        showToast("Plan change reverted successfully.");
+      } catch (err: unknown) {
+        showToast(`Failed to revert plan: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    },
+    [messages, showToast]
+  );
+
   // Clear History
   const clearHistory = useCallback(() => {
     stopGeneration();
@@ -387,6 +445,7 @@ export function useCopilot({
     stopGeneration,
     acceptChange,
     rejectChange,
+    revertChange,
     clearHistory,
     updateConfig,
     availableProviders,

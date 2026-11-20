@@ -1,11 +1,12 @@
 import React from "react";
-import { Check, X, PlusCircle, Edit3, Trash2 } from "lucide-react";
+import { Check, X, PlusCircle, Edit3, Trash2, RotateCcw } from "lucide-react";
 import type { PlanDiff } from "../../services/ai/types";
 
 interface CopilotDiffPreviewProps {
   diff: PlanDiff;
   onAccept?: () => void;
   onReject?: () => void;
+  onRevert?: () => void;
   applied?: boolean;
 }
 
@@ -13,14 +14,23 @@ export const CopilotDiffPreview: React.FC<CopilotDiffPreviewProps> = ({
   diff,
   onAccept,
   onReject,
+  onRevert,
   applied
 }) => {
   return (
     <div className="copilot-diff-card">
       <div className="copilot-diff-header">
         <span className="copilot-diff-title">Plan Changes Summary</span>
-        {applied === true && <span className="copilot-diff-badge is-applied">Applied ✓</span>}
-        {applied === false && <span className="copilot-diff-badge is-rejected">Dismissed ✗</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {applied === true && <span className="copilot-diff-badge is-applied">Applied to Plan ✓</span>}
+          {applied === true && onRevert && (
+            <button type="button" className="copilot-btn-revert" onClick={onRevert} title="Revert to previous plan state">
+              <RotateCcw size={11} />
+              <span>Revert</span>
+            </button>
+          )}
+          {applied === false && <span className="copilot-diff-badge is-rejected">Dismissed ✗</span>}
+        </div>
       </div>
 
       <p className="copilot-diff-summary-text">{diff.summary}</p>
