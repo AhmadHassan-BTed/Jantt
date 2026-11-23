@@ -5,4 +5,5 @@ export * from "./DateFilterBar";
 export * from "./MobileNavbar";
 export * from "./MobileBottomNav";
 export * from "./MobileActionMenuSheet";
+export * from "./MobileQuickFab";
 export * from "./OrientationBanner";

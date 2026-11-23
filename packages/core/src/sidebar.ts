@@ -120,6 +120,8 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
   let closed = false;
   let form: SidebarForm | null = null;
   let discardArmed = false;
+  const openedAt = Date.now();
+  let pointerDownTarget: EventTarget | null = null;
 
   const restoreFocus = () => {
     const active = document.activeElement;
@@ -169,8 +171,18 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
   document.addEventListener("keydown", onKeyDown);
 
   if (!isCustomContainer) {
+    backdrop.addEventListener("pointerdown", (e) => {
+      pointerDownTarget = e.target;
+    });
     backdrop.addEventListener("click", (e) => {
-      if (e.target === backdrop) requestDismiss();
+      if (e.target !== backdrop) return;
+      if (pointerDownTarget && pointerDownTarget !== backdrop) {
+        pointerDownTarget = null;
+        return;
+      }
+      if (Date.now() - openedAt < 180 && pointerDownTarget !== backdrop) return;
+      pointerDownTarget = null;
+      requestDismiss();
     });
   }
 

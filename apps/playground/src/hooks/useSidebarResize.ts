@@ -5,6 +5,7 @@ import { storageService } from "../services/storage";
 interface UseSidebarResizeOptions {
   initialWidth: number;
   initialCollapsed: boolean;
+  isMobile?: boolean;
 }
 
 const MIN_SIDEBAR_WIDTH = 280;
@@ -18,20 +19,30 @@ function clampSidebarWidth(width: number): number {
   return Math.round(Math.max(MIN_SIDEBAR_WIDTH, Math.min(max, safe)));
 }
 
-export function useSidebarResize({ initialWidth, initialCollapsed }: UseSidebarResizeOptions) {
+export function useSidebarResize({ initialWidth, initialCollapsed, isMobile = false }: UseSidebarResizeOptions) {
   const [sidebarWidth, setSidebarWidthState] = useState<number>(() => clampSidebarWidth(initialWidth));
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(initialCollapsed);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(isMobile ? true : initialCollapsed);
   const [isResizing, setIsResizing] = useState(false);
   /** Removes the listeners of an in-flight drag; also used for unmount cleanup. */
   const stopDragRef = useRef<(() => void) | null>(null);
+  const wasMobileRef = useRef(isMobile);
 
   const setSidebarWidth = useCallback((width: number) => {
     setSidebarWidthState(clampSidebarWidth(width));
   }, []);
 
+  // Entering mobile mode always starts with the JSON drawer closed so the visual workspace is visible first.
   useEffect(() => {
+    if (isMobile && !wasMobileRef.current) {
+      setIsSidebarCollapsed(true);
+    }
+    wasMobileRef.current = isMobile;
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (isMobile) return;
     storageService.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, String(isSidebarCollapsed));
-  }, [isSidebarCollapsed]);
+  }, [isSidebarCollapsed, isMobile]);
 
   // Width is persisted once per drag (on release), not on every pointer move.
   useEffect(() => {

@@ -4,7 +4,7 @@
 
 <br />
 
-# Create Interactive Gantt Charts with AI — No Code Required.
+# Create Interactive Gantt Charts with AI: No Code Required.
 
 **Simple enough to organize your semester, wedding, or team meeting in 60 seconds.**  
 **Powerful enough for working-calendar Critical Path analysis, 100,000-task Canvas rendering, and Microsoft Project / Primavera P6 teams.**
@@ -56,7 +56,7 @@ Most timeline tools force an unfair trade-off: spreadsheets break the moment one
 
 ## Create and Edit Gantt Charts with AI (Built-In Copilot)
 
-Stop wrestling with spreadsheet rows or begging chatbots for fragile SVG/React code. Jantt ships a **built-in AI Copilot** directly inside the live workspace — just open the Copilot drawer and describe what you want in plain English.
+Stop wrestling with spreadsheet rows or begging chatbots for fragile SVG/React code. Jantt ships a **built-in AI Copilot** directly inside the live workspace: just open the Copilot drawer and describe what you want in plain English.
 
 ### How It Works in 3 Steps
 1. **Describe or Paste Anything in Plain English:** Type a goal, paste messy meeting notes, or ask to push deadlines, flag urgent risks, rebalance workloads, or add milestones.
@@ -64,7 +64,7 @@ Stop wrestling with spreadsheet rows or begging chatbots for fragile SVG/React c
 3. **Apply in One Click:** Accept the change with full **Undo / Redo** support. Dependencies automatically cascade, working days recalculate, and all 6 views update immediately.
 
 ### Bring Your Own Key (10 Providers) or Run 100% Free & Local
-Your API keys stay strictly in your browser's `localStorage` and connect directly to your provider — never through a Jantt proxy. **Live dynamic model discovery** (`/models` and Ollama `/api/tags`) automatically fetches the latest models from your account with instant search and context-window tags.
+Your API keys stay strictly in your browser's `localStorage` and connect directly to your provider: never through a Jantt proxy. **Live dynamic model discovery** (`/models` and Ollama `/api/tags`) automatically fetches the latest models from your account with instant search and context-window tags.
 
 | Provider Category | Supported Providers |
 | :--- | :--- |
@@ -87,7 +87,7 @@ Jantt is not just for Fortune 500 schedulers or software engineers. Open [the li
 
 ### Organizing for Students, PhD/MS Applicants & Researchers
 - **University & Scholarship Pipelines:** Track PhD/MS deadlines, GRE/IELTS prep, Statement of Purpose drafts, recommendation letter reminders, and application fees in one calm timeline.
-- **Semester, Thesis & Exam Planning:** Map coursework, lab experiments, advisor sign-off milestones, and revision weeks — then flip to **Checklist View** each morning to tick off today's work with one click.
+- **Semester, Thesis & Exam Planning:** Map coursework, lab experiments, advisor sign-off milestones, and revision weeks, then flip to **Checklist View** each morning to tick off today's work with one click.
 - **Zero Cost for Students:** Free forever, instant browser auto-save, and one-click JSON/CSV/PDF backup for advisor check-ins.
 
 ### Personal Life Organizers, Freelancers & Everyday Planning
@@ -102,10 +102,10 @@ Jantt is not just for Fortune 500 schedulers or software engineers. Open [the li
 - **Notes Right Next to Tasks:** Keep Markdown meeting notes, specs, and decisions pinned alongside the timeline with clickable `@person` and `/task` references.
 
 ### Engineering Teams & Program Managers
-- **Working-Calendar-Aware Critical Path (CPM):** Schedule cascades, Critical Path, float calculations, Resource Leveling, and DCMA-14 audits all honor the same working calendars — Mon–Fri (`standard`), Mon–Thu (`compressed_4x10`), 24/7 (`continuous`), US/UK/EU/CA/AU regional statutory holidays, custom named calendars, and per-person calendars.
+- **Working-Calendar-Aware Critical Path (CPM):** Schedule cascades, Critical Path, float calculations, Resource Leveling, and DCMA-14 audits all honor the same working calendars: Mon-Fri (`standard`), Mon-Thu (`compressed_4x10`), 24/7 (`continuous`), US/UK/EU/CA/AU regional statutory holidays, custom named calendars, and per-person calendars.
 - **Full ANSI/PMI Dependency Math:** Finish-to-Start (`FS`), Start-to-Start (`SS`), Finish-to-Finish (`FF`), and Start-to-Finish (`SF`) links with positive lags, negative leads, and `locked: true` hard milestones.
 - **No More Expensive Legacy Viewer Seats:** Import and export **Microsoft Project `.xml`** and **Oracle Primavera P6 `.xer`** schedules directly in the browser or CLI.
-- **Executive Analytics Built In:** Earned Value Management (**EVM — ANSI/EIA-748**), **DCMA-14** schedule health grading (`A`–`F`), **PERT** 3-point estimates, **5,000-run Monte Carlo** risk simulation, and automated **Resource Leveling** with preview before apply.
+- **Executive Analytics Built In:** Earned Value Management (**EVM: ANSI/EIA-748**), **DCMA-14** schedule health grading (`A`-`F`), **PERT** 3-point estimates, **5,000-run Monte Carlo** risk simulation, and automated **Resource Leveling** with preview before apply.
 
 ### Developers & Autonomous AI Agents
 - **JSON-as-Interface (10x Fewer LLM Tokens):** Instead of asking AI models to hallucinate brittle React JSX or SVG coordinate math, models emit clean, validated Jantt JSON conforming to a formal JSON Schema (`schema/v1.json`).
@@ -131,7 +131,7 @@ Edit a task in any view and every other view updates instantaneously. **Every pa
 
 ## Visual Showcase & Curated Themes
 
-Jantt features **7 handcrafted Swiss Modernism themes** (grouped cleanly into Dark and Light palettes) powered by CSS custom properties — zero visual clutter, zero emojis, crisp OLED readability.
+Jantt features **7 handcrafted Swiss Modernism themes** (grouped cleanly into Dark and Light palettes) powered by CSS custom properties: zero visual clutter, zero emojis, crisp OLED readability.
 
 <div align="center">
 
@@ -213,8 +213,8 @@ Jantt features **7 handcrafted Swiss Modernism themes** (grouped cleanly into Da
 Use Jantt completely offline with zero account, or collaborate live with teammates for free:
 
 - **Instant Local Mode (Zero Account):** Open the web app and start building immediately. Every edit auto-saves locally in your browser, and every view remembers your scroll, zoom, and filters.
-- **Free Real-Time Cloud Rooms:** Sign in with **GitHub OAuth** (minimal `read:user` scope — no passwords, no Google tracking) to claim your `@username`, create live shared cloud rooms, invite collaborators with **Owner**, **Editor**, or **Viewer** roles, and merge concurrent edits safely via ACID transactions and a 3-way CRDT reconciler.
-- **Compressed Share Links:** Share any plan as a self-contained, `fflate`-compressed URL snapshot — zero server required for read-only viewing.
+- **Free Real-Time Cloud Rooms:** Sign in with **GitHub OAuth** (minimal `read:user` scope: no passwords, no Google tracking) to claim your `@username`, create live shared cloud rooms, invite collaborators with **Owner**, **Editor**, or **Viewer** roles, and merge concurrent edits safely via ACID transactions and a 3-way CRDT reconciler.
+- **Compressed Share Links:** Share any plan as a self-contained, `fflate`-compressed URL snapshot: zero server required for read-only viewing.
 - **Zero Database ID Leakage:** `sanitizePlanForJson` recursively strips private UIDs, secrets, and room tokens before any write or export. Only clean canonical `@username` mentions appear in JSON.
 - **Dual-Mode People Manager:** Assign tasks to real `@username` collaborators or offline personas (clients, contractors, advisors) without requiring them to create an account.
 - **Portable Forever:** Import or export raw **JSON**, **RFC-4180 CSV**, **Microsoft Project `.xml`**, **Oracle Primavera P6 `.xer`**, **standalone SVG**, or print-ready **Executive HTML/PDF Booklets** anytime.
@@ -824,4 +824,4 @@ If Jantt saves you hours of fighting spreadsheets or expensive project managemen
 
 ## License
 
-Licensed under the **MIT License** — see [`LICENSE`](./LICENSE) for details.
+Licensed under the **MIT License**: see [`LICENSE`](./LICENSE) for details.

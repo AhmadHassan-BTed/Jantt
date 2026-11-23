@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import {
   type Task,
   type JanttData,
@@ -59,6 +59,7 @@ export function useTaskDetailSidebar({
   autoCascade
 }: UseTaskDetailSidebarOptions) {
   const activeSidebarRef = useRef<{ close: () => void } | null>(null);
+  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const parsedDataRef = useRef(parsedData);
   parsedDataRef.current = parsedData;
   const activeThemeRef = useRef(activeTheme);
@@ -76,6 +77,7 @@ export function useTaskDetailSidebar({
   const closeSidebar = useCallback(() => {
     const sidebar = activeSidebarRef.current;
     activeSidebarRef.current = null;
+    setIsTaskDetailOpen(false);
     try {
       sidebar?.close();
     } catch {
@@ -123,6 +125,7 @@ export function useTaskDetailSidebar({
         readOnly: readOnlyRef.current,
         onClose: () => {
           if (activeSidebarRef.current === sidebarInstance) activeSidebarRef.current = null;
+          setIsTaskDetailOpen(false);
         },
         onSave: (updatedTask) => {
           if (readOnlyRef.current) {
@@ -153,11 +156,14 @@ export function useTaskDetailSidebar({
       });
 
       activeSidebarRef.current = sidebarInstance;
+      setIsTaskDetailOpen(true);
     },
     [closeSidebar]
   );
 
   return {
-    openTaskDetailSidebar
+    openTaskDetailSidebar,
+    isTaskDetailOpen,
+    closeTaskDetailSidebar: closeSidebar
   };
 }

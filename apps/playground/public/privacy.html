@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Jantt Privacy Policy</title>
+    <meta name="description" content="Privacy policy for Jantt, the local-first AI Gantt and timeline planner." />
+    <style>
+      :root {
+        --bg: #090e1a;
+        --surface: #10172a;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --border: rgba(148, 163, 184, 0.18);
+        --accent: #38bdf8;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #ffffff;
+          --surface: #f8fafc;
+          --text: #0f172a;
+          --muted: #475569;
+          --border: #cbd5e1;
+          --accent: #0284c7;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+      }
+
+      main {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+
+      header {
+        margin-bottom: 32px;
+      }
+
+      h1 {
+        font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
+        font-size: 32px;
+        margin: 0 0 8px;
+      }
+
+      h2 {
+        font-size: 18px;
+        margin-top: 32px;
+        margin-bottom: 8px;
+        color: var(--accent);
+      }
+
+      p,
+      li {
+        color: var(--text);
+        font-size: 15px;
+      }
+
+      ul {
+        padding-left: 20px;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px 24px;
+        margin: 16px 0;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Jantt Privacy Policy</h1>
+        <p class="muted">Last updated: November 2026</p>
+      </header>
+
+      <p>
+        Jantt is a local-first planning application. Your plans, preferences, snapshots, and Bring
+        Your Own Key (BYOK) AI credentials live in your own browser storage. There is no Jantt
+        user account and no Jantt backend that stores your plan data.
+      </p>
+
+      <h2>1. Local-first storage</h2>
+      <div class="card">
+        <p>
+          Plans, project lists, theme and layout preferences, version-history snapshots, and BYOK
+          AI provider keys are stored in the browser (localStorage and IndexedDB) on the device
+          you use. Jantt never uploads them to a Jantt server. Clearing browser storage removes
+          them permanently.
+        </p>
+      </div>
+
+      <h2>2. BYOK AI Copilot</h2>
+      <div class="card">
+        <p>
+          Prompts and plan snapshots are sent directly from your browser to the AI provider you
+          choose (Gemini, OpenAI, Anthropic, Groq, DeepSeek, OpenRouter, Mistral, xAI, a custom
+          HTTPS endpoint, or a local Ollama instance). They never pass through Jantt servers.
+          Your provider API key is stored only in your browser.
+        </p>
+      </div>
+
+      <h2>3. Optional cloud rooms</h2>
+      <div class="card">
+        <p>
+          Cloud collaboration is opt-in. When you create or join a cloud room, Jantt uses GitHub
+          OAuth with the <code>read:user</code> scope for identity and Firebase Realtime
+          Database solely to synchronize live plan edits between collaborators. Room data is
+          stored in Firebase under the room you create. You can leave or delete a room at any
+          time from within the app.
+        </p>
+      </div>
+
+      <h2>4. No ads and no tracking</h2>
+      <div class="card">
+        <p>
+          Jantt contains no advertising, no third-party analytics trackers, and no sale of user
+          data. The only network requests are to the services you explicitly use: Firebase, the
+          GitHub API, your chosen AI provider, and remote plan imports you request.
+        </p>
+      </div>
+
+      <h2 id="data-deletion">5. Account and data deletion</h2>
+      <div class="card">
+        <p>You can delete your Jantt local data, cloud rooms, or optional sign-in account at any time:</p>
+        <ul>
+          <li>
+            <strong>Local device data:</strong> Clear site data (or uninstall the Android app / clear app storage) to
+            permanently remove all local plans, notes, snapshots, preferences, and BYOK API keys stored on your device.
+          </li>
+          <li>
+            <strong>Cloud rooms:</strong> Open the Plan Manager or Cloud Room settings in Jantt and delete any cloud
+            room you own. Deleting a room immediately removes the room document and revokes member access in Firebase.
+          </li>
+          <li>
+            <strong>Optional GitHub sign-in account:</strong> Sign out inside Jantt, revoke Jantt's OAuth authorization
+            in your GitHub account settings, and email
+            <a href="mailto:ahmadhassan.bted@gmail.com">ahmadhassan.bted@gmail.com</a> with your GitHub username to
+            request immediate deletion of your Firebase authentication record and profile metadata.
+          </li>
+        </ul>
+        <p>
+          <strong>Data deleted vs. retained:</strong> Upon account deletion, your Firebase authentication record,
+          linked GitHub profile metadata (username, display name, user ID), and any cloud rooms you request to remove
+          are permanently deleted within 7 days. No personal data is retained after deletion.
+        </p>
+      </div>
+
+      <h2>6. Contact</h2>
+      <div class="card">
+        <p>
+          Questions about this policy can be sent to
+          <a href="mailto:ahmadhassan.bted@gmail.com">ahmadhassan.bted@gmail.com</a>.
+        </p>
+      </div>
+    </main>
+  </body>
+</html>

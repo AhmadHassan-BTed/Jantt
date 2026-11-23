@@ -74,6 +74,23 @@ export function tintColor(color: string, percent: number): string {
   return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
 }
 
+export function formatShortRange(start: string, end: string): string {
+  const parse = (value: string) => {
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) || !/^\d{4}-\d{2}-\d{2}$/.test(value) || date.toISOString().slice(0, 10) !== value
+      ? null
+      : date;
+  };
+  const a = parse(start);
+  const b = parse(end);
+  if (!a || !b) return start === end ? start : `${start} - ${end}`;
+  const fmt = (date: Date) => new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
+  if (start === end) return fmt(a);
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+    ? `${fmt(a).replace(/\s\d+$/, "")} ${a.getDate()}-${b.getDate()}`
+    : `${fmt(a)}-${fmt(b)}`;
+}
+
 export interface TaskStatusSelectProps {
   task: Task;
   value: string;
@@ -129,6 +146,7 @@ export function onActivateKey(action: () => void) {
 }
 
 interface KanbanViewProps {
+  isMobile?: boolean;
   parsedData: JanttData;
   kanbanSortRules: KanbanSortRule[];
   setKanbanSortRules: (rules: KanbanSortRule[]) => void;
@@ -141,6 +159,7 @@ interface KanbanViewProps {
   teams: Team[];
   selectedPersonFilter?: string;
   openTaskDetailSidebar: (task: Task) => void;
+  selectedMobileTaskId?: string | null;
   /** Must be the guarded plan commit (viewer / pending-login checks + undo snapshot). */
   handleChartCommit: (data: JanttData) => void;
   isViewer?: boolean;
@@ -156,6 +175,7 @@ const KANBAN_COLUMNS: ReadonlyArray<{ id: WorkflowStatus; label: string; shortLa
 ];
 
 export const KanbanView: React.FC<KanbanViewProps> = ({
+  isMobile = false,
   parsedData,
   kanbanSortRules,
   setKanbanSortRules,
@@ -168,6 +188,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   teams,
   selectedPersonFilter = "all",
   openTaskDetailSidebar,
+  selectedMobileTaskId = null,
   handleChartCommit,
   isViewer = false,
   onPromptFork
@@ -262,7 +283,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       <div className="kanban-sort-bar">
         <span className="kanban-sort-label">
           <SortAsc size={12} />
-          Sort by:
+          {isMobile ? "Sort:" : "Sort by:"}
         </span>
         {kanbanSortRules.map((rule, idx) => (
           <div key={idx} className="kanban-sort-chip">
@@ -320,7 +341,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
           >
             <Plus size={11} />
-            <span>Add Sort</span>
+            <span>{isMobile ? "Sort" : "Add Sort"}</span>
           </button>
         )}
       </div>
@@ -379,14 +400,15 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 const title = t.label || t.name || t.id;
                 const teamColor = sanitizeCssColor(assigneeInfo.team?.color, "var(--jantt-accent)");
+                const shortRange = formatShortRange(t.start, t.end);
                 return (
                   <div
                     key={t.id}
                     role="button"
                     tabIndex={0}
                     aria-label={`Open details for ${title}`}
-                    className={`kanban-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "kanban-card-dimmed" : ""}`}
-                    style={dragTaskId === t.id ? { opacity: 0.5 } : undefined}
+                    className={`kanban-card ${isMobile ? "is-mobile-card" : ""} ${isMobile && selectedMobileTaskId === t.id ? "is-mobile-selected" : ""} ${isCompleted ? "is-completed" : ""} ${isDimmed ? "kanban-card-dimmed" : ""}`}
+                    style={{ ...(dragTaskId === t.id ? { opacity: 0.5 } : {}), ...(isMobile ? { borderLeftColor: catColor } : {}) }}
                     draggable={!isViewer}
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/plain", t.id);
@@ -397,6 +419,18 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                     onClick={() => openTaskDetailSidebar(t)}
                     onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
                   >
+                    {isMobile ? <>
+                      <div className="kanban-mobile-row-top">
+                        {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
+                        <span className="kanban-mobile-title">{title}</span>
+                        {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
+                      </div>
+                      <div className="kanban-mobile-row-bottom">
+                        <span className="kanban-mobile-date">{shortRange}</span>
+                        {t.assignee && <span className="kanban-mobile-avatar" style={{ background: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
+                        <span className="kanban-mobile-status-wrap"><TaskStatusSelect task={t} value={col.id} disabled={isViewer} optionPrefix="" onStatusChange={(status) => moveTask(t.id, status)} /></span>
+                      </div>
+                    </> : <>
                     <div className="kanban-card-top">
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <span className="kanban-cat-dot" style={{ background: catColor }} />
@@ -483,6 +517,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                         onStatusChange={(status) => moveTask(t.id, status)}
                       />
                     </div>
+                    </>}
                   </div>
                 );
               })}

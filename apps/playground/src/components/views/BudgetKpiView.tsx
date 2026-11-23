@@ -40,6 +40,7 @@ import { tintColor } from "./KanbanView";
 import { MonteCarloModal } from "../modals/MonteCarloModal";
 
 interface BudgetKpiViewProps {
+  isMobile?: boolean;
   parsedData: JanttData;
   summaryKpiTasks: Task[];
   summarySortConfig: SummarySortConfig;
@@ -99,6 +100,7 @@ const SORTABLE_COLUMNS: ReadonlyArray<{ id: string; label: (essential: boolean, 
 ];
 
 export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
+  isMobile = false,
   parsedData,
   summaryKpiTasks,
   summarySortConfig,
@@ -254,55 +256,31 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   return (
     <div className="summary-view-container">
       {/* SECTION SWITCHER: Clearly distinguishes Essential (Hobbyist) vs Advanced PM (Professional) */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "12px",
-          marginBottom: "18px",
-          padding: "10px 14px",
-          borderRadius: "8px",
-          background: "var(--jantt-surface)",
-          border: "1px solid var(--jantt-border)"
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text)" }}>
-            View Dashboard:
-          </span>
-          <div role="group" aria-label="Dashboard detail level" style={{ display: "inline-flex", background: "var(--jantt-bg)", padding: "2px", borderRadius: "6px", border: "1px solid var(--jantt-border)" }}>
+      <div className="summary-mode-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", width: isMobile ? "100%" : undefined }}>
+          {!isMobile && (
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text)" }}>
+              View Dashboard:
+            </span>
+          )}
+          <div className="summary-mode-tabs" role="group" aria-label="Dashboard detail level">
             {(["essential", "advanced"] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setViewMode(mode)}
                 aria-pressed={viewMode === mode}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "5px 12px",
-                  borderRadius: "4px",
-                  border: "none",
-                  background: viewMode === mode ? "var(--jantt-accent)" : "transparent",
-                  color: viewMode === mode ? "var(--jantt-accent-contrast, #FFFFFF)" : "var(--jantt-text-muted)",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.15s ease"
-                }}
+                className={`summary-mode-tab ${viewMode === mode ? "is-active" : ""}`}
               >
                 {mode === "essential" ? <Sparkles size={13} /> : <BarChart3 size={13} />}
-                <span>{mode === "essential" ? "Essential (Simple & Visual)" : "Advanced PM (EVM & Audit)"}</span>
+                <span>{isMobile ? (mode === "essential" ? "Essential" : "Advanced PM") : mode === "essential" ? "Essential (Simple & Visual)" : "Advanced PM (EVM & Audit)"}</span>
               </button>
             ))}
           </div>
         </div>
 
         {/* Status pill summary & Monte Carlo Trigger */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+        <div className="summary-mode-status">
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
             <span>Pace: <strong style={{ color: evm.scheduleStatus === "ahead" ? "#10B981" : evm.scheduleStatus === "behind" ? "#EF4444" : "inherit" }}>{evm.scheduleStatus}</strong></span>
             <span>•</span>
@@ -318,19 +296,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           <button
             type="button"
             onClick={openMonteCarlo}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "5px 12px",
-              borderRadius: "6px",
-              border: "1px solid rgba(245, 158, 11, 0.35)",
-              background: "rgba(245, 158, 11, 0.12)",
-              color: "#D97706",
-              fontSize: "12px",
-              fontWeight: 700,
-              cursor: "pointer"
-            }}
+            className="summary-monte-carlo-btn"
             title="Run Monte Carlo Probabilistic Risk Simulation (2,000+ iterations)"
           >
             <Dice5 size={14} style={{ color: "#F59E0B" }} />
@@ -347,11 +313,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           <div className="summary-kpi-grid">
             {/* Card 1: Time Countdown */}
             <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "var(--jantt-accent)" }}>
+              <div className="kpi-icon-wrap" style={{ color: "var(--jantt-accent)", display: isMobile ? "none" : undefined }}>
                 <Clock size={20} />
               </div>
               <div className="kpi-data">
-                <span className="kpi-label">Time Remaining</span>
+                {isMobile ? <div className="kpi-card-head"><Clock size={14} style={{ color: "var(--jantt-accent)" }} /><span className="kpi-label">Time Remaining</span></div> : <span className="kpi-label">Time Remaining</span>}
                 <span className="kpi-value">{daysToForecast} Days</span>
                 <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
                   Forecast finish: {forecastFinish || "-"}
@@ -365,11 +331,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
 
             {/* Card 2: Budget & Remaining Cash */}
             <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "#10B981" }}>
+              <div className="kpi-icon-wrap" style={{ color: "#10B981", display: isMobile ? "none" : undefined }}>
                 <DollarSign size={20} />
               </div>
               <div className="kpi-data">
-                <span className="kpi-label">Budget &amp; Spend</span>
+                {isMobile ? <div className="kpi-card-head"><DollarSign size={14} style={{ color: "#10B981" }} /><span className="kpi-label">Budget &amp; Spend</span></div> : <span className="kpi-label">Budget &amp; Spend</span>}
                 <span className="kpi-value">{evm.bac > 0 ? money(evm.bac) : "No budget set"}</span>
                 <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
                   {!isActualCostKnown ? (
@@ -395,11 +361,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
 
             {/* Card 3: Overall Task Progress */}
             <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "#3B82F6" }}>
+              <div className="kpi-icon-wrap" style={{ color: "#3B82F6", display: isMobile ? "none" : undefined }}>
                 <CheckCircle2 size={20} />
               </div>
               <div className="kpi-data">
-                <span className="kpi-label">Work Done</span>
+                {isMobile ? <div className="kpi-card-head"><CheckCircle2 size={14} style={{ color: "#3B82F6" }} /><span className="kpi-label">Work Done</span></div> : <span className="kpi-label">Work Done</span>}
                 <span className="kpi-value">{evm.projectProgressPercent}%</span>
                 <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
                   {evm.taskCountCompleted} of {evm.taskCountTotal} tasks finished
@@ -409,11 +375,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
 
             {/* Card 4: Bottleneck Tasks (least float) */}
             <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical, #EF4444)" }}>
+              <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical, #EF4444)", display: isMobile ? "none" : undefined }}>
                 <Layers size={20} />
               </div>
               <div className="kpi-data">
-                <span className="kpi-label">Bottleneck Tasks</span>
+                {isMobile ? <div className="kpi-card-head"><Layers size={14} style={{ color: "var(--jantt-critical, #EF4444)" }} /><span className="kpi-label">Bottleneck Tasks</span></div> : <span className="kpi-label">Bottleneck Tasks</span>}
                 <span className="kpi-value" style={{ color: "var(--jantt-critical, #EF4444)" }}>
                   {cpm.criticalTaskIds.size} Tasks
                 </span>
@@ -426,6 +392,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
 
           {/* Quick Filter Action Bar for everyday productivity */}
           <div
+            className="summary-quick-filter-bar"
             role="group"
             aria-label="Quick filter"
             style={{
@@ -540,7 +507,39 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           </span>
         </div>
 
-        <table className="summary-table">
+        {isMobile && (
+          <>
+            <select
+              className="summary-mobile-sort-select"
+              aria-label="Sort breakdown tasks"
+              value={summarySortConfig.column || "wbs"}
+              onChange={(event) => setSummarySortConfig({ column: event.target.value, direction: summarySortConfig.direction || "asc" })}
+            >
+              <option value="wbs">WBS</option><option value="name">Name</option><option value="buffer">Float / Wiggle Room</option><option value="budget">Budget</option><option value="status">Status</option><option value="progress">Progress</option>
+            </select>
+            <div className="summary-mobile-card-list">
+              {displayTasks.map((task) => {
+                const metric = cpm.metrics.get(task.id);
+                const completed = isTaskDone(task);
+                const progress = completed ? 100 : Math.round(Math.min(1, Math.max(0, Number(task.progress) || 0)) * 100);
+                const blocked = blockedTaskIds.has(task.id);
+                const critical = Boolean(metric?.isCritical);
+                return <article className="summary-mobile-card" key={task.id}>
+                  <div className="summary-mobile-card-top">
+                    <span className="kanban-wbs-badge">{task.wbs || "-"}</span>
+                    <span className="summary-mobile-card-title">{task.label || task.name || task.id}</span>
+                    <span className={`kanban-prio-badge is-status-${(task.status || "not-started").replace("-", "")}`}>
+                      {completed ? "Done" : critical ? "Critical" : blocked ? "Blocked" : "Ready"}
+                    </span>
+                  </div>
+                  <div className="summary-mobile-card-bottom"><span>{metric?.totalFloat === undefined ? "Float -" : `Float ${formatFloatLabel(metric.totalFloat)}`}</span><span>{typeof task.estimatedCost === "number" ? money(task.estimatedCost) : "-"}</span><span>{progress}%</span></div>
+                  <div className="summary-mobile-progress-track"><div className="summary-mobile-progress-fill" style={{ width: `${progress}%` }} /></div>
+                </article>;
+              })}
+            </div>
+          </>
+        )}
+        {!isMobile && <table className="summary-table">
           <thead>
             <tr>
               {SORTABLE_COLUMNS.map((col) => {
@@ -765,7 +764,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               );
             })}
           </tbody>
-        </table>
+        </table>}
       </div>
 
       {!onOpenMonteCarlo && (

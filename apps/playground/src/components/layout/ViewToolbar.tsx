@@ -22,7 +22,9 @@ import {
   CheckSquare,
   Activity,
   StickyNote,
-  Crosshair
+  Crosshair,
+  PanelLeftOpen,
+  PanelLeftClose
 } from "lucide-react";
 import {
   getTodayISODate,
@@ -139,6 +141,7 @@ export const ViewNavBar: React.FC<ViewNavBarProps> = ({
 };
 
 export interface ViewToolbarProps {
+  isMobile?: boolean;
   activeView: ActiveView;
   taskCount: number;
   onAddTask?: () => void;
@@ -157,9 +160,13 @@ export interface ViewToolbarProps {
   /** Shows the timeline scale control inline in this bar (used on mobile where ViewNavBar is hidden). */
   showScaleInline?: boolean;
   onJumpToToday?: () => void;
+  /** Mobile Gantt Task & Category sidebar visibility state (collapsed by default on mobile). */
+  showTaskSidebar?: boolean;
+  onToggleTaskSidebar?: () => void;
 }
 
 export const ViewToolbar: React.FC<ViewToolbarProps> = ({
+  isMobile = false,
   activeView,
   taskCount,
   onAddTask,
@@ -176,10 +183,13 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   onExportCsv,
   readOnly = false,
   showScaleInline = false,
-  onJumpToToday
+  onJumpToToday,
+  showTaskSidebar = false,
+  onToggleTaskSidebar
 }) => {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const filterPopoverRef = useRef<HTMLDivElement>(null);
   const filterTriggerRef = useRef<HTMLButtonElement>(null);
@@ -313,11 +323,294 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
     return person ? `Person: ${person.name}` : `Person: ${people.selectedPersonFilter}`;
   }, [people.selectedPersonFilter, people.teams, people.effectivePeople]);
 
+  const activeFilterChips = (
+    <>
+      {isDateActive && (
+        <div className="toolbar-filter-chip" title="Active date filter - click to clear">
+          <Calendar size={10} style={{ color: "#38BDF8" }} />
+          <span>
+            {dateFilter.dateFilterActiveSummary?.label
+              ? `${dateFilter.dateFilterActiveSummary.label} (${dateFilter.dateFilterActiveSummary.countText})`
+              : dateFilter.dateFilterMode === "today"
+              ? "Today"
+              : dateFilter.dateFilterMode === "week"
+              ? "This Week"
+              : dateFilter.dateFilterMode === "range"
+              ? `${dateFilter.dateFilterRangeStart || "Start"} → ${dateFilter.dateFilterRangeEnd || "End"}`
+              : "Date"}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              dateFilter.setDateFilterMode("all");
+              dateFilter.setDateFilterRangeStart("");
+              dateFilter.setDateFilterRangeEnd("");
+            }}
+            aria-label="Clear date filter"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )}
+
+      {isCriticalPathActive && (
+        <div className="toolbar-filter-chip is-amber" title="Critical path highlighting is active - click to toggle off">
+          <Zap size={10} style={{ color: "#D97706" }} />
+          <span>Critical Path ({criticalCount})</span>
+          <button
+            type="button"
+            onClick={() => viewport?.setShowCriticalPath(false)}
+            aria-label="Disable critical path"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )}
+
+      {personFilterLabel && (
+        <div className="toolbar-filter-chip" title="Active assignee or team filter - click to clear">
+          <Users size={10} style={{ color: "#38BDF8" }} />
+          <span>{personFilterLabel}</span>
+          <button
+            type="button"
+            onClick={() => people.setSelectedPersonFilter?.("all")}
+            aria-label="Remove person filter"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )}
+
+      {isCompletedActive && (
+        <div className="toolbar-filter-chip" title="Completed tasks display mode - click to reset">
+          <CheckCircle2 size={10} style={{ color: dateFilter.completedFilterMode === "filter" ? "#EF4444" : "#F59E0B" }} />
+          <span>Completed: {dateFilter.completedFilterMode === "filter" ? "Hidden" : "Dimmed"}</span>
+          <button
+            type="button"
+            onClick={() => dateFilter.setCompletedFilterMode?.("show")}
+            aria-label="Reset completed tasks filter"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )}
+
+      {isBehaviorActive && (
+        <div className="toolbar-filter-chip" title="Non-matching tasks display mode - click to reset">
+          <EyeOff size={10} style={{ color: "#818CF8" }} />
+          <span>Non-matching: Hidden</span>
+          <button
+            type="button"
+            onClick={() => dateFilter.setDateFilterBehavior("dim")}
+            aria-label="Reset non-matching filter"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )}
+
+      {hasAnyActiveFilter && (
+        <button
+          type="button"
+          className="toolbar-clear-all-btn"
+          onClick={clearAllFilters}
+          title="Clear all active filters"
+        >
+          <RotateCcw size={11} />
+          <span>Clear all</span>
+        </button>
+      )}
+    </>
+  );
+
   return (
-    <div className="view-toolbar">
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          ZONE 1: LEFT (Create, Search & Conditional Dynamic Filter Chips)
-          ───────────────────────────────────────────────────────────────────────────── */}
+    <div className={isMobile ? "view-toolbar is-mobile-toolbar" : "view-toolbar"}>
+      {isMobile && (
+        <>
+          <div className="mobile-toolbar-row">
+            {(activeView === "gantt" || activeView === "canvas") && (
+              <>
+                {activeView === "gantt" && onToggleTaskSidebar && (
+                  <button
+                    type="button"
+                    className={`mobile-toolbar-icon-btn ${showTaskSidebar ? "is-active" : ""}`}
+                    onClick={onToggleTaskSidebar}
+                    aria-label={showTaskSidebar ? "Hide Task & Category sidebar" : "Show Task & Category sidebar"}
+                    aria-pressed={showTaskSidebar}
+                    title={showTaskSidebar ? "Hide Task & Category sidebar" : "Show Task & Category sidebar"}
+                  >
+                    {showTaskSidebar ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+                  </button>
+                )}
+                {onJumpToToday && (
+                  <button
+                    type="button"
+                    className="toolbar-today-jump-btn mobile-toolbar-today-btn"
+                    onClick={onJumpToToday}
+                    title="Jump to today"
+                    aria-label="Jump to today"
+                  >
+                    <Crosshair size={12} style={{ color: "#EF4444" }} />
+                    <span className="mobile-today-label">Today</span>
+                  </button>
+                )}
+                {activeView === "gantt" && viewport && (
+                  <div className="toolbar-scale-group is-mobile-compact" role="group" aria-label="Timeline scale presets">
+                    {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((scale) => (
+                      <button
+                        key={scale}
+                        type="button"
+                        className={`toolbar-scale-btn ${viewport.currentScale === scale ? "is-active" : ""}`}
+                        aria-label={scale[0].toUpperCase() + scale.slice(1)}
+                        title={scale[0].toUpperCase() + scale.slice(1)}
+                        aria-pressed={viewport.currentScale === scale}
+                        onClick={() => {
+                          viewport.setCurrentDayWidth(undefined);
+                          viewport.setCurrentScale(scale);
+                        }}
+                      >
+                        {({ day: "D", week: "W", month: "M", quarter: "Q", year: "Y" } as const)[scale]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="mobile-toolbar-actions">
+                  {onSearchChange && (
+                    <button
+                      type="button"
+                      className={`mobile-toolbar-icon-btn ${isMobileSearchOpen || Boolean(searchQuery.trim()) ? "is-active" : ""}`}
+                      onClick={() => setIsMobileSearchOpen((open) => !open)}
+                      aria-label="Search tasks"
+                      aria-expanded={isMobileSearchOpen || Boolean(searchQuery.trim())}
+                    >
+                      <Search size={15} />
+                    </button>
+                  )}
+                  <button
+                    ref={filterTriggerRef}
+                    type="button"
+                    className={`mobile-toolbar-icon-btn ${totalActiveFiltersCount ? "is-active" : ""}`}
+                    onClick={() => setIsFilterPopoverOpen((open) => !open)}
+                    aria-label="Filters"
+                    aria-expanded={isFilterPopoverOpen}
+                    aria-haspopup="dialog"
+                  >
+                    <Filter size={15} />
+                    {totalActiveFiltersCount > 0 && <span className="mobile-toolbar-badge">{totalActiveFiltersCount}</span>}
+                  </button>
+                  {activeView === "gantt" && viewport && (
+                    <button
+                      ref={settingsTriggerRef}
+                      type="button"
+                      className={`mobile-toolbar-icon-btn ${isSettingsPopoverOpen ? "is-active" : ""}`}
+                      onClick={() => setIsSettingsPopoverOpen((open) => !open)}
+                      aria-label="Chart settings"
+                      aria-expanded={isSettingsPopoverOpen}
+                      aria-haspopup="dialog"
+                    >
+                      <SettingsIcon size={15} />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {(activeView === "kanban" || activeView === "tasks") && (
+              <>
+                {onSearchChange && (
+                  <div className="toolbar-search-box mobile-toolbar-search-wrap">
+                    <Search size={12} className="toolbar-search-icon" />
+                    <input
+                      type="text"
+                      className="toolbar-search-input"
+                      placeholder="Search tasks..."
+                      aria-label="Search tasks"
+                      value={searchQuery}
+                      onChange={(e) => onSearchChange(e.target.value)}
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        className="toolbar-search-clear"
+                        onClick={() => onSearchChange("")}
+                        title="Clear search"
+                        aria-label="Clear search"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <button
+                  ref={filterTriggerRef}
+                  type="button"
+                  className={`mobile-toolbar-icon-btn ${totalActiveFiltersCount ? "is-active" : ""}`}
+                  onClick={() => setIsFilterPopoverOpen((open) => !open)}
+                  aria-label="Filters"
+                  aria-expanded={isFilterPopoverOpen}
+                  aria-haspopup="dialog"
+                >
+                  <Filter size={15} />
+                  {totalActiveFiltersCount > 0 && <span className="mobile-toolbar-badge">{totalActiveFiltersCount}</span>}
+                </button>
+              </>
+            )}
+
+            {activeView === "summary" && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: "8px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text-muted)" }}>
+                  Project Health ({taskCount} tasks)
+                </span>
+                <button
+                  ref={filterTriggerRef}
+                  type="button"
+                  className={`toolbar-btn ${totalActiveFiltersCount > 0 ? "is-active" : ""}`}
+                  onClick={() => setIsFilterPopoverOpen((open) => !open)}
+                  aria-label="Filters"
+                  aria-expanded={isFilterPopoverOpen}
+                  aria-haspopup="dialog"
+                >
+                  <Filter size={12} />
+                  <span>Filters</span>
+                  {totalActiveFiltersCount > 0 && <span className="toolbar-badge-count">{totalActiveFiltersCount}</span>}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {(activeView === "gantt" || activeView === "canvas") && (isMobileSearchOpen || Boolean(searchQuery.trim())) && (
+            <div className="mobile-toolbar-search-row">
+              <div className="toolbar-search-box mobile-toolbar-search-wrap">
+                <Search size={12} className="toolbar-search-icon" />
+                <input
+                  type="text"
+                  className="toolbar-search-input"
+                  placeholder="Search tasks..."
+                  aria-label="Search tasks"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange?.(e.target.value)}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="toolbar-search-clear"
+                    onClick={() => onSearchChange?.("")}
+                    title="Clear search"
+                    aria-label="Clear search"
+                  >
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {hasAnyActiveFilter && <div className="mobile-toolbar-chips-row">{activeFilterChips}</div>}
+        </>
+      )}
+
+      {/* ZONE 1: LEFT (Desktop Create, Search & Conditional Dynamic Filter Chips) */}
+      {!isMobile && (
       <div className="view-toolbar-left">
         {/* Primary Add Task Button */}
         {onAddTask && !readOnly && (
@@ -358,109 +651,12 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
           </div>
         )}
 
-        {/* ── Dynamic Contextual Filter Chips (Only visible when active) ── */}
-        {isDateActive && (
-          <div className="toolbar-filter-chip" title="Active date filter - click to clear">
-            <Calendar size={10} style={{ color: "#38BDF8" }} />
-            <span>
-              {dateFilter.dateFilterActiveSummary?.label
-                ? `${dateFilter.dateFilterActiveSummary.label} (${dateFilter.dateFilterActiveSummary.countText})`
-                : dateFilter.dateFilterMode === "today"
-                ? "Today"
-                : dateFilter.dateFilterMode === "week"
-                ? "This Week"
-                : dateFilter.dateFilterMode === "range"
-                ? `${dateFilter.dateFilterRangeStart || "Start"} → ${dateFilter.dateFilterRangeEnd || "End"}`
-                : "Date"}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                dateFilter.setDateFilterMode("all");
-                dateFilter.setDateFilterRangeStart("");
-                dateFilter.setDateFilterRangeEnd("");
-              }}
-              aria-label="Clear date filter"
-            >
-              <X size={10} />
-            </button>
-          </div>
-        )}
-
-        {isCriticalPathActive && (
-          <div className="toolbar-filter-chip is-amber" title="Critical path highlighting is active - click to toggle off">
-            <Zap size={10} style={{ color: "#D97706" }} />
-            <span>Critical Path ({criticalCount})</span>
-            <button
-              type="button"
-              onClick={() => viewport?.setShowCriticalPath(false)}
-              aria-label="Disable critical path"
-            >
-              <X size={10} />
-            </button>
-          </div>
-        )}
-
-        {personFilterLabel && (
-          <div className="toolbar-filter-chip" title="Active assignee or team filter - click to clear">
-            <Users size={10} style={{ color: "#38BDF8" }} />
-            <span>{personFilterLabel}</span>
-            <button
-              type="button"
-              onClick={() => people.setSelectedPersonFilter?.("all")}
-              aria-label="Remove person filter"
-            >
-              <X size={10} />
-            </button>
-          </div>
-        )}
-
-        {isCompletedActive && (
-          <div className="toolbar-filter-chip" title="Completed tasks display mode - click to reset">
-            <CheckCircle2 size={10} style={{ color: dateFilter.completedFilterMode === "filter" ? "#EF4444" : "#F59E0B" }} />
-            <span>Completed: {dateFilter.completedFilterMode === "filter" ? "Hidden" : "Dimmed"}</span>
-            <button
-              type="button"
-              onClick={() => dateFilter.setCompletedFilterMode?.("show")}
-              aria-label="Reset completed tasks filter"
-            >
-              <X size={10} />
-            </button>
-          </div>
-        )}
-
-        {isBehaviorActive && (
-          <div className="toolbar-filter-chip" title="Non-matching tasks display mode - click to reset">
-            <EyeOff size={10} style={{ color: "#818CF8" }} />
-            <span>Non-matching: Hidden</span>
-            <button
-              type="button"
-              onClick={() => dateFilter.setDateFilterBehavior("dim")}
-              aria-label="Reset non-matching filter"
-            >
-              <X size={10} />
-            </button>
-          </div>
-        )}
-
-        {/* Clear All Active Filters Button */}
-        {hasAnyActiveFilter && (
-          <button
-            type="button"
-            className="toolbar-clear-all-btn"
-            onClick={clearAllFilters}
-            title="Clear all active filters"
-          >
-            <RotateCcw size={11} />
-            <span>Clear all</span>
-          </button>
-        )}
+        {activeFilterChips}
       </div>
+      )}
 
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          ZONE 2: CENTER (Timeline Time Scale — only inline on mobile when ViewNavBar is hidden)
-          ───────────────────────────────────────────────────────────────────────────── */}
-      {showScaleInline && (activeView === "gantt" || activeView === "canvas") && viewport && (
+      {/* ZONE 2: CENTER (Inline scale fallback when non-mobile compact) */}
+      {!isMobile && showScaleInline && (activeView === "gantt" || activeView === "canvas") && viewport && (
         <div className="view-toolbar-center">
           {onJumpToToday && (
             <button
@@ -500,8 +696,9 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
           ───────────────────────────────────────────────────────────────────────────── */}
       <div className="view-toolbar-right">
         <div className="toolbar-action-cluster">
-        {/* Filters Popover Trigger */}
+        {/* Filters Popover Trigger (desktop only; mobile trigger sits in .mobile-toolbar-row) */}
         <div className="toolbar-popover-container">
+          {!isMobile && (
           <button
             ref={filterTriggerRef}
             type="button"
@@ -518,6 +715,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
             )}
             <ChevronDown size={11} className={`toolbar-chevron ${isFilterPopoverOpen ? "is-open" : ""}`} />
           </button>
+          )}
 
           {/* Grouped Filter Popover Card */}
           {isFilterPopoverOpen && (
@@ -775,6 +973,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
         {/* Settings Popover (Gantt View) */}
         {activeView === "gantt" && viewport && (
           <div className="toolbar-popover-container">
+            {!isMobile && (
             <button
               ref={settingsTriggerRef}
               type="button"
@@ -787,6 +986,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
               <SettingsIcon size={13} />
               <span>Settings</span>
             </button>
+            )}
 
             {/* Chart Settings Popover Card */}
             {isSettingsPopoverOpen && (

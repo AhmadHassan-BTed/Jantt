@@ -43,6 +43,10 @@ export interface JanttProps {
   onError?: (error: Error) => void;
   disableDragOnTouch?: boolean;
   isMobile?: boolean;
+  /** When true (mobile), single tap selects a task and double tap opens its detail drawer. */
+  mobileDoubleTapToOpen?: boolean;
+  /** Hides the left Task & Category column so the timeline expands edge-to-edge with inline labels. */
+  hideLabelColumn?: boolean;
   /** Increment this counter to smoothly scroll the timeline viewport to the Today line. */
   scrollToTodayTrigger?: number;
   /** Optional scroll position restored when the chart mounts (e.g. returning from another view). */
@@ -163,6 +167,8 @@ export const Jantt: React.FC<JanttProps> = ({
   onError,
   disableDragOnTouch,
   isMobile,
+  mobileDoubleTapToOpen,
+  hideLabelColumn,
   scrollToTodayTrigger,
   initialScroll,
   onSaveScroll
@@ -237,6 +243,8 @@ export const Jantt: React.FC<JanttProps> = ({
     showToolbar,
     disableDragOnTouch,
     isMobile,
+    mobileDoubleTapToOpen,
+    hideLabelColumn,
     Boolean(renderDetail),
     Boolean(onOpenAutoSave),
     Boolean(onImportJson),
@@ -260,6 +268,8 @@ export const Jantt: React.FC<JanttProps> = ({
     showToolbar,
     disableDragOnTouch,
     isMobile,
+    mobileDoubleTapToOpen,
+    hideLabelColumn,
     onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
     onClearDateFilter: () => callbacksRef.current.onClearDateFilter?.(),
     onDayWidthChange: (w: number) => {

@@ -533,6 +533,10 @@ export interface JanttOptions {
   themeClassName?: string;
   className?: string;
   readOnly?: boolean;
+  /** On mobile, a single tap selects a task and a double tap opens its details. Default: false. */
+  mobileDoubleTapToOpen?: boolean;
+  /** Hides the left Task & Category column so the timeline expands full-width with inline bar and milestone labels. Default: false. */
+  hideLabelColumn?: boolean;
   searchQuery?: string;
   selectedDate?: string | null;
   showDateFilterBadge?: boolean;

@@ -7,12 +7,20 @@
 
     <!-- SEO Primary Meta Tags -->
     <meta name="title" content="Jantt - Free AI Gantt Chart Maker &amp; Declarative Timeline Workspace | No Code Required" />
-    <meta name="description" content="Create and edit interactive Gantt charts with AI in seconds — no code required, free forever. Built-in BYOK AI Copilot (Gemini, OpenAI, Claude, Groq, local Ollama) with diff preview, free real-time cloud rooms, working-calendar Critical Path, Kanban, Checklist, Notes, and MS Project / Primavera P6 import-export. Built for students, life organizers, team meetings, project managers, and developers." />
+    <meta name="description" content="Create and edit interactive Gantt charts with AI in seconds: no code required, free forever. Built-in BYOK AI Copilot (Gemini, OpenAI, Claude, Groq, local Ollama) with diff preview, free real-time cloud rooms, working-calendar Critical Path, Kanban, Checklist, Notes, and MS Project / Primavera P6 import-export. Built for students, life organizers, team meetings, project managers, and developers." />
     <meta name="keywords" content="create gantt chart with ai, free ai gantt chart generator, online gantt chart maker no sign up, free cloud gantt chart, student study planner timeline, phd application tracker, life organizer timeline, meeting roadmap planner, open source microsoft project alternative, primavera p6 xer viewer, working calendar critical path method, json gantt chart, react gantt chart mit, kanban board, mcp server gantt, ollama gantt chart" />
     <meta name="author" content="Ahmad Hassan" />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#0B111E" />
+    <meta name="theme-color" content="#090E1A" />
     <link rel="canonical" href="https://ahmadhassan-bted.github.io/Jantt/" />
+
+    <!-- Installable app metadata -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Jantt" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -31,10 +39,115 @@
     <meta name="twitter:image" content="https://raw.githubusercontent.com/AhmadHassan-BTed/Jantt/main/assets/screenshots/jantt-swiss-dark-overview.png" />
 
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="color-scheme" content="dark light" />
     <!-- Content-Security-Policy: installed at runtime for production builds by src/main.tsx
          (the Vite dev server needs an inline React Refresh preamble); see public/_headers. -->
+
+    <!-- Zero-script, CSP-safe branded boot splash. Removed by src/main.tsx after React mounts. -->
+    <style id="jantt-boot-splash-style">
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #090e1a;
+      }
+
+      #jantt-boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        background: #090e1a;
+        color: #f8fafc;
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        opacity: 1;
+        transition: opacity 180ms ease-out;
+      }
+
+      #jantt-boot-splash.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .jantt-boot-mark {
+        width: 64px;
+        height: 64px;
+        filter: drop-shadow(0 8px 28px rgba(56, 189, 248, 0.18));
+      }
+
+      .jantt-boot-wordmark {
+        font-family: "Space Grotesk", "Inter", system-ui, -apple-system, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.44em;
+        text-indent: 0.44em;
+        color: #e2e8f0;
+      }
+
+      .jantt-boot-track {
+        position: relative;
+        width: 112px;
+        height: 2px;
+        overflow: hidden;
+        border-radius: 2px;
+        background: rgba(148, 163, 184, 0.22);
+      }
+
+      .jantt-boot-track::after {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 38%;
+        border-radius: 2px;
+        background: #38bdf8;
+        animation: jantt-boot-progress 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+
+      @keyframes jantt-boot-progress {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(300%);
+        }
+      }
+
+      @media (prefers-color-scheme: light) and (display-mode: browser) {
+        html,
+        body,
+        #jantt-boot-splash {
+          background: #ffffff;
+        }
+
+        #jantt-boot-splash {
+          color: #0f172a;
+        }
+
+        .jantt-boot-wordmark {
+          color: #0f172a;
+        }
+
+        .jantt-boot-track {
+          background: #e2e8f0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #jantt-boot-splash {
+          transition: none;
+        }
+
+        .jantt-boot-track::after {
+          width: 100%;
+          animation: none;
+        }
+      }
+    </style>
 
     <!-- Typography Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -78,6 +191,19 @@
   <body>
     <noscript>Jantt needs JavaScript to run. Please enable it and reload the page.</noscript>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="jantt-boot-splash" aria-hidden="true">
+      <svg class="jantt-boot-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M 8.5 7.5 C 6.5 7.5 5.5 9 5.5 11.5 C 5.5 13.5 4.5 15 3.2 16 C 4.5 17 5.5 18.5 5.5 20.5 C 5.5 23 6.5 24.5 8.5 24.5" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <rect x="9.5" y="8.5" width="8" height="3" rx="1.5" fill="#38BDF8" />
+        <path d="M 17.5 10 L 19 10 L 19 14.5 L 20 14.5" stroke="#94A3B8" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <rect x="13.5" y="14" width="9" height="3" rx="1.5" fill="#3B82F6" />
+        <rect x="9.5" y="19.5" width="6.5" height="3" rx="1.5" fill="#10B981" />
+        <rect x="19.2" y="19.5" width="3" height="3" rx="0.6" transform="rotate(45 20.7 21)" fill="#F59E0B" />
+        <path d="M 23.5 7.5 C 25.5 7.5 26.5 9 26.5 11.5 C 26.5 13.5 27.5 15 28.8 16 C 27.5 17 26.5 18.5 26.5 20.5 C 26.5 23 25.5 24.5 23.5 24.5" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+      </svg>
+      <span class="jantt-boot-wordmark">JANTT</span>
+      <span class="jantt-boot-track" role="progressbar" aria-label="Loading Jantt"></span>
+    </div>
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

@@ -47,3 +47,13 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+
+# Android TWA packaging
+apps/android-twa/*.keystore
+apps/android-twa/*.jks
+apps/android-twa/*.aab
+apps/android-twa/*.apk
+apps/android-twa/app/
+apps/android-twa/build/
+apps/android-twa/.gradle/
+apps/android-twa/signing.properties

@@ -55,7 +55,7 @@ const FOCUS_RESTORE_ATTRS = ["data-task-id", "data-row-id", "data-date", "data-j
 
 /** Canvas descendants that own their pointer gestures (the canvas pan/marquee must not start). */
 const CANVAS_OWN_GESTURE_SELECTOR =
-  ".jantt-task-bar, .jantt-milestone, .jantt-progress-handle, .jantt-resize-handle, .jantt-link-port, .jantt-dep-hit, .jantt-link-remove-chip";
+  ".jantt-task-bar, .jantt-milestone, .jantt-milestone-label, .jantt-bar-outside-label, .jantt-progress-handle, .jantt-resize-handle, .jantt-link-port, .jantt-dep-hit, .jantt-link-remove-chip";
 
 /** Plans larger than this debounce search re-renders while typing; smaller plans filter instantly. */
 const SEARCH_DEBOUNCE_TASK_THRESHOLD = 200;
@@ -78,6 +78,7 @@ export class JanttRendererEngine {
   private controller!: InteractionController;
   private previewWireSvg: SVGPathElement | null = null;
   private activeSidebarInstance: { close: () => void } | null = null;
+  private lastLabelTaskTap: { id: string; time: number } | null = null;
 
   private resizeObserver: ResizeObserver | null = null;
   private lastObservedWidth = 0;
@@ -460,7 +461,7 @@ export class JanttRendererEngine {
     const dayOffset = diffDays(this.state.renderedStartDate, todayStr) + getTodayProgressFraction(now);
     const todayX = dayOffset * this.lastLayoutDayWidth;
     const labelCol = this.bodyWrap.querySelector<HTMLElement>(".jantt-label-column");
-    const labelW = labelCol ? labelCol.offsetWidth : this.state.labelWidth;
+    const labelW = labelCol ? labelCol.offsetWidth : (this.currentOptions.hideLabelColumn ? 0 : this.state.labelWidth);
     const visibleTimelineW = Math.max(0, this.bodyWrap.clientWidth - labelW);
     const maxScroll = Math.max(0, this.bodyWrap.scrollWidth - this.bodyWrap.clientWidth);
     const target = Math.max(0, Math.min(maxScroll, Math.round(todayX - visibleTimelineW / 2)));
@@ -796,24 +797,46 @@ export class JanttRendererEngine {
     gridContainer.style.width = `${canvasWidth}px`;
     gridContainer.style.height = `${totalCanvasHeight}px`;
 
-    // 8. Render Sticky Data Grid Table (the splitter lives inside the sticky column)
-    const { labelCol } = renderGridTable({
-      taskLayouts,
-      labelWidth: this.state.labelWidth,
-      headerHeight: header.totalHeight,
-      rowHeight: viewport.rowHeight,
-      gridContainer,
-      controller: this.controller,
-      showCritical: this.state.showCritical,
-      people: this.currentData.people,
-      teams: this.currentData.teams,
-      onTaskClick: (task: Task) => {
-        this.currentOptions.onTaskClick?.(task);
-        this.openTaskSidebar(task);
-      },
-      onAddTask: this.currentOptions.readOnly ? undefined : this.handleAddTask,
-      onLabelWidthChange: this.handleLabelWidthChange
-    });
+    const hideLabelColumn = Boolean(this.currentOptions.hideLabelColumn);
+    this.root.classList.toggle("jantt-label-col-hidden", hideLabelColumn);
+
+    // 8. Render Sticky Data Grid Table (omitted when hideLabelColumn is active)
+    const labelCol = hideLabelColumn
+      ? null
+      : renderGridTable({
+          taskLayouts,
+          labelWidth: this.state.labelWidth,
+          headerHeight: header.totalHeight,
+          rowHeight: viewport.rowHeight,
+          gridContainer,
+          controller: this.controller,
+          showCritical: this.state.showCritical,
+          people: this.currentData.people,
+          teams: this.currentData.teams,
+          onTaskClick: (task: Task) => {
+            if (this.currentOptions.mobileDoubleTapToOpen) {
+              const now = Date.now();
+              if (this.lastLabelTaskTap?.id === task.id && now - this.lastLabelTaskTap.time <= 420) {
+                this.lastLabelTaskTap = null;
+                this.currentOptions.onTaskClick?.(task);
+                this.openTaskSidebar(task);
+              } else {
+                this.lastLabelTaskTap = { id: task.id, time: now };
+                this.controller.selectTask(task.id, false);
+              }
+              return;
+            }
+            this.currentOptions.onTaskClick?.(task);
+            this.openTaskSidebar(task);
+          },
+          onTaskKeyOpen: (task: Task) => {
+            this.lastLabelTaskTap = null;
+            this.currentOptions.onTaskClick?.(task);
+            this.openTaskSidebar(task);
+          },
+          onAddTask: this.currentOptions.readOnly ? undefined : this.handleAddTask,
+          onLabelWidthChange: this.handleLabelWidthChange
+        }).labelCol;
 
     // 9. Render Timeline Grid Lines & Today Line
     const { gridLayer, todayLine } = renderTimelineGrid({
@@ -851,6 +874,7 @@ export class JanttRendererEngine {
         showCritical: this.state.showCritical,
         showBaselines: this.state.showBaselines,
         readOnly: this.currentOptions.readOnly,
+        showOutsideLabels: hideLabelColumn,
         people: this.currentData.people,
         teams: this.currentData.teams,
         controller: this.controller,
@@ -862,7 +886,11 @@ export class JanttRendererEngine {
 
     // 12. Swap the new body in only once it is fully built (a failed render keeps the previous one)
     const bodyWrap = this.ensureBodyWrap();
-    bodyWrap.replaceChildren(labelCol, timelineArea);
+    if (labelCol) {
+      bodyWrap.replaceChildren(labelCol, timelineArea);
+    } else {
+      bodyWrap.replaceChildren(timelineArea);
+    }
     this.lastTaskLayouts = taskLayouts;
 
     this.state.renderedDayWidth = this.state.currentDayWidth;

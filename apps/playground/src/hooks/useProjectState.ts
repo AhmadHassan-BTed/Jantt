@@ -416,10 +416,8 @@ export function useProjectState({
     [activateProject, commitProjects, showToast]
   );
 
-  const handleImportJsonFile = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const handleImportFile = useCallback(
+    (file: File) => {
       const reader = new FileReader();
       reader.onerror = () => {
         showToast(`Could not read "${file.name}".`, true);
@@ -463,9 +461,17 @@ export function useProjectState({
         }
       };
       reader.readAsText(file);
-      e.target.value = "";
     },
     [addAndOpenProject, showToast]
+  );
+
+  const handleImportJsonFile = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (file) handleImportFile(file);
+    },
+    [handleImportFile]
   );
 
   /**
@@ -523,6 +529,7 @@ export function useProjectState({
     handleRenameProject,
     handleDuplicateProject,
     handleDeleteProject,
+    handleImportFile,
     handleImportJsonFile,
     handleResetActiveProject,
     saveProjectData

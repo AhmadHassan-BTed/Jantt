@@ -173,6 +173,32 @@ describe("Touch & Mobile Interaction Controller", () => {
     expect(onTaskClick).toHaveBeenCalledWith(task);
   });
 
+  it("requires a same-task second touch tap when mobileDoubleTapToOpen is enabled", () => {
+    vi.useFakeTimers();
+    const onTaskClick = vi.fn();
+    const { controller, openModalHandler } = setupController({ mobileDoubleTapToOpen: true, onTaskClick });
+    const tap = (task: Task, pointerId: number) => {
+      controller.startDrag(pointer("pointerdown", { pointerType: "touch", pointerId }), task, "move");
+      window.dispatchEvent(pointer("pointerup", { pointerType: "touch", pointerId }));
+    };
+
+    tap(initialData.tasks[0], 20);
+    expect(openModalHandler).not.toHaveBeenCalled();
+    expect((controller as any).selectedTaskIds.has("task-1")).toBe(true);
+    expect(onTaskClick).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(200);
+    tap(initialData.tasks[0], 21);
+    expect(openModalHandler).toHaveBeenCalledWith(initialData.tasks[0]);
+    expect(onTaskClick).toHaveBeenCalledTimes(1);
+
+    tap(initialData.tasks[0], 22);
+    vi.advanceTimersByTime(50);
+    tap(initialData.tasks[1], 23);
+    expect(openModalHandler).toHaveBeenCalledTimes(1);
+    expect((controller as any).selectedTaskIds.has("task-2")).toBe(true);
+  });
+
   it("does NOT open modal when touch gesture is a scroll/pan swipe (movement > 12px)", () => {
     const { controller, openModalHandler } = setupController();
     const task = initialData.tasks[0];
@@ -991,6 +1017,18 @@ describe("Task sidebar (detail drawer)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores an immediate trailing backdrop click but dismisses after a fresh backdrop press", () => {
+    const { onClose } = open({ id: "t1", category: "dev", start: "2026-09-01", end: "2026-09-05" });
+    const backdrop = document.querySelector<HTMLElement>(".jantt-sidebar-backdrop")!;
+
+    backdrop.click();
+    expect(onClose).not.toHaveBeenCalled();
+
+    backdrop.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+    backdrop.click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("does not drop unsaved edits on Escape until confirmed", () => {
     const { sidebar, onClose } = open({ id: "t1", category: "dev", start: "2026-09-01", end: "2026-09-05" });
     expect(document.querySelector(".jantt-sidebar-backdrop")?.getAttribute("aria-modal")).toBe("true");
@@ -1039,5 +1077,38 @@ describe("Task sidebar (detail drawer)", () => {
     expect(backdrop.querySelector("[onmouseover]")).toBeNull();
     modal.close();
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the Task & Category column and renders outside labels for milestones and narrow bars when hideLabelColumn is true", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const data: JanttData = {
+      categories: { dev: { label: "Dev", color: "#3B82F6" } },
+      tasks: [
+        { id: "wide", label: "Wide Task Bar", category: "dev", start: "2026-09-01", end: "2026-09-14" },
+        { id: "short", label: "Short Task", category: "dev", start: "2026-09-15", end: "2026-09-16" },
+        { id: "ms", label: "Release Signoff", category: "dev", start: "2026-09-18", end: "2026-09-18", milestone: true }
+      ]
+    };
+
+    const chart = renderJantt(host, data, {
+      hideLabelColumn: true,
+      viewport: { dayWidth: 16 }
+    });
+
+    expect(host.querySelector(".jantt-label-column")).toBeNull();
+    expect(host.querySelector(".jantt-container")?.classList.contains("jantt-label-col-hidden")).toBe(true);
+    expect(host.querySelector('.jantt-milestone-label[data-task-id="ms"]')?.textContent).toBe("Release Signoff");
+    expect(host.querySelector('.jantt-bar-outside-label[data-task-id="short"]')?.textContent).toBe("Short Task");
+    expect(host.querySelector('.jantt-bar-outside-label[data-task-id="wide"]')).toBeNull();
+
+    // Toggling hideLabelColumn back to false restores the Task & Category column and removes outside labels
+    chart.update(data, { hideLabelColumn: false });
+    expect(host.querySelector(".jantt-label-column")).not.toBeNull();
+    expect(host.querySelector(".jantt-container")?.classList.contains("jantt-label-col-hidden")).toBe(false);
+    expect(host.querySelector(".jantt-milestone-label")).toBeNull();
+    expect(host.querySelector(".jantt-bar-outside-label")).toBeNull();
+
+    chart.destroy();
   });
 });

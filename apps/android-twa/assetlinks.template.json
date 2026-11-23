@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.ahmadhassan_bted.jantt",
+      "sha256_cert_fingerprints": [
+        "REPLACE_WITH_UPLOAD_KEY_SHA256_FINGERPRINT",
+        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256_FINGERPRINT"
+      ]
+    }
+  }
+]

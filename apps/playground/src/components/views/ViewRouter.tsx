@@ -17,6 +17,8 @@ import { ViewNavBar, ViewToolbar } from "../layout/ViewToolbar";
 import { EmptyChartState } from "../common/EmptyChartState";
 import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
+import { triggerHaptic } from "../../services/platform";
+import type { Task } from "@jantt/core";
 
 // Heavy, less-used views load on first use: the canvas renderer and the EVM / schedule-health
 // dashboard stay out of the startup bundle. (They are deliberately not re-exported from the
@@ -132,6 +134,25 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
   onPromptFork
 }) => {
   const [jumpToTodayCount, setJumpToTodayCount] = React.useState(0);
+  const [selectedMobileTaskId, setSelectedMobileTaskId] = React.useState<string | null>(null);
+  const [showMobileTaskList, setShowMobileTaskList] = React.useState(false);
+  const mobileTapRef = React.useRef<{ id: string; time: number } | null>(null);
+  const handleToggleMobileTaskList = React.useCallback(() => {
+    triggerHaptic("light");
+    setShowMobileTaskList((prev) => !prev);
+  }, []);
+  const handleMobileTaskOpen = React.useCallback((task: Task) => {
+    const now = Date.now();
+    const previous = mobileTapRef.current;
+    setSelectedMobileTaskId(task.id);
+    if (previous?.id === task.id && now - previous.time <= 420) {
+      mobileTapRef.current = null;
+      triggerHaptic("light");
+      taskDetail.openTaskDetailSidebar(task);
+      return;
+    }
+    mobileTapRef.current = { id: task.id, time: now };
+  }, [taskDetail.openTaskDetailSidebar]);
   const handleJumpToToday = React.useCallback(() => {
     setJumpToTodayCount((c) => c + 1);
   }, []);
@@ -163,6 +184,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
       {activeView !== "notes" && (
         <ViewToolbar
+          isMobile={Boolean(isMobile)}
           activeView={activeView}
           taskCount={parsedData.tasks.length}
           onAddTask={!isViewer ? tasks.handleAddNewTask : undefined}
@@ -187,6 +209,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           readOnly={isViewer}
           showScaleInline={Boolean(isMobile)}
           onJumpToToday={handleJumpToToday}
+          showTaskSidebar={showMobileTaskList}
+          onToggleTaskSidebar={isMobile ? handleToggleMobileTaskList : undefined}
         />
       )}
 
@@ -203,6 +227,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               filterTasksByDate={false}
               disableDragOnTouch={Boolean(isMobile)}
               isMobile={isMobile}
+              mobileDoubleTapToOpen={Boolean(isMobile)}
+              hideLabelColumn={Boolean(isMobile && !showMobileTaskList)}
               selectedDate={dateFilter.dateFilterActiveDate}
               onDateClick={(clickedDate) => {
                 if (clickedDate === getTodayISODate()) {
@@ -268,7 +294,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           {activeView === "canvas" && (
             <CanvasView
               parsedData={ganttDisplayData ?? parsedData}
-              onTaskClick={(task) => taskDetail.openTaskDetailSidebar(task)}
+              onTaskClick={isMobile ? handleMobileTaskOpen : taskDetail.openTaskDetailSidebar}
               activeTheme={viewport.activeTheme}
               isViewer={isViewer}
               onOpenScratchPlan={project.handleCreateLocalCopyFromData}
@@ -278,6 +304,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
           {activeView === "kanban" && (
             <KanbanView
+              isMobile={Boolean(isMobile)}
               parsedData={parsedData}
               kanbanSortRules={tasks.kanbanSortRules}
               setKanbanSortRules={tasks.setKanbanSortRules}
@@ -289,7 +316,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               effectivePeople={people.effectivePeople}
               teams={people.teams}
               selectedPersonFilter={people.selectedPersonFilter}
-              openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
+              openTaskDetailSidebar={isMobile ? handleMobileTaskOpen : taskDetail.openTaskDetailSidebar}
+              selectedMobileTaskId={isMobile ? selectedMobileTaskId : null}
               handleChartCommit={commitFullPlan}
               isViewer={isViewer}
               onPromptFork={onPromptFork}
@@ -298,6 +326,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
           {activeView === "tasks" && (
             <TasksView
+              isMobile={Boolean(isMobile)}
               parsedData={parsedData}
               dateFilterMode={dateFilter.dateFilterMode}
               dateFilterBehavior={dateFilter.dateFilterBehavior}
@@ -314,7 +343,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               handleAddNewTask={tasks.handleAddNewTask}
               setDateFilterMode={dateFilter.setDateFilterMode}
               setCompletedFilterMode={dateFilter.setCompletedFilterMode}
-              openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
+              openTaskDetailSidebar={isMobile ? handleMobileTaskOpen : taskDetail.openTaskDetailSidebar}
+              selectedMobileTaskId={isMobile ? selectedMobileTaskId : null}
               handleChartCommit={commitFullPlan}
               isViewer={isViewer}
               onPromptFork={onPromptFork}
@@ -323,6 +353,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
           {activeView === "summary" && (
             <BudgetKpiView
+              isMobile={Boolean(isMobile)}
               parsedData={parsedData}
               summaryKpiTasks={dateFilter.summaryKpiTasks}
               summarySortConfig={tasks.summarySortConfig}

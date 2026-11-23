@@ -1,0 +1,102 @@
+{
+  "id": "./",
+  "name": "Jantt - AI Gantt & Timeline Planner",
+  "short_name": "Jantt",
+  "description": "Create and edit interactive Gantt charts with AI. Local-first planning with a BYOK AI Copilot, cloud rooms, Kanban, tasks, notes and project health analytics.",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#090E1A",
+  "theme_color": "#090E1A",
+  "categories": ["productivity", "business", "education", "utilities"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Plan",
+      "short_name": "New Plan",
+      "description": "Create a new plan on this device.",
+      "url": "./?action=new-plan",
+      "icons": [
+        {
+          "src": "./icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "AI Copilot",
+      "short_name": "Copilot",
+      "description": "Open the AI Copilot and describe your plan.",
+      "url": "./?action=copilot",
+      "icons": [
+        {
+          "src": "./icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Tasks Checklist",
+      "short_name": "Tasks",
+      "description": "Open the synchronized task checklist.",
+      "url": "./?view=tasks",
+      "icons": [
+        {
+          "src": "./icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Project Notes",
+      "short_name": "Notes",
+      "description": "Open project notes and meeting summaries.",
+      "url": "./?view=notes",
+      "icons": [
+        {
+          "src": "./icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/json": [".json", ".jantt.json"]
+      }
+    }
+  ]
+}

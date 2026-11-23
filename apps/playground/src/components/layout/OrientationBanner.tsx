@@ -7,7 +7,7 @@ interface OrientationBannerProps {
   activeView: string;
 }
 
-const STORAGE_KEY_DISMISSED = "jantt_dismiss_orientation_banner";
+const STORAGE_KEY_DISMISSED = "jantt_orientation_banner_dismissed";
 
 export const OrientationBanner: React.FC<OrientationBannerProps> = ({
   isMobile,
@@ -16,7 +16,7 @@ export const OrientationBanner: React.FC<OrientationBannerProps> = ({
 }) => {
   const [isDismissed, setIsDismissed] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem(STORAGE_KEY_DISMISSED) === "true";
+      return sessionStorage.getItem(STORAGE_KEY_DISMISSED) === "1";
     } catch {
       return false;
     }
@@ -27,7 +27,7 @@ export const OrientationBanner: React.FC<OrientationBannerProps> = ({
   const handleDismiss = () => {
     setIsDismissed(true);
     try {
-      sessionStorage.setItem(STORAGE_KEY_DISMISSED, "true");
+      sessionStorage.setItem(STORAGE_KEY_DISMISSED, "1");
     } catch {
       // Ignore
     }
@@ -47,7 +47,7 @@ export const OrientationBanner: React.FC<OrientationBannerProps> = ({
           <RotateCw size={14} className="rotate-hint-icon" />
         </span>
         <span className="mobile-orientation-text">
-          Rotate phone to <strong>landscape</strong> for full timeline view
+          Rotate for wider timeline
         </span>
       </div>
       <button

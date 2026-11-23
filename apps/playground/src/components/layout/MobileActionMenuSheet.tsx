@@ -11,6 +11,7 @@ import {
   Github,
   LogOut,
   FolderKanban,
+  FolderPlus,
   Users,
   Cloud,
   ChevronDown,
@@ -21,13 +22,18 @@ import {
   Kanban,
   CheckSquare,
   Activity,
-  StickyNote
+  StickyNote,
+  Download,
+  Share,
+  ShieldCheck,
+  Smartphone
 } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
 import type { ActiveView } from "../../types";
 import { AVAILABLE_THEMES } from "../../constants";
 import { getTrustedAvatarUrl } from "../../room-storage";
+import { useSheetSwipeDismiss } from "../../hooks/useSheetSwipeDismiss";
 import { renderPanelSlot, type PanelSlot } from "./Navbar";
 
 interface MobileActionMenuSheetProps {
@@ -43,6 +49,7 @@ interface MobileActionMenuSheetProps {
   onOpenPromptModal: () => void;
   onToggleCopilot?: () => void;
   onOpenPlanManager: () => void;
+  onCreateNewPlan: () => void;
   onOpenPeopleModal: () => void;
   onOpenJsonEditor: () => void;
   currentUser?: FirebaseUser | null;
@@ -62,9 +69,17 @@ interface MobileActionMenuSheetProps {
   /** Short status shown next to the "Cloud" entry, e.g. "Live room - Editor". */
   cloudStatusLabel?: string;
   onImportFile?: () => void;
-  /** When provided, a view switcher is shown (used when the bottom navigation is hidden). */
-  activeView?: ActiveView;
-  setActiveView?: (view: ActiveView) => void;
+  /** View switcher, always available on mobile, including the 60 fps Canvas renderer. */
+  activeView: ActiveView;
+  setActiveView: (view: ActiveView) => void;
+  canInstall: boolean;
+  isIosSafari: boolean;
+  isStandalone: boolean;
+  onInstall: () => void;
+  updateAvailable: boolean;
+  onApplyUpdate: () => void;
+  /** Human-readable runtime: "Standalone App", "Android App" or "Web". */
+  appModeLabel: string;
 }
 
 const VIEW_TILES: Array<{ id: ActiveView; label: string; icon: React.ReactNode }> = [
@@ -96,6 +111,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
   onOpenPromptModal,
   onToggleCopilot,
   onOpenPlanManager,
+  onCreateNewPlan,
   onOpenPeopleModal,
   onOpenJsonEditor,
   currentUser,
@@ -109,12 +125,20 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
   cloudStatusLabel,
   onImportFile,
   activeView,
-  setActiveView
+  setActiveView,
+  canInstall,
+  isIosSafari,
+  isStandalone,
+  onInstall,
+  updateAvailable,
+  onApplyUpdate,
+  appModeLabel
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isCloudExpanded, setIsCloudExpanded] = useState(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const swipe = useSheetSwipeDismiss({ onClose, enabled: true });
 
   // Dialog behaviour: initial focus, Escape to close, focus trap, focus restored on close.
   useEffect(() => {
@@ -169,16 +193,17 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
     <div className="mobile-sheet-backdrop" onClick={onClose}>
       <div
         ref={cardRef}
-        className="mobile-sheet-card"
+        className={`mobile-sheet-card ${swipe.isDragging ? "is-dragging" : ""}`}
+        style={swipe.sheetStyle}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="mobile-sheet-title"
         tabIndex={-1}
       >
-        <div className="mobile-sheet-pull-handle" aria-hidden="true" />
+        <div className="mobile-sheet-pull-handle" aria-hidden="true" {...swipe.handleProps} />
 
-        <div className="mobile-sheet-header">
+        <div className="mobile-sheet-header" {...swipe.handleProps}>
           <h3 className="mobile-sheet-title" id="mobile-sheet-title">
             Tools &amp; Settings
           </h3>
@@ -188,26 +213,46 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
         </div>
 
         <div className="mobile-sheet-body">
-          {/* View switcher (only when the bottom navigation is hidden, e.g. immersive landscape) */}
-          {activeView && setActiveView && (
-            <div className="mobile-menu-section">
-              <span className="mobile-menu-section-label">Views</span>
-              <div className="mobile-menu-grid is-three-col" role="group" aria-label="Switch view">
-                {VIEW_TILES.map((tile) => (
-                  <button
-                    key={tile.id}
-                    type="button"
-                    className={`mobile-menu-tile ${activeView === tile.id ? "is-active" : ""}`}
-                    aria-pressed={activeView === tile.id}
-                    onClick={act(() => setActiveView(tile.id))}
-                  >
-                    {tile.icon}
-                    <span>{tile.label}</span>
-                  </button>
-                ))}
+          {updateAvailable && (
+            <div className="mobile-sheet-update-card" role="status">
+              <RefreshCw size={16} aria-hidden="true" />
+              <div className="mobile-sheet-update-copy">
+                <strong>Update Available</strong>
+                <span>A new version of Jantt is ready. Refresh to load it.</span>
               </div>
+              <button
+                type="button"
+                className="mobile-sheet-update-btn"
+                onClick={() => {
+                  onApplyUpdate();
+                  onClose();
+                }}
+              >
+                Refresh Now
+              </button>
             </div>
           )}
+
+          <div className="mobile-menu-section">
+            <span className="mobile-menu-section-label">Views &amp; Renderer</span>
+            <div className="mobile-menu-grid is-three-col" role="group" aria-label="Switch view">
+              {VIEW_TILES.map((tile) => (
+                <button
+                  key={tile.id}
+                  type="button"
+                  className={`mobile-menu-tile ${activeView === tile.id ? "is-active" : ""}`}
+                  aria-pressed={activeView === tile.id}
+                  onClick={act(() => setActiveView(tile.id))}
+                >
+                  {tile.icon}
+                  <span>{tile.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mobile-menu-help">
+              Canvas renders the same timeline at 60 fps for large plans.
+            </p>
+          </div>
 
           {/* User Account Section */}
           <div className="mobile-menu-section">
@@ -296,10 +341,37 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
             )}
           </div>
 
+          {!isStandalone && (canInstall || isIosSafari) && (
+            <div className="mobile-menu-section">
+              <span className="mobile-menu-section-label">Install</span>
+              {canInstall ? (
+                <button type="button" className="mobile-menu-install-row" onClick={act(onInstall)}>
+                  <Download size={16} aria-hidden="true" />
+                  <span className="mobile-menu-install-copy">
+                    <strong>Install Jantt</strong>
+                    <span>Full-screen app with offline access</span>
+                  </span>
+                </button>
+              ) : (
+                <div className="mobile-menu-install-hint">
+                  <Share size={15} aria-hidden="true" />
+                  <span>
+                    On iPhone or iPad, tap the Share button in Safari, then choose Add to Home Screen.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Core Plan & JSON State */}
           <div className="mobile-menu-section">
             <span className="mobile-menu-section-label">Project &amp; Data</span>
             <div className="mobile-menu-grid">
+              <button type="button" className="mobile-menu-tile" onClick={act(onCreateNewPlan)}>
+                <FolderPlus size={16} style={{ color: "var(--jantt-accent)" }} aria-hidden="true" />
+                <span>New Plan</span>
+              </button>
+
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPlanManager)}>
                 <FolderKanban size={16} style={{ color: "var(--jantt-accent)" }} aria-hidden="true" />
                 <span>Manage Plans</span>
@@ -395,6 +467,22 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                 ))}
               </optgroup>
             </select>
+          </div>
+
+          <div className="mobile-sheet-footer">
+            <span className="mobile-sheet-mode">
+              <Smartphone size={12} aria-hidden="true" />
+              <span>Jantt App Mode: {appModeLabel}</span>
+            </span>
+            <a
+              className="mobile-sheet-privacy-link"
+              href="./privacy.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ShieldCheck size={12} aria-hidden="true" />
+              <span>Privacy Policy</span>
+            </a>
           </div>
         </div>
       </div>

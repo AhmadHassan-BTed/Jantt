@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { RefreshCw, WifiOff, X } from "lucide-react";
 import { validate, type JanttData, type Task, type TimeScale } from "@jantt/core";
 
 import type { SavedProject } from "./types";
@@ -38,6 +39,10 @@ import { commandBus } from "./services";
 import { useMobileDetection } from "./hooks/useMobileDetection";
 import { useUndoRedo } from "./hooks/useUndoRedo";
 import { useCopilot } from "./hooks/useCopilot";
+import { useAppPlatform } from "./hooks/useAppPlatform";
+import { useVisualViewport } from "./hooks/useVisualViewport";
+import { useAndroidBackNavigation, type BackNavigationOverlay } from "./hooks/useAndroidBackNavigation";
+import { registerLaunchQueueHandler, syncThemeColorMeta } from "./services/platform";
 import { exportMsProjectXml, exportPrimaveraXer, exportExecutiveReportHtml } from "@jantt/interop";
 import { OPEN_JSON_EDITOR_EVENT } from "./components/common/EmptyChartState";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
@@ -52,6 +57,7 @@ import {
   Toast,
   MobileNavbar,
   MobileBottomNav,
+  MobileQuickFab,
   OrientationBanner,
   ReadOnlyForkModal,
   EditorLoginModal,
@@ -97,6 +103,8 @@ type PendingConfirm = Omit<ConfirmDialogProps, "onCancel">;
 export function App() {
   const init = useMemo(() => loadInitialState(), []);
   const mobile = useMobileDetection();
+  const platform = useAppPlatform(mobile.isMobile);
+  useVisualViewport();
 
   // UI Modals & Notifications
   const toast = useToast();
@@ -108,6 +116,8 @@ export function App() {
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [showCopilot, setShowCopilot] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
 
   // Firebase Authentication & Cloud User Identity
   const auth = useAuth();
@@ -186,10 +196,16 @@ export function App() {
     initialView: init.initialView
   });
 
+  // Android status bar and gesture navigation bar follow the selected Jantt theme.
+  useEffect(() => {
+    syncThemeColorMeta(viewport.activeTheme.mode, viewport.activeTheme.vars["--jantt-bg"]);
+  }, [viewport.activeTheme]);
+
   // Sidebar Drag-Resize & Collapse
   const sidebar = useSidebarResize({
     initialWidth: init.initialWidth,
-    initialCollapsed: init.initialCollapsed
+    initialCollapsed: init.initialCollapsed,
+    isMobile: mobile.isMobile
   });
 
   // People & Squad Management
@@ -247,6 +263,28 @@ export function App() {
   /** Latest active plan id, for handlers that resume after a network await. */
   const activeProjectIdRef = useRef(project.activeProjectId);
   activeProjectIdRef.current = project.activeProjectId;
+
+  // PWA shortcuts (?action=) and OS file launches: one-shot, then the transient params are gone.
+  const launchHandledRef = useRef(false);
+  useEffect(() => {
+    if (launchHandledRef.current) return;
+    launchHandledRef.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    if (action === "new-plan") project.handleOpenAddPlanModal();
+    else if (action === "copilot") setShowCopilot(true);
+
+    if (action || params.has("source")) {
+      params.delete("action");
+      params.delete("source");
+      const query = params.toString();
+      const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", nextUrl);
+    }
+
+    registerLaunchQueueHandler((file) => project.handleImportFile(file));
+  }, [project.handleImportFile, project.handleOpenAddPlanModal]);
 
   // Zero-Data-Loss Version History & Snapshot Vault
   const vault = useSnapshotVault(project.activeProjectId);
@@ -759,6 +797,7 @@ export function App() {
     setShowShortcutsModal(false);
     setShowPromptModal(false);
     setShowCopilot(false);
+    setIsMobileMenuOpen(false);
     setShowPlanManagerModal(false);
     setShowReadOnlyForkModal(false);
     setShowEditorLoginModal(false);
@@ -997,6 +1036,66 @@ export function App() {
     [editor.parsedData?.notes]
   );
 
+  const isAnyOverlayOpen =
+    isMobileMenuOpen ||
+    showCopilot ||
+    taskDetail.isTaskDetailOpen ||
+    (mobile.isMobile && !sidebar.isSidebarCollapsed) ||
+    showPromptModal ||
+    showPlanManagerModal ||
+    showReadOnlyForkModal ||
+    showEditorLoginModal ||
+    showCommandPalette ||
+    showShortcutsModal ||
+    showShareRoomModal ||
+    pendingConfirm !== null ||
+    project.showAddPlanModal ||
+    people.showPeopleModal ||
+    sharing.showShareModal ||
+    autoSave.showAutoSaveModal ||
+    vault.showVersionHistoryModal ||
+    roomSync.showRoomModal ||
+    auth.showVerificationModal;
+
+  const backNavigationOverlays: BackNavigationOverlay[] = [
+    { id: "mobile-menu", isOpen: mobile.isMobile && isMobileMenuOpen, close: () => setIsMobileMenuOpen(false) },
+    { id: "copilot", isOpen: showCopilot, close: () => setShowCopilot(false) },
+    {
+      id: "task-detail",
+      isOpen: taskDetail.isTaskDetailOpen,
+      close: taskDetail.closeTaskDetailSidebar
+    },
+    {
+      id: "json-editor",
+      isOpen: mobile.isMobile && !sidebar.isSidebarCollapsed,
+      close: () => sidebar.setIsSidebarCollapsed(true)
+    },
+    { id: "read-only-fork", isOpen: showReadOnlyForkModal, close: () => setShowReadOnlyForkModal(false) },
+    { id: "editor-login", isOpen: showEditorLoginModal, close: () => setShowEditorLoginModal(false) },
+    { id: "prompt", isOpen: showPromptModal, close: () => setShowPromptModal(false) },
+    { id: "plan-manager", isOpen: showPlanManagerModal, close: () => setShowPlanManagerModal(false) },
+    { id: "add-plan", isOpen: project.showAddPlanModal, close: () => project.setShowAddPlanModal(false) },
+    { id: "people", isOpen: people.showPeopleModal, close: () => people.setShowPeopleModal(false) },
+    { id: "share", isOpen: sharing.showShareModal, close: () => sharing.setShowShareModal(false) },
+    { id: "share-room", isOpen: showShareRoomModal, close: () => setShowShareRoomModal(false) },
+    { id: "auto-save", isOpen: autoSave.showAutoSaveModal, close: () => autoSave.setShowAutoSaveModal(false) },
+    {
+      id: "version-history",
+      isOpen: vault.showVersionHistoryModal,
+      close: () => vault.setShowVersionHistoryModal(false)
+    },
+    { id: "room", isOpen: roomSync.showRoomModal, close: () => roomSync.setShowRoomModal(false) },
+    { id: "verification", isOpen: auth.showVerificationModal, close: () => auth.setShowVerificationModal(false) },
+    { id: "command-palette", isOpen: showCommandPalette, close: () => setShowCommandPalette(false) },
+    { id: "shortcuts", isOpen: showShortcutsModal, close: () => setShowShortcutsModal(false) },
+    { id: "confirm", isOpen: pendingConfirm !== null, close: () => setPendingConfirm(null) }
+  ];
+  useAndroidBackNavigation(backNavigationOverlays, mobile.isMobile || platform.isStandalone);
+
+  useEffect(() => {
+    if (!platform.updateAvailable) setIsUpdateDismissed(false);
+  }, [platform.updateAvailable]);
+
   return (
     <div
       className={`playground-app ${viewport.activeTheme.className} ${mobile.isMobile ? "is-mobile-device" : ""} ${mobile.isImmersiveLandscape ? "is-immersive-landscape" : ""}`}
@@ -1055,7 +1154,19 @@ export function App() {
           cloudStatusLabel={roomSync.activeRoomId ? `Live • ${roomRoleLabel}` : "Local plan"}
           isSigningIn={auth.isSigningIn}
           activeView={viewport.activeView}
+          notesCount={notesCount}
           setActiveView={viewport.setActiveView}
+          isMenuOpen={isMobileMenuOpen}
+          onMenuOpenChange={setIsMobileMenuOpen}
+          isOnline={platform.isOnline}
+          isCopilotOpen={showCopilot}
+          updateAvailable={platform.updateAvailable}
+          canInstall={platform.canInstall}
+          isIosSafari={platform.isIosSafari}
+          isStandalone={platform.isStandalone}
+          onInstall={platform.promptInstall}
+          onApplyUpdate={platform.applyUpdate}
+          appModeLabel={platform.isTwa ? "Android App" : platform.isStandalone ? "Standalone App" : "Web"}
         />
       ) : (
         <Navbar
@@ -1107,6 +1218,9 @@ export function App() {
           onlineCount={roomSync.onlineUsers.length}
           cloudPanel={renderCloudPanel}
           onDeleteRoom={isRoomOwner && auth.userProfile ? handleDeleteActiveRoom : undefined}
+          canInstall={platform.canInstall}
+          isStandalone={platform.isStandalone}
+          onInstall={platform.promptInstall}
         />
       )}
 
@@ -1116,6 +1230,34 @@ export function App() {
         isPortrait={mobile.isPortrait}
         activeView={viewport.activeView}
       />
+
+      {(platform.isOnline === false || (platform.updateAvailable && !isUpdateDismissed)) && (
+        <div className="jantt-platform-pill-stack" role="status" aria-live="polite">
+          {!platform.isOnline && (
+            <div className="jantt-platform-pill is-offline">
+              <WifiOff size={13} aria-hidden="true" />
+              <span>Offline - Local changes saved</span>
+            </div>
+          )}
+          {platform.updateAvailable && !isUpdateDismissed && (
+            <div className="jantt-platform-pill is-update">
+              <RefreshCw size={13} aria-hidden="true" />
+              <span>New version ready</span>
+              <button type="button" className="jantt-platform-pill-action" onClick={platform.applyUpdate}>
+                Refresh
+              </button>
+              <button
+                type="button"
+                className="jantt-platform-pill-close"
+                onClick={() => setIsUpdateDismissed(true)}
+                aria-label="Dismiss update notice"
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <main className="workspace-main">
         <EditorPane
@@ -1198,6 +1340,10 @@ export function App() {
           setActiveView={viewport.setActiveView}
           notesCount={notesCount}
         />
+      )}
+
+      {mobile.isMobile && !mobile.isImmersiveLandscape && !isReadOnly && !isAnyOverlayOpen && (
+        <MobileQuickFab activeView={viewport.activeView} onAddTask={tasks.handleAddNewTask} />
       )}
 
       {/* Modals & Popups */}

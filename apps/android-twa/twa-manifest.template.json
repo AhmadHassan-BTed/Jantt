@@ -1,0 +1,74 @@
+{
+  "packageId": "io.github.ahmadhassan_bted.jantt",
+  "host": "ahmadhassan-bted.github.io",
+  "name": "Jantt",
+  "launcherName": "Jantt",
+  "display": "standalone",
+  "themeColor": "#090E1A",
+  "themeColorDark": "#090E1A",
+  "navigationColor": "#090E1A",
+  "navigationColorDark": "#090E1A",
+  "navigationDividerColor": "#090E1A",
+  "navigationDividerColorDark": "#090E1A",
+  "backgroundColor": "#090E1A",
+  "enableNotifications": false,
+  "startUrl": "/Jantt/?source=twa",
+  "iconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-512.png",
+  "maskableIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 250,
+  "signingKey": {
+    "path": "jantt-release.keystore",
+    "alias": "jantt"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.1.0",
+  "shortcuts": [
+    {
+      "name": "New Plan",
+      "short_name": "New Plan",
+      "url": "/Jantt/?action=new-plan&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    },
+    {
+      "name": "AI Copilot",
+      "short_name": "Copilot",
+      "url": "/Jantt/?action=copilot&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    },
+    {
+      "name": "Tasks Checklist",
+      "short_name": "Tasks",
+      "url": "/Jantt/?view=tasks&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    },
+    {
+      "name": "Project Notes",
+      "short_name": "Notes",
+      "url": "/Jantt/?view=notes&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap",
+  "webManifestUrl": "https://ahmadhassan-bted.github.io/Jantt/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": false,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://ahmadhassan-bted.github.io/Jantt/",
+  "minSdkVersion": 23,
+  "orientation": "any",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

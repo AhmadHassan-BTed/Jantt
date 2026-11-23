@@ -50,6 +50,7 @@ function buildProductionCsp(env: BuildEnv): string {
     "img-src 'self' data: blob: https:",
     `connect-src ${sources(
       "'self'",
+      "https:",
       "https://*.googleapis.com",
       ...RTDB_HOSTS,
       "wss://*.firebaseio.com",
@@ -57,12 +58,15 @@ function buildProductionCsp(env: BuildEnv): string {
       dbOrigin,
       dbSocket,
       "https://api.github.com",
+      "http://localhost:*",
+      "http://127.0.0.1:*",
       "data:",
       "blob:",
       ...emulator
     )}`,
     // The Firebase Auth helper iframe lives on the project's auth domain.
     `frame-src ${sources("'self'", "https://*.firebaseapp.com", "https://*.web.app", authOrigin, ...emulator)}`,
+    "manifest-src 'self'",
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -82,6 +86,21 @@ function installProductionCsp() {
 
 installProductionCsp();
 
+/** Fades the static boot splash out after React's first painted frame, then removes its DOM and CSS. */
+function dismissBootSplash() {
+  const splash = document.getElementById("jantt-boot-splash");
+  if (!splash) return;
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      splash.classList.add("is-hidden");
+      window.setTimeout(() => {
+        splash.remove();
+        document.getElementById("jantt-boot-splash-style")?.remove();
+      }, 200);
+    });
+  });
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
@@ -89,3 +108,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+dismissBootSplash();

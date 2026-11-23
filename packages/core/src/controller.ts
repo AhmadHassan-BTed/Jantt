@@ -102,6 +102,7 @@ export class InteractionController {
   private lastPointerEvent: PointerEvent | null = null;
   private captureEl: HTMLElement | null = null;
   private readonly tapCleanups = new Set<() => void>();
+  private lastTapTask: { id: string; time: number } | null = null;
   private readonly splitResizeProxy = (width: number, isFinal?: boolean) => this.queueSplitResize(width, isFinal);
   private readonly ctx: GestureContext;
 
@@ -153,7 +154,8 @@ export class InteractionController {
         return self.data;
       },
       get options() {
-        return self.options;
+        if (!self.options.mobileDoubleTapToOpen) return self.options;
+        return { ...self.options, onTaskClick: undefined };
       },
       get dayWidth() {
         return self.dayWidth;
@@ -168,7 +170,10 @@ export class InteractionController {
         return self.container;
       },
       selectedTaskIds: this.selectedTaskIds,
-      openModalHandler: (task) => this.openModalHandler(task),
+      openModalHandler: (task) => {
+        if (this.options.mobileDoubleTapToOpen) this.handlePointerOpenTask(task);
+        else this.openModalHandler(task);
+      },
       get onLiveLinkUpdate() {
         return self.onLiveLinkUpdate;
       },
@@ -755,8 +760,7 @@ export class InteractionController {
         Date.now() - startTime < TAP_MAX_MS;
       const task = isTap ? this.findTask(taskId) : undefined;
       if (task) {
-        this.selectTask(task.id, false);
-        this.openTask(task);
+        this.handlePointerOpenTask(task);
       }
     };
     const onCancel = (c: PointerEvent) => {
@@ -824,6 +828,23 @@ export class InteractionController {
   private openTask(task: Task) {
     this.options.onTaskClick?.(task);
     this.openModalHandler(task);
+  }
+
+  private handlePointerOpenTask(task: Task) {
+    if (!this.options.mobileDoubleTapToOpen) {
+      this.openTask(task);
+      return;
+    }
+
+    const now = Date.now();
+    if (this.lastTapTask?.id === task.id && now - this.lastTapTask.time <= 420) {
+      this.lastTapTask = null;
+      this.openTask(task);
+      return;
+    }
+
+    this.lastTapTask = { id: task.id, time: now };
+    this.selectTask(task.id, false);
   }
 
   private applySelection(taskId: string, toggle: boolean) {

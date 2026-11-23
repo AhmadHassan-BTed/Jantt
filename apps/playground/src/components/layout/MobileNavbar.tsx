@@ -1,11 +1,13 @@
-import React, { useState } from "react";
-import { FolderKanban, MoreVertical, Plus, Share2, Eye, KeyRound, ChevronDown } from "lucide-react";
-import { JanttLogo } from "../common/JanttLogo";
+import React from "react";
+import { MoreVertical, Share2, Eye, KeyRound, ChevronDown, Sparkles, WifiOff } from "lucide-react";
+import { JanttIcon, JanttLogo } from "../common/JanttLogo";
 import type { RoomPresence, UserProfile } from "../../firebase/types";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { ActiveView } from "../../types";
 import { MobileActionMenuSheet } from "./MobileActionMenuSheet";
 import type { PanelSlot } from "./Navbar";
+import { Layers, Kanban, CheckSquare, Activity, StickyNote } from "lucide-react";
+import { triggerHaptic } from "../../services/platform";
 
 interface MobileNavbarProps {
   /**
@@ -49,6 +51,19 @@ interface MobileNavbarProps {
   cloudStatusLabel?: string;
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
+  /** Controlled Tools & Settings sheet, so Android Back can close it like any other overlay. */
+  isMenuOpen: boolean;
+  onMenuOpenChange: (open: boolean) => void;
+  isOnline: boolean;
+  isCopilotOpen: boolean;
+  updateAvailable: boolean;
+  canInstall: boolean;
+  isIosSafari: boolean;
+  isStandalone: boolean;
+  onInstall: () => void;
+  onApplyUpdate: () => void;
+  appModeLabel: string;
+  notesCount?: number;
 }
 
 export const MobileNavbar: React.FC<MobileNavbarProps> = ({
@@ -85,16 +100,27 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   cloudPanel,
   cloudStatusLabel,
   activeView,
-  setActiveView
+  setActiveView,
+  isMenuOpen,
+  onMenuOpenChange,
+  isOnline,
+  isCopilotOpen,
+  updateAvailable,
+  canInstall,
+  isIosSafari,
+  isStandalone,
+  onInstall,
+  onApplyUpdate,
+  appModeLabel,
+  notesCount = 0
 }) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const isRoomActive = Boolean(activeRoomId);
   const isFloating = variant === "floating";
 
   const sheet = (
     <MobileActionMenuSheet
       isOpen={isMenuOpen}
-      onClose={() => setIsMenuOpen(false)}
+      onClose={() => onMenuOpenChange(false)}
       selectedThemeId={selectedThemeId}
       setSelectedThemeId={setSelectedThemeId}
       saveStatus={saveStatus}
@@ -105,6 +131,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
       onOpenPromptModal={onOpenPromptModal}
       onToggleCopilot={onToggleCopilot}
       onOpenPlanManager={onOpenPlanManager}
+      onCreateNewPlan={handleOpenAddPlanModal}
       onOpenPeopleModal={() => setShowPeopleModal(true)}
       onOpenJsonEditor={onOpenJsonEditor}
       onImportFile={onImportFile}
@@ -117,25 +144,48 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
       onOpenVerificationModal={onOpenVerificationModal}
       cloudPanel={cloudPanel}
       cloudStatusLabel={cloudStatusLabel}
-      activeView={isFloating ? activeView : undefined}
-      setActiveView={isFloating ? setActiveView : undefined}
+      activeView={activeView}
+      setActiveView={setActiveView}
+      canInstall={canInstall}
+      isIosSafari={isIosSafari}
+      isStandalone={isStandalone}
+      onInstall={onInstall}
+      updateAvailable={updateAvailable}
+      onApplyUpdate={onApplyUpdate}
+      appModeLabel={appModeLabel}
     />
   );
 
   if (isFloating) {
     return (
       <>
-        <button
-          type="button"
-          className="mobile-immersive-fab"
-          onClick={() => setIsMenuOpen(true)}
-          aria-label={`Open menu: views, plans and settings (current plan: ${activePlanName})`}
-          aria-haspopup="dialog"
-          aria-expanded={isMenuOpen}
-        >
-          <MoreVertical size={18} aria-hidden="true" />
-          {isRoomActive && <span className="mobile-room-pulse-dot" aria-hidden="true" />}
-        </button>
+        <header className="mobile-landscape-rail">
+          <button type="button" className="mobile-landscape-plan-btn" onClick={onOpenPlanManager} aria-label={`Manage plan: ${activePlanName}`}>
+            <JanttIcon size={16} />
+            <span className="mobile-landscape-plan-name">{activePlanName}</span>
+            {isOnline ? isRoomActive && <span className="mobile-room-pulse-dot" aria-label="Live" /> : <WifiOff size={12} aria-label="Offline" />}
+            <ChevronDown size={11} className="mobile-plan-chevron" aria-hidden="true" />
+          </button>
+          <nav className="mobile-landscape-tabs" aria-label="View navigation">
+            {([
+              { id: "gantt", label: "Timeline", icon: <Layers size={14} /> },
+              { id: "kanban", label: "Board", icon: <Kanban size={14} /> },
+              { id: "tasks", label: "Tasks", icon: <CheckSquare size={14} /> },
+              { id: "summary", label: "Health", icon: <Activity size={14} /> },
+              { id: "notes", label: "Notes", icon: <StickyNote size={14} /> }
+            ] as const).map((tab) => {
+              const active = activeView === tab.id || (tab.id === "gantt" && activeView === "canvas");
+              return <button key={tab.id} type="button" className={`mobile-landscape-tab ${active ? "is-active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => { triggerHaptic("light"); setActiveView(tab.id); }}>
+                {tab.icon}<span>{tab.label}</span>{tab.id === "notes" && notesCount > 0 && <span className="mobile-nav-badge">{notesCount}</span>}
+              </button>;
+            })}
+          </nav>
+          <div className="mobile-landscape-actions">
+            <button type="button" className="mobile-nav-icon-btn" onClick={() => onToggleCopilot?.()} aria-label="Open AI Copilot"><Sparkles size={16} /></button>
+            <button type="button" className="mobile-nav-icon-btn" onClick={onOpenShare} aria-label="Share plan"><Share2 size={16} /></button>
+            <button type="button" className="mobile-nav-icon-btn is-menu-trigger" onClick={() => onMenuOpenChange(true)} aria-label="Open tools and settings menu" aria-haspopup="dialog" aria-expanded={isMenuOpen}><MoreVertical size={16} />{updateAvailable && <span className="mobile-update-dot" />}</button>
+          </div>
+        </header>
         {sheet}
       </>
     );
@@ -144,28 +194,27 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   return (
     <>
       <header className="mobile-navbar">
-        {/* Left: Brand + Plan Title Pill */}
+        {/* Left: tappable brand + plan switcher pill */}
         <div className="mobile-nav-left">
-          <button
-            type="button"
-            className="mobile-logo-wrap"
-            onClick={onOpenPlanManager}
-            title="Open plans"
-            aria-label="Open plan manager"
-          >
-            <JanttLogo size={24} />
-          </button>
-
           <button
             type="button"
             className="mobile-plan-selector-pill"
             onClick={onOpenPlanManager}
             title={`Current plan: ${activePlanName}. Tap to switch or manage plans.`}
-            aria-label={`Current plan: ${activePlanName}${isRoomActive ? " (live cloud room)" : ""}. Switch or manage plans`}
+            aria-label={`Current plan: ${activePlanName}${isRoomActive ? " (live cloud room)" : ""}${
+              isOnline ? "" : " (offline)"
+            }. Switch or manage plans`}
           >
-            <FolderKanban size={13} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} aria-hidden="true" />
+            <span className="mobile-brand-mark" aria-hidden="true">
+              <JanttLogo size={20} />
+            </span>
             <span className="mobile-plan-name">{activePlanName}</span>
-            {isRoomActive && (
+            {!isOnline ? (
+              <span className="mobile-offline-badge">
+                <WifiOff size={10} aria-hidden="true" />
+                <span>Offline</span>
+              </span>
+            ) : isRoomActive ? (
               <span
                 className="mobile-room-indicator"
                 title={`Live room${onlineUsers.length > 0 ? ` (${onlineUsers.length} online)` : ""}`}
@@ -173,8 +222,8 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
               >
                 <span className="mobile-room-pulse-dot" />
               </span>
-            )}
-            <ChevronDown size={12} style={{ opacity: 0.6, flexShrink: 0 }} aria-hidden="true" />
+            ) : null}
+            <ChevronDown size={12} className="mobile-plan-chevron" aria-hidden="true" />
           </button>
 
           {isPendingLoginEditor ? (
@@ -200,8 +249,19 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
           ) : null}
         </div>
 
-        {/* Right: Quick Action Buttons & Menu Trigger */}
+        {/* Right: three crisp thumb targets; New Plan lives in the plan manager and sheet. */}
         <div className="mobile-nav-right">
+          <button
+            type="button"
+            className={`mobile-nav-icon-btn is-copilot ${isCopilotOpen ? "is-active" : ""}`}
+            onClick={() => onToggleCopilot?.()}
+            title={isCopilotOpen ? "Close AI Copilot" : "Open AI Copilot"}
+            aria-label={isCopilotOpen ? "Close AI Copilot" : "Open AI Copilot"}
+            aria-expanded={isCopilotOpen}
+          >
+            <Sparkles size={18} aria-hidden="true" />
+          </button>
+
           <button
             type="button"
             className="mobile-nav-icon-btn"
@@ -209,29 +269,20 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
             title={isRoomActive ? "Invite & share room" : "Share plan"}
             aria-label={isRoomActive ? "Invite people and share this room" : "Share this plan"}
           >
-            <Share2 size={16} aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            className="mobile-nav-icon-btn"
-            onClick={handleOpenAddPlanModal}
-            title="Create New Plan"
-            aria-label="Create a new plan"
-          >
-            <Plus size={16} aria-hidden="true" />
+            <Share2 size={17} aria-hidden="true" />
           </button>
 
           <button
             type="button"
             className="mobile-nav-icon-btn is-menu-trigger"
-            onClick={() => setIsMenuOpen(true)}
+            onClick={() => onMenuOpenChange(true)}
             title="Tools & Settings Menu"
             aria-label="Open tools and settings menu"
             aria-haspopup="dialog"
             aria-expanded={isMenuOpen}
           >
-            <MoreVertical size={17} aria-hidden="true" />
+            <MoreVertical size={18} aria-hidden="true" />
+            {updateAvailable && <span className="mobile-update-dot" aria-hidden="true" />}
           </button>
         </div>
       </header>

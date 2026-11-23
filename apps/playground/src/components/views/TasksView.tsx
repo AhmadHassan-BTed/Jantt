@@ -25,9 +25,11 @@ import { storageService } from "../../services/storage";
 import { ResourceLevelingPanel } from "./ResourceLevelingPanel";
 import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
 import { getPeerId, isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
-import { TaskStatusSelect, applyTaskStatus, getStatusValue, onActivateKey, tintColor } from "./KanbanView";
+import { TaskStatusSelect, applyTaskStatus, getStatusValue, onActivateKey, tintColor, formatShortRange } from "./KanbanView";
 
 interface TasksViewProps {
+  isMobile?: boolean;
+  selectedMobileTaskId?: string | null;
   parsedData: JanttData;
   dateFilterMode: DateFilterMode;
   dateFilterBehavior: "dim" | "hide";
@@ -70,6 +72,7 @@ export function removeDependencyOn(
 const asLower = (value: unknown) => (typeof value === "string" ? value : value == null ? "" : String(value)).toLowerCase();
 
 export const TasksView: React.FC<TasksViewProps> = ({
+  isMobile = false,
   parsedData,
   dateFilterMode,
   dateFilterBehavior,
@@ -87,6 +90,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   setDateFilterMode,
   setCompletedFilterMode,
   openTaskDetailSidebar,
+  selectedMobileTaskId = null,
   handleChartCommit,
   isViewer = false,
   onPromptFork
@@ -211,7 +215,18 @@ export const TasksView: React.FC<TasksViewProps> = ({
   return (
     <div className="tasks-view-container">
       {/* Header with Title, Stats, Search, View Mode, Add Task (person filter lives in the filter bar) */}
-      <div className="tasks-view-header">
+      {isMobile ? (
+        <div className="tasks-view-header is-mobile-compact">
+          <span className="tasks-mobile-stats">{matchingDateFilterTasks.length} tasks • {matchingDateFilterTasks.filter((t) => isTaskDone(t)).length} done</span>
+          <div className="tasks-mobile-controls">
+            <div className="tasks-mode-group" role="group" aria-label="Task layout">
+              <button type="button" className={`tasks-mode-btn ${tasksViewMode === "cards" ? "is-active" : ""}`} onClick={() => setTasksViewMode("cards")} aria-pressed={tasksViewMode === "cards"}>Cards</button>
+              <button type="button" className={`tasks-mode-btn ${tasksViewMode === "todo" ? "is-active" : ""}`} onClick={() => setTasksViewMode("todo")} aria-pressed={tasksViewMode === "todo"}>List</button>
+            </div>
+            <button type="button" className="btn-nav" onClick={() => setShowResourceLeveling((shown) => !shown)} aria-expanded={showResourceLeveling}>Level</button>
+          </div>
+        </div>
+      ) : <div className="tasks-view-header">
         <div className="tasks-view-title-section">
           <CheckSquare size={22} style={{ color: "var(--jantt-accent)" }} />
           <div>
@@ -291,7 +306,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {showResourceLeveling && <ResourceLevelingPanel data={parsedData} onCommit={handleChartCommit} readOnly={isViewer} onPromptFork={onPromptFork} />}
 
@@ -377,7 +392,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     role="button"
                     tabIndex={0}
                     aria-label={`Open details for ${title}`}
-                    className={`tasks-todo-row ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
+                    className={`tasks-todo-row ${isMobile && selectedMobileTaskId === t.id ? "is-mobile-selected" : ""} ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
                     style={{ borderLeftColor: catColor }}
                     onClick={() => openTaskDetailSidebar(t)}
                     onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
@@ -465,11 +480,26 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   role="button"
                   tabIndex={0}
                   aria-label={`Open details for ${title}`}
-                  className={`today-task-card ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
-                  style={{ borderTopColor: catColor }}
+                  className={`${isMobile ? "today-card is-mobile-card" : "today-task-card"} ${isMobile && selectedMobileTaskId === t.id ? "is-mobile-selected" : ""} ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
+                  style={isMobile ? { borderLeftColor: catColor } : { borderTopColor: catColor }}
                   onClick={() => openTaskDetailSidebar(t)}
                   onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
                 >
+                  {isMobile ? <>
+                  <div className="tasks-mobile-card-top">
+                    <button type="button" className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`} disabled={isViewer} aria-pressed={isCompleted} aria-label={isCompleted ? "Mark as in progress" : "Mark as completed"} onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}>{isCompleted ? <Check size={11} /> : null}</button>
+                    {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
+                    <h3 className="tasks-mobile-card-title">{title}</h3>
+                    {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
+                  </div>
+                  <div className="tasks-mobile-card-bottom">
+                    <span className="kanban-mobile-date">{formatShortRange(t.start, t.end)}</span>
+                    {t.assignee && <span className="kanban-mobile-avatar" style={{ background: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
+                    <span className="tasks-mobile-prog-chip">{progressPct}%</span>
+                    <TaskStatusSelect task={t} value={getStatusValue(t)} disabled={isViewer} onStatusChange={(status) => handleStatusChange(t.id, status)} />
+                    {renderDeleteButton(t)}
+                  </div>
+                  </> : <>
                   <div className="today-card-header">
                     <div className="today-card-category">
                       <span className="kanban-cat-dot" style={{ background: catColor }} />
@@ -483,7 +513,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
                       {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
-                      <button
+                      {!isMobile && <button
                         type="button"
                         className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`}
                         disabled={isViewer}
@@ -496,7 +526,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       >
                         {isCompleted ? <Check size={11} /> : null}
                         <span>{isCompleted ? "Done" : "Check"}</span>
-                      </button>
+                      </button>}
                     </div>
                   </div>
                   <h3 className="today-card-title">{title}</h3>
@@ -544,7 +574,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       </div>
                     )}
                   </div>
-                  {isCompleted ? (
+                  {!isMobile && (isCompleted ? (
                     <div className="today-card-complete" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                       <Check size={11} />
                       <span>Completed</span>
@@ -556,8 +586,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       </div>
                       <span className="today-prog-pct">{progressPct}%</span>
                     </div>
-                  )}
-                  <div className="today-card-actions" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  ))}
+                  <div className={isMobile ? "task-card-mobile-actions" : "today-card-actions"} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    {isMobile && <button type="button" className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`} disabled={isViewer} aria-pressed={isCompleted} aria-label={isCompleted ? "Mark as in progress" : "Mark as completed"} onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}>{isCompleted ? <Check size={11} /> : null}</button>}
                     <TaskStatusSelect
                       task={t}
                       value={getStatusValue(t)}
@@ -566,6 +597,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     />
                     {renderDeleteButton(t)}
                   </div>
+                  </>}
                 </div>
               );
             })}

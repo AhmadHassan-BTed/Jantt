@@ -15,6 +15,7 @@ export interface GridTableProps {
   people?: Person[];
   teams?: Team[];
   onTaskClick: (task: Task) => void;
+  onTaskKeyOpen?: (task: Task) => void;
   onAddTask?: () => void;
   /** Keyboard resize of the table (splitter ArrowLeft/ArrowRight/Home/End); the splitter is focusable only when set. */
   onLabelWidthChange?: (width: number) => void;
@@ -129,7 +130,7 @@ export function renderGridTable(props: GridTableProps): {
     row.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        props.onTaskClick(item.task);
+        (props.onTaskKeyOpen || props.onTaskClick)(item.task);
       }
     });
 

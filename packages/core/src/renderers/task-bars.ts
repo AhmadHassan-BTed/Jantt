@@ -12,6 +12,8 @@ export interface TaskBarsProps {
   showCritical: boolean;
   showBaselines: boolean;
   readOnly?: boolean;
+  /** When true (label column hidden), renders readable labels beside milestones and narrow bars. */
+  showOutsideLabels?: boolean;
   people?: Person[];
   teams?: Team[];
   controller: InteractionController;
@@ -19,6 +21,7 @@ export interface TaskBarsProps {
 }
 
 const DONE_BACKGROUND = "var(--jantt-bar-done, #64748B)";
+const NARROW_BAR_LABEL_THRESHOLD_PX = 104;
 
 /**
  * Renders task bars, milestone diamonds, baseline ghost bars, progress indicators, and link ports.
@@ -137,12 +140,31 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       }
 
       container.appendChild(mStone);
+
+      if (props.showOutsideLabels) {
+        const mLabel = document.createElement("div");
+        mLabel.className = `jantt-milestone-label ${isDone ? "is-done" : ""} ${isSelected ? "is-selected" : ""}`.trim();
+        mLabel.style.left = `${item.x + 14}px`;
+        mLabel.style.top = `${item.y}px`;
+        mLabel.textContent = item.displayLabel;
+        mLabel.setAttribute("data-task-id", item.task.id);
+        mLabel.setAttribute("role", "button");
+        mLabel.setAttribute("aria-label", `Milestone: ${item.displayLabel}`);
+        mLabel.addEventListener("pointerdown", (e) => {
+          props.controller.startDrag(e, item.task, "move", mStone);
+        });
+        mLabel.addEventListener("keydown", (e) => {
+          props.controller.handleKeyDown(e, item.task);
+        });
+        container.appendChild(mLabel);
+      }
       return;
     }
 
     // 3. Standard Task Bar
+    const useOutsideBarLabel = Boolean(props.showOutsideLabels && item.width < NARROW_BAR_LABEL_THRESHOLD_PX);
     const bar = document.createElement("div");
-    bar.className = `jantt-task-bar ${isDone ? "is-done" : ""} ${item.task.locked ? "is-locked" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
+    bar.className = `jantt-task-bar ${isDone ? "is-done" : ""} ${item.task.locked ? "is-locked" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""} ${useOutsideBarLabel ? "has-outside-label" : ""}`.trim();
     bar.style.left = `${item.x}px`;
     bar.style.top = `${item.y}px`;
     bar.style.width = `${item.width}px`;
@@ -297,6 +319,24 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     });
 
     container.appendChild(bar);
+
+    if (useOutsideBarLabel) {
+      const outsideLabel = document.createElement("div");
+      outsideLabel.className = `jantt-bar-outside-label ${isDone ? "is-done" : ""} ${isSelected ? "is-selected" : ""}`.trim();
+      outsideLabel.style.left = `${item.x + item.width + 8}px`;
+      outsideLabel.style.top = `${item.y + item.height / 2}px`;
+      outsideLabel.textContent = item.displayLabel;
+      outsideLabel.setAttribute("data-task-id", item.task.id);
+      outsideLabel.setAttribute("role", "button");
+      outsideLabel.setAttribute("aria-label", item.displayLabel);
+      outsideLabel.addEventListener("pointerdown", (e) => {
+        props.controller.startDrag(e, item.task, "move", bar);
+      });
+      outsideLabel.addEventListener("keydown", (e) => {
+        props.controller.handleKeyDown(e, item.task);
+      });
+      container.appendChild(outsideLabel);
+    }
   });
 }
 

@@ -24,7 +24,8 @@ import {
   DoorOpen,
   Loader2,
   Palette,
-  PanelLeft
+  PanelLeft,
+  Download
 } from "lucide-react";
 import { themeManager } from "@jantt/core";
 import type { User as FirebaseUser } from "firebase/auth";
@@ -520,6 +521,10 @@ interface NavbarProps {
   onOpenEditorLogin?: () => void;
   onOpenCommandPalette?: () => void;
   onOpenShortcuts?: () => void;
+  /** Chromium install prompt availability; the button disappears once installed. */
+  canInstall?: boolean;
+  isStandalone?: boolean;
+  onInstall?: () => void;
 
   /* Plans */
   activeProjectId: string;
@@ -581,6 +586,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenEditorLogin,
   onOpenCommandPalette,
   onOpenShortcuts,
+  canInstall = false,
+  isStandalone = false,
+  onInstall,
   activeProjectId,
   activePlanName,
   customProjects,
@@ -805,6 +813,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="nav-label">{isRoomActive ? "Invite" : "Share"}</span>
             {peopleCount > 0 && <span className="nav-count-pill">{peopleCount}</span>}
           </button>
+
+          {canInstall && !isStandalone && onInstall && (
+            <button
+              type="button"
+              className="btn-nav nav-icon-btn nav-install-btn"
+              onClick={onInstall}
+              title="Install Jantt as a desktop app"
+              aria-label="Install Jantt as a desktop app"
+            >
+              <Download size={13} style={{ color: "#22C55E" }} aria-hidden="true" />
+              <span className="nav-label">Install App</span>
+            </button>
+          )}
 
           <button
             type="button"

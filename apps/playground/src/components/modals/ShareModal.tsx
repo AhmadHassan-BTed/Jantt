@@ -592,7 +592,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <input
               id="share-link-input"
               type="text"
@@ -600,7 +600,12 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               className="prompt-input"
               value={safeUrl}
               onFocus={(e) => e.currentTarget.select()}
-              style={{ fontFamily: "var(--jantt-font-mono, monospace)", fontSize: "12px", flex: 1, minWidth: 0 }}
+              style={{
+                fontFamily: "var(--jantt-font-mono, monospace)",
+                fontSize: "12px",
+                flex: "1 1 220px",
+                minWidth: 0
+              }}
             />
             <button
               type="button"
@@ -611,6 +616,18 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               {copiedTarget === "link" ? <Check size={14} /> : <Copy size={14} />}
               <span>{copiedTarget === "link" ? "Copied!" : "Copy link"}</span>
             </button>
+            {canNativeShare && (
+              <button
+                type="button"
+                className="btn-nav"
+                onClick={handleNativeShare}
+                style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                title="Open the device share sheet"
+              >
+                <Share2 size={14} />
+                <span>Share via Device</span>
+              </button>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px", flexWrap: "wrap" }}>
@@ -640,18 +657,6 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                 <MessageSquare size={13} />
                 <span>WhatsApp</span>
               </button>
-              {canNativeShare && (
-                <button
-                  type="button"
-                  className="btn-nav"
-                  style={{ fontSize: "11.5px", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                  onClick={handleNativeShare}
-                  title="Open the device share sheet"
-                >
-                  <Share2 size={13} />
-                  <span>More...</span>
-                </button>
-              )}
             </div>
           </div>
 

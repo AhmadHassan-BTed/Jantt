@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Sparkles, X, Settings, Trash2, ArrowLeft, Zap, BookOpen } from "lucide-react";
 import type { UseCopilotReturn } from "../../hooks/useCopilot";
+import { useSheetSwipeDismiss } from "../../hooks/useSheetSwipeDismiss";
+import { triggerHaptic } from "../../services/platform";
 import { CopilotMessages } from "./CopilotMessages";
 import { CopilotInput } from "./CopilotInput";
 import { CopilotSetup } from "./CopilotSetup";
@@ -22,10 +24,15 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
   onOpenPromptModal
 }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const swipe = useSheetSwipeDismiss({ onClose, enabled: isMobile && isOpen });
 
   if (!isOpen) return null;
 
   const isConfigured = copilot.isConfigured;
+  const handleAcceptDiff = () => {
+    triggerHaptic("success");
+    copilot.acceptChange();
+  };
 
   return (
     <>
@@ -39,13 +46,20 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
       )}
 
       <aside
-        className={`jantt-copilot-drawer ${isOpen ? "is-open" : ""}`}
+        className={`jantt-copilot-drawer ${isOpen ? "is-open" : ""} ${
+          isMobile ? "is-mobile-sheet" : ""
+        } ${swipe.isDragging ? "is-dragging" : ""}`}
+        style={isMobile ? swipe.sheetStyle : undefined}
         role="dialog"
         aria-label="Jantt AI Copilot"
         aria-modal="true"
       >
+        {isMobile && (
+          <div className="copilot-sheet-pull-handle" aria-hidden="true" {...swipe.handleProps} />
+        )}
+
         {/* Drawer Header */}
-        <div className="copilot-header">
+        <div className="copilot-header" {...(isMobile ? swipe.handleProps : {})}>
           {showSettings ? (
             <button
               type="button"
@@ -148,7 +162,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
               <CopilotMessages
                 messages={copilot.messages}
                 pendingDiff={copilot.pendingDiff}
-                onAcceptDiff={copilot.acceptChange}
+                onAcceptDiff={handleAcceptDiff}
                 onRejectDiff={copilot.rejectChange}
                 onRevertDiff={copilot.revertChange}
                 onPromptClick={(prompt) => copilot.sendMessage(prompt)}
