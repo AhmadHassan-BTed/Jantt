@@ -288,7 +288,14 @@ export function executeTool(name: string, args: Record<string, unknown>): unknow
       const validation = validate(plan);
       const tasks = liveTasksOf(plan);
       const targetDate = targetDateOf(args, plan);
-      const critical = calculateCriticalPath(tasks, { defaultGapDays: gapDaysOf(plan), targetDate });
+      const critical = calculateCriticalPath(tasks, {
+        defaultGapDays: gapDaysOf(plan),
+        targetDate,
+        calendar: plan.meta?.calendar,
+        useWorkingDays: plan.meta?.useWorkingDays,
+        calendars: plan.calendars,
+        people: plan.people
+      });
 
       let startDate: string | null = null;
       const workload = new Map<string, { assignee: string; taskCount: number; totalDays: number }>();
@@ -412,7 +419,14 @@ export function executeTool(name: string, args: Record<string, unknown>): unknow
       const validation = validate(plan);
       const tasks = liveTasksOf(plan);
       const targetDate = targetDateOf(args, plan);
-      const critical = calculateCriticalPath(tasks, { defaultGapDays: gapDaysOf(plan), targetDate });
+      const critical = calculateCriticalPath(tasks, {
+        defaultGapDays: gapDaysOf(plan),
+        targetDate,
+        calendar: plan.meta?.calendar,
+        useWorkingDays: plan.meta?.useWorkingDays,
+        calendars: plan.calendars,
+        people: plan.people
+      });
       const calendar = workingCalendarOf(plan);
       const health = auditScheduleIntegrity(tasks, critical, { calendar });
 

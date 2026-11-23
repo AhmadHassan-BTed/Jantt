@@ -284,6 +284,10 @@ export interface ViewportOptions {
 }
 
 export interface CriticalPathOptions {
+  calendar?: WorkingCalendar | CalendarPreset;
+  calendars?: Record<string, WorkingCalendar>;
+  people?: Person[];
+  useWorkingDays?: boolean;
   targetDate?: string; // Contractual completion deadline (causes negative float if project slips); invalid values are ignored
   nearCriticalThresholdDays?: number; // Default: 3 days
   defaultGapDays?: number; // Default: DEFAULT_GAP_DAYS (same as resolveSchedule); pass meta.defaultGapDays

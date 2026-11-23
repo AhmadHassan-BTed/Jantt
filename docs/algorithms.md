@@ -74,7 +74,7 @@ When working days are enabled (`meta.useWorkingDays`, or a project `meta.calenda
 
 6. **Critical links** connect two critical tasks where the link drives the successor's early start. **Critical paths** are enumerated along critical links (iterative, capped at 25 paths, with a warning when truncated).
 
-Float is measured in calendar days; working calendars are not applied inside the CPM. Links inside a cycle are ignored here as well, so cyclic input never crashes and every task still gets finite metrics.
+CPM uses each task's resolved working calendar for duration and float when a calendar applies. Dependency lags use the successor's calendar. Tasks without a working calendar use calendar days. Links inside a cycle are ignored here as well, so cyclic input never crashes and every task still gets finite metrics.
 
 ### PERT risk (`calculatePertRisk`)
 

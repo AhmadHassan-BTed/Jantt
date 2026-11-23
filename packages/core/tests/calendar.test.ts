@@ -13,8 +13,39 @@ import {
   isSupportedRegion,
   CALENDAR_PRESETS
 } from "../src/calendar";
+import { calculateCriticalPath } from "../src/cpm";
 import { CascadeResolveStage } from "../src/pipeline/stages/cascade-resolve-stage";
 import type { Task, Person, WorkingCalendar } from "../src/types";
+
+describe("CPM working calendars", () => {
+  it("moves a weekend deadline to each task's last working day", () => {
+    const task = { id: "a", start: "2026-11-02", end: "2026-11-02" };
+    const targetDate = "2026-11-08";
+    expect(calculateCriticalPath([task], { targetDate }).metrics.get("a")?.lateStart).toBe(targetDate);
+    const result = calculateCriticalPath([task], { targetDate, calendar: "standard" });
+    expect(result.metrics.get("a")).toMatchObject({ lateStart: "2026-11-06", totalFloat: 4 });
+  });
+
+  it("inverts working-day leads across calendars in the backward pass", () => {
+    const tasks: Task[] = [
+      { id: "a", start: "2026-11-06", end: "2026-11-06", calendar: "continuous" },
+      { id: "b", start: "2026-11-06", end: "2026-11-06", calendar: "standard", dependsOn: "a:FS-1d" }
+    ];
+    const result = calculateCriticalPath(tasks, { targetDate: "2026-11-10" });
+    expect(result.metrics.get("a")?.lateStart).toBe("2026-11-10");
+    expect(result.metrics.get("b")?.earlyStart).toBe("2026-11-06");
+  });
+
+  it("skips named holidays when applying dependency lag and duration", () => {
+    const tasks: Task[] = [
+      { id: "a", start: "2026-11-06", end: "2026-11-06" },
+      { id: "b", start: "2026-11-05", end: "2026-11-06", dependsOn: "a:FS+1d", calendarId: "site" }
+    ];
+    const result = calculateCriticalPath(tasks, { calendars: { site: { holidays: ["2026-11-09"] } } });
+    expect(result.metrics.get("b")).toMatchObject({ earlyStart: "2026-11-10", earlyFinish: "2026-11-11" });
+    expect(result.metrics.get("a")?.lateStart).toBe("2026-11-09");
+  });
+});
 
 describe("Multi-Calendar & Statutory Holiday Matrix", () => {
   describe("Presets and Working Day checks", () => {

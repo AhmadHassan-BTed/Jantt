@@ -253,7 +253,11 @@ export class CanvasTimelineRenderer {
         try {
           const result = calculateCriticalPath(rows, {
             targetDate: typeof meta?.targetDate === "string" ? meta.targetDate : undefined,
-            defaultGapDays: meta?.defaultGapDays
+            defaultGapDays: meta?.defaultGapDays,
+            calendar: meta?.calendar,
+            useWorkingDays: meta?.useWorkingDays,
+            calendars: this.plan.calendars,
+            people: this.plan.people
           });
           ids = result.criticalTaskIds;
           links = result.criticalDepKeys;

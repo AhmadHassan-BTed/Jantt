@@ -16,6 +16,7 @@
 
 import { Task, CriticalPathResult, CriticalPathOptions, TaskScheduleMetrics } from "./types";
 import { toEpochDay, fromEpochDay, parseISODate, isValidISODate } from "./date-math";
+import { addWorkingDays, diffWorkingDays, getPreviousWorkingDay, resolveTaskCalendar, type WorkingCalendar } from "./calendar";
 import { getEffectiveGap } from "./utils";
 import { DEFAULT_GAP_DAYS } from "./constants";
 import {
@@ -100,6 +101,35 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   const position = new Map<string, number>();
   ids.forEach((id, i) => position.set(id, i));
 
+  const calendars: (WorkingCalendar | undefined)[] = [];
+  const projectCalendar = options?.calendar;
+  const calendarContext = {
+    people: options?.people,
+    calendars: options?.calendars,
+    defaultCalendar: typeof projectCalendar === "string" ? options?.calendars?.[projectCalendar] ?? projectCalendar : projectCalendar
+  };
+  const shift = (i: number, day: number, days: number) => {
+    const calendar = calendars[i];
+    if (!calendar) return day + days;
+    const shifted = toEpochDay(addWorkingDays(fromEpochDay(day), days, calendar));
+    return Number.isNaN(shifted) ? day + days : shifted;
+  };
+  const difference = (i: number, from: number, to: number) => {
+    const calendar = calendars[i];
+    if (!calendar) return to - from;
+    const startDate = fromEpochDay(from);
+    const endDate = fromEpochDay(to);
+    return isValidISODate(startDate) && isValidISODate(endDate)
+      ? diffWorkingDays(startDate, endDate, calendar)
+      : to - from;
+  };
+  const previous = (i: number, day: number) => {
+    const calendar = calendars[i];
+    if (!calendar) return day;
+    const snapped = toEpochDay(getPreviousWorkingDay(fromEpochDay(day), calendar));
+    return Number.isNaN(snapped) ? day : snapped;
+  };
+
   const start = new Float64Array(n);
   const dur = new Float64Array(n);
   const invalidDates = new Set<string>();
@@ -110,8 +140,13 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
     const id = ids[i];
     const task = graph.nodes.get(id)!;
     const s = dayOf(task.start, invalidDates, id);
-    start[i] = s;
-    dur[i] = task.milestone ? 0 : Math.max(0, dayOf(task.end, invalidDates, id) - s);
+    const person = options?.people?.find((p) => p.id === task.assignee || p.name === task.assignee);
+    const calendar = task.calendar || task.calendarId || person?.calendar || person?.calendarId || (options?.useWorkingDays ?? Boolean(options?.calendar))
+      ? resolveTaskCalendar(task, calendarContext)
+      : undefined;
+    calendars.push(calendar);
+    start[i] = shift(i, s, 0);
+    dur[i] = task.milestone ? 0 : Math.max(0, difference(i, s, dayOf(task.end, invalidDates, id)));
 
     const gap = getEffectiveGap(task, defaultGap);
     const edges: CpmEdge[] = [];
@@ -134,8 +169,12 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   // 1. Forward Pass: ES = max(own start, every link's earliest allowed start); EF = ES + duration
   const es = new Float64Array(n);
   const ef = new Float64Array(n);
-  const forwardCandidate = (e: CpmEdge) =>
-    relationEarliestStartDay(e.type, es[e.from], ef[e.from], dur[e.to], e.lag);
+  const forwardCandidate = (e: CpmEdge) => {
+    if (!calendars[e.to]) return relationEarliestStartDay(e.type, es[e.from], ef[e.from], dur[e.to], e.lag);
+    const anchor = isStartAnchoredRelation(e.type) ? es[e.from] : ef[e.from];
+    const shifted = shift(e.to, anchor, e.lag);
+    return isFinishConstrainedRelation(e.type) ? shift(e.to, shifted, -dur[e.to]) : shifted;
+  };
   let projectEF = -Infinity;
   for (let i = 0; i < n; i++) {
     let value = start[i];
@@ -144,7 +183,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
       if (candidate > value) value = candidate;
     }
     es[i] = value;
-    ef[i] = value + dur[i];
+    ef[i] = shift(i, value, dur[i]);
     if (ef[i] > projectEF) projectEF = ef[i];
   }
 
@@ -159,24 +198,35 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
     }
   }
 
+  const latestPredecessorStart = (edge: CpmEdge, successorStart: number, successorFinish: number) => {
+    const limit = isFinishConstrainedRelation(edge.type) ? successorFinish : successorStart;
+    const lag = calendars[edge.to] ? Math.round(edge.lag) : edge.lag;
+    let anchor = limit - lag;
+    if (calendars[edge.to] && lag !== 0) {
+      // A working-day lag counts from the day after (or before) the anchor.
+      anchor = shift(edge.to, limit, 1 - lag) - 1;
+    }
+    const latestAnchor = previous(edge.from, anchor);
+    return isStartAnchoredRelation(edge.type) ? latestAnchor : shift(edge.from, latestAnchor, -dur[edge.from]);
+  };
+
   const lf = new Float64Array(n);
   const ls = new Float64Array(n);
   for (let i = n - 1; i >= 0; i--) {
-    let value = projectLF;
-    for (const e of outgoing[i]) {
-      const succAnchorLate = isFinishConstrainedRelation(e.type) ? lf[e.to] : ls[e.to];
-      const candidate = succAnchorLate - e.lag + (isStartAnchoredRelation(e.type) ? dur[i] : 0);
+    let value = shift(i, previous(i, projectLF), -dur[i]);
+    for (const edge of outgoing[i]) {
+      const candidate = latestPredecessorStart(edge, ls[edge.to], lf[edge.to]);
       if (candidate < value) value = candidate;
     }
-    lf[i] = value;
-    ls[i] = value - dur[i];
+    ls[i] = value;
+    lf[i] = shift(i, value, dur[i]);
   }
 
   // 3. Total Float & Free Float
   const totalFloat = new Float64Array(n);
   let minTotalFloat = Infinity;
   for (let i = 0; i < n; i++) {
-    totalFloat[i] = ls[i] - es[i];
+    totalFloat[i] = difference(i, es[i], ls[i]);
     if (totalFloat[i] < minTotalFloat) minTotalFloat = totalFloat[i];
   }
   const projectTotalFloat = minTotalFloat === Infinity ? 0 : minTotalFloat;
@@ -200,9 +250,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
     if (outgoing[i].length > 0) {
       let minSlack = Infinity;
       for (const e of outgoing[i]) {
-        const succAnchorEarly = isFinishConstrainedRelation(e.type) ? ef[e.to] : es[e.to];
-        const ownAnchorEarly = isStartAnchoredRelation(e.type) ? es[i] : ef[i];
-        const slack = succAnchorEarly - e.lag - ownAnchorEarly;
+        const slack = difference(i, es[i], latestPredecessorStart(e, es[e.to], ef[e.to]));
         if (slack < minSlack) minSlack = slack;
       }
       freeFloat = Math.max(0, Math.min(tf, minSlack));

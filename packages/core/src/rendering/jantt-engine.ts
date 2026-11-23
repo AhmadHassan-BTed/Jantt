@@ -99,7 +99,7 @@ export class JanttRendererEngine {
   /** Task layouts of the latest render (the delegated canvas pan/marquee handler reads them). */
   private lastTaskLayouts: TaskLayout[] = [];
   /** Critical path of the last task array: viewport-only renders (zoom, scroll anchors, search) reuse it. */
-  private criticalCache: { tasks: Task[]; gap: number; targetDate: unknown; result: CriticalPathResult } | null = null;
+  private criticalCache: { tasks: Task[]; gap: number; targetDate: unknown; calendar: unknown; useWorkingDays: unknown; calendars: unknown; people: unknown; result: CriticalPathResult } | null = null;
   /** Schedule warnings last seen per source, so persistent problems are reported to onError once. */
   private seenDiagnostics: Record<"load" | "edit", Set<string>> = { load: new Set(), edit: new Set() };
 
@@ -219,12 +219,16 @@ export class JanttRendererEngine {
   private criticalPathFor(data: JanttData): CriticalPathResult {
     const gap = data.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS;
     const targetDate = data.meta?.targetDate;
+    const calendar = data.meta?.calendar;
+    const useWorkingDays = data.meta?.useWorkingDays;
+    const { calendars, people } = data;
     const cached = this.criticalCache;
-    if (cached && cached.tasks === data.tasks && cached.gap === gap && cached.targetDate === targetDate) {
+    if (cached && cached.tasks === data.tasks && cached.gap === gap && cached.targetDate === targetDate &&
+      cached.calendar === calendar && cached.useWorkingDays === useWorkingDays && cached.calendars === calendars && cached.people === people) {
       return cached.result;
     }
-    const result = calculateCriticalPath(data.tasks, { defaultGapDays: gap, targetDate });
-    this.criticalCache = { tasks: data.tasks, gap, targetDate, result };
+    const result = calculateCriticalPath(data.tasks, { defaultGapDays: gap, targetDate, calendar, useWorkingDays, calendars, people });
+    this.criticalCache = { tasks: data.tasks, gap, targetDate, calendar, useWorkingDays, calendars, people, result };
     return result;
   }
 

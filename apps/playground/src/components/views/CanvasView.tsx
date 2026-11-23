@@ -178,8 +178,15 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
 
   // Real CPM (same engine as the Gantt and Budget views), never a priority heuristic.
   const criticalTaskIds = useMemo(
-    () => calculateCriticalPath(liveTasks, { targetDate, defaultGapDays }).criticalTaskIds,
-    [liveTasks, targetDate, defaultGapDays]
+    () => calculateCriticalPath(liveTasks, {
+      targetDate,
+      defaultGapDays,
+      calendar: parsedData.meta?.calendar,
+      useWorkingDays: parsedData.meta?.useWorkingDays,
+      calendars: parsedData.calendars,
+      people: parsedData.people
+    }).criticalTaskIds,
+    [liveTasks, targetDate, defaultGapDays, parsedData.meta, parsedData.calendars, parsedData.people]
   );
 
   const renderPlan = useMemo<JanttData>(

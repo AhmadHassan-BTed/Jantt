@@ -256,7 +256,11 @@ export function layout(
     viewportOptions.criticalResult ||
     calculateCriticalPath(tasks, {
       defaultGapDays: data.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS,
-      targetDate: data.meta?.targetDate
+      targetDate: data.meta?.targetDate,
+      calendar: data.meta?.calendar,
+      useWorkingDays: data.meta?.useWorkingDays,
+      calendars: data.calendars,
+      people: data.people
     });
   const { criticalTaskIds, criticalDepKeys } = criticalResult;
 
