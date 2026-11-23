@@ -582,7 +582,7 @@ export function diffWorkingDays(
   for (let curr = from + 1; curr <= to; curr++) {
     if (isWorkingEpochDay(curr, index)) workingCount++;
   }
-  return a < b ? workingCount : -workingCount;
+  return workingCount === 0 ? 0 : a < b ? workingCount : -workingCount;
 }
 
 /**

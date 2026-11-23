@@ -14,6 +14,7 @@ import {
   CALENDAR_PRESETS
 } from "../src/calendar";
 import { calculateCriticalPath } from "../src/cpm";
+import { resolveSchedule } from "../src/resolver";
 import { CascadeResolveStage } from "../src/pipeline/stages/cascade-resolve-stage";
 import type { Task, Person, WorkingCalendar } from "../src/types";
 
@@ -26,14 +27,36 @@ describe("CPM working calendars", () => {
     expect(result.metrics.get("a")).toMatchObject({ lateStart: "2026-11-06", totalFloat: 4 });
   });
 
-  it("inverts working-day leads across calendars in the backward pass", () => {
+  it("inverts working-day leads across calendars in the backward pass without overshooting weekends", () => {
+    // B has a 3-working-day duration (Wed 11-04 -> Mon 11-09); with target Tue 11-10, B.lateStart = Thu 11-05.
+    // Because A -> B has FS-1d on B's Mon-Fri calendar, A can finish at most Fri 11-06 (not Sat/Sun 11-07..08).
     const tasks: Task[] = [
-      { id: "a", start: "2026-11-06", end: "2026-11-06", calendar: "continuous" },
-      { id: "b", start: "2026-11-06", end: "2026-11-06", calendar: "standard", dependsOn: "a:FS-1d" }
+      { id: "a", start: "2026-11-04", end: "2026-11-04", calendar: "continuous" },
+      { id: "b", start: "2026-11-04", end: "2026-11-09", calendar: "standard", dependsOn: "a:FS-1d" }
     ];
     const result = calculateCriticalPath(tasks, { targetDate: "2026-11-10" });
-    expect(result.metrics.get("a")?.lateStart).toBe("2026-11-10");
-    expect(result.metrics.get("b")?.earlyStart).toBe("2026-11-06");
+    expect(result.metrics.get("b")?.earlyStart).toBe("2026-11-04");
+    expect(result.metrics.get("b")?.lateStart).toBe("2026-11-05");
+    expect(result.metrics.get("a")?.lateFinish).toBe("2026-11-06");
+    expect(result.metrics.get("a")?.lateStart).toBe("2026-11-06");
+
+    // Verify forward/backward consistency: scheduling A at its lateFinish keeps B within targetDate,
+    // while scheduling A one day later (Saturday) pushes B to Friday and breaches targetDate.
+    const atLate = calculateCriticalPath(
+      [{ ...tasks[0], start: "2026-11-06", end: "2026-11-06" }, tasks[1]],
+      { targetDate: "2026-11-10" }
+    );
+    expect(atLate.metrics.get("b")?.earlyStart).toBe("2026-11-05");
+    expect(atLate.metrics.get("b")?.earlyFinish).toBe("2026-11-10");
+    expect(atLate.metrics.get("b")?.totalFloat).toBe(0);
+
+    const pastLate = calculateCriticalPath(
+      [{ ...tasks[0], start: "2026-11-07", end: "2026-11-07" }, tasks[1]],
+      { targetDate: "2026-11-10" }
+    );
+    expect(pastLate.metrics.get("b")?.earlyStart).toBe("2026-11-06");
+    expect(pastLate.metrics.get("b")?.earlyFinish).toBe("2026-11-11");
+    expect(pastLate.metrics.get("b")?.totalFloat).toBe(-1);
   });
 
   it("skips named holidays when applying dependency lag and duration", () => {
@@ -44,6 +67,68 @@ describe("CPM working calendars", () => {
     const result = calculateCriticalPath(tasks, { calendars: { site: { holidays: ["2026-11-09"] } } });
     expect(result.metrics.get("b")).toMatchObject({ earlyStart: "2026-11-10", earlyFinish: "2026-11-11" });
     expect(result.metrics.get("a")?.lateStart).toBe("2026-11-09");
+  });
+
+  it("keeps mixed-calendar critical paths intact under positive deadline slack", () => {
+    const chain: Task[] = [
+      { id: "a", start: "2026-11-02", end: "2026-11-02", calendar: "standard" },
+      { id: "b", start: "2026-11-03", end: "2026-11-03", calendar: "continuous", dependsOn: "a:FS+1d" }
+    ];
+    const chainResult = calculateCriticalPath(chain, { targetDate: "2026-11-09" });
+    expect(chainResult.criticalTaskIds).toEqual(new Set(["a", "b"]));
+    expect(chainResult.criticalDepKeys).toEqual(new Set(["a->b"]));
+    expect(chainResult.criticalPaths).toEqual([["a", "b"]]);
+    expect(chainResult.metrics.get("a")?.totalFloat).toBe(4);
+    expect(chainResult.metrics.get("b")?.totalFloat).toBe(6);
+
+    // Parallel branches: continuous bottleneck finishing Wed 11-04 must stay critical over a shorter
+    // 4x10 branch finishing Mon 11-02 even though the 4x10 branch has a smaller working-day float (3 < 4).
+    const parallel: Task[] = [
+      { id: "long", start: "2026-11-02", end: "2026-11-04", calendar: "continuous" },
+      { id: "short", start: "2026-11-02", end: "2026-11-02", calendar: "compressed_4x10" }
+    ];
+    const parallelResult = calculateCriticalPath(parallel, { targetDate: "2026-11-08" });
+    expect(parallelResult.criticalTaskIds).toEqual(new Set(["long"]));
+    expect(parallelResult.projectTotalFloat).toBe(4);
+    expect(parallelResult.metrics.get("short")).toMatchObject({ isCritical: false, totalFloat: 3 });
+  });
+
+  it("preserves exact dates of unmoved weekend-started tasks like the cascade", () => {
+    const tasks: Task[] = [{ id: "wknd", start: "2026-11-07", end: "2026-11-09" }];
+    const result = calculateCriticalPath(tasks, { calendar: "standard" });
+    expect(result.metrics.get("wknd")).toMatchObject({
+      earlyStart: "2026-11-07",
+      earlyFinish: "2026-11-09",
+      totalFloat: 0,
+      isCritical: true
+    });
+  });
+
+  it("matches CascadeResolveStage calendar activation (useWorkingDays: false opts out globally)", () => {
+    const people: Person[] = [{ id: "p1", name: "Alex", calendar: "standard" }];
+    const tasks: Task[] = [
+      { id: "a", start: "2026-11-02", end: "2026-11-02", assignee: "p1" },
+      { id: "b", start: "2026-11-02", end: "2026-11-02", dependsOn: "a:FS+1d" }
+    ];
+    const optedOut = calculateCriticalPath(tasks, {
+      calendar: "standard",
+      useWorkingDays: false,
+      people,
+      targetDate: "2026-11-08"
+    });
+    // Calendar days (not Mon-Fri): B finishes 11-03, lateFinish is Sun 11-08 (5 calendar days float).
+    expect(optedOut.metrics.get("b")).toMatchObject({ lateFinish: "2026-11-08", totalFloat: 5 });
+
+    // Resolved working-day chain across a weekend stays critical with zero working-day float.
+    const chain: Task[] = [
+      { id: "t1", start: "2026-11-04", end: "2026-11-06" },
+      { id: "t2", start: "2026-11-05", end: "2026-11-06", dependsOn: "t1" }
+    ];
+    const resolved = resolveSchedule(chain, { defaultGapDays: 2, calendar: "standard" });
+    const cpm = calculateCriticalPath(resolved, { defaultGapDays: 2, calendar: "standard" });
+    expect(cpm.criticalTaskIds).toEqual(new Set(["t1", "t2"]));
+    expect(cpm.criticalDepKeys).toEqual(new Set(["t1->t2"]));
+    expect(cpm.projectTotalFloat).toBe(0);
   });
 });
 

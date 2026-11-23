@@ -27,6 +27,7 @@ import {
 import {
   getTodayISODate,
   calculateCriticalPath,
+  type CriticalPathOptions,
   type TimeScale,
   DAY_WIDTH_MIN,
   DAY_WIDTH_MAX,
@@ -144,6 +145,7 @@ export interface ViewToolbarProps {
   dateFilter: ReturnType<typeof useDateFilter>;
   people: ReturnType<typeof usePeopleTeams>;
   tasks?: Task[];
+  cpmOptions?: CriticalPathOptions;
   viewport?: ReturnType<typeof useGanttViewport>;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
@@ -164,6 +166,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   dateFilter,
   people,
   tasks = [],
+  cpmOptions,
   viewport,
   searchQuery = "",
   onSearchChange,
@@ -248,15 +251,24 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
     return counts;
   }, [tasks]);
 
-  // Critical path task count for Gantt view
+  // Critical path task count for Gantt view (honors plan gap, deadline, and working calendars)
   const criticalCount = useMemo(() => {
     if (activeView !== "gantt" || tasks.length === 0) return 0;
     try {
-      return calculateCriticalPath(tasks).criticalTaskIds.size;
+      return calculateCriticalPath(tasks, cpmOptions).criticalTaskIds.size;
     } catch {
       return 0;
     }
-  }, [activeView, tasks]);
+  }, [
+    activeView,
+    tasks,
+    cpmOptions?.defaultGapDays,
+    cpmOptions?.targetDate,
+    cpmOptions?.calendar,
+    cpmOptions?.useWorkingDays,
+    cpmOptions?.calendars,
+    cpmOptions?.people
+  ]);
 
   // Active filter state calculations
   const isDateActive = dateFilter.dateFilterMode !== "all" || Boolean(dateFilter.dateFilterActiveSummary);

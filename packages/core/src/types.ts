@@ -283,11 +283,25 @@ export interface ViewportOptions {
   criticalResult?: CriticalPathResult;
 }
 
-export interface CriticalPathOptions {
+/**
+ * Working-calendar inputs for schedule resolution and CPM analysis
+ * (typically `meta.calendar`, `meta.useWorkingDays`, `data.calendars` and `data.people`).
+ */
+export interface ScheduleCalendarOptions {
+  /** Project-wide working calendar or preset name. */
   calendar?: WorkingCalendar | CalendarPreset;
+  /** Named calendars referenced by `task.calendar` / `calendarId` and person calendars. */
   calendars?: Record<string, WorkingCalendar>;
+  /** People, used to resolve assignee calendars. */
   people?: Person[];
+  /**
+   * Use working-day arithmetic for every task. Defaults to true when `calendar` is set.
+   * Tasks with their own calendar always use it.
+   */
   useWorkingDays?: boolean;
+}
+
+export interface CriticalPathOptions extends ScheduleCalendarOptions {
   targetDate?: string; // Contractual completion deadline (causes negative float if project slips); invalid values are ignored
   nearCriticalThresholdDays?: number; // Default: 3 days
   defaultGapDays?: number; // Default: DEFAULT_GAP_DAYS (same as resolveSchedule); pass meta.defaultGapDays

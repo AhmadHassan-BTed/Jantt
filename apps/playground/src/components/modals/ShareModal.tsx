@@ -348,7 +348,13 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               title: currentProjectName || "Executive Project Status & Schedule Health Report",
               // Internal plan ids mean nothing to report readers; rooms have a shareable id.
               projectCode: roomId,
-              theme: activeTheme?.mode === "dark" ? "dark" : "corporate"
+              theme: activeTheme?.mode === "dark" ? "dark" : "corporate",
+              defaultGapDays: parsedData.meta?.defaultGapDays,
+              targetDate: typeof parsedData.meta?.targetDate === "string" ? parsedData.meta.targetDate : undefined,
+              calendar: parsedData.meta?.calendar,
+              useWorkingDays: parsedData.meta?.useWorkingDays,
+              calendars: parsedData.calendars,
+              people: parsedData.people
             }),
             extension: "html",
             mime: "text/html;charset=utf-8"

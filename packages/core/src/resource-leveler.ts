@@ -450,7 +450,13 @@ export function levelResources(
     const conflicts = detectOverAllocations(workingTasks, options);
     if (conflicts.length === 0) break;
 
-    const cpm = calculateCriticalPath(workingTasks, { defaultGapDays: defaultGap });
+    const cpm = calculateCriticalPath(workingTasks, {
+      defaultGapDays: defaultGap,
+      calendar: options?.calendar,
+      useWorkingDays: options?.useWorkingDays,
+      calendars: options?.calendars,
+      people
+    });
     const byId = new Map(workingTasks.map((t) => [t.id, t] as const));
     const groups = groupByResource(workingTasks, people);
 

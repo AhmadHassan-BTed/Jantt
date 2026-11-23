@@ -9,9 +9,11 @@
  * 5. Critical & Near-Critical identification
  * 6. Driving critical dependency link detection and contiguous path assembly
  *
- * Honors FS/SS/FF/SF links with lead/lag exactly like the cascade (same lag/gap rule, same
- * default gap), so the critical path matches the dates the cascade produced. Dates are handled
- * as integer day numbers internally; durations are `end - start` days and milestones are 0.
+ * Honors FS/SS/FF/SF links with lead/lag and working calendars using the same rules as the
+ * cascade (same lag/gap rule, same default gap, same calendar activation & successor-calendar
+ * lag semantics), so the critical path matches the dates the cascade produced. Without a working
+ * calendar, dates run on integer calendar-day numbers and durations are `end - start` days;
+ * milestones always have duration 0.
  */
 
 import { Task, CriticalPathResult, CriticalPathOptions, TaskScheduleMetrics } from "./types";
@@ -103,6 +105,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
 
   const calendars: (WorkingCalendar | undefined)[] = [];
   const projectCalendar = options?.calendar;
+  const globalUseWorking = options?.useWorkingDays ?? Boolean(projectCalendar);
   const calendarContext = {
     people: options?.people,
     calendars: options?.calendars,
@@ -131,22 +134,27 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   };
 
   const start = new Float64Array(n);
+  const rawEnd = new Float64Array(n);
   const dur = new Float64Array(n);
   const invalidDates = new Set<string>();
   const incoming: CpmEdge[][] = [];
   const outgoing: CpmEdge[][] = ids.map(() => []);
+  let hasAnyCalendar = false;
 
   for (let i = 0; i < n; i++) {
     const id = ids[i];
     const task = graph.nodes.get(id)!;
     const s = dayOf(task.start, invalidDates, id);
-    const person = options?.people?.find((p) => p.id === task.assignee || p.name === task.assignee);
-    const calendar = task.calendar || task.calendarId || person?.calendar || person?.calendarId || (options?.useWorkingDays ?? Boolean(options?.calendar))
+    const e = dayOf(task.end, invalidDates, id);
+    // Match CascadeResolveStage: explicit useWorkingDays: false opts out globally while honoring task calendars.
+    const calendar = globalUseWorking || task.calendar || task.calendarId
       ? resolveTaskCalendar(task, calendarContext)
       : undefined;
+    if (calendar) hasAnyCalendar = true;
     calendars.push(calendar);
-    start[i] = shift(i, s, 0);
-    dur[i] = task.milestone ? 0 : Math.max(0, difference(i, s, dayOf(task.end, invalidDates, id)));
+    start[i] = s;
+    rawEnd[i] = task.milestone || e < s ? s : e;
+    dur[i] = task.milestone ? 0 : Math.max(0, difference(i, s, rawEnd[i]));
 
     const gap = getEffectiveGap(task, defaultGap);
     const edges: CpmEdge[] = [];
@@ -178,12 +186,17 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   let projectEF = -Infinity;
   for (let i = 0; i < n; i++) {
     let value = start[i];
+    let pushed = false;
     for (const e of incoming[i]) {
       const candidate = forwardCandidate(e);
-      if (candidate > value) value = candidate;
+      if (candidate > value) {
+        value = candidate;
+        pushed = true;
+      }
     }
     es[i] = value;
-    ef[i] = shift(i, value, dur[i]);
+    // Unpushed tasks keep their own end date (matches CascadeResolveStage for weekend-started tasks).
+    ef[i] = pushed ? (dur[i] === 0 ? value : shift(i, value, dur[i])) : rawEnd[i];
     if (ef[i] > projectEF) projectEF = ef[i];
   }
 
@@ -199,28 +212,51 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   }
 
   const latestPredecessorStart = (edge: CpmEdge, successorStart: number, successorFinish: number) => {
-    const limit = isFinishConstrainedRelation(edge.type) ? successorFinish : successorStart;
-    const lag = calendars[edge.to] ? Math.round(edge.lag) : edge.lag;
-    let anchor = limit - lag;
-    if (calendars[edge.to] && lag !== 0) {
-      // A working-day lag counts from the day after (or before) the anchor.
-      anchor = shift(edge.to, limit, 1 - lag) - 1;
+    const rawLimit = isFinishConstrainedRelation(edge.type) ? successorFinish : successorStart;
+    let anchor: number;
+    if (!calendars[edge.to]) {
+      anchor = rawLimit - edge.lag;
+    } else {
+      // addWorkingDays always lands on a working day of the successor's calendar, so
+      // addWorkingDays(anchor, lag) <= rawLimit iff it is <= previous(edge.to, rawLimit).
+      const limit = previous(edge.to, rawLimit);
+      const lag = Math.round(edge.lag);
+      if (lag > 0) {
+        // Largest anchor such that the lag-th working day strictly after it is <= limit.
+        anchor = shift(edge.to, limit, 1 - lag) - 1;
+      } else if (lag < 0) {
+        // Largest anchor such that the |lag|-th working day strictly before it is <= limit.
+        anchor = shift(edge.to, limit, -lag);
+      } else {
+        anchor = limit;
+      }
     }
     const latestAnchor = previous(edge.from, anchor);
-    return isStartAnchoredRelation(edge.type) ? latestAnchor : shift(edge.from, latestAnchor, -dur[edge.from]);
+    if (isStartAnchoredRelation(edge.type)) return latestAnchor;
+    return dur[edge.from] === 0 ? latestAnchor : shift(edge.from, latestAnchor, -dur[edge.from]);
   };
 
-  const lf = new Float64Array(n);
-  const ls = new Float64Array(n);
-  for (let i = n - 1; i >= 0; i--) {
-    let value = shift(i, previous(i, projectLF), -dur[i]);
-    for (const edge of outgoing[i]) {
-      const candidate = latestPredecessorStart(edge, ls[edge.to], lf[edge.to]);
-      if (candidate < value) value = candidate;
+  const runBackwardPass = (finishLimit: number) => {
+    const passLf = new Float64Array(n);
+    const passLs = new Float64Array(n);
+    for (let i = n - 1; i >= 0; i--) {
+      const latestFinish = previous(i, finishLimit);
+      let value = dur[i] === 0 ? latestFinish : shift(i, latestFinish, -dur[i]);
+      for (const edge of outgoing[i]) {
+        const candidate = latestPredecessorStart(edge, passLs[edge.to], passLf[edge.to]);
+        if (candidate < value) value = candidate;
+      }
+      passLs[i] = value;
+      passLf[i] = dur[i] === 0 ? value : shift(i, value, dur[i]);
     }
-    ls[i] = value;
-    lf[i] = shift(i, value, dur[i]);
-  }
+    return { ls: passLs, lf: passLf };
+  };
+
+  const { ls, lf } = runBackwardPass(projectLF);
+  // Across mixed calendars with positive deadline slack, comparing heterogeneous working-day
+  // floats against a single minTotalFloat can split or invert the critical chain. A tight backward
+  // pass anchored at projectEF identifies the true longest path independently of calendar units.
+  const longestLs = hasAnyCalendar && projectLF > projectEF ? runBackwardPass(projectEF).ls : null;
 
   // 3. Total Float & Free Float
   const totalFloat = new Float64Array(n);
@@ -229,22 +265,29 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
     totalFloat[i] = difference(i, es[i], ls[i]);
     if (totalFloat[i] < minTotalFloat) minTotalFloat = totalFloat[i];
   }
-  const projectTotalFloat = minTotalFloat === Infinity ? 0 : minTotalFloat;
 
   // 4. Critical & Near-Critical Classification (near-critical is measured from the critical float)
   const nearCriticalThreshold = options?.nearCriticalThresholdDays ?? 3;
   const criticalFloatRef = Math.max(minTotalFloat, 0);
   const isCritical = new Uint8Array(n);
   const isDriving = (e: CpmEdge) => forwardCandidate(e) === es[e.to];
+  let minCriticalFloat = Infinity;
 
   graph.nodes.forEach((_task, id) => {
     const i = position.get(id)!;
     const tf = totalFloat[i];
-    const critical = tf <= 0 || tf === minTotalFloat;
-    const nearCritical = !critical && tf - criticalFloatRef <= nearCriticalThreshold;
+    const longestSlack = longestLs ? difference(i, es[i], longestLs[i]) : null;
+    const critical = longestSlack !== null ? tf <= 0 || longestSlack <= 0 : tf <= 0 || tf === minTotalFloat;
+    const nearCritical =
+      !critical &&
+      (longestSlack !== null ? longestSlack <= nearCriticalThreshold : tf - criticalFloatRef <= nearCriticalThreshold);
     isCritical[i] = critical ? 1 : 0;
-    if (critical) criticalTaskIds.add(id);
-    else if (nearCritical) nearCriticalTaskIds.add(id);
+    if (critical) {
+      criticalTaskIds.add(id);
+      if (tf < minCriticalFloat) minCriticalFloat = tf;
+    } else if (nearCritical) {
+      nearCriticalTaskIds.add(id);
+    }
 
     let freeFloat = tf;
     if (outgoing[i].length > 0) {
@@ -325,6 +368,13 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   if (truncated) {
     warnings.push(`Critical path listing truncated to ${MAX_CRITICAL_PATHS} paths.`);
   }
+
+  const projectTotalFloat =
+    longestLs && minCriticalFloat !== Infinity
+      ? minCriticalFloat
+      : minTotalFloat === Infinity
+        ? 0
+        : minTotalFloat;
 
   return {
     criticalTaskIds,

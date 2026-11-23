@@ -11,7 +11,7 @@
  * A task is a milestone only when it is flagged `milestone: true`; a single-day task is a bar.
  */
 
-import type { Task, CriticalPathResult, EVMAnalysis, ScheduleHealthReport } from "@jantt/core";
+import type { Task, CriticalPathResult, EVMAnalysis, ScheduleHealthReport, ScheduleCalendarOptions } from "@jantt/core";
 import { calculateEVM } from "@jantt/core";
 import { auditScheduleIntegrity } from "@jantt/core";
 import { calculateCriticalPath } from "@jantt/core";
@@ -19,7 +19,7 @@ import { diffDays, addDays, isValidISODate, getTodayISODate } from "@jantt/core"
 import { getTaskDependencyRelations } from "@jantt/core";
 import { sanitizeXmlText } from "./ms-project.js";
 
-export interface ExecutiveReportOptions {
+export interface ExecutiveReportOptions extends ScheduleCalendarOptions {
   title?: string;
   projectCode?: string;
   author?: string;
@@ -67,7 +67,10 @@ export function exportExecutiveReportHtml(tasks: Task[], options: ExecutiveRepor
   const cpm = criticalPathOf(liveTasks, options);
   if (cpm) {
     try {
-      health = auditScheduleIntegrity(liveTasks, cpm);
+      const usesWorkingDays = options.useWorkingDays ?? Boolean(options.calendar);
+      const namedCalendar = typeof options.calendar === "string" ? options.calendars?.[options.calendar] : undefined;
+      const healthCalendar = usesWorkingDays ? (namedCalendar ?? options.calendar ?? "standard") : undefined;
+      health = auditScheduleIntegrity(liveTasks, cpm, healthCalendar ? { calendar: healthCalendar } : undefined);
     } catch {
       // fallback
     }
@@ -893,10 +896,17 @@ function indexRows(tasks: Task[]): Map<string, { task: Task; row: number }> {
   return rows;
 }
 
-/** CPM with the plan's gap and target date (validated by core), so the highlight matches the cascade. */
+/** CPM with the plan's gap, target date and working calendars (validated by core), so the highlight matches the cascade. */
 function criticalPathOf(tasks: Task[], options: ExecutiveReportOptions): CriticalPathResult | null {
   try {
-    return calculateCriticalPath(tasks, { defaultGapDays: options.defaultGapDays, targetDate: options.targetDate });
+    return calculateCriticalPath(tasks, {
+      defaultGapDays: options.defaultGapDays,
+      targetDate: options.targetDate,
+      calendar: options.calendar,
+      useWorkingDays: options.useWorkingDays,
+      calendars: options.calendars,
+      people: options.people
+    });
   } catch {
     return null;
   }

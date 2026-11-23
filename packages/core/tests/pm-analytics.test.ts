@@ -307,6 +307,22 @@ describe("Schedule Health Audit (DCMA 14-Point Inspired)", () => {
     ]);
     expect(result.highFloatCount).toBe(0);
   });
+
+  it("does not double-convert task-calendar working-day float in the high-float check", () => {
+    // C uses a standard Mon-Fri calendar and has > 44 working days of float (~70 calendar days).
+    // Even without a project calendar passed to auditScheduleIntegrity, C must still be flagged.
+    const tasks: Task[] = [
+      { id: "A", category: "dev", start: "2026-01-05", end: "2026-01-06" },
+      { id: "B", category: "dev", start: "2026-01-06", end: "2026-04-01", dependsOn: "A" },
+      { id: "C", category: "dev", start: "2026-01-06", end: "2026-01-09", dependsOn: "A", calendar: "standard" },
+      { id: "D", category: "dev", start: "2026-04-01", end: "2026-04-02", dependsOn: ["B", "C"] }
+    ];
+    const cpm = calculateCriticalPath(tasks);
+    expect(cpm.metrics.get("C")!.totalFloat).toBeGreaterThan(44);
+    const result = auditScheduleIntegrity(tasks, cpm);
+    expect(result.highFloatCount).toBe(1);
+    expect(result.issues.some((i) => i.type === "high-float" && i.taskId === "C")).toBe(true);
+  });
 });
 
 describe("PERT 3-Point Estimation Engine", () => {

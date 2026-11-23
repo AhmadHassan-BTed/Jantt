@@ -263,7 +263,12 @@ export function auditScheduleIntegrity(
             recommendation: "Fast-track or compress durations along this driving chain to recover the contractual schedule."
           });
         } else if (tf > DCMA_WORKING_DAY_LIMIT) {
-          const workingFloat = toWorkingDays(metrics.earlyStart, metrics.lateStart, tf);
+          // Task-level calendars already produce working-day totalFloat from CPM; avoid
+          // shrinking them a second time by 5/7 when no project calendar option is passed.
+          const hasTaskCalendar = Boolean(t.calendar || t.calendarId);
+          const workingFloat = hasTaskCalendar
+            ? tf
+            : toWorkingDays(metrics.earlyStart, metrics.lateStart, diffDays(metrics.earlyStart, metrics.lateStart));
           if (workingFloat > DCMA_WORKING_DAY_LIMIT) {
             highFloatCount++;
             issues.push({
