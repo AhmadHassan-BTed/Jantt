@@ -940,7 +940,13 @@ export function App() {
         title: project.currentProjectName || "Executive Project Status & Schedule Health Report",
         // Internal plan ids mean nothing to report readers; rooms have a shareable id.
         projectCode: roomSync.activeRoomId || undefined,
-        theme: viewport.activeTheme?.mode === "dark" ? "dark" : "corporate"
+        theme: viewport.activeTheme?.mode === "dark" ? "dark" : "corporate",
+        defaultGapDays: data.meta?.defaultGapDays,
+        targetDate: typeof data.meta?.targetDate === "string" ? data.meta.targetDate : undefined,
+        calendar: data.meta?.calendar,
+        useWorkingDays: data.meta?.useWorkingDays,
+        calendars: data.calendars,
+        people: data.people
       })
     );
 

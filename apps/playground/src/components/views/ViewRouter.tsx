@@ -169,6 +169,14 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           dateFilter={dateFilter}
           people={people}
           tasks={parsedData.tasks}
+          cpmOptions={{
+            defaultGapDays: parsedData.meta?.defaultGapDays,
+            targetDate: typeof parsedData.meta?.targetDate === "string" ? parsedData.meta.targetDate : undefined,
+            calendar: parsedData.meta?.calendar,
+            useWorkingDays: parsedData.meta?.useWorkingDays,
+            calendars: parsedData.calendars,
+            people: parsedData.people
+          }}
           viewport={viewport}
           searchQuery={tasks.tasksSearchQuery}
           onSearchChange={tasks.setTasksSearchQuery}

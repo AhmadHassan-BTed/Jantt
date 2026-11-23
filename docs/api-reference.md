@@ -63,7 +63,9 @@ argument is either the default gap in days or `ResolveScheduleOptions`
 
 ### `calculateCriticalPath(tasks, options?): CriticalPathResult`
 Two-pass CPM: early/late start and finish, total and free float, critical and near-critical
-task ids and the critical dependency links.
+task ids and the critical dependency links. Accepts `CriticalPathOptions` (`targetDate`,
+`nearCriticalThresholdDays`, `defaultGapDays`, plus working-calendar options `calendar`,
+`useWorkingDays`, `calendars`, `people`). When no calendar applies, arithmetic uses calendar days.
 
 ### Analytics
 - `calculateEVM(tasks, options?)`: Earned Value metrics (PV, EV, AC, SV, CV, SPI, CPI, EAC, ETC, VAC, TCPI) from task `estimatedCost`, `actualCost` and `progress`.

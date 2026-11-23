@@ -389,7 +389,14 @@ function auditCommand(filePath, flags) {
       flags.target !== undefined ? EXIT_USAGE : EXIT_FAILURE
     );
   }
-  const cpm = calculateCriticalPath(liveTasks, { defaultGapDays: gapDaysOf(json), targetDate });
+  const cpm = calculateCriticalPath(liveTasks, {
+    defaultGapDays: gapDaysOf(json),
+    targetDate,
+    calendar: json?.meta?.calendar,
+    useWorkingDays: json?.meta?.useWorkingDays,
+    calendars: json?.calendars,
+    people: json?.people
+  });
   const calendar = workingCalendarOf(json);
   const health = auditScheduleIntegrity(liveTasks, cpm, { calendar });
   const evm = calculateEVM(liveTasks);
@@ -544,10 +551,24 @@ function exportCommand(filePath, flags) {
     } else if (format === "html") {
       outputContent = exportExecutiveReportHtml(liveTasks, {
         title: json?.meta?.title || parsedPath.name,
-        projectCode: json?.meta?.code || "PROJ-1"
+        projectCode: json?.meta?.code || "PROJ-1",
+        defaultGapDays: gapDaysOf(json),
+        targetDate: typeof json?.meta?.targetDate === "string" ? json.meta.targetDate : undefined,
+        calendar: json?.meta?.calendar,
+        useWorkingDays: json?.meta?.useWorkingDays,
+        calendars: json?.calendars,
+        people: json?.people
       });
     } else {
-      outputContent = exportExecutiveReportSvg(liveTasks, { title: json?.meta?.title || parsedPath.name });
+      outputContent = exportExecutiveReportSvg(liveTasks, {
+        title: json?.meta?.title || parsedPath.name,
+        defaultGapDays: gapDaysOf(json),
+        targetDate: typeof json?.meta?.targetDate === "string" ? json.meta.targetDate : undefined,
+        calendar: json?.meta?.calendar,
+        useWorkingDays: json?.meta?.useWorkingDays,
+        calendars: json?.calendars,
+        people: json?.people
+      });
     }
   } catch (err) {
     throw new CliError(`Export failed: ${err.message}`);

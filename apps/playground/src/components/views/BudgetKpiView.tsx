@@ -142,9 +142,13 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   const cpm = useMemo(() => {
     return calculateCriticalPath(allProjectTasks, {
       targetDate,
-      defaultGapDays: parsedData.meta?.defaultGapDays
+      defaultGapDays: parsedData.meta?.defaultGapDays,
+      calendar: parsedData.meta?.calendar,
+      useWorkingDays: parsedData.meta?.useWorkingDays,
+      calendars: parsedData.calendars,
+      people: parsedData.people
     });
-  }, [allProjectTasks, targetDate, parsedData.meta?.defaultGapDays]);
+  }, [allProjectTasks, targetDate, parsedData.meta, parsedData.calendars, parsedData.people]);
 
   const evm = useMemo(() => calculateEVM(allProjectTasks), [allProjectTasks]);
 

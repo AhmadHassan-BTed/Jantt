@@ -54,7 +54,7 @@ When working days are enabled (`meta.useWorkingDays`, or a project `meta.calenda
 
 ## 2. Critical Path Analysis
 
-`calculateCriticalPath` runs on the same graph with the **same lag rule and default gap** as the cascade (pass `meta.defaultGapDays`; the default is 2), so it agrees with the dates the cascade produced. All arithmetic is on integer day numbers.
+`calculateCriticalPath` runs on the same graph with the **same lag rule, default gap, and working-calendar rules** as the cascade (pass `meta.defaultGapDays` and calendar options; the default gap is 2), so it agrees with the dates the cascade produced. Without a working calendar, arithmetic runs on integer calendar days.
 
 ### Formulation
 
@@ -74,7 +74,7 @@ When working days are enabled (`meta.useWorkingDays`, or a project `meta.calenda
 
 6. **Critical links** connect two critical tasks where the link drives the successor's early start. **Critical paths** are enumerated along critical links (iterative, capped at 25 paths, with a warning when truncated).
 
-Float is measured in calendar days; working calendars are not applied inside the CPM. Links inside a cycle are ignored here as well, so cyclic input never crashes and every task still gets finite metrics.
+CPM uses each task's resolved working calendar for duration and float when a calendar applies (following the same activation rules as the cascade: `meta.useWorkingDays`, a project `meta.calendar`, or a task's own `calendar` / `calendarId`). Dependency lags use the successor's calendar. Tasks without a working calendar use calendar days. Across mixed calendars with positive deadline slack, criticality is determined from a tight longest-path pass anchored at $T_E$ so heterogeneous working-day floats never split a driving chain. Links inside a cycle are ignored here as well, so cyclic input never crashes and every task still gets finite metrics.
 
 ### PERT risk (`calculatePertRisk`)
 
