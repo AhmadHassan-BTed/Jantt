@@ -1,4 +1,12 @@
 import React from "react";
+import { MoreTaskRows, usePhoneListPage } from "./PhoneListPage";
+import { BoardCard, EditableBoardTitle } from "./BoardCard";
+import { SearchQueryFilterStage } from "../../services/query/filters/search-query-filter-stage";
+import { triggerHaptic } from "../../services/platform";
+import { TaskPresenceTag } from "../cloud/RoomPresenceStack";
+import type { RoomPresence } from "../../firebase/types";
+import { Modal, ModalHeader, useMediaQuery } from "../modals/ModalHost";
+import "./board-tasks.css";
 import {
   SortAsc,
   ArrowUp,
@@ -57,9 +65,9 @@ export function getKanbanColumn(task: Task): WorkflowStatus {
 }
 
 /** Returns `tasks` with one task moved to `status`, keeping progress consistent with it. */
-export function applyTaskStatus(tasks: Task[], taskId: string, status: string): Task[] {
+export function applyTaskStatus(tasks: Task[], taskId: string | ReadonlySet<string>, status: string): Task[] {
   return tasks.map((item) => {
-    if (item.id !== taskId) return item;
+    if (item._deleted || (typeof taskId === "string" ? item.id !== taskId : !taskId.has(item.id))) return item;
     const next: Task = { ...item, ...syncTaskProgressAndStatus({ status }, item) };
     // Re-opening finished work must actually re-open it (core keeps 100% for these statuses).
     if (status !== "completed" && typeof next.progress === "number" && next.progress >= 1) {
@@ -74,9 +82,12 @@ export function tintColor(color: string, percent: number): string {
   return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
 }
 
+const shortDateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
+const boardSearch = new SearchQueryFilterStage();
+
 export function formatShortRange(start: string, end: string): string {
   const parse = (value: string) => {
-    const date = new Date(`${value}T00:00:00`);
+    const date = new Date(`${value}T00:00:00Z`);
     return Number.isNaN(date.getTime()) || !/^\d{4}-\d{2}-\d{2}$/.test(value) || date.toISOString().slice(0, 10) !== value
       ? null
       : date;
@@ -84,10 +95,10 @@ export function formatShortRange(start: string, end: string): string {
   const a = parse(start);
   const b = parse(end);
   if (!a || !b) return start === end ? start : `${start} - ${end}`;
-  const fmt = (date: Date) => new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
+  const fmt = (date: Date) => shortDateFormatter.format(date);
   if (start === end) return fmt(a);
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
-    ? `${fmt(a).replace(/\s\d+$/, "")} ${a.getDate()}-${b.getDate()}`
+  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth()
+    ? `${fmt(a).replace(/\s\d+$/, "")} ${a.getUTCDate()}–${b.getUTCDate()}`
     : `${fmt(a)}-${fmt(b)}`;
 }
 
@@ -146,6 +157,9 @@ export function onActivateKey(action: () => void) {
 }
 
 interface KanbanViewProps {
+  remotePresence?: RoomPresence[];
+  searchQuery?: string;
+  onQuickTask?: (status: WorkflowStatus) => void;
   isMobile?: boolean;
   parsedData: JanttData;
   kanbanSortRules: KanbanSortRule[];
@@ -176,6 +190,9 @@ const KANBAN_COLUMNS: ReadonlyArray<{ id: WorkflowStatus; label: string; shortLa
 
 export const KanbanView: React.FC<KanbanViewProps> = ({
   isMobile = false,
+  remotePresence,
+  searchQuery = "",
+  onQuickTask,
   parsedData,
   kanbanSortRules,
   setKanbanSortRules,
@@ -206,11 +223,27 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
   const [mobileActiveCol, setMobileActiveCol] = React.useState<string>(() => {
     const saved = storageService.getItem<{ mobileActiveCol?: string }>(STORAGE_KEYS.KANBAN_VIEW_STATE);
-    return typeof saved?.mobileActiveCol === "string" && saved.mobileActiveCol ? saved.mobileActiveCol : "not-started";
+    return KANBAN_COLUMNS.find(col => col.id === saved?.mobileActiveCol)?.id || "not-started";
   });
   React.useEffect(() => {
     storageService.setItem(STORAGE_KEYS.KANBAN_VIEW_STATE, { mobileActiveCol });
   }, [mobileActiveCol]);
+  const [limitColumn, setLimitColumn] = React.useState<WorkflowStatus | null>(null);
+  const [limitDraft, setLimitDraft] = React.useState("");
+  const rawLimits = parsedData.meta?.kanbanWipLimits;
+  const limits = rawLimits && typeof rawLimits === "object" ? rawLimits as Record<string, unknown> : {};
+  const getLimit = (column: WorkflowStatus) => {
+    const value = limits[column];
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+  };
+  const isFoldable = useMediaQuery("(min-width: 600px) and (max-width: 840px) and (min-height: 520px)");
+  const [focusedTask, setFocusedTask] = React.useState<string | null>(null);
+  const focusRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (focusedTask) focusRef.current?.querySelector<HTMLButtonElement>(".is-board-focus .board-open-task")?.focus({ preventScroll: false });
+  }, [focusedTask, mobileActiveCol]);
+  const [moveAnnouncement, setMoveAnnouncement] = React.useState("");
+  const [sortOpen, setSortOpen] = React.useState(false);
   const [dragTaskId, setDragTaskId] = React.useState<string | null>(null);
   const [dropColumn, setDropColumn] = React.useState<WorkflowStatus | null>(null);
 
@@ -229,6 +262,9 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     }
     const task = (parsedData.tasks || []).find((t) => t.id === taskId && !t._deleted);
     if (!task || (getKanbanColumn(task) === status && getStatusValue(task) === status)) return;
+    const statusName = TASK_STATUS_OPTIONS.find(option => option.id === status)?.label || status;
+    setMoveAnnouncement(`${task.label || task.name || task.id} moved to ${statusName}`);
+    triggerHaptic(task.milestone && status === "completed" ? "success" : "light");
     handleChartCommit({ ...parsedData, tasks: applyTaskStatus(parsedData.tasks, taskId, status) });
   };
 
@@ -237,50 +273,74 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     setDropColumn(null);
   };
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const searchContext = { dateFilterMode, selectedPersonFilter, effectivePeople, teams, completedFilterMode, searchQuery: normalizedQuery };
+  const isVisible = (task: Task) => {
+    if (completedFilterMode === "filter" && isTaskDone(task)) return false;
+    if (hasActiveFilter && dateFilterBehavior === "hide" && !isTaskActiveMatch(task)) return false;
+    return !normalizedQuery || boardSearch.matches(task, searchContext) ||
+      (Array.isArray(task.tags) && task.tags.some(tag => typeof tag === "string" && tag.toLowerCase().includes(normalizedQuery)));
+  };
+  const sortColumn = (tasks: Task[]) => {
+    const sorted = kanbanMultiSort(tasks);
+    return isPersonSorting ? sortTasksByAssignee(sorted, effectivePeople, teams) : sorted;
+  };
+
   const columns = KANBAN_COLUMNS.map((col) => {
-    let colTasks = kanbanMultiSort(tasksByColumn.get(col.id) || []);
-    if (isPersonSorting) {
-      colTasks = sortTasksByAssignee(colTasks, effectivePeople, teams);
-    }
-    let visibleTasks = colTasks;
-    if (hasActiveFilter && dateFilterBehavior === "hide") {
-      visibleTasks = visibleTasks.filter(isTaskActiveMatch);
-    }
-    if (completedFilterMode === "filter") {
-      visibleTasks = visibleTasks.filter((t) => !isTaskDone(t));
-    }
+    const colTasks = sortColumn(tasksByColumn.get(col.id) || []);
+    const visibleTasks = colTasks.filter(isVisible);
     const matchingCount = colTasks.filter((t) => {
       if (completedFilterMode === "filter" && isTaskDone(t)) return false;
       return isTaskActiveMatch(t);
     }).length;
     const displayTotal =
       completedFilterMode === "filter" ? colTasks.filter((t) => !isTaskDone(t)).length : colTasks.length;
-    return { col, visibleTasks, matchingCount, displayTotal };
+    // Existing sort rules determine where a moved card lands. Show that exact slot while dragging.
+    let insertion = -1;
+    if (dropColumn === col.id && dragTaskId) {
+      const dragged = parsedData.tasks.find(task => task.id === dragTaskId && !task._deleted);
+      if (dragged && getKanbanColumn(dragged) !== col.id) {
+        const candidates = new Set(visibleTasks.map(task => task.id));
+        candidates.add(dragged.id);
+        const movedTasks = applyTaskStatus(parsedData.tasks.filter(task => candidates.has(task.id)), dragged.id, col.id);
+        const preview = sortColumn(movedTasks).filter(isVisible);
+        insertion = preview.findIndex(task => task.id === dragged.id);
+      }
+    }
+    return { col, visibleTasks, matchingCount, displayTotal, insertion, count: colTasks.length };
   });
 
+  const selectedColumn = columns.find(({ col }) => col.id === mobileActiveCol);
+  const visibleColumnId = searchQuery.trim() && !selectedColumn?.visibleTasks.length
+    ? columns.find(column => column.visibleTasks.length)?.col.id || mobileActiveCol
+    : mobileActiveCol;
+  const page = usePhoneListPage(JSON.stringify([visibleColumnId, searchQuery, dateFilterMode, selectedPersonFilter, completedFilterMode]), isMobile && !isFoldable);
+  const placeholder = <div className="board-drop-slot" aria-hidden="true" />;
   return (
-    <div className="kanban-outer-wrap">
+    <div className={`kanban-outer-wrap ${isMobile ? "phone-board" : ""}`}>
+      <span role="status" className="board-sr-status">{moveAnnouncement}</span>
       {/* Mobile Column Tab Switcher */}
       <div className="mobile-kanban-tabs">
-        {columns.map(({ col, matchingCount, displayTotal }) => (
+        {columns.map(({ col, matchingCount, displayTotal, visibleTasks }) => (
           <button
             key={col.id}
             type="button"
-            className={`mobile-kanban-tab ${mobileActiveCol === col.id ? "is-active" : ""}`}
-            onClick={() => {
-              setMobileActiveCol(col.id);
-              const el = document.getElementById(`kanban-col-${col.id}`);
-              el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-            }}
+            className={`mobile-kanban-tab ${visibleColumnId === col.id ? "is-active" : ""}`}
+            aria-pressed={visibleColumnId === col.id}
+            disabled={Boolean(searchQuery.trim() && !visibleTasks.length)}
+            onClick={() => setMobileActiveCol(col.id)}
           >
             <span>{col.shortLabel}</span>
-            <span className="mobile-kanban-tab-count">{hasActiveFilter ? matchingCount : displayTotal}</span>
+            <span className="mobile-kanban-tab-count">{searchQuery.trim() ? visibleTasks.length : hasActiveFilter ? matchingCount : displayTotal}</span>
           </button>
         ))}
       </div>
 
       {/* Multi-Sort Bar */}
-      <div className="kanban-sort-bar">
+      {isMobile && <button type="button" className="board-sort-toggle" aria-expanded={sortOpen} onClick={() => setSortOpen(open => !open)}>
+        <SortAsc size={15} />Sort{kanbanSortRules.length > 0 && <span>{kanbanSortRules.map(rule => rule.field).join(", ")}</span>}
+      </button>}
+      {(!isMobile || sortOpen) && <div className="kanban-sort-bar">
         <span className="kanban-sort-label">
           <SortAsc size={12} />
           {isMobile ? "Sort:" : "Sort by:"}
@@ -344,11 +404,20 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             <span>{isMobile ? "Sort" : "Add Sort"}</span>
           </button>
         )}
-      </div>
+      </div>}
 
       {/* Kanban Columns */}
-      <div className="kanban-view-container">
-        {columns.map(({ col, visibleTasks, matchingCount, displayTotal }) => (
+      <div className={isFoldable ? "board-split-layout" : "board-column-layout"}>
+      {isFoldable && <aside className="board-master-list" aria-label="Board task list">
+        {columns.flatMap(({ col, visibleTasks }) => visibleTasks.map(task =>
+          <button key={task.id} type="button" aria-pressed={focusedTask === task.id}
+            onClick={() => { setMobileActiveCol(col.id); setFocusedTask(task.id); }}>
+            {task.label || task.name || task.id}<small>{col.shortLabel}</small>
+          </button>
+        ))}
+      </aside>}
+      <div className="kanban-view-container" ref={focusRef}>
+        {columns.filter(({ col }) => (!isMobile && !isFoldable) || col.id === visibleColumnId).map(({ col, visibleTasks, matchingCount, displayTotal, insertion, count }) => (
           <div
             key={col.id}
             id={`kanban-col-${col.id}`}
@@ -380,13 +449,20 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             }}
           >
             <div className="kanban-col-header">
-              <span className="kanban-col-title">{col.label}</span>
-              <span className="kanban-col-count">
-                {hasActiveFilter ? `${matchingCount}/${displayTotal}` : displayTotal}
-              </span>
+              <span className="kanban-col-title">{col.shortLabel}</span>
+              <button type="button" className={`kanban-col-count board-wip-limit ${getLimit(col.id) && count > getLimit(col.id)! ? "is-over" : ""}`}
+                aria-label={`${col.shortLabel} work in progress limit, ${count} tasks, ${getLimit(col.id) ?? "unlimited"}`}
+                title={getLimit(col.id) ? `${count} of ${getLimit(col.id)} WIP limit` : "Set work in progress limit"}
+                disabled={isViewer} onClick={() => { setLimitDraft(String(getLimit(col.id) ?? "")); setLimitColumn(col.id); }}>
+                {searchQuery.trim() ? visibleTasks.length : hasActiveFilter ? `${matchingCount}/${displayTotal}` : displayTotal}
+                {getLimit(col.id) && <> / {getLimit(col.id)}{count > getLimit(col.id)! && " · over limit"}</>}
+              </button>
+              {!isViewer && onQuickTask && <button type="button" className="board-column-add" onClick={() => onQuickTask(col.id)} aria-label={`Quick task in ${col.shortLabel}`}>
+                <Plus size={18} aria-hidden="true" />
+              </button>}
             </div>
             <div className="kanban-card-list">
-              {visibleTasks.map((t) => {
+              {(visibleTasks.length > page.limit ? visibleTasks.slice(0, page.limit) : visibleTasks).map((t, index) => {
                 const cat = parsedData.categories?.[t.category];
                 // Plan colors are untrusted (rooms, share links): never let url() beacons reach a style.
                 const catColor = sanitizeCssColor(cat?.color, "var(--jantt-accent)");
@@ -401,33 +477,36 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 const title = t.label || t.name || t.id;
                 const teamColor = sanitizeCssColor(assigneeInfo.team?.color, "var(--jantt-accent)");
                 const shortRange = formatShortRange(t.start, t.end);
+                const editableTitle = <EditableBoardTitle title={title} readOnly={isViewer} mobile={isMobile}
+                  onSave={label => {
+                    if (isViewer) return;
+                    handleChartCommit({ ...parsedData, tasks: parsedData.tasks.map(item =>
+                      item.id === t.id && !item._deleted ? { ...item, label } : item) });
+                  }} />;
                 return (
-                  <div
-                    key={t.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Open details for ${title}`}
-                    className={`kanban-card ${isMobile ? "is-mobile-card" : ""} ${isMobile && selectedMobileTaskId === t.id ? "is-mobile-selected" : ""} ${isCompleted ? "is-completed" : ""} ${isDimmed ? "kanban-card-dimmed" : ""}`}
+                  <React.Fragment key={t.id}>
+                  {insertion === index && placeholder}
+                  <BoardCard title={title} mobile={isMobile} readOnly={isViewer}
+                    onSwipe={status => moveTask(t.id, status)} onOpen={() => openTaskDetailSidebar(t)}
+                    className={`kanban-card ${isFoldable && focusedTask === t.id ? "is-board-focus" : ""} ${dragTaskId === t.id ? "is-dragging" : ""} ${isMobile ? "is-mobile-card" : ""} ${isMobile && selectedMobileTaskId === t.id ? "is-mobile-selected" : ""} ${isCompleted ? "is-completed" : ""} ${isDimmed ? "kanban-card-dimmed" : ""}`}
                     style={{ ...(dragTaskId === t.id ? { opacity: 0.5 } : {}), ...(isMobile ? { borderLeftColor: catColor } : {}) }}
-                    draggable={!isViewer}
+                    draggable={!isViewer && !isMobile}
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/plain", t.id);
                       e.dataTransfer.effectAllowed = "move";
                       setDragTaskId(t.id);
                     }}
                     onDragEnd={endDrag}
-                    onClick={() => openTaskDetailSidebar(t)}
-                    onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
                   >
                     {isMobile ? <>
                       <div className="kanban-mobile-row-top">
                         {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
-                        <span className="kanban-mobile-title">{title}</span>
+                        {editableTitle}
                         {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
                       </div>
                       <div className="kanban-mobile-row-bottom">
                         <span className="kanban-mobile-date">{shortRange}</span>
-                        {t.assignee && <span className="kanban-mobile-avatar" style={{ background: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
+                        {t.assignee && <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
                         <span className="kanban-mobile-status-wrap"><TaskStatusSelect task={t} value={col.id} disabled={isViewer} optionPrefix="" onStatusChange={(status) => moveTask(t.id, status)} /></span>
                       </div>
                     </> : <>
@@ -450,7 +529,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                     {/* WBS Number + Task Title */}
                     <div className="kanban-card-title-row">
                       {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
-                      <h4 className="kanban-card-title">{title}</h4>
+                      {editableTitle}
                     </div>
                     <div className="kanban-card-meta">
                       <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -483,7 +562,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                 fontSize: "9px",
                                 fontWeight: 700,
                                 background: tintColor(teamColor, 12),
-                                color: teamColor,
+                                color: "var(--jantt-text)",
                                 padding: "1px 5px",
                                 borderRadius: "4px"
                               }}
@@ -518,13 +597,38 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       />
                     </div>
                     </>}
-                  </div>
+                    <TaskPresenceTag users={remotePresence} taskId={t.id} />
+                  </BoardCard>
+                  </React.Fragment>
                 );
               })}
+              <MoreTaskRows count={visibleTasks.length} limit={page.limit} onMore={page.loadMore} />
+              {insertion === visibleTasks.length && placeholder}
+              {!visibleTasks.length && insertion < 0 && <p className="board-empty">{searchQuery.trim() ? "No matching tasks" : "No tasks in this column"}</p>}
             </div>
           </div>
         ))}
       </div>
+      </div>
+      {limitColumn && !isViewer && <Modal onClose={() => setLimitColumn(null)} maxWidth={360}>
+        <ModalHeader title="Work in progress limit" />
+        <form className="task-action-form" onSubmit={event => {
+          event.preventDefault();
+          const value = Number(limitDraft);
+          if (limitDraft && (!Number.isSafeInteger(value) || value < 1)) return;
+          const nextLimits = { ...limits };
+          if (limitDraft) nextLimits[limitColumn] = value;
+          else delete nextLimits[limitColumn];
+          handleChartCommit({ ...parsedData, meta: { ...parsedData.meta, kanbanWipLimits: nextLimits } });
+          setLimitColumn(null);
+        }}>
+          <label>{KANBAN_COLUMNS.find(col => col.id === limitColumn)?.shortLabel} column capacity
+            <input data-autofocus type="number" min={1} step={1} placeholder="Unlimited" value={limitDraft}
+              onChange={event => setLimitDraft(event.target.value)} />
+          </label>
+          <button className="btn-nav is-primary" type="submit">Save limit</button>
+        </form>
+      </Modal>}
     </div>
   );
 };

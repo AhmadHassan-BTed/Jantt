@@ -1,7 +1,7 @@
 import { TaskLayout, DependencyLine, Person, Team } from "../types";
 import { InteractionController } from "../controller";
 import { TooltipController } from "./tooltip";
-import { formatHumanDate } from "../date-math";
+import { formatHumanDate, addDays, getTodayISODate } from "../date-math";
 import { resolveTaskAssignee } from "../team-resolver";
 import { isTaskDone, sanitizeCssColor } from "../utils";
 
@@ -28,6 +28,8 @@ const NARROW_BAR_LABEL_THRESHOLD_PX = 104;
  */
 export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): void {
   // Pre-index dependency lines by connected task IDs for O(1) hover lookups
+  const today = getTodayISODate();
+  const upcoming = addDays(today, 7);
   const taskDepMap = new Map<string, DependencyLine[]>();
   props.dependencies.forEach((dep) => {
     let fromList = taskDepMap.get(dep.fromTaskId);
@@ -45,32 +47,54 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     toList.push(dep);
   });
 
-  const activateDeps = (taskId: string) => {
-    const connected = taskDepMap.get(taskId);
-    if (!connected) return;
-    connected.forEach((dep) => {
-      const el = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
-      if (el) {
-        el.classList.add("is-active");
-        el.setAttribute("marker-end", el.dataset.activeMarker || "url(#jantt-arrow-active)");
+  function connectedLines(taskId: string): DependencyLine[] {
+    const adjacent = taskDepMap.get(taskId) || [];
+    if (!adjacent.some(dep => dep.isCritical)) return adjacent;
+    // Follow only driving CPM links. A parallel zero-float branch can belong to the same chain.
+    const lines = new Set<DependencyLine>();
+    const seen = new Set([taskId]);
+    const queue = [taskId];
+    while (queue.length) {
+      for (const dep of taskDepMap.get(queue.pop()!) || []) {
+        if (!dep.isCritical || lines.has(dep)) continue;
+        lines.add(dep);
+        for (const id of [dep.fromTaskId, dep.toTaskId]) {
+          if (!seen.has(id)) { seen.add(id); queue.push(id); }
+        }
       }
-    });
+    }
+    return Array.from(lines);
+  }
+  const bars = new Map<string, HTMLElement>();
+  const highlightedTasks = new Set<HTMLElement>();
+  let highlighted: SVGPathElement[] = [];
+  const deactivateDeps = () => {
+    for (const path of highlighted) {
+      path.classList.remove("is-active", "is-critical-chain");
+      if (path.dataset.normalMarker) path.setAttribute("marker-end", path.dataset.normalMarker);
+    }
+    highlighted = [];
+    for (const bar of highlightedTasks) bar.classList.remove("is-driving-task");
+    highlightedTasks.clear();
   };
-
-  const deactivateDeps = (taskId: string) => {
-    const connected = taskDepMap.get(taskId);
-    if (!connected) return;
-    connected.forEach((dep) => {
-      const el = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
-      if (el) {
-        el.classList.remove("is-active");
-        const isCrit = props.showCritical && dep.isCritical;
-        el.setAttribute(
-          "marker-end",
-          el.dataset.normalMarker || (isCrit ? "url(#jantt-arrow-critical)" : "url(#jantt-arrow)")
-        );
+  const activateDeps = (taskId: string) => {
+    deactivateDeps();
+    for (const dep of connectedLines(taskId)) {
+      const path = props.depPathElements.get(`${dep.fromTaskId}->${dep.toTaskId}`);
+      if (!path) continue;
+      highlighted.push(path);
+      path.classList.add("is-active");
+      if (dep.isCritical) {
+        path.classList.add("is-critical-chain");
+        for (const id of [dep.fromTaskId, dep.toTaskId]) {
+          const bar = bars.get(id);
+          if (bar) { highlightedTasks.add(bar); bar.classList.add("is-driving-task"); }
+        }
       }
-    });
+      const criticalMarker = path.ownerSVGElement?.dataset.arrowCriticalId;
+      if (dep.isCritical && criticalMarker) path.setAttribute("marker-end", `url(#${criticalMarker})`);
+      else if (path.dataset.activeMarker) path.setAttribute("marker-end", path.dataset.activeMarker);
+    }
   };
 
   // Hover cards are suppressed while any button is held (drags, pans, marquee) so re-rendered
@@ -102,6 +126,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     if (item.isMilestone) {
       const mStone = document.createElement("div");
       mStone.className = `jantt-milestone ${isDone ? "is-done" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
+      if (!isDone && item.task.end >= today && item.task.end <= upcoming) mStone.classList.add("is-upcoming");
       mStone.style.left = `${item.x}px`;
       mStone.style.top = `${item.y}px`;
       mStone.style.width = `${item.width}px`;
@@ -113,6 +138,8 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       mStone.setAttribute("role", "button");
       mStone.setAttribute("aria-label", `Milestone: ${item.displayLabel}, Date: ${formatHumanDate(item.task.start)}`);
 
+      mStone.addEventListener("focus", () => activateDeps(item.task.id));
+      mStone.addEventListener("blur", deactivateDeps);
       mStone.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "move", mStone);
       });
@@ -125,7 +152,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       });
       mStone.addEventListener("mouseleave", () => {
         props.tooltip.hide();
-        deactivateDeps(item.task.id);
+        deactivateDeps();
       });
 
       // Milestone Link Port
@@ -139,6 +166,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
         mStone.appendChild(portR);
       }
 
+      bars.set(item.task.id, mStone);
       container.appendChild(mStone);
 
       if (props.showOutsideLabels) {
@@ -173,10 +201,11 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     bar.setAttribute("data-task-id", item.task.id);
     bar.setAttribute("tabindex", "0");
     bar.setAttribute("role", "button");
-    bar.setAttribute(
-      "aria-label",
-      `${item.displayLabel}, Category: ${item.category.label}, Start: ${formatHumanDate(item.task.start)}, End: ${formatHumanDate(item.task.end)}, Duration: ${item.durationDays} days`
-    );
+    // Use the visible title and badges as the accessible name. Narrow bars place their text
+    // outside the button, so they need an explicit name. Dates are available as a description.
+    if (useOutsideBarLabel) bar.setAttribute("aria-label", item.displayLabel);
+    bar.setAttribute("aria-description",
+      `Category: ${item.category.label}, Start: ${formatHumanDate(item.task.start)}, End: ${formatHumanDate(item.task.end)}, Duration: ${item.durationDays} days`);
 
     // Progress Fill
     const progressRatio = isDone ? 1.0 : (item.task.progress ?? 0);
@@ -208,6 +237,12 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     const badges = document.createElement("div");
     badges.className = "jantt-bar-badges";
 
+    if (Number.isFinite(item.task.progress) && item.width >= 90) {
+      const percent = document.createElement("span");
+      percent.className = "jantt-bar-percent";
+      percent.textContent = `${Math.round(Math.min(1, Math.max(0, progressRatio)) * 100)}%`;
+      badges.appendChild(percent);
+    }
     if (item.task.urgent) {
       const uPill = document.createElement("span");
       uPill.className = "jantt-bar-urgent-pill is-urgent";
@@ -232,7 +267,9 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       const assigneeInfo = resolveTaskAssignee(item.task, props.people, props.teams);
       const aAvatar = document.createElement("span");
       aAvatar.className = "jantt-task-avatar-pill";
-      aAvatar.style.background = sanitizeCssColor(assigneeInfo.avatarColor, "#1E293B");
+      const avatarColor = sanitizeCssColor(assigneeInfo.avatarColor, "#1E293B");
+      aAvatar.style.setProperty("--jantt-person-color", avatarColor);
+      aAvatar.style.background = avatarColor;
       aAvatar.title = `${assigneeInfo.displayName}${assigneeInfo.team ? ` (${assigneeInfo.team.name})` : ""}`;
       aAvatar.textContent = assigneeInfo.initials;
       badges.appendChild(aAvatar);
@@ -276,9 +313,18 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       });
       bar.appendChild(handle);
 
+      const startHandle = document.createElement("div");
+      startHandle.className = "jantt-resize-handle is-start";
+      startHandle.title = "Drag to change start date";
+      startHandle.addEventListener("pointerdown", (e) => {
+        props.controller.startDrag(e, item.task, "resize", bar);
+      });
+      bar.appendChild(startHandle);
+
       const portL = document.createElement("div");
       portL.className = "jantt-link-port jantt-link-port-left";
-      portL.title = "Dependency target port";
+      portL.title = "Drag from task start to create a dependency";
+      portL.addEventListener("pointerdown", (e) => props.controller.startDrag(e, item.task, "link", portL));
       bar.appendChild(portL);
 
       const portR = document.createElement("div");
@@ -291,6 +337,8 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     }
 
     // Pointer events
+    bar.addEventListener("focus", () => activateDeps(item.task.id));
+    bar.addEventListener("blur", deactivateDeps);
     bar.addEventListener("pointerdown", (e) => {
       const target = e.target as HTMLElement;
       if (
@@ -315,9 +363,10 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
     bar.addEventListener("mouseleave", () => {
       props.tooltip.hide();
-      deactivateDeps(item.task.id);
+      deactivateDeps();
     });
 
+    bars.set(item.task.id, bar);
     container.appendChild(bar);
 
     if (useOutsideBarLabel) {

@@ -25,7 +25,8 @@ import {
   Github,
   ShieldCheck,
   Loader2,
-  Link2
+  Link2,
+  X
 } from "lucide-react";
 import type { JanttData } from "@jantt/core";
 import type { SavedProject } from "../../types";
@@ -33,6 +34,8 @@ import { getRoom, type UserRoomPointer, type UserProfile } from "../../firebase"
 import { DEFAULT_TEMPLATE } from "../../constants";
 import { formatRelativeTime } from "../../utils";
 import { ConfirmDialog, Modal, ModalHeader, downloadPlanExport, useMediaQuery, type ConfirmDialogProps } from "./ModalHost";
+
+import "./plan-manager.css";
 
 export interface PlanManagerModalProps {
   show: boolean;
@@ -274,24 +277,21 @@ export function getDropTransfer(
    Presentation
    -------------------------------------------------------------------------- */
 
-const LIST_META: Record<PlanListId, { title: string; description: string; icon: React.ReactNode; accent: string }> = {
+const LIST_META: Record<PlanListId, { title: string; description: string; icon: React.ReactNode }> = {
   device: {
     title: "This device",
     description: "Saved in this browser only",
-    icon: <HardDrive size={16} style={{ color: "#38BDF8" }} />,
-    accent: "#38BDF8"
+    icon: <HardDrive size={16} />
   },
   cloud: {
     title: "My cloud",
     description: "Rooms you own, synced live",
-    icon: <Crown size={16} style={{ color: "#F59E0B" }} />,
-    accent: "#F59E0B"
+    icon: <Crown size={16} />
   },
   shared: {
     title: "Shared with me",
     description: "Rooms others shared with you",
-    icon: <Users size={16} style={{ color: "#A855F7" }} />,
-    accent: "#C084FC"
+    icon: <Users size={16} />
   }
 };
 
@@ -307,19 +307,19 @@ const hasDragType = (event: { dataTransfer: DataTransfer | null }, type: string)
   Array.from(event.dataTransfer?.types ?? []).includes(type);
 
 const TARGET_ICONS: Record<PlanListId, React.ReactNode> = {
-  device: <HardDrive size={13} style={{ color: "#38BDF8" }} />,
-  cloud: <Cloud size={13} style={{ color: "#F59E0B" }} />,
-  shared: <Users size={13} style={{ color: "#A855F7" }} />
+  device: <HardDrive size={13} />,
+  cloud: <Cloud size={13} />,
+  shared: <Users size={13} />
 };
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 const KIND_ICONS: Record<PlanItemKind, React.ReactNode> = {
   template: <Sparkles size={16} style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0 }} />,
-  local: <HardDrive size={16} style={{ color: "#38BDF8", flexShrink: 0 }} />,
-  owned_room: <Crown size={16} style={{ color: "#F59E0B", flexShrink: 0 }} />,
-  shared_room: <Users size={16} style={{ color: "#A855F7", flexShrink: 0 }} />,
-  cached_room: <Link2 size={16} style={{ color: "#A855F7", flexShrink: 0 }} />
+  local: <HardDrive size={16} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />,
+  owned_room: <Crown size={16} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />,
+  shared_room: <Users size={16} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />,
+  cached_room: <Link2 size={16} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
 };
 
 const pillStyle = (background: string, color: string): React.CSSProperties => ({
@@ -573,6 +573,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
     : undefined;
   const isNarrow = useMediaQuery("(max-width: 960px)");
 
+  const filterRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [narrowList, setNarrowList] = useState<PlanListId>(() =>
     activeProjectId.startsWith("room-")
@@ -755,7 +756,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
   const closeMenu = (returnFocus: boolean) => {
     const anchor = menu?.anchor;
     setMenu(null);
-    if (returnFocus && anchor?.isConnected) anchor.focus();
+    if (returnFocus && anchor?.isConnected) anchor.focus({ preventScroll: true });
   };
 
   useLayoutEffect(() => {
@@ -871,18 +872,18 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
     const anchor = menu?.anchor ?? null;
     const editing: MenuEntry[] = [];
     if (item.kind === "local") {
-      editing.push({ key: "rename", label: "Rename", icon: <Edit2 size={13} style={{ color: "#F59E0B" }} />, onSelect: () => startRename(item, anchor) });
+      editing.push({ key: "rename", label: "Rename", icon: <Edit2 size={13} />, onSelect: () => startRename(item, anchor) });
     }
     if (item.kind === "local" || item.kind === "template") {
-      editing.push({ key: "duplicate", label: "Duplicate on this device", icon: <Files size={13} style={{ color: "#818CF8" }} />, onSelect: () => onDuplicateProject(item.id) });
+      editing.push({ key: "duplicate", label: "Duplicate on this device", icon: <Files size={13} />, onSelect: () => onDuplicateProject(item.id) });
     }
     const sharing: MenuEntry[] = [
-      { key: "json", label: "Export as JSON", icon: <FileJson size={13} style={{ color: "#38BDF8" }} />, onSelect: () => void exportPlan(item, "json") },
-      { key: "csv", label: "Export as CSV", icon: <FileSpreadsheet size={13} style={{ color: "#10B981" }} />, onSelect: () => void exportPlan(item, "csv") }
+      { key: "json", label: "Export as JSON", icon: <FileJson size={13} />, onSelect: () => void exportPlan(item, "json") },
+      { key: "csv", label: "Export as CSV", icon: <FileSpreadsheet size={13} />, onSelect: () => void exportPlan(item, "csv") }
     ];
     if (item.roomId && onOpenShareRoom && (item.kind === "owned_room" || item.kind === "shared_room")) {
       const roomId = item.roomId;
-      sharing.push({ key: "share", label: "Teammates & invite links", icon: <Share2 size={13} style={{ color: "#A855F7" }} />, onSelect: () => onOpenShareRoom(roomId) });
+      sharing.push({ key: "share", label: "Teammates & invite links", icon: <Share2 size={13} />, onSelect: () => onOpenShareRoom(roomId) });
     }
     const destructive: MenuEntry[] = [];
     if (item.kind === "local") {
@@ -972,7 +973,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       <div
         key={item.id}
         className={`plan-card ${item.isActive ? "is-active-plan" : ""} ${dragging?.id === item.id ? "is-dragging" : ""}`}
-        draggable={!isRenaming && !busyItemId}
+        draggable={!isNarrow && !isRenaming && !busyItemId}
         aria-busy={isBusy || undefined}
         onDragStart={(event) => {
           if (menu) setMenu(null);
@@ -985,7 +986,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       >
         <div className="plan-card-top-row">
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
-            <GripVertical size={14} aria-hidden="true" style={{ color: "var(--jantt-text-muted)", flexShrink: 0, opacity: 0.7 }} />
+            <GripVertical className="plan-drag-grip" size={14} aria-hidden="true" style={{ color: "var(--jantt-text-muted)", flexShrink: 0, opacity: 0.7 }} />
             {KIND_ICONS[item.kind]}
             {isRenaming ? (
               <input
@@ -993,6 +994,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                 autoFocus
                 className="select-input"
                 aria-label={`New name for "${item.name}"`}
+                enterKeyHint="done"
                 maxLength={120}
                 style={{ padding: "2px 6px", fontSize: "13px", fontWeight: 600, flex: 1, height: "26px", minWidth: 0 }}
                 value={renameValue}
@@ -1010,6 +1012,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               />
             ) : (
               <span
+                className="plan-card-name"
                 style={{
                   fontWeight: 600,
                   fontSize: "13.5px",
@@ -1028,14 +1031,9 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             {isBusy && <Loader2 size={14} className="spin-sync-icon" aria-label="Working" />}
             {item.isActive && (
               <span
-                style={{
-                  ...pillStyle("rgba(56, 189, 248, 0.2)", "var(--jantt-accent, #38BDF8)"),
-                  border: "1px solid rgba(56, 189, 248, 0.4)",
-                  borderRadius: "10px",
-                  padding: "2px 7px"
-                }}
+                className="plan-current-marker"
               >
-                Open now
+                <Check size={12} aria-hidden="true" /> Open now
               </span>
             )}
           </div>
@@ -1053,8 +1051,8 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
           {item.roleLabel && (
             <span
               style={pillStyle(
-                item.kind === "owned_room" ? "rgba(245, 158, 11, 0.15)" : "rgba(168, 85, 247, 0.15)",
-                item.kind === "owned_room" ? "#F59E0B" : "#C084FC"
+                "var(--jantt-surface-hover)",
+                "var(--jantt-text)"
               )}
             >
               {item.roleLabel}
@@ -1064,13 +1062,8 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
           {item.ownerUsername && <span style={{ fontSize: "11px" }}>by @{item.ownerUsername}</span>}
         </div>
 
-        <div className="plan-card-action-bar" style={{ flexWrap: "wrap" }}>
-          {item.isActive ? (
-            <button type="button" disabled className="btn-nav" style={{ padding: "4px 9px", fontSize: "11.5px", gap: "5px", cursor: "default" }}>
-              <Check size={12} style={{ color: "var(--jantt-accent, #38BDF8)" }} />
-              <span>Open now</span>
-            </button>
-          ) : (
+        <div className="plan-card-action-bar">
+          {!item.isActive && (
             <button
               type="button"
               className="btn-nav btn-nav-primary"
@@ -1094,7 +1087,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             {...menuTriggerProps(item, "transfer")}
           >
             <ArrowLeftRight size={12} aria-hidden="true" />
-            <span>Move / copy to...</span>
+            <span>Move / copy</span>
             <ChevronDown size={12} aria-hidden="true" />
           </button>
 
@@ -1202,7 +1195,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               >
                 {meta.title}
                 <span
-                  style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "10px", background: "rgba(148, 163, 184, 0.15)", color: meta.accent, fontWeight: 600 }}
+                  style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "10px", background: "rgba(148, 163, 184, 0.15)", color: "var(--jantt-text)", fontWeight: 600 }}
                 >
                   {items.length}
                 </span>
@@ -1245,7 +1238,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
 
         {list === "cloud" && isLoggedIn && !isCloudVerified && (
           <div style={noticeStyle}>
-            <ShieldCheck size={14} style={{ color: "#F59E0B", flexShrink: 0 }} />
+            <ShieldCheck size={14} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
             <span style={{ flex: "1 1 160px" }}>Verify your GitHub account to create rooms or copy plans to the cloud.</span>
             {onRequireVerification && (
               <button type="button" className="btn-nav" style={{ fontSize: "11px", padding: "3px 8px" }} onClick={onRequireVerification}>
@@ -1318,7 +1311,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
         onClick={onImportFile}
         title="Import a .json, MS Project .xml, Primavera .xer or .csv file onto this device"
       >
-        <Upload size={13} style={{ color: "#38BDF8" }} />
+        <Upload size={13} />
         <span>Import file</span>
       </button>
       <button
@@ -1346,13 +1339,14 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
           title="Plan manager"
           subtitle={
             isNarrow
-              ? "Pick a list, then use “Move / copy to...” on a plan to transfer it."
+              ? undefined
               : "Drag a plan onto another list, or use “Move / copy to...” on its card."
           }
           actions={headerActions}
         />
 
         <div
+          className="plan-manager-tools"
           style={{
             padding: "10px 20px",
             borderBottom: "1px solid var(--jantt-border-subtle, rgba(255, 255, 255, 0.06))",
@@ -1363,41 +1357,59 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             flexShrink: 0
           }}
         >
-          <div style={{ position: "relative", flex: "1 1 240px", maxWidth: isNarrow ? undefined : "380px" }}>
+          <div className="plan-manager-filter" style={{ position: "relative", flex: "1 1 240px", maxWidth: isNarrow ? undefined : "380px" }}>
             <Search
               size={14}
               aria-hidden="true"
               style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--jantt-text-muted)" }}
             />
             <input
+              ref={filterRef}
               type="search"
+              enterKeyHint="search"
               className="select-input"
               aria-label="Filter plans"
               style={{ width: "100%", paddingLeft: "32px", paddingRight: "10px", fontSize: "12px", height: "32px", boxSizing: "border-box" }}
-              placeholder="Filter by plan name, room ID or owner..."
+              placeholder="Find a plan, room or owner"
               value={searchQuery}
               // Start in the filter on desktop; on phones a focused input would pop up the keyboard.
               data-autofocus={isNarrow ? undefined : true}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Escape" && searchQuery) {
+                if (event.key === "Enter" && isNarrow) {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                } else if (event.key === "Escape" && searchQuery) {
                   event.preventDefault();
                   setSearchQuery("");
                 }
               }}
             />
+            {searchQuery && (
+              <button
+                type="button"
+                className="plan-filter-clear"
+                aria-label="Clear plan filter"
+                onClick={() => { setSearchQuery(""); filterRef.current?.focus(); }}
+              >
+                <X size={15} />
+              </button>
+            )}
           </div>
 
           {isNarrow && (
             <div
+              className="plan-scope-tabs"
               role="tablist"
               aria-label="Plan lists"
               style={{ display: "flex", gap: "6px", flex: "1 1 100%", overflowX: "auto" }}
               onKeyDown={(event) => {
-                if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+                if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
                 event.preventDefault();
                 const step = event.key === "ArrowRight" ? 1 : -1;
-                const next = PLAN_LIST_ORDER[(PLAN_LIST_ORDER.indexOf(narrowList) + step + PLAN_LIST_ORDER.length) % PLAN_LIST_ORDER.length];
+                const index = PLAN_LIST_ORDER.indexOf(narrowList);
+                const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? PLAN_LIST_ORDER.length - 1 : (index + step + PLAN_LIST_ORDER.length) % PLAN_LIST_ORDER.length;
+                const next = PLAN_LIST_ORDER[nextIndex];
                 setNarrowList(next);
                 document.getElementById(`plan-list-tab-${next}`)?.focus();
               }}
@@ -1411,7 +1423,8 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                     type="button"
                     role="tab"
                     aria-selected={selected}
-                    aria-controls={`plan-list-panel-${list}`}
+                    aria-label={`${LIST_META[list].title}, ${filtered[list].length} plans`}
+                    aria-controls={selected ? `plan-list-panel-${list}` : undefined}
                     tabIndex={selected ? 0 : -1}
                     data-autofocus={selected ? true : undefined}
                     className={`btn-nav ${selected ? "btn-nav-primary" : ""}`}
@@ -1426,8 +1439,8 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                     onClick={() => setNarrowList(list)}
                     {...dropTargetProps(list)}
                   >
-                    {LIST_META[list].title}
-                    <span style={{ opacity: 0.75 }}>{filtered[list].length}</span>
+                    {list === "device" ? "Device" : list === "cloud" ? "My cloud" : "Shared"}
+                    <span className="plan-tab-count">{filtered[list].length}</span>
                   </button>
                 );
               })}
@@ -1442,7 +1455,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             ref={menuRef}
             role="menu"
             aria-label={menu.kind === "transfer" ? `Move or copy "${menuItem.name}"` : `Actions for "${menuItem.name}"`}
-            className="card-floating-actions-menu"
+            className="card-floating-actions-menu plan-manager-menu"
             onKeyDown={handleMenuKeyDown}
             style={{
               position: "absolute",
@@ -1454,7 +1467,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               zIndex: 5,
               minWidth: "220px",
               maxWidth: "min(340px, calc(100% - 16px))",
-              background: "var(--jantt-surface-elevated, #1e293b)",
+              background: "var(--jantt-surface-solid)",
               border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.12))",
               borderRadius: "8px",
               boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4)",
@@ -1488,7 +1501,6 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                       className={`card-menu-item ${entry.tone === "danger" ? "is-danger" : ""}`}
                       style={{
                         alignItems: entry.description ? "flex-start" : undefined,
-                        ...(entry.tone === "danger" ? { color: "#EF4444" } : null),
                         ...(entry.disabled ? { opacity: 0.6, cursor: "not-allowed" } : null)
                       }}
                       onClick={() => {

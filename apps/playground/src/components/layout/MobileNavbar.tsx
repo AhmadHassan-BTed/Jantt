@@ -1,6 +1,7 @@
 import React from "react";
-import { MoreVertical, Share2, Eye, KeyRound, ChevronDown, Sparkles, WifiOff } from "lucide-react";
-import { JanttIcon, JanttLogo } from "../common/JanttLogo";
+import { RoomPresenceStack } from "../cloud/RoomPresenceStack";
+import { Search, Menu, Share2, Eye, KeyRound, ChevronDown, Sparkles, WifiOff } from "lucide-react";
+import { JanttIcon } from "../common/JanttLogo";
 import type { RoomPresence, UserProfile } from "../../firebase/types";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { ActiveView } from "../../types";
@@ -22,6 +23,10 @@ interface MobileNavbarProps {
   onlineUsers?: RoomPresence[];
   /** Opens the right share flow for the active plan (room invite or link share). */
   onOpenShare: () => void;
+  onSearch: () => void;
+  roomConnection: string;
+  onUndo?: () => void;
+  onRedo?: () => void;
   setShowPeopleModal: (show: boolean) => void;
   saveStatus: "saved" | "saving" | "pending";
   autoSaveLabel: string;
@@ -55,7 +60,6 @@ interface MobileNavbarProps {
   isMenuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   isOnline: boolean;
-  isCopilotOpen: boolean;
   updateAvailable: boolean;
   canInstall: boolean;
   isIosSafari: boolean;
@@ -74,6 +78,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   activeRoomId,
   onlineUsers = [],
   onOpenShare,
+  onSearch, roomConnection, onUndo, onRedo,
   setShowPeopleModal,
   saveStatus,
   autoSaveLabel,
@@ -104,7 +109,6 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   isMenuOpen,
   onMenuOpenChange,
   isOnline,
-  isCopilotOpen,
   updateAvailable,
   canInstall,
   isIosSafari,
@@ -130,7 +134,9 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
       onOpenVersionHistory={onOpenVersionHistory}
       onOpenPromptModal={onOpenPromptModal}
       onToggleCopilot={onToggleCopilot}
+      onUndo={onUndo} onRedo={onRedo}
       onOpenPlanManager={onOpenPlanManager}
+      onShare={onOpenShare}
       onCreateNewPlan={handleOpenAddPlanModal}
       onOpenPeopleModal={() => setShowPeopleModal(true)}
       onOpenJsonEditor={onOpenJsonEditor}
@@ -183,7 +189,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
           <div className="mobile-landscape-actions">
             <button type="button" className="mobile-nav-icon-btn" onClick={() => onToggleCopilot?.()} aria-label="Open AI Copilot"><Sparkles size={16} /></button>
             <button type="button" className="mobile-nav-icon-btn" onClick={onOpenShare} aria-label="Share plan"><Share2 size={16} /></button>
-            <button type="button" className="mobile-nav-icon-btn is-menu-trigger" onClick={() => onMenuOpenChange(true)} aria-label="Open tools and settings menu" aria-haspopup="dialog" aria-expanded={isMenuOpen}><MoreVertical size={16} />{updateAvailable && <span className="mobile-update-dot" />}</button>
+            <button type="button" className="mobile-nav-icon-btn is-menu-trigger" onClick={() => onMenuOpenChange(true)} aria-label="Open tools and settings menu" aria-haspopup="dialog" aria-expanded={isMenuOpen}><Menu size={16} />{updateAvailable && <span className="mobile-update-dot" />}</button>
           </div>
         </header>
         {sheet}
@@ -200,29 +206,17 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
             type="button"
             className="mobile-plan-selector-pill"
             onClick={onOpenPlanManager}
+            aria-haspopup="dialog"
             title={`Current plan: ${activePlanName}. Tap to switch or manage plans.`}
-            aria-label={`Current plan: ${activePlanName}${isRoomActive ? " (live cloud room)" : ""}${
-              isOnline ? "" : " (offline)"
-            }. Switch or manage plans`}
           >
             <span className="mobile-brand-mark" aria-hidden="true">
-              <JanttLogo size={20} />
+              <JanttIcon size={32} variant="outline" />
             </span>
-            <span className="mobile-plan-name">{activePlanName}</span>
-            {!isOnline ? (
-              <span className="mobile-offline-badge">
-                <WifiOff size={10} aria-hidden="true" />
-                <span>Offline</span>
-              </span>
-            ) : isRoomActive ? (
-              <span
-                className="mobile-room-indicator"
-                title={`Live room${onlineUsers.length > 0 ? ` (${onlineUsers.length} online)` : ""}`}
-                aria-hidden="true"
-              >
-                <span className="mobile-room-pulse-dot" />
-              </span>
-            ) : null}
+            <span className="phone-plan-identity">
+              <small>{!isOnline ? <><WifiOff size={11} /> Offline</> : isRoomActive ? roomConnection : "On this device"}</small>
+              <span className="mobile-plan-name">{activePlanName}</span>
+            </span>
+            {isOnline && isRoomActive && <RoomPresenceStack users={onlineUsers} limit={2} />}
             <ChevronDown size={12} className="mobile-plan-chevron" aria-hidden="true" />
           </button>
 
@@ -249,28 +243,9 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
           ) : null}
         </div>
 
-        {/* Right: three crisp thumb targets; New Plan lives in the plan manager and sheet. */}
         <div className="mobile-nav-right">
-          <button
-            type="button"
-            className={`mobile-nav-icon-btn is-copilot ${isCopilotOpen ? "is-active" : ""}`}
-            onClick={() => onToggleCopilot?.()}
-            title={isCopilotOpen ? "Close AI Copilot" : "Open AI Copilot"}
-            aria-label={isCopilotOpen ? "Close AI Copilot" : "Open AI Copilot"}
-            aria-expanded={isCopilotOpen}
-          >
-            <Sparkles size={18} aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            className="mobile-nav-icon-btn"
-            onClick={onOpenShare}
-            title={isRoomActive ? "Invite & share room" : "Share plan"}
-            aria-label={isRoomActive ? "Invite people and share this room" : "Share this plan"}
-          >
-            <Share2 size={17} aria-hidden="true" />
-          </button>
+          <button type="button" className="mobile-nav-icon-btn" onClick={onSearch}
+            aria-label="Find tasks and commands" title="Find tasks and commands"><Search size={19} /></button>
 
           <button
             type="button"
@@ -281,7 +256,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
             aria-haspopup="dialog"
             aria-expanded={isMenuOpen}
           >
-            <MoreVertical size={18} aria-hidden="true" />
+            <Menu size={18} aria-hidden="true" />
             {updateAvailable && <span className="mobile-update-dot" aria-hidden="true" />}
           </button>
         </div>

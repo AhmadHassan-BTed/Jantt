@@ -50,6 +50,7 @@ export interface PlanDiff {
     id: string;
     label: string;
     changedFields: string[];
+    dateChanges?: string[];
   }>;
   metaChanged: string[];
   categoriesChanged: boolean;
@@ -115,5 +116,4 @@ export interface CopilotConfig {
   customBaseUrl?: string;
   proxyUrl?: string;
   temperature: number;
-  autoApply: boolean;
 }

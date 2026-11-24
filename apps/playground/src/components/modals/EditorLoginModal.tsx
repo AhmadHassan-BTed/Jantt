@@ -9,6 +9,7 @@ interface EditorLoginModalProps {
   /** Starts GitHub sign-in; never rejects (failures surface through the app's auth error toast). */
   onLogin: () => void;
   onMakeLocalCopy?: () => void;
+  allowFork?: boolean;
   /** A GitHub sign-in is already in progress: the button waits instead of starting another one. */
   isSigningIn?: boolean;
 }
@@ -19,6 +20,7 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
   roomTitle = "Shared Plan",
   onLogin,
   onMakeLocalCopy,
+  allowFork = true,
   isSigningIn = false
 }) => {
   if (!show) return null;
@@ -55,7 +57,7 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
             <strong> sign in with GitHub</strong>.
           </p>
           <p style={{ margin: 0, color: "var(--jantt-text-muted)", fontSize: "12.5px" }}>
-            {onMakeLocalCopy
+            {allowFork && onMakeLocalCopy
               ? "Prefer not to sign in? Make a private copy on this device instead; the shared room stays unchanged."
               : "Until you sign in, the plan stays read-only."}
           </p>
@@ -84,7 +86,7 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
             <span>{isSigningIn ? "Signing In with GitHub..." : "Sign In with GitHub to Edit"}</span>
           </button>
 
-          {onMakeLocalCopy && (
+          {allowFork && onMakeLocalCopy && (
             <button
               type="button"
               className="btn btn-secondary"

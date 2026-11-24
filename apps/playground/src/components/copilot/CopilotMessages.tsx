@@ -6,27 +6,21 @@ import { CopilotDiffPreview } from "./CopilotDiffPreview";
 interface CopilotMessagesProps {
   messages: CopilotMessage[];
   pendingDiff: PendingPlanChange | null;
+  readOnly: boolean;
+  stale: boolean;
   onAcceptDiff: () => void;
   onRejectDiff: () => void;
   onRevertDiff: (messageId: string) => void;
-  onPromptClick: (prompt: string) => void;
 }
-
-const EXAMPLE_PROMPTS = [
-  "Add 3 tasks for the design and review phase starting next Monday",
-  "Mark all tasks currently in progress as completed",
-  "Shift the entire project schedule forward by 2 weeks",
-  "Add a new category 'Infrastructure' and assign 2 backend tasks to it",
-  "Analyze the critical path and report any scheduling bottlenecks"
-];
 
 export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
   messages,
   pendingDiff,
+  readOnly,
+  stale,
   onAcceptDiff,
   onRejectDiff,
-  onRevertDiff,
-  onPromptClick
+  onRevertDiff
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -44,19 +38,6 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
         <p>
           Ask questions, modify dates, assign team members, and generate or edit tasks in real time.
         </p>
-        <div className="copilot-example-prompts">
-          <span className="copilot-prompts-label">Try asking:</span>
-          {EXAMPLE_PROMPTS.map((prompt, idx) => (
-            <button
-              key={idx}
-              type="button"
-              className="copilot-prompt-chip"
-              onClick={() => onPromptClick(prompt)}
-            >
-              &ldquo;{prompt}&rdquo;
-            </button>
-          ))}
-        </div>
       </div>
     );
   }
@@ -101,9 +82,10 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
                     <CopilotDiffPreview
                       diff={msg.diff}
                       applied={msg.applied}
+                      blockedReason={readOnly ? "This room is view-only." : stale ? "The plan changed. Ask for an updated proposal." : undefined}
                       onAccept={pendingDiff?.messageId === msg.id ? onAcceptDiff : undefined}
                       onReject={pendingDiff?.messageId === msg.id ? onRejectDiff : undefined}
-                      onRevert={msg.previousPlan ? () => onRevertDiff(msg.id) : undefined}
+                      onRevert={!readOnly && msg.previousPlan ? () => onRevertDiff(msg.id) : undefined}
                     />
                   )}
                 </>

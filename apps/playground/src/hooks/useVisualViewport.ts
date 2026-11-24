@@ -13,19 +13,30 @@ export function useVisualViewport(): void {
     if (!viewport) return;
 
     const root = document.documentElement;
+    let frame = 0;
     const update = () => {
+      frame = 0;
+      const typing = document.activeElement?.matches("input, textarea, [contenteditable=true]");
+      const keyboardOpen = Boolean(typing && viewport.scale <= 1.05 &&
+        window.innerHeight - viewport.height > KEYBOARD_SHRINK_THRESHOLD_PX);
       root.style.setProperty("--jantt-vvh", `${Math.round(viewport.height)}px`);
-      const keyboardOpen = window.innerHeight - viewport.height > KEYBOARD_SHRINK_THRESHOLD_PX;
-      root.setAttribute("data-keyboard-open", keyboardOpen ? "true" : "false");
+      root.style.setProperty("--jantt-vv-top", `${Math.round(viewport.offsetTop)}px`);
+      root.setAttribute("data-keyboard-open", String(keyboardOpen));
     };
-
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
     update();
-    viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
+    viewport.addEventListener("resize", schedule);
+    viewport.addEventListener("scroll", schedule);
+    document.addEventListener("focusin", schedule);
+    document.addEventListener("focusout", schedule);
     return () => {
-      viewport.removeEventListener("resize", update);
-      viewport.removeEventListener("scroll", update);
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("resize", schedule);
+      viewport.removeEventListener("scroll", schedule);
+      document.removeEventListener("focusin", schedule);
+      document.removeEventListener("focusout", schedule);
       root.style.removeProperty("--jantt-vvh");
+      root.style.removeProperty("--jantt-vv-top");
       root.removeAttribute("data-keyboard-open");
     };
   }, []);

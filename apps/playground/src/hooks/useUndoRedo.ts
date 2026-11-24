@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { JanttData, Task } from "@jantt/core";
+import { getTaskDependencyRelations, type JanttData, type Task } from "@jantt/core";
 import { commandBus } from "../services/bus";
 import { deleteTasks, getPeerId } from "../utils";
 
@@ -156,7 +156,7 @@ export function applyHistoryEntry(
   let skipped = 0;
 
   const tasks = [...(current.tasks || [])];
-  const toRemove: string[] = [];
+  const toRemove = new Set<string>();
   const restored: string[] = [];
   const ordered = [...entry.tasks].sort((a, b) => a.index - b.index);
 
@@ -166,9 +166,8 @@ export function applyHistoryEntry(
     const idx = tasks.findIndex((t) => t.id === change.id);
 
     if (!target) {
-      if (idx >= 0) {
-        toRemove.push(change.id);
-        applied++;
+      if (idx >= 0 && source && !changedKeys(tasks[idx], source, TASK_BOOKKEEPING_FIELDS).length) {
+        toRemove.add(change.id);
       } else {
         skipped++;
       }
@@ -235,7 +234,26 @@ export function applyHistoryEntry(
     data = { ...data, meta: meta as JanttData["meta"] };
   }
 
-  if (toRemove.length > 0) data = deleteTasks(data, toRemove, deletedAt);
+  if (toRemove.size > 0) {
+    // A collaborator may have attached a new note or dependency to an added task.
+    // Keep that task and its prerequisites when reversing the original addition.
+    const byId = new Map(tasks.map(task => [task.id, task]));
+    const retained = tasks.filter(task => !toRemove.has(task.id));
+    const keepReferenced = (id: string) => {
+      if (!toRemove.delete(id)) return;
+      skipped++;
+      const task = byId.get(id);
+      if (task) retained.push(task);
+    };
+    for (const note of data.notes || []) {
+      for (const id of note.task_ids || []) keepReferenced(id);
+    }
+    for (const task of retained) {
+      for (const dependency of getTaskDependencyRelations(task, byId)) keepReferenced(dependency.id);
+    }
+    applied += toRemove.size;
+    data = deleteTasks(data, toRemove, deletedAt);
+  }
   return { data, applied, skipped };
 }
 
@@ -329,7 +347,7 @@ export function useUndoRedo(
       }
       bump();
 
-      const verb = direction === "undo" ? "Undid last change (Ctrl+Z)" : "Redid change (Ctrl+Y)";
+      const verb = direction === "undo" ? "Undid last change" : "Redid change";
       showToastRef.current?.(result.skipped > 0 ? `${verb}. Fields edited since were kept.` : verb);
     },
     [bump]

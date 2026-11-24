@@ -38,6 +38,7 @@ export type RoomSyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "confli
 type RoomRole = "collaborator" | "viewer";
 
 interface UseRoomSyncOptions {
+  inspectedTaskId?: string | null;
   customProjects: SavedProject[];
   setCustomProjects: React.Dispatch<React.SetStateAction<SavedProject[]>>;
   activeProjectId: string;
@@ -464,9 +465,9 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       const previousRole = proj.role;
       const lostEditing = previousRole === "collaborator" && role === "viewer";
       if (lostEditing) {
-        // Keep anything not yet saved before the editor turns read-only.
+        // Preserve edits before an in-flight merge. With no save in flight, reconcileIncoming snapshots the draft.
         const local = parsedDataRef.current;
-        if (local && ctx.baseHash !== null && calculatePlanHash(local) !== ctx.baseHash) {
+        if (inFlightRef.current && local && ctx.baseHash !== null && calculatePlanHash(local) !== ctx.baseHash) {
           o.captureSnapshot(proj.id, local, "Unsaved edits before losing edit access");
         }
         if (pendingSaveRef.current?.ctx === ctx) pendingSaveRef.current = null;
@@ -481,7 +482,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         o.showToast(
           isMember
             ? "Your access to this room changed to view only."
-            : "You don't have edit access to this room. Make a local copy to keep editing.",
+            : "Your edit access was removed. You can still view the shared plan.",
           true
         );
       } else if (role === "collaborator" && previousRole === "viewer") {
@@ -693,7 +694,12 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       // listenToRoom stamps contentHash from the emitted data, so this costs nothing.
       const incomingHash = room.meta?.contentHash || calculatePlanHash(incoming);
 
-      if (ctx.base !== null && incomingHash === ctx.baseHash) {
+      const local = parsedDataRef.current;
+      if (!local) return;
+      const canEdit = roleRef.current === "collaborator";
+      const sameBase = ctx.base !== null && incomingHash === ctx.baseHash;
+      // Editor-only roster or metadata changes need no scan of a potentially large plan.
+      if (sameBase && (canEdit || calculatePlanHash(local) === ctx.baseHash)) {
         // Members/meta-only change, or our own save echoing back.
         ctx.revision = Math.max(ctx.revision, revision);
         if (statusRef.current === "syncing" && !inFlightRef.current && !pendingSaveRef.current) {
@@ -702,10 +708,9 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         return;
       }
 
-      const local = parsedDataRef.current;
-      if (!local) return;
       const o = optionsRef.current;
       const localHash = calculatePlanHash(local);
+      const hasUnsyncedEdits = localHash !== ctx.baseHash;
 
       if (incomingHash === localHash) {
         acknowledge(ctx, incoming, incomingHash, revision, local);
@@ -714,8 +719,6 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         return;
       }
 
-      const canEdit = roleRef.current === "collaborator";
-      const hasUnsyncedEdits = localHash !== ctx.baseHash;
       if (!canEdit && hasUnsyncedEdits) {
         const proj = getActiveProject();
         if (proj?.role === "collaborator" && !userProfileRef.current) {
@@ -795,6 +798,10 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       return;
     }
     lastSnapshotRef.current = { roomId, room };
+    const allow = room.meta?.allowViewerForks !== false;
+    if ((getActiveProject()?.allowViewerForks !== false) !== allow) {
+      patchRoomProject(roomId, { allowViewerForks: allow }, true);
+    }
     applyAccess(ctx, room);
     if (inFlightRef.current) {
       // Applied once the save settles, so the base never moves under an in-flight merge.
@@ -936,13 +943,20 @@ export function useRoomSync(options: UseRoomSyncOptions) {
   }, [flushCloudSave, persistBase]);
 
   // ─── Presence ──────────────────────────────────────────────────────────────
+  const publishInspection = useRef<((taskId: string | null) => void) | null>(null);
   const presenceKey = userProfile
     ? [userProfile.uid, userProfile.username, userProfile.displayName, userProfile.photoURL || ""].join("|")
     : "";
   useEffect(() => {
     if (!activeRoomId || !presenceKey) return;
-    return trackRoomPresence(activeRoomId, userProfileRef.current);
+    return trackRoomPresence(activeRoomId, userProfileRef.current, (publish) => {
+      publishInspection.current = publish;
+      return () => { publishInspection.current = null; };
+    });
   }, [activeRoomId, presenceKey]);
+  useEffect(() => {
+    publishInspection.current?.(options.inspectedTaskId ?? null);
+  }, [activeRoomId, presenceKey, options.inspectedTaskId]);
 
   useEffect(() => {
     if (!activeRoomId) {
@@ -978,12 +992,14 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         ? {
             ...existing,
             name: payload.meta?.title || existing.name,
+            allowViewerForks: payload.meta?.allowViewerForks !== false,
             // Signed out, the snapshot cannot tell editors apart: keep the known role until sign-in.
             role: userProfileRef.current ? role : existing.role ?? role
           }
         : {
             id,
             name: payload.meta?.title || roomId,
+            allowViewerForks: payload.meta?.allowViewerForks !== false,
             updatedAt: payload.meta?.updatedAt || now,
             data,
             source: "room",
@@ -1254,6 +1270,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     isActiveRoomMember,
     activeSecretKey,
     onlineUsers,
+    allowViewerForks: !activeRoomId || activeProj?.allowViewerForks !== false,
     handleCreateRoom,
     handleJoinRoom,
     handleUnlockCollaborator,

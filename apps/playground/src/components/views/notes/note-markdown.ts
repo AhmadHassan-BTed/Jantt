@@ -252,15 +252,22 @@ const VIEWPORT_MARGIN = 8;
 
 /** Places a popup next to `rect`, flipping above when there is more room there. */
 export function placePopupNearRect(rect: Pick<DOMRect, "top" | "bottom" | "left">): PopupCoords {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const left = Math.max(VIEWPORT_MARGIN, Math.min(rect.left, vw - POPUP_WIDTH - VIEWPORT_MARGIN));
-  const spaceBelow = vh - rect.bottom - POPUP_GAP - VIEWPORT_MARGIN;
-  const spaceAbove = rect.top - POPUP_GAP - VIEWPORT_MARGIN;
+  const viewport = window.visualViewport;
+  const topEdge = (viewport?.offsetTop ?? 0) + VIEWPORT_MARGIN;
+  const leftEdge = (viewport?.offsetLeft ?? 0) + VIEWPORT_MARGIN;
+  const width = viewport?.width ?? window.innerWidth;
+  const height = viewport?.height ?? window.innerHeight;
+  const bottomEdge = topEdge + height - 2 * VIEWPORT_MARGIN;
+  const left = Math.max(leftEdge, Math.min(rect.left, leftEdge + width - POPUP_WIDTH - 2 * VIEWPORT_MARGIN));
+  const below = Math.max(topEdge, Math.min(bottomEdge, rect.bottom + POPUP_GAP));
+  const above = Math.max(topEdge, Math.min(bottomEdge, rect.top - POPUP_GAP));
+  const spaceBelow = bottomEdge - below;
+  const spaceAbove = above - topEdge;
   if (spaceBelow >= POPUP_PREFERRED_HEIGHT || spaceBelow >= spaceAbove) {
-    return { left, top: rect.bottom + POPUP_GAP, maxHeight: Math.max(120, Math.min(POPUP_PREFERRED_HEIGHT, spaceBelow)) };
+    return { left, top: below, maxHeight: Math.min(POPUP_PREFERRED_HEIGHT, spaceBelow) };
   }
-  return { left, bottom: vh - rect.top + POPUP_GAP, maxHeight: Math.max(120, Math.min(POPUP_PREFERRED_HEIGHT, spaceAbove)) };
+  const maxHeight = Math.min(POPUP_PREFERRED_HEIGHT, spaceAbove);
+  return { left, top: above - maxHeight, maxHeight };
 }
 
 function isUsableRect(rect: DOMRect | undefined | null): rect is DOMRect {

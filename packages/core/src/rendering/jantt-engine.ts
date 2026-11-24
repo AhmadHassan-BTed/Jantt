@@ -43,7 +43,7 @@ export interface JanttInstance {
   getData: () => JanttData;
   filterByDate: (dateStr: string | null) => void;
   getSelectedDate: () => string | null;
-  setDayWidth: (dayWidth: number) => void;
+  setDayWidth: (dayWidth: number, anchorClientX?: number) => void;
   getDayWidth: () => number;
   scrollToToday: () => void;
   getScrollPosition: () => { scrollLeft: number; scrollTop: number };
@@ -388,6 +388,7 @@ export class JanttRendererEngine {
 
   private openTaskSidebar = (task: Task) => {
     this.tooltip.hide();
+    if (this.currentOptions.onOpenTaskDetails) { this.currentOptions.onOpenTaskDetails(task); return; }
     this.activeSidebarInstance?.close();
 
     let customContainer: HTMLElement | undefined;
@@ -721,7 +722,7 @@ export class JanttRendererEngine {
             wire.toX,
             wire.toY,
             this.lastRowHeight,
-            this.state.currentRouting
+            this.state.currentRouting, wire.fromSide, wire.toSide
           );
           wireEl.setAttribute("d", pathStr);
         },
@@ -1017,9 +1018,12 @@ export class JanttRendererEngine {
         this.render();
       },
       getSelectedDate: () => this.state.selectedDateFilter,
-      setDayWidth: (w: number) => {
+      setDayWidth: (w: number, anchorClientX?: number) => {
         if (this.destroyed) return;
-        this.handleDayWidthChange(w);
+        if (anchorClientX === undefined) { this.handleDayWidthChange(w); return; }
+        this.setZoomAnchor(anchorClientX);
+        try { this.handleDayWidthChange(w); }
+        finally { this.clearZoomAnchor(); }
       },
       getDayWidth: () => this.state.currentDayWidth,
       scrollToToday: () => this.scrollToToday(),

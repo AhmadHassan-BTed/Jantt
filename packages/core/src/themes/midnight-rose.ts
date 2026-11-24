@@ -20,7 +20,7 @@ export const midnightRoseTheme: ThemeDefinition = {
     "--jantt-text-dim": "#FB7185",
     "--jantt-accent": "#F43F5E",
     "--jantt-accent-glow": "rgba(244, 63, 94, 0.4)",
-    "--jantt-accent-contrast": "#FFFFFF",
+    "--jantt-accent-contrast": "#240813",
     "--jantt-today": "#38BDF8",
     "--jantt-critical": "#FBBF24",
     "--jantt-critical-glow": "rgba(251, 191, 36, 0.4)",

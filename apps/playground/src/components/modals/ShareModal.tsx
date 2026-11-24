@@ -1,3 +1,4 @@
+import { RoomQr } from "../cloud/RoomQr";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Share2,
@@ -471,8 +472,8 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                   )}
                   <span>
                     {needsSignInToManage
-                      ? "You are signed out, so this room is view-only here. Sign in to use your edit access and invite teammates, or make your own editable copy on this device."
-                      : "You have view-only access. Ask the room owner for edit access, or make your own editable copy on this device."}
+                      ? "You are signed out, so this room is view-only here. Sign in to use your edit access and invite teammates, or ask the owner for help."
+                      : "You have view-only access. Ask the room owner for edit access."}
                   </span>
                 </div>
                 {needsSignInToManage && onLogin && (
@@ -630,6 +631,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
             )}
           </div>
 
+          {isRoomActive && isWebUrl && <RoomQr url={safeUrl} />}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", flex: "1 1 220px" }}>
               {isRoomActive

@@ -35,6 +35,8 @@ import { JanttLogo } from "../common/JanttLogo";
 import { PRIMARY_MODIFIER_LABEL } from "../common/CommandPalette";
 import type { SavedProject } from "../../types";
 import { AVAILABLE_THEMES, DEFAULT_TEMPLATE } from "../../constants";
+import { RoomPresenceStack } from "../cloud/RoomPresenceStack";
+import type { RoomPresence } from "../../firebase/types";
 import { getTrustedAvatarUrl } from "../../room-storage";
 
 /**
@@ -479,7 +481,7 @@ const ThemeMenuBody: React.FC<ThemeMenuBodyProps> = ({ selectedThemeId, onSelect
 /** Partial on purpose: an unknown future status falls back to its raw name. */
 const SYNC_STATE_LABEL: Partial<Record<RoomSyncStatus, string>> = {
   idle: "Idle",
-  "in-sync": "In sync",
+  "in-sync": "Connected",
   syncing: "Syncing",
   merged: "Merged",
   conflict: "Conflict",
@@ -551,6 +553,7 @@ interface NavbarProps {
   syncStatus?: RoomSyncStatus;
   syncMessage?: string;
   onlineCount?: number;
+  onlineUsers?: RoomPresence[];
   /** Cloud collaboration panel rendered inside the Cloud popover (a function receives `close`). */
   cloudPanel: PanelSlot;
   onLeaveRoom?: () => void;
@@ -607,6 +610,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   syncStatus = "in-sync",
   syncMessage,
   onlineCount = 0,
+  onlineUsers = [],
   cloudPanel,
   onLeaveRoom,
   onDeleteRoom
@@ -709,8 +713,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ) : (
                   <Cloud size={14} style={{ color: "#38BDF8" }} aria-hidden="true" />
                 )}
-                <span className="nav-label">{isRoomActive ? (isSyncProblem ? syncLabel : "Live") : "Cloud"}</span>
-                {isRoomActive && onlineCount > 0 && <span className="nav-count-pill">{onlineCount}</span>}
+                <span className="nav-label">{isRoomActive ? syncLabel : "Cloud"}</span>
+                {isRoomActive && <RoomPresenceStack users={onlineUsers} limit={3} />}
                 <ChevronDown size={12} className="nav-popover-chevron" aria-hidden="true" />
               </>
             }

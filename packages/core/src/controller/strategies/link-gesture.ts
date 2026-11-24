@@ -2,6 +2,22 @@ import { IGestureStrategy, DragState, GestureContext, dependencyItemFor } from "
 import { hasDependencyCycle } from "../../resolver";
 import { appendDependency, getTaskDependencyRelations } from "../../dependencies";
 
+function snapTarget(e: PointerEvent, state: DragState, ctx: GestureContext) {
+  if (typeof document.elementFromPoint !== "function") return null;
+  // A short magnetic radius around a bar makes small touch targets practical.
+  for (const [dx, dy] of [[0, 0], [-8, 0], [8, 0], [0, -7], [0, 7]]) {
+    const hit = document.elementFromPoint(e.clientX + dx, e.clientY + dy);
+    const bar = hit?.closest<HTMLElement>("[data-task-id]");
+    const id = bar?.dataset.taskId;
+    if (!bar || !id || id === state.linkFromTaskId || (ctx.container && !ctx.container.contains(bar))) continue;
+    const rect = bar.getBoundingClientRect();
+    const end = Boolean(hit?.closest(".jantt-link-port-right")) ||
+      (rect.width > 0 && Math.abs(e.clientX - rect.right) <= Math.min(rect.width / 2, 14));
+    return { id, end, x: end ? rect.right : rect.left, y: rect.top + rect.height / 2 };
+  }
+  return null;
+}
+
 export class LinkGestureStrategy implements IGestureStrategy {
   public readonly mode = "link" as const;
 
@@ -12,11 +28,18 @@ export class LinkGestureStrategy implements IGestureStrategy {
     const bar = state.element.closest<HTMLElement>("[data-task-id]") ?? state.element;
     const origin = bar.parentElement?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const rect = bar.getBoundingClientRect();
+    const target = snapTarget(e, state, ctx);
+    if (target?.id && target.id !== state.snappedTaskId) {
+      ctx.options.onLinkSnap?.(target.id);
+    }
+    state.snappedTaskId = target?.id;
     ctx.onLiveLinkUpdate({
-      fromX: rect.right - origin.left,
+      ...(state.element.classList.contains("jantt-link-port-left") ? { fromSide: "start" as const } : {}),
+      ...(target?.end ? { toSide: "end" as const } : {}),
+      fromX: (state.element.classList.contains("jantt-link-port-left") ? rect.left : rect.right) - origin.left,
       fromY: rect.top + rect.height / 2 - origin.top,
-      toX: e.clientX - origin.left,
-      toY: e.clientY - origin.top
+      toX: (target?.x ?? e.clientX) - origin.left,
+      toY: (target?.y ?? e.clientY) - origin.top
     });
   }
 
@@ -26,11 +49,9 @@ export class LinkGestureStrategy implements IGestureStrategy {
     const linkFromTaskId = state.linkFromTaskId;
     if (!state.moved || !linkFromTaskId || typeof document.elementFromPoint !== "function") return;
 
-    const targetElement = document.elementFromPoint(e.clientX, e.clientY);
-    // Another chart on the page may render a task with the same id: only this chart counts.
-    if (!targetElement || (ctx.container && !ctx.container.contains(targetElement))) return;
-    const targetTaskId = targetElement.closest<HTMLElement>("[data-task-id]")?.dataset.taskId;
-    if (!targetTaskId || targetTaskId === linkFromTaskId) return;
+    const target = snapTarget(e, state, ctx);
+    if (!target) return;
+    const targetTaskId = target.id;
 
     const targetTask = ctx.data.tasks.find((t) => t.id === targetTaskId);
     if (!targetTask) return;
@@ -43,7 +64,10 @@ export class LinkGestureStrategy implements IGestureStrategy {
       return;
     }
 
-    const updated = { ...targetTask, dependsOn: appendDependency(targetTask.dependsOn, dependencyItemFor(linkFromTaskId)) };
+    const fromStart = state.element?.classList.contains("jantt-link-port-left");
+    const type = fromStart ? (target.end ? "SF" : "SS") : (target.end ? "FF" : "FS");
+    const link = type === "FS" ? dependencyItemFor(linkFromTaskId) : { id: linkFromTaskId, type } as const;
+    const updated = { ...targetTask, dependsOn: appendDependency(targetTask.dependsOn, link) };
     const nextTasks = ctx.data.tasks.map((t) => (t === targetTask ? updated : t));
     if (hasDependencyCycle(nextTasks)) {
       ctx.options.onError?.(

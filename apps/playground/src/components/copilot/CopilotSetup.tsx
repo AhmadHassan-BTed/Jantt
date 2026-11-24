@@ -52,7 +52,6 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
   const [customBaseUrl, setCustomBaseUrl] = useState(config.customBaseUrl || "");
   const [proxyUrl, setProxyUrl] = useState(config.proxyUrl || "");
   const [temperature, setTemperature] = useState(config.temperature);
-  const [autoApply, setAutoApply] = useState(config.autoApply);
 
   // Dropdown open state
   const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
@@ -169,8 +168,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
       apiKey: cleanKey,
       customBaseUrl: cleanUrl,
       proxyUrl: cleanProxy,
-      temperature,
-      autoApply
+      temperature
     });
 
     setSavedSuccess(true);
@@ -462,10 +460,11 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
 
         {/* Creativity / Temperature */}
         <div className="copilot-form-group">
-          <label className="copilot-form-label">
+          <label className="copilot-form-label" htmlFor="copilot-temperature">
             Creativity & Temperature: {temperature}
           </label>
           <input
+            id="copilot-temperature"
             type="range"
             min="0"
             max="1"
@@ -477,21 +476,6 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           <span className="copilot-form-hint">
             Lower values (0.1 - 0.3) generate strict, deterministic project schedules.
           </span>
-        </div>
-
-        {/* Live Auto-Commit */}
-        <div className="copilot-form-group">
-          <label className="copilot-checkbox-row">
-            <input
-              type="checkbox"
-              checked={autoApply}
-              onChange={(e) => setAutoApply(e.target.checked)}
-              className="copilot-checkbox"
-            />
-            <span className="copilot-checkbox-label">
-              <strong>Live Auto-Commit</strong> — Immediately apply clean AI edits to the chart & JSON editor
-            </span>
-          </label>
         </div>
 
         {/* Footer */}

@@ -34,8 +34,11 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
   );
   /** Session-only theme imposed by the open plan (e.g. a cloud room); never persisted. */
   const [planThemeId, setPlanThemeId] = useState<string | null>(null);
-  const selectedThemeId = planThemeId ?? personalThemeId;
-  const activeTheme: ThemeDefinition = themeManager.getTheme(selectedThemeId) || AVAILABLE_THEMES[0];
+  const requestedThemeId = planThemeId ?? personalThemeId;
+  const activeTheme = useMemo<ThemeDefinition>(() => {
+    return themeManager.getTheme(requestedThemeId) ?? AVAILABLE_THEMES[0];
+  }, [requestedThemeId]);
+  const selectedThemeId = activeTheme.id;
   const [currentScale, setCurrentScale] = useState<TimeScale>(options.initialScale);
   const [currentDayWidth, setCurrentDayWidth] = useState<number | undefined>(() => {
     const raw = storageService.getItem<string>(STORAGE_KEYS.DAY_WIDTH);

@@ -1,4 +1,6 @@
 import React from "react";
+import { AllocationHeatmap } from "./AllocationHeatmap";
+import "./health.css";
 import { createCalendar, detectOverAllocations, hasDependencyCycle, levelResources, resolvePersonById, resolveSchedule, validate, type JanttData, type LevelingResult, type Task } from "@jantt/core";
 
 interface Props {
@@ -15,6 +17,7 @@ const formatPercent = (value: number): string => String(Math.round(value * 10000
 export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnly, onPromptFork }) => {
   const [proposal, setProposal] = React.useState<LevelingResult | null>(null);
   const proposalSource = React.useRef<JanttData | null>(null);
+  const [optimization, setOptimization] = React.useState<{ source: JanttData; tasks: Task[]; changed: number } | null>(null);
   const [calculating, setCalculating] = React.useState(false);
   const [error, setError] = React.useState("");
   const [defaultPercent, setDefaultPercent] = React.useState("");
@@ -85,6 +88,7 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
 
   const preview = () => {
     setProposal(null);
+    setOptimization(null);
     proposalSource.current = data;
     setError("");
     if (hasDependencyCycle(data.tasks)) { setError("Circular dependencies prevent a safe preview."); return; }
@@ -126,20 +130,25 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
 
   // Invalidate during render, before the effect clears an old proposal or worker.
   const currentProposal = proposalSource.current === data ? proposal : null;
-  const changes = currentProposal?.tasks.flatMap((task) => {
-    const original = data.tasks.find((item) => item.id === task.id);
-    return original && (original.start !== task.start || original.end !== task.end) ? [{ original, task }] : [];
-  }) || [];
+  const changes = React.useMemo(() => {
+    if (!currentProposal) return [];
+    const originals = new Map(data.tasks.map(task => [task.id, task]));
+    return currentProposal.tasks.flatMap(task => {
+      const original = originals.get(task.id);
+      return original && (original.start !== task.start || original.end !== task.end) ? [{ original, task }] : [];
+    });
+  }, [currentProposal, data.tasks]);
   const beforeFinish = getProjectFinish(data.tasks);
   const afterFinish = currentProposal ? getProjectFinish(currentProposal.tasks) : "";
 
   return (
-    <section aria-label="Resource leveling" style={{ margin: "12px 0", padding: 16, border: "1px solid var(--jantt-border)", borderRadius: 8 }}>
+    <section className="health-scenarios" aria-label="Resource leveling" style={{ margin: "12px 0", padding: 16, border: "1px solid var(--jantt-border)", borderRadius: 8 }}>
       <strong>Resource leveling</strong>
       <p style={{ margin: "8px 0" }}>
         {!allocation.error && <>{allocation.conflicts.length} resource-day overload{allocation.conflicts.length === 1 ? "" : "s"} across the full project. </>}
         Default resource capacity: {formatPercent(options.defaultCapacity ?? 1)}% per person.
       </p>
+      <AllocationHeatmap conflicts={allocation.conflicts} resources={resources} />
       {allocation.error && <p role="alert">{allocation.error}</p>}
       <details style={{ marginBottom: 12 }}>
         <summary>Resource capacity settings</summary>
@@ -153,6 +162,31 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
       <button type="button" className="btn-nav" onClick={preview} disabled={calculating || Boolean(allocation.error)}>
         {calculating ? "Calculating…" : "Preview leveling"}
       </button>
+      <button type="button" className="btn-nav" disabled={calculating || Boolean(allocation.error)} onClick={() => {
+        setProposal(null);
+        setError("");
+        const diagnostics: string[] = [];
+        const scheduled = resolveSchedule(data.tasks.filter(task => !task._deleted), { ...options, diagnostics });
+        if (diagnostics.length) { setOptimization(null); setError(diagnostics.join(" ")); return; }
+        const byId = new Map(scheduled.map(task => [task.id, task]));
+        let changed = 0;
+        const next = data.tasks.map(task => {
+          const replacement = byId.get(task.id);
+          if (task._deleted || !replacement || (replacement.start === task.start && replacement.end === task.end)) return task;
+          changed++;
+          return replacement;
+        });
+        setOptimization({ source: data, tasks: next, changed });
+      }}>Optimize schedule</button>
+      {optimization?.source === data && <div className="health-scenario-result" role="status">
+        <strong>Earliest-start scenario</strong>
+        <p>{optimization.changed ? `${optimization.changed} tasks move to the earliest dates their dependencies allow. Forecast finish ${getProjectFinish(optimization.tasks)} (current ${beforeFinish}).` : "The schedule already uses the earliest dates its dependencies allow."}</p>
+        {optimization.changed > 0 && <button type="button" className="btn-nav" onClick={() => {
+          if (readOnly) { onPromptFork?.(); return; }
+          onCommit({ ...data, tasks: optimization.tasks });
+          setOptimization(null);
+        }}>Apply scenario</button>}
+      </div>}
       {error && <p role="alert">{error}</p>}
       {currentProposal && (
         <div aria-live="polite" style={{ marginTop: 12 }}>

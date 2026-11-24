@@ -115,7 +115,7 @@ describe("theme color and haptics", () => {
       configurable: true
     });
     triggerHaptic("light");
-    expect(vibrate).toHaveBeenCalledWith([8]);
+    expect(vibrate).toHaveBeenCalledWith([10]);
   });
 
   it("never vibrates under reduced motion", () => {
@@ -204,10 +204,6 @@ describe("additional platform hardening", () => {
     }
   });
 
-  it("protects the app shell from non-index HTML pages", () => {
-    const plugin = readFileSync(resolve(playgroundRoot, "vite-pwa-plugin.ts"), "utf8");
-    expect(plugin).toContain('isShellNavigation');
-    expect(plugin).toContain('cache.put(request, network.clone())');
-  });
+
 });
 

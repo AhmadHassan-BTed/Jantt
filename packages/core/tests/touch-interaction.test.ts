@@ -1042,6 +1042,18 @@ describe("Task sidebar (detail drawer)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("retains edits after a host dismissal request and saves after the warning", () => {
+    const { sidebar, onClose, onSave, save } = open({ id: "t1", category: "dev", start: "2026-09-01", end: "2026-09-05" });
+    sidebar.element.querySelector<HTMLTextAreaElement>("#jantt-sidebar-notes")!.value = "phone draft";
+
+    expect(sidebar.requestDismiss()).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(sidebar.element.querySelector("#jantt-sidebar-discard")).toBe(document.activeElement);
+    save();
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ notes: "phone draft" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("gives custom renderers the read-only/locked state and blocks their writes", () => {
     const onSave = vi.fn();
     const onError = vi.fn();

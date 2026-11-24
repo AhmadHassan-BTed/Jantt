@@ -1,6 +1,7 @@
 import type { JanttData, Person } from "@jantt/core";
 
 export interface SavedProject {
+  allowViewerForks?: boolean;
   id: string;
   name: string;
   updatedAt: string;

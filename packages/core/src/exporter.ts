@@ -134,7 +134,8 @@ export function exportSvgString(container: HTMLElement): string | null {
       const w = parseFloat(el.style.width) || 0;
       const h = parseFloat(el.style.height) || 0;
       const fill = readStyle(el, "background-color") || "#64748B";
-      const label = el.getAttribute("aria-label") || el.dataset.taskId || "";
+      const name = el.getAttribute("aria-label") || el.querySelector(".jantt-bar-title")?.textContent || el.dataset.taskId;
+      const label = [name, el.getAttribute("aria-description")].filter(Boolean).join(", ");
       const group = document.createElementNS(SVG_NS, "g");
       const title = document.createElementNS(SVG_NS, "title");
       title.textContent = label;

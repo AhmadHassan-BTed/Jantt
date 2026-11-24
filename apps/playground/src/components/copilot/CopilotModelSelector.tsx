@@ -190,7 +190,7 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
               const statusText = isLoading
                 ? "Syncing..."
                 : discovery?.source === "live"
-                ? `Live · ${allModels.length}`
+                ? `Live · ${allModels.length}${discovery.latencyMs === undefined ? "" : ` · ${discovery.latencyMs} ms`}`
                 : discovery?.source === "cache"
                 ? `Synced · ${allModels.length}`
                 : `Fallback · ${allModels.length}`;

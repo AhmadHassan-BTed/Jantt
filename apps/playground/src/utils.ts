@@ -680,7 +680,7 @@ export interface LaunchNotice {
   isError: boolean;
 }
 
-export function loadInitialState() {
+export function loadInitialState(compact = false) {
   const isBrowser = typeof window !== "undefined";
   let launchNotice: LaunchNotice | null = null;
 
@@ -715,7 +715,7 @@ export function loadInitialState() {
     if (savedScale && VALID_SCALES.includes(savedScale)) initialScale = savedScale;
   } catch {}
 
-  let initialRouting: LinkRoutingStyle = "orthogonal";
+  let initialRouting: LinkRoutingStyle = "curved";
   try {
     const savedRouting = storageService.getItem<LinkRoutingStyle>(STORAGE_KEYS.ROUTING);
     if (savedRouting && ["orthogonal", "curved", "direct"].includes(savedRouting)) {
@@ -884,6 +884,9 @@ export function loadInitialState() {
   storageService.setItem(STORAGE_KEYS.ACTIVE_PROJECT_ID, activeProjectId);
 
   const metaScale = initialParsed?.meta?.scale;
+  // Open the long example at a useful overview on a first phone visit. Saved zoom and shared
+  // links retain precedence, and imported plans keep their chosen scale.
+  const overview = compact && activeProjectId === "default" ? "quarter" : metaScale;
 
   return {
     activeProjectId,
@@ -892,7 +895,7 @@ export function loadInitialState() {
     /** The project list as loaded (including a just-imported share link). */
     savedProjects,
     initialTheme,
-    initialScale: initialScale ?? (metaScale && VALID_SCALES.includes(metaScale) ? metaScale : "week"),
+    initialScale: initialScale ?? (overview && VALID_SCALES.includes(overview) ? overview : "week"),
     initialRouting,
     initialRowHeightMode,
     initialRowHeight,

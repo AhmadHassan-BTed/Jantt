@@ -53,6 +53,7 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
   }, [text]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (isStreaming) {
@@ -75,13 +76,22 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
 
   return (
     <div className="copilot-input-wrapper">
+      <div className="copilot-suggestions" role="group" aria-label="Suggested prompts">
+        {["Identify critical path bottlenecks", "Compress schedule by 2 weeks", "Level over-allocated resources",
+          "Estimate optimistic vs pessimistic delivery dates", "Generate executive markdown progress report"].map(prompt =>
+          <button key={prompt} type="button" disabled={isStreaming} onClick={() => {
+            setText(prompt);
+            textareaRef.current?.focus();
+          }}>{prompt}</button>)}
+      </div>
       <div className="copilot-input-card">
         <textarea
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isReadOnly ? "Plan is read-only..." : "Ask anything, @ to mention, / for actions"}
+          aria-label="Message Copilot"
+          placeholder="Ask about this plan…"
           rows={1}
           className="copilot-textarea"
           disabled={isReadOnly}

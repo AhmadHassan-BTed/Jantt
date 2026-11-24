@@ -40,6 +40,7 @@ interface UseTaskActionsOptions {
   summaryBaseTasks?: Task[];
   /** Auto-Cascade toggle. When omitted, the persisted preference is used. */
   autoCascade?: boolean;
+  compact?: boolean;
 }
 
 export function useTaskActions({
@@ -55,11 +56,12 @@ export function useTaskActions({
   initialKanbanSort,
   handleChartCommit,
   summaryBaseTasks,
+  compact = false,
   autoCascade
 }: UseTaskActionsOptions) {
   const [tasksViewMode, setTasksViewMode] = useState<"cards" | "todo">(() => {
     const saved = storageService.getItem<{ tasksViewMode?: string }>(STORAGE_KEYS.TASKS_VIEW_STATE);
-    return saved?.tasksViewMode === "todo" ? "todo" : "cards";
+    return saved?.tasksViewMode === "cards" || saved?.tasksViewMode === "todo" ? saved.tasksViewMode : compact ? "todo" : "cards";
   });
   const [tasksSearchQuery, setTasksSearchQuery] = useState<string>("");
   const [summarySortConfig, setSummarySortConfig] = useState<SummarySortConfig>(() => {
@@ -176,7 +178,7 @@ export function useTaskActions({
     [kanbanSortRules, effectivePeople, teams]
   );
 
-  const handleAddNewTask = useCallback(() => {
+  const createTask = useCallback((draft?: { title: string; start: string; milestone: boolean; status?: string }) => {
     if (!parsedData) return;
     const allTasks = parsedData.tasks || [];
     const activeTasks = allTasks.filter((t) => !t._deleted);
@@ -193,14 +195,17 @@ export function useTaskActions({
     const newTask: Task = {
       id: generateId("task"),
       wbs: `${nextIdx}.0`,
-      label: `New Task ${nextIdx}`,
+      label: draft?.title.trim() || `New Task ${nextIdx}`,
       category: defaultCat,
-      start: lastEnd,
-      end: addDays(lastEnd, 7),
+      start: draft?.start || lastEnd,
+      end: draft?.milestone ? draft.start : addDays(draft?.start || lastEnd, 7),
+      ...(draft?.milestone ? { milestone: true } : {}),
       progress: 0,
       status: "not-started",
       gapDays: parsedData.meta?.defaultGapDays ?? 2
     };
+
+    if (draft?.status) Object.assign(newTask, syncTaskProgressAndStatus({ status: draft.status }, newTask));
 
     // Soft-deleted tombstone tasks are kept so the deletion keeps propagating to collaborators
     const cascade = autoCascade ?? isAutoCascadeEnabled();
@@ -219,7 +224,10 @@ export function useTaskActions({
     }
   }, [parsedData, autoCascade, setParsedData, setJsonText, setValidationResult, handleChartCommit]);
 
+  const handleAddNewTask = useCallback(() => createTask(), [createTask]);
+
   return {
+    createTask,
     tasksViewMode,
     setTasksViewMode,
     tasksSearchQuery,

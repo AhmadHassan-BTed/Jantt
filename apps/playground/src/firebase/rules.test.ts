@@ -350,6 +350,7 @@ function roomMeta(overrides: Partial<RoomMetadata> = {}): Required<Omit<RoomMeta
     taskCount: 1,
     noteCount: 0,
     theme: "noir",
+    allowViewerForks: true,
     ...overrides
   };
 }
@@ -408,7 +409,7 @@ function shareWrites(target: Persona, role: "editor" | "viewer"): Record<string,
 
 /** presenceService.trackRoomPresence */
 function presence(p: Persona, overrides: Partial<RoomPresence> = {}): Required<RoomPresence> {
-  return { uid: p.uid, username: p.username, displayName: p.username, photoURL: AVATAR, status: "online", lastSeen: NOW, joinedAt: NOW, ...overrides };
+  return { uid: p.uid, username: p.username, displayName: p.username, photoURL: AVATAR, inspectedTaskId: "plan-task", status: "online", lastSeen: NOW, joinedAt: NOW, ...overrides };
 }
 
 let db: RulesDb;
@@ -788,6 +789,14 @@ describe("rooms: members, invites and bans", () => {
 });
 
 describe("rooms: presence and pointers", () => {
+  it("reserves the viewer copy setting for the owner", () => {
+    const path = `rooms/${ROOM}/meta/allowViewerForks`;
+    expect(db.set(alice.auth, path, false)).toBe(true);
+    expect(db.set(carol.auth, path, true)).toBe(false);
+    expect(db.set(bob.auth, path, true)).toBe(false);
+    expect(db.set(alice.auth, path, "false")).toBe(false);
+  });
+
   it("lets members publish and clear only their own presence", () => {
     expect(db.set(carol.auth, `rooms/${ROOM}/presence/${carol.uid}`, presence(carol))).toBe(true);
     expect(db.set(carol.auth, `rooms/${ROOM}/presence/${carol.uid}`, null)).toBe(true);
@@ -801,6 +810,8 @@ describe("rooms: presence and pointers", () => {
     expect(db.set(carol.auth, path, withoutAvatar)).toBe(true);
     expect(db.set(carol.auth, path, { ...presence(carol), isOwner: true })).toBe(false);
     expect(db.set(carol.auth, path, presence(carol, { photoURL: "https://tracker.example/p.gif" }))).toBe(false);
+    expect(db.set(carol.auth, path, presence(carol, { inspectedTaskId: "x".repeat(257) }))).toBe(false);
+    expect(db.set(carol.auth, path, { ...presence(carol), inspectedTaskId: 123 })).toBe(false);
     // A numeric timestamp would break every viewer's presence sort (string comparison).
     expect(db.set(carol.auth, path, { ...presence(carol), joinedAt: Date.now() })).toBe(false);
     expect(db.set(carol.auth, path, { ...presence(carol), lastSeen: Date.now() })).toBe(false);

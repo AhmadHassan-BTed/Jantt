@@ -142,7 +142,7 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
                     className="note-chip-team"
                     style={{
                       borderColor: teamColor || "var(--primary)",
-                      color: teamColor || "inherit"
+                      color: "var(--jantt-text)"
                     }}
                   >
                     {toText(teamObj.name)}

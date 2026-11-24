@@ -49,6 +49,9 @@ function toPresence(uid: string, raw: unknown): RoomPresence | null {
     lastSeen: toIsoTimestamp(entry.lastSeen),
     joinedAt: toIsoTimestamp(entry.joinedAt)
   };
+  if (typeof entry.inspectedTaskId === "string" && entry.inspectedTaskId.length > 0 && entry.inspectedTaskId.length <= 256) {
+    presence.inspectedTaskId = entry.inspectedTaskId;
+  }
   const photoURL = getTrustedAvatarUrl(entry.photoURL);
   if (photoURL) presence.photoURL = photoURL;
   return presence;
@@ -68,7 +71,8 @@ function toPresence(uid: string, raw: unknown): RoomPresence | null {
  */
 export function trackRoomPresence(
   roomId: string,
-  user: UserProfile | null | undefined
+  user: UserProfile | null | undefined,
+  observeSelection?: (publish: (taskId: string | null) => void) => () => void
 ): () => void {
   if (typeof window === "undefined" || !roomId || !user?.uid) {
     return () => {};
@@ -81,6 +85,8 @@ export function trackRoomPresence(
   let isMember = false;
   let confirmed = false;
   let denied = false;
+  let inspectedTaskId: string | null = null;
+  let selectionSupported = true;
 
   const writePresence = () => {
     if (!active || denied || !connected || !isMember) return;
@@ -96,6 +102,7 @@ export function trackRoomPresence(
     const photoURL = getTrustedAvatarUrl(user.photoURL);
     if (photoURL) presence.photoURL = photoURL;
 
+    if (selectionSupported && inspectedTaskId) presence.inspectedTaskId = inspectedTaskId;
     confirmed = false;
     set(presenceRef, presence).then(
       () => {
@@ -104,7 +111,11 @@ export function trackRoomPresence(
       (err) => {
         // Refused by the rules: stop retrying until the membership changes. Other failures
         // (connection lost mid-write) are retried by the next `.info/connected` event.
-        if (isPermissionDeniedError(err)) denied = true;
+        if (isPermissionDeniedError(err) && presence.inspectedTaskId && selectionSupported) {
+          // Rooms using older database rules still accept basic presence.
+          selectionSupported = false;
+          writePresence();
+        } else if (isPermissionDeniedError(err)) denied = true;
         else warnPresence("Could not publish presence", err);
       }
     );
@@ -146,6 +157,13 @@ export function trackRoomPresence(
     (err) => warnPresence("Presence listener cancelled", err)
   );
 
+  const stopSelection = observeSelection?.((taskId) => {
+    const next = taskId && taskId.length <= 256 ? taskId : null;
+    if (next === inspectedTaskId) return;
+    inspectedTaskId = next;
+    if (selectionSupported) writePresence();
+  });
+
   const release = async () => {
     if (!active) return;
     active = false;
@@ -153,6 +171,7 @@ export function trackRoomPresence(
     stopConnected();
     stopMember();
     stopSelf();
+    stopSelection?.();
     // Best effort: offline, neither call reaches the server, so its onDisconnect handler still
     // removes the entry when the connection closes.
     await Promise.allSettled([onDisconnect(presenceRef).cancel(), remove(presenceRef)]);

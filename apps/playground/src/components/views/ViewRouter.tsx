@@ -1,5 +1,6 @@
 import React from "react";
-import { Jantt } from "@jantt/react";
+import { PhoneTimeline as Jantt } from "./PhoneTimeline";
+import type { RoomPresence } from "../../firebase/types";
 import { getTodayISODate, type JanttData } from "@jantt/core";
 import type { ActiveView } from "../../types";
 import type { useGanttViewport } from "../../hooks/useGanttViewport";
@@ -10,19 +11,19 @@ import type { useTaskDetailSidebar } from "../../hooks/useTaskDetailSidebar";
 import type { useEditorState } from "../../hooks/useEditorState";
 import type { useAutoSave } from "../../hooks/useAutoSave";
 import type { useProjectState } from "../../hooks/useProjectState";
-import { KanbanView } from "./KanbanView";
-import { TasksView } from "./TasksView";
-import { NotesView } from "./NotesView";
 import { ViewNavBar, ViewToolbar } from "../layout/ViewToolbar";
 import { EmptyChartState } from "../common/EmptyChartState";
 import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
 import { triggerHaptic } from "../../services/platform";
-import type { Task } from "@jantt/core";
+import { TimelineHeading } from "./TimelineHeading";
 
 // Heavy, less-used views load on first use: the canvas renderer and the EVM / schedule-health
 // dashboard stay out of the startup bundle. (They are deliberately not re-exported from the
 // views barrel, which would pull them back into the main chunk.)
+const KanbanView = React.lazy(() => import("./KanbanView").then((m) => ({ default: m.KanbanView })));
+const TasksView = React.lazy(() => import("./TasksView").then((m) => ({ default: m.TasksView })));
+const NotesView = React.lazy(() => import("./NotesView").then((m) => ({ default: m.NotesView })));
 const CanvasView = React.lazy(() => import("./CanvasView").then((m) => ({ default: m.CanvasView })));
 const BudgetKpiView = React.lazy(() => import("./BudgetKpiView").then((m) => ({ default: m.BudgetKpiView })));
 
@@ -33,6 +34,10 @@ const viewLoadingFallback = (
 );
 
 export interface ViewRouterProps {
+  remotePresence?: RoomPresence[];
+  registerNoteBack?: (close: (() => void) | null) => void;
+  onInspectTask?: (id: string | null) => void;
+  onQuickTask?: (status: string) => void;
   activeView: ActiveView;
   setActiveView?: (view: ActiveView) => void;
   notesCount?: number;
@@ -114,6 +119,10 @@ class ViewErrorBoundary extends React.Component<ViewErrorBoundaryProps, { error:
 
 export const ViewRouter: React.FC<ViewRouterProps> = ({
   activeView,
+  onQuickTask,
+  registerNoteBack,
+  remotePresence = [],
+  onInspectTask,
   setActiveView,
   notesCount,
   parsedData,
@@ -134,35 +143,24 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
   onPromptFork
 }) => {
   const [jumpToTodayCount, setJumpToTodayCount] = React.useState(0);
-  const [selectedMobileTaskId, setSelectedMobileTaskId] = React.useState<string | null>(null);
-  const [showMobileTaskList, setShowMobileTaskList] = React.useState(false);
-  const mobileTapRef = React.useRef<{ id: string; time: number } | null>(null);
+  const [showMobileTaskList, setShowMobileTaskList] = React.useState(true);
   const handleToggleMobileTaskList = React.useCallback(() => {
     triggerHaptic("light");
     setShowMobileTaskList((prev) => !prev);
   }, []);
-  const handleMobileTaskOpen = React.useCallback((task: Task) => {
-    const now = Date.now();
-    const previous = mobileTapRef.current;
-    setSelectedMobileTaskId(task.id);
-    if (previous?.id === task.id && now - previous.time <= 420) {
-      mobileTapRef.current = null;
-      triggerHaptic("light");
-      taskDetail.openTaskDetailSidebar(task);
-      return;
-    }
-    mobileTapRef.current = { id: task.id, time: now };
-  }, [taskDetail.openTaskDetailSidebar]);
   const handleJumpToToday = React.useCallback(() => {
     setJumpToTodayCount((c) => c + 1);
   }, []);
-  const ganttScrollRef = React.useRef<{ scrollLeft: number; scrollTop: number } | null>(
-    storageService.getItem<{ scrollLeft: number; scrollTop: number }>(STORAGE_KEYS.GANTT_SCROLL)
-  );
+  const [initialScroll] = React.useState(() =>
+    storageService.getItem<{ scrollLeft: number; scrollTop: number }>(STORAGE_KEYS.GANTT_SCROLL));
+  const ganttScrollRef = React.useRef(initialScroll);
   const handleSaveGanttScroll = React.useCallback((pos: { scrollLeft: number; scrollTop: number }) => {
     ganttScrollRef.current = pos;
     storageService.setItem(STORAGE_KEYS.GANTT_SCROLL, pos);
   }, []);
+
+  const inspectingUsers = React.useMemo(() => remotePresence.flatMap(user =>
+    user.inspectedTaskId ? [{ taskId: user.inspectedTaskId, name: user.displayName }] : []), [remotePresence]);
 
   if (!parsedData) {
     return <EmptyChartState />;
@@ -182,6 +180,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
         />
       )}
 
+      {isMobile && (activeView === "gantt" || activeView === "canvas") &&
+        <TimelineHeading data={parsedData} onHealth={() => setActiveView?.("summary")} />}
       {activeView !== "notes" && (
         <ViewToolbar
           isMobile={Boolean(isMobile)}
@@ -218,6 +218,11 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
         <React.Suspense fallback={viewLoadingFallback}>
           {activeView === "gantt" && ganttDisplayData && (
             <Jantt
+              showSplit={showMobileTaskList}
+              onToggleSplit={isMobile ? handleToggleMobileTaskList : undefined}
+              onPreviewOpen={taskDetail.openTaskDetailSidebar}
+              onInspectTask={onInspectTask}
+              inspectingUsers={inspectingUsers}
               data={ganttDisplayData}
               onCommit={handleGanttCommit}
               readOnly={isViewer}
@@ -294,7 +299,10 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
           {activeView === "canvas" && (
             <CanvasView
               parsedData={ganttDisplayData ?? parsedData}
-              onTaskClick={isMobile ? handleMobileTaskOpen : taskDetail.openTaskDetailSidebar}
+              isMobile={isMobile}
+              onInspectTask={onInspectTask}
+              inspectingUsers={inspectingUsers}
+              onTaskClick={taskDetail.openTaskDetailSidebar}
               activeTheme={viewport.activeTheme}
               isViewer={isViewer}
               onOpenScratchPlan={project.handleCreateLocalCopyFromData}
@@ -304,6 +312,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
           {activeView === "kanban" && (
             <KanbanView
+              onQuickTask={onQuickTask}
+              searchQuery={tasks.tasksSearchQuery}
               isMobile={Boolean(isMobile)}
               parsedData={parsedData}
               kanbanSortRules={tasks.kanbanSortRules}
@@ -316,8 +326,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               effectivePeople={people.effectivePeople}
               teams={people.teams}
               selectedPersonFilter={people.selectedPersonFilter}
-              openTaskDetailSidebar={isMobile ? handleMobileTaskOpen : taskDetail.openTaskDetailSidebar}
-              selectedMobileTaskId={isMobile ? selectedMobileTaskId : null}
+              openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
+              remotePresence={remotePresence}
               handleChartCommit={commitFullPlan}
               isViewer={isViewer}
               onPromptFork={onPromptFork}
@@ -343,8 +353,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               handleAddNewTask={tasks.handleAddNewTask}
               setDateFilterMode={dateFilter.setDateFilterMode}
               setCompletedFilterMode={dateFilter.setCompletedFilterMode}
-              openTaskDetailSidebar={isMobile ? handleMobileTaskOpen : taskDetail.openTaskDetailSidebar}
-              selectedMobileTaskId={isMobile ? selectedMobileTaskId : null}
+              openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
+              remotePresence={remotePresence}
               handleChartCommit={commitFullPlan}
               isViewer={isViewer}
               onPromptFork={onPromptFork}
@@ -353,6 +363,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
           {activeView === "summary" && (
             <BudgetKpiView
+              onCommit={commitFullPlan} readOnly={isViewer} onPromptFork={onPromptFork}
               isMobile={Boolean(isMobile)}
               parsedData={parsedData}
               summaryKpiTasks={dateFilter.summaryKpiTasks}
@@ -372,6 +383,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
 
           {activeView === "notes" && (
             <NotesView
+              registerNoteBack={isMobile ? registerNoteBack : undefined}
               parsedData={parsedData}
               handleChartCommit={commitFullPlan}
               effectivePeople={people.effectivePeople}

@@ -1,0 +1,87 @@
+{
+  "packageId": "org.fractal.jantt",
+  "host": "ahmadhassan-bted.github.io",
+  "name": "Jantt: AI Gantt & Planner",
+  "launcherName": "Jantt",
+  "display": "standalone",
+  "themeColor": "#090E1A",
+  "themeColorDark": "#090E1A",
+  "navigationColor": "#090E1A",
+  "navigationColorDark": "#090E1A",
+  "navigationDividerColor": "#090E1A",
+  "navigationDividerColorDark": "#090E1A",
+  "backgroundColor": "#090E1A",
+  "enableNotifications": false,
+  "startUrl": "/Jantt/?source=twa",
+  "iconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-512.png",
+  "maskableIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 250,
+  "signingKey": {
+    "path": "jantt-release.keystore",
+    "alias": "jantt"
+  },
+  "appVersionCode": 3,
+  "appVersionName": "1.1.2",
+  "shortcuts": [
+    {
+      "name": "New Plan",
+      "shortName": "New Plan",
+      "url": "https://ahmadhassan-bted.github.io/Jantt/?action=new-plan&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    },
+    {
+      "name": "AI Copilot",
+      "shortName": "Copilot",
+      "url": "https://ahmadhassan-bted.github.io/Jantt/?action=copilot&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    },
+    {
+      "name": "Tasks Checklist",
+      "shortName": "Tasks",
+      "url": "https://ahmadhassan-bted.github.io/Jantt/?view=tasks&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    },
+    {
+      "name": "Project Notes",
+      "shortName": "Notes",
+      "url": "https://ahmadhassan-bted.github.io/Jantt/?view=notes&source=twa",
+      "chosenIconUrl": "https://ahmadhassan-bted.github.io/Jantt/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap",
+  "webManifestUrl": "https://ahmadhassan-bted.github.io/Jantt/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": false,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://ahmadhassan-bted.github.io/Jantt/",
+  "minSdkVersion": 24,
+  "orientation": "any",
+  "fingerprints": [
+    {
+      "value": "0E:A7:40:C8:CD:68:1C:98:11:06:DC:AD:4D:B9:2B:99:21:DF:54:50:0A:13:5C:08:50:D6:0C:7F:2B:C5:82:60"
+    },
+    {
+      "value": "A0:FB:16:66:E1:4F:53:2A:FA:23:CE:64:3E:41:C1:68:F5:0B:E2:96:58:A3:8D:67:46:C3:13:F1:43:C6:D0:35"
+    },
+    {
+      "value": "D5:C0:1C:E6:B6:8D:C4:B5:B0:7D:35:D8:D4:40:A2:66:06:A8:4E:94:DF:31:A4:16:34:24:1E:E5:B3:9B:12:E3"
+    }
+  ],
+  "additionalTrustedOrigins": [
+    "jantt-cloud.firebaseapp.com",
+    "jantt-cloud.web.app"
+  ],
+  "retainedBundles": []
+}

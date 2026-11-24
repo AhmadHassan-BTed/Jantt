@@ -14,12 +14,12 @@
   --jantt-border-strong: #94A3B8;
   --jantt-text: #0F172A;
   --jantt-text-muted: #475569;
-  --jantt-text-dim: #94A3B8;
-  --jantt-accent: #0284C7;
+  --jantt-text-dim: #526479;
+  --jantt-accent: #036A9E;
   --jantt-accent-glow: rgba(2, 132, 199, 0.14);
   --jantt-accent-contrast: #FFFFFF;
   --jantt-today: #E11D48;
-  --jantt-critical: #D97706;
+  --jantt-critical: #B42335;
   --jantt-critical-glow: rgba(217, 119, 6, 0.18);
   --jantt-bar-done: #64748B;
   --jantt-bar-done-subtle: rgba(100, 116, 139, 0.16);
@@ -45,9 +45,9 @@
   --jantt-border-strong: rgba(255, 255, 255, 0.28);
   --jantt-text: #FFFFFF;
   --jantt-text-muted: #A1A1AA;
-  --jantt-text-dim: #71717A;
+  --jantt-text-dim: #A0A0A6;
   --jantt-accent: #FFFFFF;
-  --jantt-accent-glow: rgba(255, 255, 255, 0.30);
+  --jantt-accent-glow: rgba(255, 255, 255, 0.12);
   --jantt-accent-contrast: #000000;
   --jantt-today: #EF4444;
   --jantt-critical: #F43F5E;
@@ -57,7 +57,7 @@
   --jantt-weekend-bg: transparent;
   --jantt-grid-line: rgba(255, 255, 255, 0.08);
   --jantt-grid-row-line: rgba(255, 255, 255, 0.05);
-  --jantt-dep-line: #52525B;
+  --jantt-dep-line: #818187;
   --jantt-dep-line-active: #FFFFFF;
   --jantt-bar-radius: 6px;
   --jantt-glass-blur: 16px;
@@ -2442,9 +2442,9 @@ body.jantt-is-col-resizing * {
 .jantt-sidebar-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgb(0 0 0 / calc(.65 * var(--sheet-opacity, 1)));
+  -webkit-backdrop-filter: blur(calc(8px * var(--sheet-opacity, 1)));
+  backdrop-filter: blur(calc(8px * var(--sheet-opacity, 1)));
   z-index: 1000;
   display: flex;
   justify-content: flex-end;
@@ -3016,3 +3016,10 @@ body.jantt-is-col-resizing * {
 }
 
 
+
+.jantt-resize-handle.is-start { left: 0; right: auto; border-radius: var(--jantt-bar-radius) 0 0 var(--jantt-bar-radius); }
+.jantt-bar-percent { font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.jantt-drag-date-hint { position:fixed; z-index:100; pointer-events:none; border-radius:6px; padding:5px 8px;
+  background:var(--jantt-surface-solid); color:var(--jantt-text); border:1px solid var(--jantt-border-strong);
+  font:600 11px/1.4 system-ui,sans-serif; font-variant-numeric:tabular-nums; }

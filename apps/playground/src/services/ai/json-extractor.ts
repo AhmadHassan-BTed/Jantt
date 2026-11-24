@@ -1,4 +1,6 @@
-import type { JanttData, Task, JanttMeta } from "@jantt/core";
+import type { JanttData, Task } from "@jantt/core";
+
+import { deleteTasks, getPeerId } from "../../utils";
 
 export interface ExtractionResult {
   data: JanttData | null;
@@ -6,19 +8,6 @@ export interface ExtractionResult {
   textContent: string;
   source: "fenced-block" | "raw-object" | "none";
 }
-
-/** Allowed root keys in strict Jantt specification */
-const VALID_ROOT_KEYS = new Set([
-  "$schema",
-  "meta",
-  "categories",
-  "calendars",
-  "documents",
-  "notes",
-  "teams",
-  "people",
-  "tasks"
-]);
 
 /** Known conversational or LLM hallucination keys that must NEVER enter the JSON */
 const POLLUTION_ROOT_KEYS = new Set([
@@ -72,18 +61,14 @@ const VALID_TASK_KEYS = new Set([
   "notes",
   "description",
   "fields",
-  "fieldTimestamps",
-  "updatedAt",
-  "updatedBy",
-  "_deleted",
-  "deletedAt"
+  "_deleted"
 ]);
 
 function cleanJsonString(str: string): string {
-  return str
-    .replace(/,\s*([}\]])/g, "$1") // trailing commas
-    .replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, "$1") // comments
-    .trim();
+  // Match quoted JSON strings first so punctuation and comment markers in notes stay literal.
+  return str.replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*|,(?=\s*[}\]])/g, token =>
+    token.startsWith('"') ? token : ""
+  ).trim();
 }
 
 /**
@@ -99,7 +84,7 @@ export function sanitizeTask(task: any): (Partial<Task> & { id: string }) | null
 
   for (const [key, value] of Object.entries(task)) {
     if (POLLUTION_ROOT_KEYS.has(key.toLowerCase())) continue;
-    if (VALID_TASK_KEYS.has(key)) {
+    if (key !== "id" && VALID_TASK_KEYS.has(key)) {
       cleanTask[key] = value;
     }
   }
@@ -138,109 +123,45 @@ export function sanitizeAndReconcilePlan(
   const activeCategories = currentPlan?.categories || incomingRoot.categories || {};
   const fallbackCategory = Object.keys(activeCategories)[0] || "general";
 
-  // Reconcile tasks
-  let finalTasks: Task[] = [];
-  const masterTasks = (currentPlan?.tasks || []).filter((t) => !t._deleted);
+  // Existing tasks are patches by ID, including when a provider echoes the whole plan.
+  // Large-plan prompts intentionally omit fields such as budgets and baselines.
+  const masterTasks = currentPlan?.tasks || [];
+  const masterIds = new Set(masterTasks.map(task => task.id));
+  const patches = new Map<string, Partial<Task> & { id: string }>();
+  for (const rawTask of incomingTasks || []) {
+    const patch = sanitizeTask(rawTask);
+    if (patch) patches.set(patch.id, patch);
+  }
 
-  if (incomingTasks && incomingTasks.length > 0) {
-    const sanitizedIncoming = incomingTasks
-      .map((t) => sanitizeTask(t))
-      .filter((t): t is Partial<Task> & { id: string } => t !== null);
-
-    const masterTaskMap = new Map<string, Task>(masterTasks.map((t) => [t.id, t]));
-    const incomingTaskMap = new Map<string, Partial<Task>>(sanitizedIncoming.map((t) => [t.id, t]));
-
-    // Is it a full replacement?
-    // Only if incoming has at least masterTasks.length, or master is empty,
-    // or incoming has nearly all tasks and includes required fields like start and category
-    const isFullReplacement =
-      masterTasks.length === 0 ||
-      sanitizedIncoming.length >= masterTasks.length ||
-      (masterTasks.length > 2 &&
-        sanitizedIncoming.length >= masterTasks.length - 1 &&
-        sanitizedIncoming.every((t) => t.category && t.start && t.end));
-
-    if (isFullReplacement) {
-      finalTasks = sanitizedIncoming.map((t) => ({
-        category: fallbackCategory,
-        ...t
-      })) as Task[];
-    } else {
-      // Partial patch: merge incoming properties into existing master tasks
-      finalTasks = masterTasks.map((masterT) => {
-        const patch = incomingTaskMap.get(masterT.id);
-        if (!patch) return masterT;
-        return {
-          ...masterT,
-          ...patch
-        };
-      });
-      // Append any genuinely new tasks
-      for (const t of sanitizedIncoming) {
-        if (!masterTaskMap.has(t.id)) {
-          finalTasks.push({
-            category: fallbackCategory,
-            start: new Date().toISOString().slice(0, 10),
-            end: new Date().toISOString().slice(0, 10),
-            ...t
-          } as Task);
-        }
-      }
+  const removed: string[] = [];
+  const tasks = masterTasks.map(task => {
+    const patch = patches.get(task.id);
+    if (!patch || task._deleted) return task;
+    if (patch._deleted === true) {
+      removed.push(task.id);
+      return task;
     }
-  } else {
-    finalTasks = masterTasks;
+    return { ...task, ...patch };
+  });
+  for (const patch of patches.values()) {
+    if (masterIds.has(patch.id) || patch._deleted || currentPlan?.meta?.tombstones?.[patch.id]) continue;
+    tasks.push({ category: fallbackCategory, ...patch } as Task);
   }
 
-  // Purify root object
-  const cleanPlan: Record<string, any> = {
-    $schema: incomingRoot.$schema || currentPlan?.$schema || "https://jantt.dev/schema/v1.json",
-    meta: {
-      ...(currentPlan?.meta || {}),
-      ...(incomingRoot.meta || {})
-    },
-    categories: {
-      ...(currentPlan?.categories || {}),
-      ...(incomingRoot.categories || {})
-    },
-    tasks: finalTasks
-  };
-
-  // Clean meta from conversational pollution
-  if (cleanPlan.meta) {
-    const cleanMeta: Record<string, any> = {};
-    for (const [k, v] of Object.entries(cleanPlan.meta)) {
-      if (!POLLUTION_ROOT_KEYS.has(k.toLowerCase())) {
-        cleanMeta[k] = v;
-      }
-    }
-    cleanPlan.meta = cleanMeta as JanttMeta;
+  const plan: JanttData = { ...currentPlan, tasks };
+  if (incomingRoot.$schema) plan.$schema = incomingRoot.$schema;
+  if (incomingRoot.categories) plan.categories = { ...currentPlan?.categories, ...incomingRoot.categories };
+  if (incomingRoot.meta) {
+    const bookkeeping = new Set(["revision", "updatedAt", "contentHash", "sync", "tombstones"]);
+    const editableMeta = Object.fromEntries(Object.entries(incomingRoot.meta).filter(
+      ([key]) => !bookkeeping.has(key) && !POLLUTION_ROOT_KEYS.has(key.toLowerCase())
+    ));
+    plan.meta = { ...currentPlan?.meta, ...editableMeta };
   }
-
-  // Preserve other valid schema sections
-  if (incomingRoot.people || currentPlan?.people) {
-    cleanPlan.people = incomingRoot.people || currentPlan?.people;
+  for (const key of ["people", "teams", "notes", "documents", "calendars"] as const) {
+    if (incomingRoot[key] !== undefined) plan[key] = incomingRoot[key];
   }
-  if (incomingRoot.teams || currentPlan?.teams) {
-    cleanPlan.teams = incomingRoot.teams || currentPlan?.teams;
-  }
-  if (incomingRoot.notes || currentPlan?.notes) {
-    cleanPlan.notes = incomingRoot.notes || currentPlan?.notes;
-  }
-  if (incomingRoot.documents || currentPlan?.documents) {
-    cleanPlan.documents = incomingRoot.documents || currentPlan?.documents;
-  }
-  if (incomingRoot.calendars || currentPlan?.calendars) {
-    cleanPlan.calendars = incomingRoot.calendars || currentPlan?.calendars;
-  }
-
-  // Final check: root must only contain strictly valid Jantt schema keys
-  for (const k of Object.keys(cleanPlan)) {
-    if (!VALID_ROOT_KEYS.has(k) || POLLUTION_ROOT_KEYS.has(k.toLowerCase())) {
-      delete cleanPlan[k];
-    }
-  }
-
-  return cleanPlan as JanttData;
+  return removed.length ? deleteTasks(plan, removed, new Date().toISOString() + "#" + getPeerId()) : plan;
 }
 
 /**

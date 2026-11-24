@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useId } from "react";
 import {
+  X,
   Search,
   Layers,
   Zap,
@@ -406,8 +407,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
         props.onClose();
         break;
       case "Tab":
-        // The search box is the only tabbable element: keep focus inside the dialog.
         e.preventDefault();
+        inputRef.current?.parentElement?.querySelector<HTMLElement>(".palette-close")?.focus();
         break;
     }
   };
@@ -443,6 +444,10 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
             autoComplete="off"
             spellCheck={false}
           />
+          <button type="button" className="palette-close" onClick={props.onClose} onKeyDown={e => {
+            if (e.key === "Tab") { e.preventDefault(); inputRef.current?.focus(); }
+            if (e.key === "Escape") props.onClose();
+          }} aria-label="Close search"><X size={18} /></button>
           <kbd className="command-palette-kbd">ESC</kbd>
         </div>
 

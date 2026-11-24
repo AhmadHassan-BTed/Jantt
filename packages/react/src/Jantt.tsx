@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from "react";
 import { JanttData, Task, ViewportOptions, JanttOptions, renderJantt, JanttInstance } from "@jantt/core";
 
 export interface JanttProps {
+  /** Access the mounted renderer for input devices with their own gesture lifecycle. */
+  onInstance?: (instance: JanttInstance | null) => void;
   data: JanttData;
   onChange?: (draft: JanttData) => void;
   onCommit?: (final: JanttData) => void;
@@ -9,6 +11,9 @@ export interface JanttProps {
   onTaskClick?: (task: Task) => void;
   onTaskDelete?: (taskId: string) => void;
   onTaskAdd?: (newTask: Task) => void;
+  /** Delegate the full detail sheet to a host that manages navigation and undo. */
+  onOpenTaskDetails?: (task: Task) => void;
+  onLinkSnap?: (taskId: string) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;
   onLinkDelete?: (fromTaskId: string, toTaskId: string) => void;
   sidebarContainer?: HTMLElement | string;
@@ -135,12 +140,15 @@ const toError = (error: unknown): Error => (error instanceof Error ? error : new
 
 export const Jantt: React.FC<JanttProps> = ({
   data,
+  onInstance,
   onChange,
   onCommit,
   onViewportChange,
   onTaskClick,
   onTaskDelete,
   onTaskAdd,
+  onOpenTaskDetails,
+  onLinkSnap,
   onLinkCreate,
   onLinkDelete,
   sidebarContainer,
@@ -173,6 +181,8 @@ export const Jantt: React.FC<JanttProps> = ({
   initialScroll,
   onSaveScroll
 }) => {
+  const onInstanceRef = useRef(onInstance);
+  onInstanceRef.current = onInstance;
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<JanttInstance | null>(null);
   /** Props as last handed to the engine; null before the first mount attempt. */
@@ -197,6 +207,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskClick,
     onTaskDelete,
     onTaskAdd,
+    onOpenTaskDetails,
+    onLinkSnap,
     onLinkCreate,
     onLinkDelete,
     onDateClick,
@@ -217,6 +229,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskClick,
     onTaskDelete,
     onTaskAdd,
+    onOpenTaskDetails,
+    onLinkSnap,
     onLinkCreate,
     onLinkDelete,
     onDateClick,
@@ -246,6 +260,7 @@ export const Jantt: React.FC<JanttProps> = ({
     mobileDoubleTapToOpen,
     hideLabelColumn,
     Boolean(renderDetail),
+    Boolean(onOpenTaskDetails),
     Boolean(onOpenAutoSave),
     Boolean(onImportJson),
     Boolean(onExportJson),
@@ -291,6 +306,8 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskClick: onTaskClick ? (t: Task) => callbacksRef.current.onTaskClick?.(t) : undefined,
     onTaskDelete: onTaskDelete ? (id: string) => callbacksRef.current.onTaskDelete?.(id) : undefined,
     onTaskAdd: onTaskAdd ? (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask) : undefined,
+    onOpenTaskDetails: onOpenTaskDetails ? task => callbacksRef.current.onOpenTaskDetails?.(task) : undefined,
+    onLinkSnap: id => callbacksRef.current.onLinkSnap?.(id),
     onLinkCreate: onLinkCreate ? (fromId: string, toId: string) => callbacksRef.current.onLinkCreate?.(fromId, toId) : undefined,
     onLinkDelete: onLinkDelete ? (fromId: string, toId: string) => callbacksRef.current.onLinkDelete?.(fromId, toId) : undefined,
     // Optional features are forwarded only when provided: the engine shows the detail renderer and
@@ -318,6 +335,7 @@ export const Jantt: React.FC<JanttProps> = ({
         autoCascade,
         searchQuery
       });
+      onInstanceRef.current?.(instanceRef.current);
       if (initialScrollRef.current && (initialScrollRef.current.scrollLeft > 0 || initialScrollRef.current.scrollTop > 0)) {
         instanceRef.current.setScrollPosition(initialScrollRef.current.scrollLeft, initialScrollRef.current.scrollTop);
       }
@@ -334,6 +352,7 @@ export const Jantt: React.FC<JanttProps> = ({
       if (instanceRef.current) {
         onSaveScrollRef.current?.(instanceRef.current.getScrollPosition());
       }
+      onInstanceRef.current?.(null);
       instanceRef.current?.destroy();
       instanceRef.current = null;
       syncedRef.current = null;

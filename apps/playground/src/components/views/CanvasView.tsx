@@ -12,6 +12,10 @@ import {
   Maximize2,
   Crosshair
 } from "lucide-react";
+import { useTimelineTouch, type TimelinePinch } from "../../hooks/useTimelineTouch";
+import { TimelineTaskPreview, type InspectingUsers } from "./TimelineTaskPreview";
+import { triggerHaptic } from "../../services/platform";
+import "./phone-timeline.css";
 import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
 
@@ -23,11 +27,11 @@ interface PersistedCanvasState {
   dayWidth: number;
 }
 
-function loadCanvasState(): PersistedCanvasState {
+function loadCanvasState(isMobile: boolean): PersistedCanvasState {
   const saved = storageService.getItem<Partial<PersistedCanvasState>>(STORAGE_KEYS.CANVAS_STATE);
   return {
     showCritical: typeof saved?.showCritical === "boolean" ? saved.showCritical : false,
-    showMinimap: typeof saved?.showMinimap === "boolean" ? saved.showMinimap : true,
+    showMinimap: typeof saved?.showMinimap === "boolean" ? saved.showMinimap : !isMobile,
     scrollX: typeof saved?.scrollX === "number" && Number.isFinite(saved.scrollX) ? Math.max(0, saved.scrollX) : 0,
     scrollY: typeof saved?.scrollY === "number" && Number.isFinite(saved.scrollY) ? Math.max(0, saved.scrollY) : 0,
     dayWidth:
@@ -39,6 +43,9 @@ function loadCanvasState(): PersistedCanvasState {
 
 export interface CanvasViewProps {
   parsedData: JanttData;
+  isMobile?: boolean;
+  inspectingUsers?: InspectingUsers;
+  onInspectTask?: (id: string | null) => void;
   onTaskClick?: (task: Task) => void;
   activeTheme?: ThemeDefinition;
   /** Read-only room viewers get no mutating controls. */
@@ -54,7 +61,7 @@ export interface CanvasViewProps {
 
 const ROW_HEIGHT = 34;
 const HEADER_HEIGHT = 44;
-const MIN_DAY_WIDTH = 12;
+const MIN_DAY_WIDTH = 1.2;
 const MAX_DAY_WIDTH = 140;
 const DEFAULT_DAY_WIDTH = 36;
 const ZOOM_STEP = 6;
@@ -116,6 +123,9 @@ function resolveCanvasColors(theme?: ThemeDefinition): CanvasColorConfig {
 
 export const CanvasView: React.FC<CanvasViewProps> = ({
   parsedData,
+  isMobile = false,
+  inspectingUsers,
+  onInspectTask,
   onTaskClick,
   activeTheme,
   isViewer = false,
@@ -127,7 +137,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CanvasTimelineRenderer | null>(null);
 
-  const initialCanvasState = useMemo(() => loadCanvasState(), []);
+  const initialCanvasState = useMemo(() => loadCanvasState(isMobile), []);
 
   // Pan/zoom live in refs: panning repaints the canvas without re-rendering React.
   const viewRef = useRef({
@@ -146,6 +156,15 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   const [showMinimap, setShowMinimap] = useState(initialCanvasState.showMinimap);
   const [isPanning, setIsPanning] = useState(false);
   const [hoveredTask, setHoveredTask] = useState<{ task: Task; x: number; y: number } | null>(null);
+
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const highlightedIds = useMemo(() => {
+    const ids = new Set(inspectingUsers?.map(user => user.taskId));
+    if (previewId) ids.add(previewId);
+    return ids;
+  }, [previewId, inspectingUsers]);
+  const highlightedRef = useRef(highlightedIds);
+  highlightedRef.current = highlightedIds;
 
   const showCriticalRef = useRef(showCritical);
   showCriticalRef.current = showCritical;
@@ -210,6 +229,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       scrollY: viewRef.current.scrollY,
       width: container.clientWidth,
       height: container.clientHeight,
+      ...(highlightedRef.current.size ? { highlightedTaskIds: highlightedRef.current } : {}),
       devicePixelRatio: window.devicePixelRatio || 1
     };
   }, []);
@@ -284,6 +304,8 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       renderFrame();
     });
   }, [renderFrame, schedulePersistCanvasState]);
+
+  useEffect(() => { scheduleRender(); }, [highlightedIds, scheduleRender]);
 
   useEffect(() => {
     persistCanvasStateNow();
@@ -410,8 +432,48 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     return hit && hit.hitType !== "none" ? { task: hit.task, x, y } : null;
   };
 
+  const pinchStart = useRef({ width: 0, x: 0, y: 0, left: 0 });
+  const preview = previewId ? liveTasks.find(t => t.id === previewId) : undefined;
+  const tap = useRef<{ id: string; time: number } | null>(null);
+  const inspectRef = useRef(onInspectTask);
+  inspectRef.current = onInspectTask;
+  useEffect(() => () => inspectRef.current?.(null), []);
+  const openDetails = (task: Task) => {
+    tap.current = null;
+    setPreviewId(null);
+    onInspectTask?.(task.id);
+    onTaskClickRef.current?.(task);
+  };
+  const movePinch = ({ start, current, ratio }: TimelinePinch) => {
+    const initial = pinchStart.current;
+    const width = clamp(initial.width * ratio, MIN_DAY_WIDTH, MAX_DAY_WIDTH);
+    viewRef.current.dayWidth = width;
+    viewRef.current.scrollX = (initial.x + start.x - initial.left) * width / initial.width - (current.x - initial.left);
+    viewRef.current.scrollY = initial.y + start.y - current.y;
+    scheduleRender();
+  };
+  const pinching = useTimelineTouch(canvasRef, {
+    accepts: target => target === canvasRef.current,
+    start: () => {
+      dragRef.current = null;
+      setIsPanning(false);
+      setHoveredTask(null);
+      pinchStart.current = { width: viewRef.current.dayWidth, x: viewRef.current.scrollX,
+        y: viewRef.current.scrollY, left: canvasRef.current?.getBoundingClientRect().left || 0 };
+    },
+    move: movePinch,
+    finish: (sample, cancelled) => {
+      if (!cancelled) { movePinch(sample); return; }
+      const initial = pinchStart.current;
+      Object.assign(viewRef.current, { dayWidth: initial.width, scrollX: initial.x, scrollY: initial.y });
+      if (canvasRef.current) scheduleRender();
+    },
+    pan: panBy
+  });
+
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!e.isPrimary || pinching.current) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = {
       pointerId: e.pointerId,
@@ -457,7 +519,16 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     setIsPanning(false);
     if (isClick && !drag.moved) {
       const hit = hitTestAt(e.clientX, e.clientY);
-      if (hit) onTaskClickRef.current?.(hit.task);
+      if (!hit) { setPreviewId(null); onInspectTask?.(null); return; }
+      const now = performance.now();
+      if (!isMobile || (tap.current?.id === hit.task.id && now - tap.current.time < 420)) {
+        openDetails(hit.task);
+      } else {
+        tap.current = { id: hit.task.id, time: now };
+        setPreviewId(hit.task.id);
+        onInspectTask?.(hit.task.id);
+        triggerHaptic("light");
+      }
     }
   };
 
@@ -612,7 +683,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     : 0;
 
   return (
-    <div
+    <div className={`canvas-view ${isMobile ? "is-phone-canvas" : ""}`}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -640,7 +711,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           gap: "8px"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        {!isMobile && <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <div
             style={{
               display: "inline-flex",
@@ -676,10 +747,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
               Drag or scroll to pan &bull; Ctrl+scroll to zoom
             </span>
           </div>
-        </div>
+        </div>}
 
         {/* Action Buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+        <div className="canvas-controls" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: isMobile ? "nowrap" : "wrap" }}>
           <button
             type="button"
             className="btn-nav"
@@ -808,7 +879,12 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         >
           {canvasLabel}
         </canvas>
+        {Boolean(inspectingUsers?.length) && <div className="canvas-inspectors">
+          {inspectingUsers?.map(user => <span key={`${user.taskId}-${user.name}`}>{user.name} · {liveTasks.find(t => t.id === user.taskId)?.label || user.taskId}</span>)}
+        </div>}
 
+        {isMobile && preview && <TimelineTaskPreview task={preview} inspectors={inspectingUsers}
+          onOpen={() => openDetails(preview)} onClose={() => { tap.current = null; setPreviewId(null); onInspectTask?.(null); }} />}
         {/* Hover Tooltip */}
         {hoveredTask && (
           <div

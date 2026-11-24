@@ -1,0 +1,129 @@
+.plan-current-marker, .plan-tab-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 12px;
+  padding: 2px 6px;
+  color: var(--jantt-text);
+  background: color-mix(in srgb, var(--jantt-accent) 13%, var(--jantt-surface-solid));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.plan-board-column .plan-card.is-active-plan {
+  background: color-mix(in srgb, var(--jantt-accent) 6%, var(--jantt-surface-solid));
+  box-shadow: none;
+}
+
+.plan-manager-filter .select-input { max-width: none; }
+.plan-manager-filter:has(.plan-filter-clear) input { padding-right: 44px !important; }
+.plan-manager-filter input::-webkit-search-cancel-button { appearance: none; }
+.plan-filter-clear {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--jantt-text-muted);
+  cursor: pointer;
+}
+.plan-manager-menu { overscroll-behavior: contain; }
+.plan-manager-menu .card-menu-item:focus-visible {
+  outline: 2px solid var(--jantt-accent);
+  outline-offset: -2px;
+  background: var(--jantt-surface-hover);
+  color: var(--jantt-text);
+}
+.plan-manager-menu .card-menu-item.is-danger {
+  color: var(--jantt-text);
+}
+.plan-manager-menu .card-menu-item.is-danger svg { color: #dc2626; }
+
+@media (max-width: 960px) {
+  .plan-drag-grip { display: none; }
+  .plan-board-column .plan-card { cursor: default; }
+  .plan-board-column .plan-card:hover { transform: none; }
+}
+@media (max-width: 600px) {
+  .prompt-modal-card:has(.plan-manager-tools) {
+    height: min(740px, 100%) !important;
+    max-height: 100%;
+    overflow: hidden;
+  }
+  .prompt-modal-card:has(.plan-manager-tools) .shared-dialog-header {
+    padding: 10px 14px;
+    gap: 4px 8px !important;
+  }
+  .prompt-modal-card:has(.plan-manager-tools) .shared-dialog-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 6px !important;
+  }
+  .prompt-modal-card:has(.plan-manager-tools) .shared-dialog-actions > .btn-nav {
+    justify-content: center;
+    padding-inline: 4px !important;
+    white-space: nowrap;
+  }
+  .plan-manager-tools { padding: 10px 12px !important; gap: 7px !important; }
+  .plan-manager-filter .select-input, .plan-card input.select-input {
+    min-height: 44px;
+    font-size: 16px !important;
+  }
+  .plan-scope-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(3,minmax(0,1fr));
+    gap: 3px !important;
+    overflow: visible !important;
+    padding: 3px;
+    background: var(--jantt-bg);
+    border: 1px solid var(--jantt-border);
+    border-radius: 12px;
+  }
+  .plan-scope-tabs .btn-nav {
+    min-width: 0;
+    min-height: 44px;
+    padding: 3px !important;
+    gap: 4px !important;
+  }
+  .plan-scope-tabs .btn-nav[aria-selected=false] { background: transparent; border-color: transparent; }
+  .plan-tab-count { padding: 1px 4px; font-size: 10px; }
+  .plan-manager-tools + .plan-board-container {
+    padding: 10px 12px max(10px,env(safe-area-inset-bottom));
+    display: flex;
+    overflow: hidden;
+  }
+  .plan-board-container .plan-board-column { flex: 1; min-width: 0; }
+  .plan-board-column .plan-board-column-body { min-height: 0; padding: 8px; overscroll-behavior: contain; }
+  .plan-board-column .plan-card { padding: 10px; }
+  .plan-card .plan-card-name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+  .plan-board-column .plan-card-action-bar { flex-wrap: wrap; }
+  .plan-board-column .btn-nav, .plan-manager-menu .card-menu-item {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .plan-manager-menu .card-menu-item { font-size: 13px; }
+}
+
+
+@media (max-width: 600px) {
+  html[data-keyboard-open="true"] .prompt-modal-card:has(.plan-manager-tools) .shared-dialog-actions,
+  html[data-keyboard-open="true"] .plan-board-column-header:has(h3):not(:has(button)),
+  html[data-keyboard-open="true"] .prompt-modal-card:has(.plan-card input:focus) .plan-manager-tools {
+    display: none !important;
+  }
+  html[data-keyboard-open="true"] .prompt-modal-card:has(.plan-manager-tools) .shared-dialog-header {
+    padding-block: 0;
+  }
+  html[data-keyboard-open="true"] .plan-manager-tools { padding-block: 3px !important; gap: 3px !important; }
+}

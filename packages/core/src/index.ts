@@ -28,6 +28,7 @@ export * from "./detail-modal";
 export * from "./sidebar";
 export * from "./renderers";
 export * from "./renderer";
+export { TaskScheduleCoordinator } from "./rendering/task-schedule-coordinator";
 export * from "./exporter";
 export * from "./themes";
 export * from "./remote-sync";

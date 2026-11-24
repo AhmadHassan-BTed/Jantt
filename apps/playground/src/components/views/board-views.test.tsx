@@ -78,6 +78,42 @@ describe("KanbanView", () => {
     expect(moved.status).toBe("in-progress");
   });
 
+  it("finds tasks in other phone columns and opens the matching column", () => {
+    act(() => root.render(kanban({ isMobile: true })));
+    act(() => root.render(kanban({ isMobile: true, searchQuery: "Beta" })));
+    expect(container.querySelectorAll(".kanban-card")).toHaveLength(1);
+    expect(container.querySelector("#kanban-col-blocked .kanban-mobile-title")?.textContent).toBe("Beta");
+  });
+
+  it("starts quick capture in the chosen column", () => {
+    const onQuickTask = vi.fn();
+    act(() => root.render(kanban({ onQuickTask })));
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Quick task in Blocked"]')!.click());
+    expect(onQuickTask).toHaveBeenCalledWith("blocked");
+  });
+
+  it("previews the same sorted drop position that gets committed", () => {
+    const data = plan();
+    const commit = vi.fn();
+    const sort = (items: Task[]) => [...items].sort((a, b) => b.end.localeCompare(a.end));
+    act(() => root.render(kanban({ parsedData: data, kanbanMultiSort: sort, handleChartCommit: commit })));
+    const target = container.querySelector<HTMLElement>("#kanban-col-blocked")!;
+    const card = container.querySelector<HTMLElement>("#kanban-col-not-started .kanban-card")!;
+    const drag = (node: HTMLElement, type: string) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "dataTransfer", { value: { setData: vi.fn() } });
+      act(() => { node.dispatchEvent(event); });
+    };
+    drag(card, "dragstart");
+    drag(target, "dragover");
+    const pending = Array.from(target.querySelectorAll(".kanban-card, .board-drop-slot"))
+      .findIndex(el => el.classList.contains("board-drop-slot"));
+    expect(pending).toBe(1);
+    drag(target, "drop");
+    act(() => root.render(kanban({ parsedData: commit.mock.calls[0][0], kanbanMultiSort: sort })));
+    expect(columnTitles("blocked")[pending]).toBe("Alpha");
+  });
+
   it("is read-only for viewers", () => {
     const commit = vi.fn();
     act(() => root.render(kanban({ handleChartCommit: commit, isViewer: true })));
@@ -141,6 +177,40 @@ describe("TasksView", () => {
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Delete task Alpha"]')!.click());
     expect(commit).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+
+  it("changes several selected tasks in one guarded commit", () => {
+    const commit = vi.fn();
+    const data = plan();
+    act(() => root.render(tasksView({ parsedData: data, handleChartCommit: commit })));
+    const button = (text: string) => Array.from(container.querySelectorAll("button")).find(el => el.textContent === text)!;
+    act(() => button("Select tasks").click());
+    act(() => container.querySelector<HTMLInputElement>('input[aria-label="Select Alpha"]')!.click());
+    act(() => container.querySelector<HTMLInputElement>('input[aria-label="Select Beta"]')!.click());
+    const change = (select: HTMLSelectElement, value: string) => act(() => {
+      select.value = value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    change(container.querySelector<HTMLSelectElement>('[aria-label="Bulk action"]')!, "status");
+    change(container.querySelector<HTMLSelectElement>('[role="dialog"] select')!, "completed");
+    act(() => button("Apply changes").click());
+    expect(commit).toHaveBeenCalledTimes(1);
+    const result: JanttData = commit.mock.calls[0][0];
+    expect(result.tasks.slice(0, 2).map(task => [task.status, task.progress])).toEqual([["completed", 1], ["completed", 1]]);
+    expect(result.tasks[2]).toBe(data.tasks[2]);
+  });
+
+  it("selects all filtered phone tasks including rows beyond the first page", () => {
+    const data = plan();
+    data.tasks = Array.from({ length: 100 }, (_, index) => ({ ...data.tasks[0], id: String(index) }));
+    const commit = vi.fn();
+    act(() => root.render(tasksView({ parsedData: data, handleChartCommit: commit, isMobile: true })));
+    expect(container.querySelectorAll(".phone-task-line")).toHaveLength(48);
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Select tasks"]')!.click());
+    act(() => Array.from(container.querySelectorAll("button")).find(el => el.textContent === "Select all")!.click());
+    expect(container.querySelector(".checklist-selection-bar span")?.textContent).toBe("100 selected");
+    act(() => container.querySelector<HTMLButtonElement>(".load-task-page")!.click());
+    expect(container.querySelectorAll(".phone-task-line")).toHaveLength(96);
   });
 
   it("hides mutating controls for viewers", () => {

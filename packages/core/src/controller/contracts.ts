@@ -42,6 +42,9 @@ export interface DragState {
   element?: HTMLElement;
   pointerId?: number;
   linkFromTaskId?: string;
+  resizeStart?: boolean;
+  snappedTaskId?: string;
+  dragHint?: HTMLElement;
   multiTasks?: Map<string, { start: string; end: string }>;
   selectionBoxEl?: HTMLElement;
   canvasEl?: HTMLElement;
@@ -58,6 +61,12 @@ export interface DragState {
   lastValue?: number;
 }
 
+export interface LiveLinkWire {
+  fromX: number; fromY: number; toX: number; toY: number;
+  fromSide?: "start" | "end";
+  toSide?: "start" | "end";
+}
+
 export interface GestureContext {
   data: JanttData;
   options: JanttOptions;
@@ -67,7 +76,7 @@ export interface GestureContext {
   selectedTaskIds: Set<string>;
   container?: HTMLElement;
   openModalHandler: (task: Task) => void;
-  onLiveLinkUpdate?: (wireData: { fromX: number; fromY: number; toX: number; toY: number } | null) => void;
+  onLiveLinkUpdate?: (wireData: LiveLinkWire | null) => void;
   /** Reports a new label-column width; `isFinal` is true once, when the splitter drag ends. */
   onSplitResize?: (newWidth: number, isFinal?: boolean) => void;
   onRenderRequest: () => void;

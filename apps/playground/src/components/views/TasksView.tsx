@@ -1,4 +1,9 @@
 import React from "react";
+import { MoreTaskRows, usePhoneListPage } from "./PhoneListPage";
+import { TaskPresenceTag } from "../cloud/RoomPresenceStack";
+import type { RoomPresence } from "../../firebase/types";
+import { triggerHaptic } from "../../services/platform";
+import { ChecklistActionDialog, checklistActions, type ChecklistAction, type TaskSelection } from "./ChecklistActionDialog";
 import {
   CheckSquare,
   X,
@@ -7,6 +12,7 @@ import {
   Plus,
   CheckCircle2,
   Calendar,
+  UserRound,
   Trash2,
   Check
 } from "lucide-react";
@@ -24,10 +30,11 @@ import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
 import { ResourceLevelingPanel } from "./ResourceLevelingPanel";
 import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
-import { getPeerId, isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
-import { TaskStatusSelect, applyTaskStatus, getStatusValue, onActivateKey, tintColor, formatShortRange } from "./KanbanView";
+import { deleteTasks, getPeerId, isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
+import { TaskStatusSelect, applyTaskStatus, getStatusValue, tintColor, formatShortRange } from "./KanbanView";
 
 interface TasksViewProps {
+  remotePresence?: RoomPresence[];
   isMobile?: boolean;
   selectedMobileTaskId?: string | null;
   parsedData: JanttData;
@@ -73,6 +80,7 @@ const asLower = (value: unknown) => (typeof value === "string" ? value : value =
 
 export const TasksView: React.FC<TasksViewProps> = ({
   isMobile = false,
+  remotePresence,
   parsedData,
   dateFilterMode,
   dateFilterBehavior,
@@ -95,6 +103,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const page = usePhoneListPage(JSON.stringify([tasksViewMode, tasksSearchQuery, dateFilterMode, selectedPersonFilter, completedFilterMode]), isMobile);
+  const [selecting, setSelecting] = React.useState(false);
+  const [selected, setSelected] = React.useState<Set<string>>(() => new Set());
+  const [selection, setSelection] = React.useState<TaskSelection | null>(null);
+  const toggleSelected = (id: string) => setSelected(previous => {
+    const next = new Set(previous);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleSelection = () => {
+    setSelecting(previous => !previous);
+    setSelected(new Set());
+  };
   const [showResourceLeveling, setShowResourceLeveling] = React.useState<boolean>(() => {
     const saved = storageService.getItem<{ showResourceLeveling?: boolean }>(STORAGE_KEYS.TASKS_VIEW_STATE);
     return Boolean(saved?.showResourceLeveling);
@@ -125,41 +146,28 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
   const handleStatusChange = (taskId: string, status: string) => {
     if (!requestEdit()) return;
+    const task = parsedData.tasks.find(item => item.id === taskId);
+    triggerHaptic(task?.milestone && status === "completed" ? "success" : "light");
     handleChartCommit({ ...parsedData, tasks: applyTaskStatus(parsedData.tasks, taskId, status) });
   };
 
   const handleToggleDone = (t: Task) => handleStatusChange(t.id, isTaskDone(t) ? "in-progress" : "completed");
 
+  const deleteSelected = (ids: Set<string>) => {
+    if (!requestEdit()) return;
+    const deletedAt = `${new Date().toISOString()}#${getPeerId()}`;
+    const result = deleteTasks(parsedData, ids, deletedAt);
+    const kept = new Map(result.tasks.map(task => [task.id, task]));
+    // Keep the soft-deleted rows in their original positions for legacy sync peers.
+    const tasks = parsedData.tasks.map(task => kept.get(task.id) || { ...task, _deleted: true, deletedAt });
+    handleChartCommit({ ...result, tasks });
+    triggerHaptic("warning");
+  };
+
   const handleDeleteTask = (task: Task) => {
     if (!requestEdit()) return;
     const label = task.label || task.name || task.id;
-    if (!window.confirm(`Delete task "${label}"? Links from other tasks to it will be removed.`)) return;
-
-    // Composite "<iso>#<peer>" stamp, the same clock every other delete path uses, so concurrent
-    // edits and deletes of this task order deterministically across collaborators.
-    const deletedAt = `${new Date().toISOString()}#${getPeerId()}`;
-    const allTasks = parsedData.tasks || [];
-    const knownIds = new Set(allTasks.map((item) => item.id));
-    // Soft-delete (task kept with `_deleted` plus a tombstone): the filtered-view commit merge
-    // and the reconciler both see the deletion and cannot resurrect it. Only links that point
-    // at the deleted task are removed (types and lags of the others survive); nothing is re-scheduled.
-    const tasks = allTasks.map((item) => {
-      if (item.id === task.id) return { ...item, _deleted: true, deletedAt };
-      if (item._deleted) return item;
-      const dependsOn = filterDependsOn(item.dependsOn, (rel) => rel.id !== task.id, knownIds);
-      return dependsOn === item.dependsOn ? item : { ...item, dependsOn };
-    });
-    handleChartCommit({
-      ...parsedData,
-      meta: {
-        ...parsedData.meta,
-        tombstones: {
-          ...(parsedData.meta?.tombstones || {}),
-          [task.id]: { deletedAt, entityType: "task" }
-        }
-      },
-      tasks
-    });
+    if (window.confirm(`Delete task "${label}"? Links from other tasks to it will be removed.`)) deleteSelected(new Set([task.id]));
   };
 
   const resetAllConstraints = () => {
@@ -213,7 +221,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   };
 
   return (
-    <div className="tasks-view-container">
+    <div className={`tasks-view-container ${isMobile ? "phone-checklist" : ""}`}>
       {/* Header with Title, Stats, Search, View Mode, Add Task (person filter lives in the filter bar) */}
       {isMobile ? (
         <div className="tasks-view-header is-mobile-compact">
@@ -223,6 +231,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
               <button type="button" className={`tasks-mode-btn ${tasksViewMode === "cards" ? "is-active" : ""}`} onClick={() => setTasksViewMode("cards")} aria-pressed={tasksViewMode === "cards"}>Cards</button>
               <button type="button" className={`tasks-mode-btn ${tasksViewMode === "todo" ? "is-active" : ""}`} onClick={() => setTasksViewMode("todo")} aria-pressed={tasksViewMode === "todo"}>List</button>
             </div>
+            {tasksViewMode === "todo" && !isViewer && <button type="button" className="btn-nav" aria-label={selecting ? "Finish selection" : "Select tasks"} aria-pressed={selecting} onClick={toggleSelection}>
+              {selecting ? "Done" : "Select"}
+            </button>}
             <button type="button" className="btn-nav" onClick={() => setShowResourceLeveling((shown) => !shown)} aria-expanded={showResourceLeveling}>Level</button>
           </div>
         </div>
@@ -347,6 +358,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
           return renderEmptyState();
         }
 
+        const pageTasks = tasksToDisplay.length > page.limit ? tasksToDisplay.slice(0, page.limit) : tasksToDisplay;
+        const moreRows = <MoreTaskRows count={tasksToDisplay.length} limit={page.limit} onMore={page.loadMore} />;
         const describeDim = (t: Task) => {
           const isCompleted = isTaskDone(t);
           const isPersonMatch = isTaskMatchingPersonFilter(t, selectedPersonFilter, effectivePeople, teams);
@@ -378,26 +391,71 @@ export const TasksView: React.FC<TasksViewProps> = ({
           );
 
         if (tasksViewMode === "todo") {
+          const marked = tasksToDisplay.filter(task => selected.has(task.id));
           return (
             <div className="tasks-todo-list">
-              {tasksToDisplay.map((t) => {
+              {!isViewer && (!isMobile || selecting) && <div className="checklist-selection-bar">
+                {!isMobile && <button type="button" aria-pressed={selecting} onClick={toggleSelection}>{selecting ? "Done" : "Select tasks"}</button>}
+                {selecting && <>
+                  <button type="button" onClick={() => setSelected(marked.length === tasksToDisplay.length ? new Set() : new Set(tasksToDisplay.map(task => task.id)))}>
+                    {marked.length === tasksToDisplay.length ? "Clear" : "Select all"}
+                  </button>
+                  <span aria-live="polite">{marked.length} selected</span>
+                  <select aria-label="Bulk action" disabled={!marked.length} value="" onChange={event => {
+                    setSelection({ action: event.target.value as ChecklistAction, ids: new Set(marked.map(task => task.id)) });
+                  }}>
+                    <option value="" disabled>Actions</option>
+                    {Object.entries(checklistActions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                </>}
+              </div>}
+              {pageTasks.map((t) => {
                 const cat = parsedData.categories?.[t.category];
                 const catColor = sanitizeCssColor(cat?.color, "var(--jantt-accent)");
                 const { isCompleted, isDimmed, dimReason } = describeDim(t);
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 const title = t.label || t.name || t.id;
+                const dateLabel = formatShortRange(t.start, t.end);
+                const assigneeLabel = t.assignee ? [assigneeInfo.initials, assigneeInfo.displayName].join(" ") : "Unassigned";
+                if (isMobile) return <div key={t.id} role="group" aria-label={title}
+                  className={`tasks-todo-row phone-task-line ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
+                  style={{ borderLeftColor: catColor }}>
+                  {selecting && !isViewer ? <label className="phone-task-check"><input type="checkbox" checked={selected.has(t.id)}
+                    aria-label={`Select ${title}`} onChange={() => toggleSelected(t.id)} /></label> :
+                    <button type="button" className="phone-task-check" disabled={isViewer} aria-pressed={isCompleted}
+                      aria-label={`Mark ${title} as ${isCompleted ? "in progress" : "completed"}`} onClick={() => handleToggleDone(t)}>
+                      {isCompleted ? <CheckCircle2 size={18} /> : <span className="phone-checkbox-outline" />}
+                    </button>}
+                  <button type="button" className="phone-task-title" aria-label={`Open details for ${title}`}
+                    onClick={() => openTaskDetailSidebar(t)}>{title}</button>
+                  <button type="button" className="phone-task-member" disabled={isViewer} aria-label={`${assigneeLabel}. Assign member to ${title}`}
+                    title={assigneeInfo.displayName} onClick={() => setSelection({ action: "assignee", ids: new Set([t.id]) })}>
+                    {t.assignee ? <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span> : <UserRound size={16} />}
+                  </button>
+                  <div className="phone-task-controls">
+                    <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={`${dateLabel}. Edit dates for ${title}`}
+                      onClick={() => setSelection({ action: "dates", ids: new Set([t.id]) })}>
+                      <Calendar size={13} /> {dateLabel}
+                    </button>
+                    <TaskStatusSelect task={t} value={getStatusValue(t)} disabled={isViewer} onStatusChange={status => handleStatusChange(t.id, status)} />
+                  </div>
+                  <TaskPresenceTag users={remotePresence} taskId={t.id} />
+                </div>;
                 return (
                   <div
                     key={t.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Open details for ${title}`}
+                    role="group"
+                    aria-label={title}
                     className={`tasks-todo-row ${isMobile && selectedMobileTaskId === t.id ? "is-mobile-selected" : ""} ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
                     style={{ borderLeftColor: catColor }}
-                    onClick={() => openTaskDetailSidebar(t)}
-                    onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
+                    onClick={event => {
+                      if (!(event.target as HTMLElement).closest("button, input, select, label")) openTaskDetailSidebar(t);
+                    }}
                   >
                     <div className="tasks-todo-left">
+                      {selecting && !isViewer ? <label className="checklist-checkbox">
+                        <input type="checkbox" checked={selected.has(t.id)} aria-label={`Select ${title}`} onChange={() => toggleSelected(t.id)} />
+                      </label> :
                       <button
                         type="button"
                         className={`tasks-checkbox-btn ${isCompleted ? "is-checked" : ""}`}
@@ -415,13 +473,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         ) : (
                           <div style={{ width: 16, height: 16, border: "2px solid var(--jantt-border-strong)", borderRadius: 4 }} />
                         )}
-                      </button>
+                      </button>}
                       <div className="tasks-todo-body">
                         <div className="tasks-todo-title-wrap">
                           {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
                           <span className="kanban-cat-dot" style={{ background: catColor }} />
                           <span className="kanban-cat-label" style={{ fontSize: "11px" }}>{cat?.label || t.category}</span>
-                          <span className={`tasks-todo-title ${isCompleted ? "is-struck" : ""}`}>{title}</span>
+                          <button type="button" className={`tasks-todo-title checklist-open-task ${isCompleted ? "is-struck" : ""}`}
+                            aria-label={`Open details for ${title}`} onClick={() => openTaskDetailSidebar(t)}>{title}</button>
                           {isDimmed && (
                             <span className="task-dimmed-tag" title="Task is dimmed by the active filters">
                               {dimReason}
@@ -432,18 +491,17 @@ export const TasksView: React.FC<TasksViewProps> = ({
                           )}
                         </div>
                         <div className="tasks-todo-meta">
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                            <Calendar size={11} /> {t.start} → {t.end}
-                          </span>
-                          {t.assignee && (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              <span style={{ width: 14, height: 14, borderRadius: "50%", background: assigneeInfo.avatarColor, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "8px", fontWeight: 700 }}>
-                                {assigneeInfo.initials}
-                              </span>
-                              <span>{assigneeInfo.displayName}</span>
-                            </span>
-                          )}
+                          <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={`${dateLabel}. Edit dates for ${title}`}
+                            onClick={() => setSelection({ action: "dates", ids: new Set([t.id]) })}>
+                            <Calendar size={13} /> {dateLabel}
+                          </button>
+                          <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={`${assigneeLabel}. Assign member to ${title}`}
+                            onClick={() => setSelection({ action: "assignee", ids: new Set([t.id]) })}>
+                            {t.assignee ? <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span> : <UserRound size={13} />}
+                            {t.assignee ? assigneeInfo.displayName : "Unassigned"}
+                          </button>
                         </div>
+                        <TaskPresenceTag users={remotePresence} taskId={t.id} />
                       </div>
                     </div>
 
@@ -459,6 +517,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   </div>
                 );
               })}
+              {moreRows}
             </div>
           );
         }
@@ -466,7 +525,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
         // Otherwise Detailed Cards mode
         return (
           <div className="today-task-grid">
-            {tasksToDisplay.map((t) => {
+            {pageTasks.map((t) => {
               const cat = parsedData.categories?.[t.category];
               const catColor = sanitizeCssColor(cat?.color, "var(--jantt-accent)");
               const { isCompleted, isDimmed, dimReason } = describeDim(t);
@@ -477,24 +536,26 @@ export const TasksView: React.FC<TasksViewProps> = ({
               return (
                 <div
                   key={t.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Open details for ${title}`}
+                  role="group"
+                  aria-label={title}
                   className={`${isMobile ? "today-card is-mobile-card" : "today-task-card"} ${isMobile && selectedMobileTaskId === t.id ? "is-mobile-selected" : ""} ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
                   style={isMobile ? { borderLeftColor: catColor } : { borderTopColor: catColor }}
-                  onClick={() => openTaskDetailSidebar(t)}
-                  onKeyDown={onActivateKey(() => openTaskDetailSidebar(t))}
+                  onClick={event => {
+                    if (!(event.target as HTMLElement).closest("button, input, select, label")) openTaskDetailSidebar(t);
+                  }}
                 >
+                  <TaskPresenceTag users={remotePresence} taskId={t.id} />
                   {isMobile ? <>
                   <div className="tasks-mobile-card-top">
                     <button type="button" className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`} disabled={isViewer} aria-pressed={isCompleted} aria-label={isCompleted ? "Mark as in progress" : "Mark as completed"} onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}>{isCompleted ? <Check size={11} /> : null}</button>
                     {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
-                    <h3 className="tasks-mobile-card-title">{title}</h3>
+                    <h3 className="tasks-mobile-card-title"><button type="button" className="checklist-open-task" aria-label={`Open details for ${title}`}
+                      onClick={() => openTaskDetailSidebar(t)}>{title}</button></h3>
                     {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
                   </div>
                   <div className="tasks-mobile-card-bottom">
                     <span className="kanban-mobile-date">{formatShortRange(t.start, t.end)}</span>
-                    {t.assignee && <span className="kanban-mobile-avatar" style={{ background: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
+                    {t.assignee && <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
                     <span className="tasks-mobile-prog-chip">{progressPct}%</span>
                     <TaskStatusSelect task={t} value={getStatusValue(t)} disabled={isViewer} onStatusChange={(status) => handleStatusChange(t.id, status)} />
                     {renderDeleteButton(t)}
@@ -529,27 +590,15 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       </button>}
                     </div>
                   </div>
-                  <h3 className="today-card-title">{title}</h3>
+                  <h3 className="today-card-title"><button type="button" className="checklist-open-task" aria-label={`Open details for ${title}`}
+                    onClick={() => openTaskDetailSidebar(t)}>{title}</button></h3>
                   <div className="today-card-meta">
                     <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                       <Calendar size={11} /> {t.start} → {t.end}
                     </span>
                     {t.assignee && (
                       <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: "18px",
-                            height: "18px",
-                            borderRadius: "50%",
-                            background: assigneeInfo.avatarColor,
-                            color: "#FFFFFF",
-                            fontSize: "10px",
-                            fontWeight: 700
-                          }}
-                        >
+                        <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>
                           {assigneeInfo.initials}
                         </span>
                         <span style={{ fontWeight: 600, color: "var(--jantt-text)" }}>{assigneeInfo.displayName}</span>
@@ -562,7 +611,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                               fontSize: "9.5px",
                               fontWeight: 700,
                               background: tintColor(teamColor, 12),
-                              color: teamColor,
+                              color: "var(--jantt-text)",
                               padding: "2px 6px",
                               borderRadius: "100px",
                               border: `1px solid ${tintColor(teamColor, 25)}`
@@ -601,9 +650,12 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 </div>
               );
             })}
+            {moreRows}
           </div>
         );
       })()}
+      {selection && !isViewer && <ChecklistActionDialog selection={selection} plan={parsedData} people={effectivePeople}
+        onCommit={handleChartCommit} onDelete={deleteSelected} onClose={() => setSelection(null)} />}
     </div>
   );
 };

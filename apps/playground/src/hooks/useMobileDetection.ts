@@ -18,7 +18,7 @@ export interface MobileDetectionState {
  * narrow screens, plus landscape phones (short, touch-first) that are wider than 768px.
  */
 export const MOBILE_MEDIA_QUERY =
-  "(max-width: 768px), (max-height: 519px) and (max-width: 950px) and (pointer: coarse)";
+  "(max-width: 840px), (max-height: 519px) and (max-width: 950px) and (pointer: coarse)";
 const TABLET_MEDIA_QUERY = "(max-width: 1024px)";
 const LANDSCAPE_MEDIA_QUERY = "(orientation: landscape)";
 /** Full-bleed chart without chrome: only for touch phones held sideways, never for small desktop windows. */

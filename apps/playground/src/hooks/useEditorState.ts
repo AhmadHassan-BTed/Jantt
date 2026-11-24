@@ -199,6 +199,7 @@ export function useEditorState({
   const [copiedJson, setCopiedJson] = useState(false);
   const [isLiveSyncing, setIsLiveSyncing] = useState(false);
   const syncTimerRef = useRef<number | null>(null);
+  const rawDraftRef = useRef<string | null>(null);
   const parseTimerRef = useRef<number | null>(null);
 
   const parsedDataRef = useRef(parsedData);
@@ -210,6 +211,7 @@ export function useEditorState({
   onTeamsChangeRef.current = onTeamsChange;
 
   const cancelPendingParse = useCallback(() => {
+    rawDraftRef.current = null;
     if (parseTimerRef.current !== null) {
       window.clearTimeout(parseTimerRef.current);
       parseTimerRef.current = null;
@@ -249,6 +251,7 @@ export function useEditorState({
   /** Parses editor text; a syntax or schema error keeps the last valid plan on screen. */
   const applyEditorText = useCallback(
     (text: string) => {
+      rawDraftRef.current = text;
       let parsed: JanttData;
       try {
         parsed = JSON.parse(text);
@@ -264,11 +267,12 @@ export function useEditorState({
             }
           ]
         });
-        return;
+        return false;
       }
       const val = validate(parsed);
       setValidationResult(val);
-      if (!val.valid) return;
+      if (!val.valid) return false;
+      rawDraftRef.current = null;
 
       // Stamp edited fields so JSON edits survive merges with collaborators
       const data = stampLocalChanges(parsedDataRef.current, parsed, {
@@ -279,6 +283,7 @@ export function useEditorState({
       parsedDataRef.current = data;
       setParsedDataState(data);
       notifyRegistries(data);
+      return true;
     },
     [notifyRegistries]
   );
@@ -287,6 +292,7 @@ export function useEditorState({
     (text: string) => {
       setJsonTextState(text);
       cancelPendingParse();
+      rawDraftRef.current = text;
       parseTimerRef.current = window.setTimeout(() => {
         parseTimerRef.current = null;
         applyEditorText(text);
@@ -294,6 +300,14 @@ export function useEditorState({
     },
     [applyEditorText, cancelPendingParse]
   );
+
+  const flushEditorDraft = useCallback((): boolean => {
+    const draft = rawDraftRef.current;
+    if (draft === null) return true;
+    if (parseTimerRef.current !== null) window.clearTimeout(parseTimerRef.current);
+    parseTimerRef.current = null;
+    return applyEditorText(draft);
+  }, [applyEditorText]);
 
   const handleChartCommit = useCallback((updated: JanttData) => {
     // A chart edit supersedes a half-typed JSON edit
@@ -347,6 +361,7 @@ export function useEditorState({
     if (currentMaster) {
       commandBus.emit("LOCAL_COMMIT", { before: currentMaster, after: finalData });
     }
+    return finalData;
   }, [cancelPendingParse, notifyRegistries]);
 
   const formatJson = useCallback(() => {
@@ -396,6 +411,7 @@ export function useEditorState({
     copiedJson,
     isLiveSyncing,
     handleEditorChange,
+    flushEditorDraft,
     handleChartCommit,
     formatJson,
     handleCopyJson,

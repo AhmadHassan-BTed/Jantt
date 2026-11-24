@@ -7,6 +7,6 @@ export * from "./PromptModal";
 export * from "./PlanManagerModal";
 export * from "./ReadOnlyForkModal";
 export * from "./EditorLoginModal";
-export * from "./MonteCarloModal";
+export type { MonteCarloModalProps } from "./MonteCarloModal";
 export * from "./ShortcutsModal";
 export * from "./ModalHost";

@@ -557,6 +557,9 @@ export interface JanttOptions {
   onDayWidthChange?: (dayWidth: number) => void;
   onTaskDelete?: (taskId: string) => void;
   onTaskAdd?: (newTask: Task) => void;
+  /** Delegate the full detail sheet to a host that manages navigation and undo. */
+  onOpenTaskDetails?: (task: Task) => void;
+  onLinkSnap?: (taskId: string) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;
   onLinkDelete?: (fromTaskId: string, toTaskId: string) => void;
   renderDetail?: (

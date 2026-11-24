@@ -4,6 +4,7 @@ export interface PlaygroundEventMap {
   PEOPLE_CHANGED: Person[];
   TEAMS_CHANGED: Team[];
   FLUSH_SAVE: void;
+  FLUSH_NOTE_DRAFT: void;
   /** The active plan changed (any path: select, create, import, room open, fork...). */
   ACTIVE_PROJECT_CHANGED: { projectId: string; previousId: string | null };
   /**

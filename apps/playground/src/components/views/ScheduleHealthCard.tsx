@@ -43,17 +43,26 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, h
     storageService.setItem(STORAGE_KEYS.SUMMARY_VIEW_STATE, { ...prev, healthExpanded: expanded });
   }, [expanded]);
   const [visibleByGroup, setVisibleByGroup] = useState<Record<string, number>>({});
+  const [expandedDiagnosticKeys, setExpandedDiagnosticKeys] = useState<Set<string>>(() => new Set(["target"]));
+  const toggleDiagnosticKey = (key: string) => {
+    setExpandedDiagnosticKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const panelId = "schedule-health-issues";
 
   const gradeColors: Record<string, string> = {
-    A: "#10B981",
-    B: "#3B82F6",
-    C: "#F59E0B",
-    D: "#F97316",
-    F: "#EF4444"
+    A: "var(--jantt-status-good)",
+    B: "var(--jantt-status-info)",
+    C: "var(--jantt-status-warn)",
+    D: "var(--jantt-status-warn)",
+    F: "var(--jantt-status-bad)"
   };
 
-  const badgeColor = gradeColors[audit.grade] || "#10B981";
+  const badgeColor = gradeColors[audit.grade] || "var(--jantt-status-good)";
   const checks = Array.isArray(audit.checks) ? audit.checks : [];
   const passedChecks = checks.filter((c) => c.passed).length;
 
@@ -87,7 +96,7 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, h
               width: "36px",
               height: "36px",
               borderRadius: "8px",
-              background: `${badgeColor}1A`,
+              background: `color-mix(in srgb, ${badgeColor} 10%, transparent)`,
               color: badgeColor,
               display: "flex",
               alignItems: "center",
@@ -112,9 +121,9 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, h
                   fontWeight: 700,
                   padding: "2px 8px",
                   borderRadius: "12px",
-                  background: `${badgeColor}20`,
+                  background: `color-mix(in srgb, ${badgeColor} 13%, transparent)`,
                   color: badgeColor,
-                  border: `1px solid ${badgeColor}40`
+                  border: `1px solid color-mix(in srgb, ${badgeColor} 25%, transparent)`
                 }}
               >
                 {audit.healthScore}/100 health score
@@ -152,44 +161,172 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, h
         )}
       </div>
 
-      {/* Quick Diagnostic Badges */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginTop: "12px" }}>
-        <div style={{ padding: "8px 12px", borderRadius: "6px", background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", display: "flex", alignItems: "center", gap: "8px" }}>
-          {negativeFloatSummary.neutral ? (
-            <CalendarX size={16} color="#94A3B8" />
-          ) : negativeFloatSummary.ok ? (
-            <CheckCircle2 size={16} color="#10B981" />
-          ) : (
-            <AlertCircle size={16} color="#EF4444" />
+      {/* Diagnostic Audits - Compact Expandable List */}
+      <div className="kpi-accordion-list" role="region" aria-label="Diagnostic Checks" style={{ marginTop: "12px" }}>
+        {/* Audit 1: Target Date Integrity */}
+        <div className={`kpi-accordion-item ${expandedDiagnosticKeys.has("target") ? "is-expanded" : ""}`}>
+          <button
+            type="button"
+            className="kpi-accordion-header"
+            onClick={() => toggleDiagnosticKey("target")}
+            aria-expanded={expandedDiagnosticKeys.has("target")}
+          >
+            <div className="kpi-accordion-lead">
+              <div
+                className="kpi-accordion-icon"
+                style={{
+                  background: negativeFloatSummary.neutral
+                    ? "color-mix(in srgb, #94A3B8 15%, transparent)"
+                    : negativeFloatSummary.ok
+                    ? "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)"
+                    : "color-mix(in srgb, var(--jantt-status-bad) 15%, transparent)",
+                  color: negativeFloatSummary.neutral ? "#94A3B8" : negativeFloatSummary.ok ? "var(--jantt-status-good)" : "var(--jantt-status-bad)"
+                }}
+              >
+                {negativeFloatSummary.neutral ? (
+                  <CalendarX size={16} />
+                ) : negativeFloatSummary.ok ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <AlertCircle size={16} />
+                )}
+              </div>
+              <div className="kpi-accordion-title-wrap">
+                <span className="kpi-accordion-title">Target Date Integrity</span>
+                <span className="kpi-accordion-subtitle" title="Negative float: a task can only meet the target date if it finishes earlier than currently planned.">
+                  {negativeFloatSummary.text}
+                </span>
+              </div>
+            </div>
+            <div className="kpi-accordion-trailing">
+              <span
+                className="kpi-accordion-badge"
+                style={{
+                  background: negativeFloatSummary.neutral
+                    ? "color-mix(in srgb, #94A3B8 15%, transparent)"
+                    : negativeFloatSummary.ok
+                    ? "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)"
+                    : "color-mix(in srgb, var(--jantt-status-bad) 15%, transparent)",
+                  color: negativeFloatSummary.neutral ? "#94A3B8" : negativeFloatSummary.ok ? "var(--jantt-status-good)" : "var(--jantt-status-bad)"
+                }}
+              >
+                {negativeFloatSummary.neutral ? "No Target" : negativeFloatSummary.ok ? "Passed" : `${audit.negativeFloatCount} Overdue`}
+              </span>
+              <ChevronDown size={14} className="kpi-accordion-chevron" />
+            </div>
+          </button>
+          {expandedDiagnosticKeys.has("target") && (
+            <div className="kpi-accordion-body">
+              <div><strong>Status:</strong> {negativeFloatSummary.text}</div>
+              <div style={{ color: "var(--jantt-text-muted)" }}>
+                Negative float occurs when the forecast finish date of any task on the critical path falls after the project target date specified in plan settings.
+              </div>
+            </div>
           )}
-          <div>
-            <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }} title="Negative float: a task can only meet the target date if it finishes earlier than currently planned.">
-              Target Date
-            </div>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: negativeFloatSummary.ok ? "var(--jantt-text)" : "#EF4444" }}>
-              {negativeFloatSummary.text}
-            </div>
-          </div>
         </div>
 
-        <div style={{ padding: "8px 12px", borderRadius: "6px", background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", display: "flex", alignItems: "center", gap: "8px" }}>
-          {audit.missingLogicCount === 0 ? <CheckCircle2 size={16} color="#10B981" /> : <AlertTriangle size={16} color="#F59E0B" />}
-          <div>
-            <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>Logic Completeness</div>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: audit.missingLogicCount === 0 ? "var(--jantt-text)" : "#F59E0B" }}>
-              {audit.missingLogicCount === 0 ? "100% Connected" : `${audit.missingLogicCount} Task(s) Unlinked`}
+        {/* Audit 2: Logic Completeness */}
+        <div className={`kpi-accordion-item ${expandedDiagnosticKeys.has("logic") ? "is-expanded" : ""}`}>
+          <button
+            type="button"
+            className="kpi-accordion-header"
+            onClick={() => toggleDiagnosticKey("logic")}
+            aria-expanded={expandedDiagnosticKeys.has("logic")}
+          >
+            <div className="kpi-accordion-lead">
+              <div
+                className="kpi-accordion-icon"
+                style={{
+                  background: audit.missingLogicCount === 0
+                    ? "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)"
+                    : "color-mix(in srgb, var(--jantt-status-warn) 15%, transparent)",
+                  color: audit.missingLogicCount === 0 ? "var(--jantt-status-good)" : "var(--jantt-status-warn)"
+                }}
+              >
+                {audit.missingLogicCount === 0 ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+              </div>
+              <div className="kpi-accordion-title-wrap">
+                <span className="kpi-accordion-title">Dependency Logic Completeness</span>
+                <span className="kpi-accordion-subtitle">
+                  {audit.missingLogicCount === 0 ? "All open tasks connected" : `${audit.missingLogicCount} task(s) unlinked`}
+                </span>
+              </div>
             </div>
-          </div>
+            <div className="kpi-accordion-trailing">
+              <span
+                className="kpi-accordion-badge"
+                style={{
+                  background: audit.missingLogicCount === 0
+                    ? "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)"
+                    : "color-mix(in srgb, var(--jantt-status-warn) 15%, transparent)",
+                  color: audit.missingLogicCount === 0 ? "var(--jantt-status-good)" : "var(--jantt-status-warn)"
+                }}
+              >
+                {audit.missingLogicCount === 0 ? "100% Linked" : `${audit.missingLogicCount} Unlinked`}
+              </span>
+              <ChevronDown size={14} className="kpi-accordion-chevron" />
+            </div>
+          </button>
+          {expandedDiagnosticKeys.has("logic") && (
+            <div className="kpi-accordion-body">
+              <div><strong>Unlinked Tasks:</strong> {audit.missingLogicCount}</div>
+              <div style={{ color: "var(--jantt-text-muted)" }}>
+                Tasks without predecessors or successors float independently and will not automatically shift when linked work changes. Link tasks together to preserve schedule integrity.
+              </div>
+            </div>
+          )}
         </div>
 
-        <div style={{ padding: "8px 12px", borderRadius: "6px", background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", display: "flex", alignItems: "center", gap: "8px" }}>
-          {audit.highFloatCount === 0 ? <CheckCircle2 size={16} color="#10B981" /> : <ShieldCheck size={16} color="#3B82F6" />}
-          <div>
-            <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>Float Distribution</div>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text)" }}>
-              {audit.highFloatCount === 0 ? "Optimal Buffers" : `${audit.highFloatCount} High Float (>44 working days)`}
+        {/* Audit 3: Float Distribution */}
+        <div className={`kpi-accordion-item ${expandedDiagnosticKeys.has("float") ? "is-expanded" : ""}`}>
+          <button
+            type="button"
+            className="kpi-accordion-header"
+            onClick={() => toggleDiagnosticKey("float")}
+            aria-expanded={expandedDiagnosticKeys.has("float")}
+          >
+            <div className="kpi-accordion-lead">
+              <div
+                className="kpi-accordion-icon"
+                style={{
+                  background: audit.highFloatCount === 0
+                    ? "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)"
+                    : "color-mix(in srgb, var(--jantt-status-info) 15%, transparent)",
+                  color: audit.highFloatCount === 0 ? "var(--jantt-status-good)" : "var(--jantt-status-info)"
+                }}
+              >
+                {audit.highFloatCount === 0 ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
+              </div>
+              <div className="kpi-accordion-title-wrap">
+                <span className="kpi-accordion-title">Float &amp; Buffer Distribution</span>
+                <span className="kpi-accordion-subtitle">
+                  {audit.highFloatCount === 0 ? "Optimal buffer slack" : `${audit.highFloatCount} task(s) with >44 working days slack`}
+                </span>
+              </div>
             </div>
-          </div>
+            <div className="kpi-accordion-trailing">
+              <span
+                className="kpi-accordion-badge"
+                style={{
+                  background: audit.highFloatCount === 0
+                    ? "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)"
+                    : "color-mix(in srgb, var(--jantt-status-info) 15%, transparent)",
+                  color: audit.highFloatCount === 0 ? "var(--jantt-status-good)" : "var(--jantt-status-info)"
+                }}
+              >
+                {audit.highFloatCount === 0 ? "Optimal" : `${audit.highFloatCount} High Slack`}
+              </span>
+              <ChevronDown size={14} className="kpi-accordion-chevron" />
+            </div>
+          </button>
+          {expandedDiagnosticKeys.has("float") && (
+            <div className="kpi-accordion-body">
+              <div><strong>High Float Tasks:</strong> {audit.highFloatCount}</div>
+              <div style={{ color: "var(--jantt-text-muted)" }}>
+                High float (more than 44 working days of slack) often suggests an incomplete downstream dependency network or artificial fixed constraints.
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -214,9 +351,9 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, h
                   <td style={{ padding: "4px 6px" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                       {check.passed ? (
-                        <CheckCircle2 size={13} color="#10B981" role="img" aria-label="Pass" />
+                        <CheckCircle2 size={13} color="var(--jantt-status-good)" role="img" aria-label="Pass" />
                       ) : (
-                        <AlertTriangle size={13} color="#F59E0B" role="img" aria-label="Fail" />
+                        <AlertTriangle size={13} color="var(--jantt-status-warn)" role="img" aria-label="Fail" />
                       )}
                       <span>
                         {check.dcmaCheck !== undefined && <span style={{ color: "var(--jantt-text-muted)" }}>#{check.dcmaCheck} </span>}
@@ -230,7 +367,7 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, h
                   <td style={{ padding: "4px 6px", fontFamily: "var(--jantt-font-mono)" }}>
                     {check.threshold === 0 ? "none" : `≤ ${formatPercent(check.threshold)}`}
                   </td>
-                  <td style={{ padding: "4px 6px", fontFamily: "var(--jantt-font-mono)", color: check.penalty > 0 ? "#EF4444" : "var(--jantt-text-muted)" }}>
+                  <td style={{ padding: "4px 6px", fontFamily: "var(--jantt-font-mono)", color: check.penalty > 0 ? "var(--jantt-status-bad)" : "var(--jantt-text-muted)" }}>
                     {check.penalty > 0 ? `−${Math.round(check.penalty * 10) / 10}` : "0"}
                   </td>
                 </tr>
@@ -264,7 +401,7 @@ export const ScheduleHealthCard: React.FC<ScheduleHealthCardProps> = ({ audit, h
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      {issue.severity === "high" ? <AlertCircle size={14} color="#EF4444" /> : <AlertTriangle size={14} color="#F59E0B" />}
+                      {issue.severity === "high" ? <AlertCircle size={14} color="var(--jantt-status-bad)" /> : <AlertTriangle size={14} color="var(--jantt-status-warn)" />}
                       <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text)" }}>
                         {issue.message}
                       </span>

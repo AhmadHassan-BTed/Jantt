@@ -1,4 +1,4 @@
-import { levelResources, type ResourceLevelingOptions } from "@jantt/core";
+import { levelResources, type ResourceLevelingOptions } from "../../../../packages/core/src/resource-leveler";
 import type { Task } from "@jantt/core";
 
 const worker = self as unknown as {

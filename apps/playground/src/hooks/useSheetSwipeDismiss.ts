@@ -16,6 +16,7 @@ export interface SheetSwipeDismiss {
     style: React.CSSProperties;
   };
   sheetStyle: React.CSSProperties;
+  backdropStyle: React.CSSProperties;
   isDragging: boolean;
 }
 
@@ -24,6 +25,7 @@ interface DragState {
   startY: number;
   lastY: number;
   lastTime: number;
+  height: number;
   velocity: number;
 }
 
@@ -38,7 +40,9 @@ export function useSheetSwipeDismiss({
   enabled,
   thresholdPx = 92
 }: UseSheetSwipeDismissOptions): SheetSwipeDismiss {
-  const [dragY, setDragY] = useState(0);
+  const [position, setPosition] = useState({ y: 0, height: 1 });
+  const frame = useRef(0);
+  const closingTimer = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const enabledRef = useRef(enabled);
@@ -48,13 +52,22 @@ export function useSheetSwipeDismiss({
 
   useEffect(() => {
     if (enabled) return;
+    window.clearTimeout(closingTimer.current);
+    closingTimer.current = 0;
     dragRef.current = null;
-    setDragY(0);
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
+    setPosition({ y: 0, height: 1 });
     setIsDragging(false);
   }, [enabled]);
 
+  useEffect(() => () => {
+    cancelAnimationFrame(frame.current);
+    window.clearTimeout(closingTimer.current);
+  }, []);
+
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    if (!enabledRef.current || !event.isPrimary) return;
+    if (!enabledRef.current || closingTimer.current || !event.isPrimary) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest(INTERACTIVE_SELECTOR)) return;
@@ -64,6 +77,7 @@ export function useSheetSwipeDismiss({
       startY: event.clientY,
       lastY: event.clientY,
       lastTime: event.timeStamp,
+      height: event.currentTarget.closest('[role="dialog"], [role="alertdialog"]')?.getBoundingClientRect().height || 320,
       velocity: 0
     };
     setIsDragging(true);
@@ -82,9 +96,15 @@ export function useSheetSwipeDismiss({
     drag.velocity = (event.clientY - drag.lastY) / elapsed;
     drag.lastY = event.clientY;
     drag.lastTime = event.timeStamp;
-    setDragY(deltaY > 0 ? deltaY : 0);
+    if (!frame.current) frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const dy = drag.lastY - drag.startY;
+      const y = dy < 0 ? -Math.min(18, Math.sqrt(-dy) * 2) : dy > thresholdPx
+        ? thresholdPx + (dy - thresholdPx) * 0.65 : dy;
+      setPosition({ y, height: drag.height });
+    });
     if (deltaY > 4) event.preventDefault();
-  }, []);
+  }, [thresholdPx]);
 
   const finishDrag = useCallback(
     (event: React.PointerEvent<HTMLElement>, cancelled: boolean) => {
@@ -92,7 +112,9 @@ export function useSheetSwipeDismiss({
       if (!drag || drag.pointerId !== event.pointerId) return;
       dragRef.current = null;
       setIsDragging(false);
-      setDragY(0);
+      cancelAnimationFrame(frame.current);
+      frame.current = 0;
+      setPosition({ y: 0, height: 1 });
       try {
         event.currentTarget.releasePointerCapture(event.pointerId);
       } catch {
@@ -101,9 +123,18 @@ export function useSheetSwipeDismiss({
       if (cancelled) return;
 
       const deltaY = Math.max(0, event.clientY - drag.startY);
-      if (deltaY >= thresholdPx || (deltaY > 16 && drag.velocity >= 0.5)) {
+      if (deltaY >= thresholdPx || (deltaY > 16 && event.timeStamp - drag.lastTime < 100 && drag.velocity >= 0.5)) {
         triggerHaptic("light");
-        onCloseRef.current();
+        if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+          onCloseRef.current();
+        } else {
+          setPosition({ y: drag.height, height: drag.height });
+          closingTimer.current = window.setTimeout(() => {
+            closingTimer.current = 0;
+            setPosition({ y: 0, height: 1 });
+            onCloseRef.current();
+          }, 160);
+        }
       }
     },
     [thresholdPx]
@@ -127,10 +158,11 @@ export function useSheetSwipeDismiss({
       style: { touchAction: "none" }
     },
     sheetStyle: {
-      transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
-      transition: isDragging ? "none" : "transform 180ms cubic-bezier(0.16, 1, 0.3, 1)",
-      willChange: "transform"
+      transform: position.y ? `translate3d(0,${position.y}px,0)` : undefined,
+      transition: isDragging ? "none" : "transform 160ms cubic-bezier(.2,.95,.35,1.08)",
+      willChange: isDragging ? "transform" : undefined
     },
+    backdropStyle: { "--sheet-opacity": Math.max(0, 1 - Math.max(0, position.y) / position.height) } as React.CSSProperties,
     isDragging
   };
 }

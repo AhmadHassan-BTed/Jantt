@@ -21,8 +21,6 @@ import {
   setProxyUrl,
   getTemperature,
   setTemperature,
-  getAutoApply,
-  setAutoApply,
   getProviderAccounts,
   addProviderAccount,
   updateProviderAccount,
@@ -46,16 +44,23 @@ import {
 } from "../services/ai/model-discovery";
 import { buildSystemPrompt } from "../services/ai/system-prompt";
 import { extractJsonFromResponse } from "../services/ai/json-extractor";
+import { diffPlans, applyHistoryEntry } from "./useUndoRedo";
+import { getPeerId } from "../utils";
 import { computePlanDiff } from "../services/ai/plan-differ";
 
 export interface UseCopilotOptions {
   parsedData: JanttData | null;
-  commitPlan: (data: JanttData) => void;
+  commitPlan: (data: JanttData) => JanttData | null;
   showToast: (message: string, isError?: boolean) => void;
   isReadOnly: boolean;
+  projectId: string;
+  activeView: string;
+  inspectedTaskId: string | null;
 }
 
 export interface UseCopilotReturn {
+  isReadOnly: boolean;
+  isProposalStale: boolean;
   messages: CopilotMessage[];
   isStreaming: boolean;
   config: CopilotConfig;
@@ -87,7 +92,7 @@ export function useCopilot({
   parsedData,
   commitPlan,
   showToast,
-  isReadOnly
+  isReadOnly, projectId, activeView, inspectedTaskId
 }: UseCopilotOptions): UseCopilotReturn {
   // Accounts State
   const [accounts, setAccounts] = useState<ProviderAccount[]>(() => getProviderAccounts());
@@ -126,8 +131,7 @@ export function useCopilot({
         modelId: defaultModel,
         customBaseUrl: matched.customBaseUrl,
         proxyUrl: matched.proxyUrl,
-        temperature: getTemperature(),
-        autoApply: getAutoApply()
+        temperature: getTemperature()
       };
     }
 
@@ -139,8 +143,7 @@ export function useCopilot({
       modelId: getModelForProvider(providerId, defaultModel),
       customBaseUrl: getCustomBaseUrl(providerId),
       proxyUrl: getProxyUrl(providerId),
-      temperature: getTemperature(),
-      autoApply: getAutoApply()
+      temperature: getTemperature()
     };
   });
 
@@ -167,7 +170,9 @@ export function useCopilot({
     const promise = (async () => {
       setLoadingModelsByAccount((prev) => ({ ...prev, [accountId]: true }));
       try {
-        const result = await fetchLiveModelsForAccount(acc, { force });
+        const started = performance.now();
+        const response = await fetchLiveModelsForAccount(acc, { force });
+        const result = response.source === "live" ? { ...response, latencyMs: Math.round(performance.now() - started) } : response;
         setDiscoveredModelsByAccount((prev) => ({ ...prev, [accountId]: result }));
 
         // If this account has no selected model yet (or placeholder "custom") and live models loaded, pick the first live model.
@@ -306,6 +311,10 @@ export function useCopilot({
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingDiff, setPendingDiff] = useState<PendingPlanChange | null>(null);
 
+  const contextRef = useRef({ projectId, activeView, inspectedTaskId });
+  contextRef.current = { projectId, activeView, inspectedTaskId };
+  const proposalSource = useRef<JanttData | null>(null);
+  const requestGeneration = useRef(0);
   const activeAbortRef = useRef<AbortController | null>(null);
 
   // Sync provider switch helper
@@ -332,7 +341,6 @@ export function useCopilot({
         if (partial.customBaseUrl !== undefined) setCustomBaseUrl(nextProvider, partial.customBaseUrl);
         if (partial.proxyUrl !== undefined) setProxyUrl(nextProvider, partial.proxyUrl);
         if (partial.temperature !== undefined) setTemperature(partial.temperature);
-        if (partial.autoApply !== undefined) setAutoApply(partial.autoApply);
       }
 
       return {
@@ -342,8 +350,7 @@ export function useCopilot({
         modelId: nextModel,
         customBaseUrl: nextBaseUrl,
         proxyUrl: nextProxy,
-        temperature: partial.temperature !== undefined ? partial.temperature : prev.temperature,
-        autoApply: partial.autoApply !== undefined ? partial.autoApply : prev.autoApply
+        temperature: partial.temperature !== undefined ? partial.temperature : prev.temperature
       };
     });
   }, []);
@@ -373,6 +380,7 @@ export function useCopilot({
 
   // Stop Generation
   const stopGeneration = useCallback(() => {
+    requestGeneration.current++;
     if (activeAbortRef.current) {
       activeAbortRef.current.abort();
       activeAbortRef.current = null;
@@ -398,18 +406,14 @@ export function useCopilot({
       const cleanPrompt = text.trim();
       if (!cleanPrompt) return;
 
-      if (isReadOnlyRef.current) {
-        showToast("Read-only mode: changes cannot be committed to this plan.", true);
-        return;
-      }
-
       if (isStreaming) {
         return;
       }
 
+      const generation = ++requestGeneration.current;
       const activeConfig = configRef.current;
       const isLocal =
-        activeConfig.providerId === "openai-compatible" &&
+        activeConfig.providerId === "ollama" || activeConfig.providerId === "openai-compatible" &&
         (activeConfig.customBaseUrl?.includes("localhost") || activeConfig.customBaseUrl?.includes("127.0.0.1"));
 
       if (!activeConfig.apiKey.trim() && !isLocal) {
@@ -439,7 +443,10 @@ export function useCopilot({
       setIsStreaming(true);
 
       // Build chat conversation array
-      const systemPrompt = buildSystemPrompt(parsedDataRef.current);
+      const sourcePlan = parsedDataRef.current;
+      const context = contextRef.current;
+      const systemPrompt = buildSystemPrompt(sourcePlan) + "\nWorkspace view and selected task: " +
+        JSON.stringify({ view: context.activeView, selectedTaskId: context.inspectedTaskId });
       const conversationPayload: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system", content: systemPrompt }
       ];
@@ -470,69 +477,47 @@ export function useCopilot({
         activeConfig.apiKey,
         {
           onToken: (chunk) => {
+            if (generation !== requestGeneration.current) return;
             accumulatedResponse += chunk;
             setMessages((prev) =>
               prev.map((msg) => (msg.id === assistantMessageId ? { ...msg, content: accumulatedResponse } : msg))
             );
           },
           onDone: (fullText) => {
+            if (generation !== requestGeneration.current || context.projectId !== contextRef.current.projectId) return;
             setIsStreaming(false);
             activeAbortRef.current = null;
 
             const finalContent = fullText || accumulatedResponse;
-            const extraction = extractJsonFromResponse(finalContent, parsedDataRef.current);
+            const extraction = extractJsonFromResponse(finalContent, sourcePlan);
 
             if (extraction.data) {
               const validation = validate(extraction.data);
               if (validation.valid) {
-                const diff = computePlanDiff(parsedDataRef.current, extraction.data);
-                const beforePlan = parsedDataRef.current ? JSON.parse(JSON.stringify(parsedDataRef.current)) : null;
+                const diff = computePlanDiff(sourcePlan, extraction.data);
+                const beforePlan = sourcePlan;
+                proposalSource.current = sourcePlan;
+                const pending: PendingPlanChange = {
+                  plan: extraction.data,
+                  diff,
+                  messageId: assistantMessageId
+                };
+                setPendingDiff(pending);
 
-                if (activeConfig.autoApply && !isReadOnlyRef.current) {
-                  try {
-                    commitPlanRef.current(extraction.data);
-                    setMessages((prev) =>
-                      prev.map((msg) =>
-                        msg.id === assistantMessageId
-                          ? {
-                              ...msg,
-                              content: extraction.textContent || "Live changes applied to your project plan.",
-                              extractedPlan: extraction.data,
-                              previousPlan: beforePlan,
-                              diff,
-                              applied: true,
-                              isStreaming: false
-                            }
-                          : msg
-                      )
-                    );
-                    showToast(`Live plan update committed: ${diff.summary}`);
-                  } catch (err: unknown) {
-                    showToast(`Failed to auto-commit plan: ${err instanceof Error ? err.message : String(err)}`, true);
-                  }
-                } else {
-                  const pending: PendingPlanChange = {
-                    plan: extraction.data,
-                    diff,
-                    messageId: assistantMessageId
-                  };
-                  setPendingDiff(pending);
-
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === assistantMessageId
-                        ? {
-                            ...msg,
-                            content: extraction.textContent || "I have prepared the updated project plan according to your specifications.",
-                            extractedPlan: extraction.data,
-                            previousPlan: beforePlan,
-                            diff,
-                            isStreaming: false
-                          }
-                        : msg
-                    )
-                  );
-                }
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? {
+                          ...msg,
+                          content: extraction.textContent || "Review the proposed changes below.",
+                          extractedPlan: extraction.data,
+                          previousPlan: beforePlan,
+                          diff,
+                          isStreaming: false
+                        }
+                      : msg
+                  )
+                );
               } else {
                 const errors = validation.errors.map((e) => `${e.path}: ${e.message}`);
                 setMessages((prev) =>
@@ -563,6 +548,7 @@ export function useCopilot({
             }
           },
           onError: (err) => {
+            if (generation !== requestGeneration.current) return;
             setIsStreaming(false);
             activeAbortRef.current = null;
             setMessages((prev) =>
@@ -599,9 +585,14 @@ export function useCopilot({
     }
 
     try {
-      commitPlanRef.current(pendingDiff.plan);
+      if (parsedDataRef.current !== proposalSource.current) {
+        showToast("The plan changed since this proposal. Request an updated preview.", true);
+        return;
+      }
+      const committed = commitPlanRef.current(pendingDiff.plan);
+      if (!committed) return;
       setMessages((prev) =>
-        prev.map((msg) => (msg.id === pendingDiff.messageId ? { ...msg, applied: true } : msg))
+        prev.map((msg) => (msg.id === pendingDiff.messageId ? { ...msg, extractedPlan: committed, applied: true } : msg))
       );
       showToast(`Applied plan changes: ${pendingDiff.diff.summary}`);
       setPendingDiff(null);
@@ -624,7 +615,7 @@ export function useCopilot({
   const revertChange = useCallback(
     (messageId: string) => {
       const targetMsg = messages.find((m) => m.id === messageId);
-      if (!targetMsg?.previousPlan) {
+      if (!targetMsg?.applied || !targetMsg.previousPlan || !targetMsg.extractedPlan || !parsedDataRef.current) {
         showToast("No restore snapshot available for this change.", true);
         return;
       }
@@ -633,11 +624,18 @@ export function useCopilot({
         return;
       }
       try {
-        commitPlanRef.current(targetMsg.previousPlan);
+        const entry = diffPlans(targetMsg.previousPlan, targetMsg.extractedPlan);
+        if (!entry) return;
+        const reverted = applyHistoryEntry(parsedDataRef.current, entry, "undo", `${new Date().toISOString()}#${getPeerId()}`);
+        if (!reverted.applied) {
+          showToast("These fields have changed since the proposal was applied.", true);
+          return;
+        }
+        if (!commitPlanRef.current(reverted.data)) return;
         setMessages((prev) =>
           prev.map((msg) => (msg.id === messageId ? { ...msg, applied: false } : msg))
         );
-        showToast("Plan change reverted successfully.");
+        showToast(reverted.skipped ? "Reverted proposal edits and kept newer changes." : "Reverted proposal edits.");
       } catch (err: unknown) {
         showToast(`Failed to revert plan: ${err instanceof Error ? err.message : String(err)}`, true);
       }
@@ -652,12 +650,19 @@ export function useCopilot({
     setPendingDiff(null);
   }, [stopGeneration]);
 
+  useEffect(() => {
+    clearHistory();
+    return () => { requestGeneration.current++; activeAbortRef.current?.abort(); };
+  }, [projectId, clearHistory]);
+
   return {
     messages,
     isStreaming,
     config,
     isConfigured,
     pendingDiff,
+    isReadOnly,
+    isProposalStale: Boolean(pendingDiff && parsedData !== proposalSource.current),
     sendMessage,
     stopGeneration,
     acceptChange,

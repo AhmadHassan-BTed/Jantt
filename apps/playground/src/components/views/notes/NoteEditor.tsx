@@ -1,3 +1,4 @@
+import "./note-editor.css";
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -148,6 +149,44 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    let frame = 0;
+    const revealFocus = () => {
+      frame = 0;
+      const scroller = scrollRef.current;
+      const active = document.activeElement;
+      if (!scroller || !(active instanceof HTMLElement) || !scroller.contains(active)) return;
+      if (!active.matches("input, textarea, [contenteditable=true]")) return;
+      const bounds = scroller.getBoundingClientRect();
+      const top = Math.max(viewport.offsetTop, bounds.top) + 8;
+      const bottom = Math.min(viewport.offsetTop + viewport.height, bounds.bottom) - 8;
+      let rect = active.getBoundingClientRect();
+      if (active.isContentEditable) {
+        const selection = window.getSelection();
+        if (selection?.rangeCount) {
+          const range = selection.getRangeAt(0).cloneRange();
+          range.collapse(false);
+          const caret = range.getClientRects()[0];
+          if (caret) rect = caret;
+        }
+      }
+      if (rect.top < top || rect.bottom > bottom) {
+        scroller.scrollTop += active.classList.contains("note-picker-input") || rect.top < top || rect.height > bottom - top
+          ? rect.top - top : rect.bottom - bottom;
+      }
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(revealFocus); };
+    viewport.addEventListener("resize", schedule);
+    viewport.addEventListener("scroll", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("resize", schedule);
+      viewport.removeEventListener("scroll", schedule);
+    };
+  }, []);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorAnchorRef = useRef<HTMLDivElement>(null);
   const colorTriggerRef = useRef<HTMLButtonElement>(null);
@@ -233,6 +272,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             type="button"
             className="note-back-btn"
             onClick={onBackToGallery}
+            aria-label="All notes"
             title="Back to Notes Overview"
           >
             <ArrowLeft size={16} />
@@ -340,7 +380,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       </div>
 
       {/* Editor Document Surface */}
-      <div className="note-editor-doc-scroll">
+      <div className="note-editor-doc-scroll" ref={scrollRef}>
         <div className="note-editor-sheet">
           <input
             ref={titleInputRef}

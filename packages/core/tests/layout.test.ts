@@ -83,6 +83,22 @@ describe("Layout Engine", () => {
     expect(dep.path.endsWith(`L ${dep.toX} ${dep.toY}`)).toBe(true);
   });
 
+  it("routes a curved link around the horizontal extent of intermediate bars", () => {
+    const data = { tasks: [
+      { id: "a", category: "dev", start: "2026-09-03", end: "2026-09-06" },
+      { id: "obstacle", category: "dev", start: "2026-09-01", end: "2026-09-18" },
+      { id: "b", category: "dev", start: "2026-09-10", end: "2026-09-15", dependsOn: "a" }
+    ] };
+    const result = layout(data, { dayWidth: 20, rowHeight: 40, linkRouting: "curved" });
+    const path = result.dependencies[0].path;
+    const obstacle = result.tasks[1];
+    expect(path).toContain(" Q ");
+    const rail = Array.from(path.matchAll(/L ([\d.-]+) ([\d.-]+)/g))
+      .find(match => Number(match[2]) > 60 && Number(match[2]) < 80);
+    expect(rail).toBeDefined();
+    expect(Number(rail![1]) < obstacle.x || Number(rail![1]) > obstacle.x + obstacle.width).toBe(true);
+  });
+
   it("supports curved link routing style with straight horizontal entry into arrowhead", () => {
     const res = layout(sampleData, { dayWidth: 30, rowHeight: 40, linkRouting: "curved" });
     expect(res.dependencies).toHaveLength(1);

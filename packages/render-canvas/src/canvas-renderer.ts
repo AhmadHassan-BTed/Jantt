@@ -39,6 +39,8 @@ export interface CanvasRendererOptions {
 }
 
 export interface ViewportState {
+  /** The local or remote selections to outline in this frame. */
+  highlightedTaskIds?: ReadonlySet<string>;
   scrollX: number;
   scrollY: number;
   /** Viewport size in CSS pixels. */
@@ -320,7 +322,7 @@ export class CanvasTimelineRenderer {
     this.drawGrid(ctx, vertWindow, horizWindow);
 
     // 5. Draw visible task bars and milestones
-    this.drawTaskBars(ctx, vertWindow, horizWindow, critical);
+    this.drawTaskBars(ctx, vertWindow, horizWindow, critical, viewport.highlightedTaskIds);
 
     // 6. Draw dependencies
     this.drawDependencies(ctx, vertWindow, horizWindow, critical);
@@ -388,7 +390,8 @@ export class CanvasTimelineRenderer {
     ctx: CanvasRenderingContext2D,
     vert: VerticalVirtualWindow,
     horiz: HorizontalVirtualWindow,
-    critical: Set<string> | null
+    critical: Set<string> | null,
+    highlighted?: ReadonlySet<string>
   ) {
     const { rows, startDays, spanDays, milestones, rowHeight, dayWidth, colors } = this;
     const categories = this.plan.categories || {};
@@ -416,6 +419,7 @@ export class CanvasTimelineRenderer {
       const barW = durationDays * dayWidth;
       const textY = barY + BAR_HEIGHT / 2;
       const label = String(t.label || t.name || t.id);
+      const isSelected = highlighted?.has(t.id);
       const isCritical = critical !== null && critical.has(t.id);
 
       // Task color, then category color, then the theme primary (matches the DOM renderer)
@@ -431,8 +435,8 @@ export class CanvasTimelineRenderer {
         ctx.rotate(Math.PI / 4);
         ctx.fillStyle = barColor;
         ctx.fillRect(-size / 2, -size / 2, size, size);
-        if (isCritical) {
-          ctx.strokeStyle = colors.critical;
+        if (isCritical || isSelected) {
+          ctx.strokeStyle = isSelected ? colors.primary : colors.critical;
           ctx.lineWidth = 2;
           ctx.strokeRect(-size / 2 - 1, -size / 2 - 1, size + 2, size + 2);
         }
@@ -442,7 +446,7 @@ export class CanvasTimelineRenderer {
         ctx.fillText(label, cx + size * Math.SQRT1_2 + 6, textY);
       } else if (t.isGroup || t.type === "group" || t.type === "summary") {
         // Draw Summary / Group Parent Bracket [=======]
-        ctx.fillStyle = isCritical ? colors.critical : colors.text;
+        ctx.fillStyle = isSelected ? colors.primary : isCritical ? colors.critical : colors.text;
         const bracketH = 8;
         ctx.fillRect(barX, barY + 2, barW, bracketH);
         // Downward end chevrons
@@ -479,8 +483,8 @@ export class CanvasTimelineRenderer {
         }
 
         // Critical Path Highlight (computed CPM path)
-        if (isCritical) {
-          ctx.strokeStyle = colors.critical;
+        if (isCritical || isSelected) {
+          ctx.strokeStyle = isSelected ? colors.primary : colors.critical;
           ctx.lineWidth = 2;
           ctx.strokeRect(barX - 1, barY - 1, barW + 2, BAR_HEIGHT + 2);
         }
@@ -630,6 +634,32 @@ export class CanvasTimelineRenderer {
     const first = new Date((this.timelineStartDay + firstVisible) * DAY_MS);
     let year = first.getUTCFullYear();
     let month = first.getUTCMonth();
+    if (dayWidth < 4) {
+      // In overview scales the useful units are years and quarters. Keep both tiers legible
+      // as a pinch passes below the width needed for a week label.
+      const quarter = Math.floor(month / 3);
+      month = quarter * 3;
+      let lastYear = -1;
+      while (true) {
+        const offset = Date.UTC(year, month, 1) / DAY_MS - this.timelineStartDay;
+        if (offset > lastVisible) break;
+        const x = offset * dayWidth;
+        const next = (Date.UTC(year, month + 3, 1) / DAY_MS - this.timelineStartDay) * dayWidth;
+        if (year !== lastYear) {
+          const end = (Date.UTC(year + 1, 0, 1) / DAY_MS - this.timelineStartDay) * dayWidth;
+          ctx.fillText(String(year), Math.min(Math.max(scrollX, x) + 6, end - 32), tierY / 2 + 1);
+          lastYear = year;
+        }
+        ctx.fillText(`Q${month / 3 + 1}`, Math.min(Math.max(x, scrollX) + 6, next - 20), tierY * 1.5);
+        ctx.moveTo(x, month === 0 ? 0 : tierY);
+        ctx.lineTo(x, headerHeight);
+        month += 3;
+        if (month >= 12) { month = 0; year++; }
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     for (;;) {
       const monthStart = Date.UTC(year, month, 1) / DAY_MS - this.timelineStartDay;
       if (monthStart > lastVisible) break;

@@ -4,15 +4,19 @@ import {
   type JanttData,
   type ThemeDefinition,
   createTaskSidebar,
+  isTaskDone,
+  TaskScheduleCoordinator,
   resolveSchedule
 } from "@jantt/core";
 import type { ActiveView } from "../types";
+import { triggerHaptic } from "../services/platform";
 import { commandBus } from "../services/bus";
 import { deleteTasks, getPeerId, isAutoCascadeEnabled } from "../utils";
 
 interface UseTaskDetailSidebarOptions {
   parsedData: JanttData | null;
   activeTheme: ThemeDefinition;
+  onInspectTask?: (id: string | null) => void;
   activeView: ActiveView;
   handleChartCommit: (data: JanttData) => void;
   readOnly?: boolean;
@@ -52,13 +56,16 @@ function editedFields(original: Task, edited: Task): Partial<Task> {
 export function useTaskDetailSidebar({
   parsedData,
   activeTheme,
+  onInspectTask,
   activeView,
   handleChartCommit,
   readOnly = false,
   onPromptFork,
   autoCascade
 }: UseTaskDetailSidebarOptions) {
-  const activeSidebarRef = useRef<{ close: () => void } | null>(null);
+  const inspectRef = useRef(onInspectTask);
+  inspectRef.current = onInspectTask;
+  const activeSidebarRef = useRef<ReturnType<typeof createTaskSidebar> | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const parsedDataRef = useRef(parsedData);
   parsedDataRef.current = parsedData;
@@ -77,6 +84,7 @@ export function useTaskDetailSidebar({
   const closeSidebar = useCallback(() => {
     const sidebar = activeSidebarRef.current;
     activeSidebarRef.current = null;
+    inspectRef.current?.(null);
     setIsTaskDetailOpen(false);
     try {
       sidebar?.close();
@@ -113,18 +121,20 @@ export function useTaskDetailSidebar({
 
       const reschedule = (tasks: Task[], data: JanttData) =>
         (autoCascadeRef.current ?? isAutoCascadeEnabled())
-          ? resolveSchedule(tasks, data.meta?.defaultGapDays ?? 2)
+          ? resolveSchedule(tasks, TaskScheduleCoordinator.scheduleOptions(data))
           : tasks;
 
       const sidebarInstance = createTaskSidebar({
         task,
         allTasks: openedWith.tasks,
+        scheduleOptions: TaskScheduleCoordinator.scheduleOptions(openedWith),
         categories: openedWith.categories || {},
         theme: activeThemeRef.current.vars,
         themeClassName: activeThemeRef.current.className,
         readOnly: readOnlyRef.current,
         onClose: () => {
           if (activeSidebarRef.current === sidebarInstance) activeSidebarRef.current = null;
+          inspectRef.current?.(null);
           setIsTaskDetailOpen(false);
         },
         onSave: (updatedTask) => {
@@ -134,14 +144,18 @@ export function useTaskDetailSidebar({
           }
           const currentData = parsedDataRef.current;
           if (!currentData) return;
-          const patch = editedFields(original, updatedTask);
+          const before = original;
+          const patch = editedFields(before, updatedTask);
           original = JSON.parse(JSON.stringify(updatedTask));
           if (Object.keys(patch).length === 0) return;
           // Merge only the edited fields into the current task, so edits made elsewhere
           // (including collaborators) since the drawer opened are kept
-          if (!currentData.tasks.some((t) => t.id === updatedTask.id)) return;
+          if (!currentData.tasks.some((t) => t.id === updatedTask.id && !t._deleted)) return;
           const nextTasks = currentData.tasks.map((t) => (t.id === updatedTask.id ? { ...t, ...patch } : t));
           handleChartCommitRef.current({ ...currentData, tasks: reschedule(nextTasks, currentData) });
+          if (updatedTask.status !== before.status || isTaskDone(updatedTask) !== isTaskDone(before)) {
+            triggerHaptic(updatedTask.milestone && isTaskDone(updatedTask) ? "success" : "light");
+          }
         },
         onDelete: (taskId) => {
           if (readOnlyRef.current) {
@@ -152,10 +166,12 @@ export function useTaskDetailSidebar({
           if (!currentData) return;
           const pruned = deleteTasks(currentData, [taskId], `${new Date().toISOString()}#${getPeerId()}`);
           handleChartCommitRef.current({ ...pruned, tasks: reschedule(pruned.tasks, pruned) });
+          triggerHaptic("warning");
         }
       });
 
       activeSidebarRef.current = sidebarInstance;
+      inspectRef.current?.(task.id);
       setIsTaskDetailOpen(true);
     },
     [closeSidebar]
@@ -164,6 +180,6 @@ export function useTaskDetailSidebar({
   return {
     openTaskDetailSidebar,
     isTaskDetailOpen,
-    closeTaskDetailSidebar: closeSidebar
+    closeTaskDetailSidebar: () => activeSidebarRef.current?.requestDismiss()
   };
 }

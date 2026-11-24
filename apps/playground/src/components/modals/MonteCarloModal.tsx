@@ -8,6 +8,8 @@ import {
   AlertTriangle,
   RefreshCw
 } from "lucide-react";
+import { FinishConfidence } from "./FinishConfidence";
+import "../views/health.css";
 import { Modal, ModalHeader } from "./ModalHost";
 import type { JanttData, MonteCarloResult, ScheduleWorkerClient, TaskCriticalityMetric } from "@jantt/core";
 import { DEFAULT_GAP_DAYS, createScheduleWorkerClient } from "@jantt/core";
@@ -214,16 +216,16 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
 
   const riskColor =
     scheduleRiskLevel === "low"
-      ? "#10B981"
+      ? "var(--jantt-status-good)"
       : scheduleRiskLevel === "medium"
-      ? "#F59E0B"
-      : "#EF4444";
+      ? "var(--jantt-status-warn)"
+      : "var(--jantt-status-bad)";
 
   const kpis = hasResult && result && p50 && p80 && p95
     ? [
         { label: "PLANNED DURATION", value: result.baselineDurationDays, sub: `Finish: ${result.baselineCompletionDate}`, color: "var(--jantt-text)" },
-        { label: "P50 (MEDIAN)", value: p50.durationDays, sub: p50.completionDate, color: "#3B82F6" },
-        { label: "P80 CONFIDENCE", value: p80.durationDays, sub: p80.completionDate, color: "#10B981" },
+        { label: "P50 (MEDIAN)", value: p50.durationDays, sub: p50.completionDate, color: "var(--jantt-status-info)" },
+        { label: "P80 CONFIDENCE", value: p80.durationDays, sub: p80.completionDate, color: "var(--jantt-status-good)" },
         { label: "P95 CONFIDENCE", value: p95.durationDays, sub: p95.completionDate, color: riskColor }
       ]
     : [];
@@ -243,7 +245,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
       />
 
       {/* Content */}
-      <div className="prompt-modal-body" style={{ padding: "16px 20px", gap: "16px" }}>
+      <div className="prompt-modal-body risk-simulation" style={{ padding: "16px 20px", gap: "16px" }}>
         {/* Simulation Controls */}
         <div
           style={{
@@ -280,20 +282,13 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
               <label htmlFor="mc-uncertainty" style={{ fontSize: "11px", fontWeight: 600, color: "var(--jantt-text-muted)" }}>
                 TASK UNCERTAINTY
               </label>
-              <select
-                id="mc-uncertainty"
-                value={uncertainty}
-                disabled={isSimulating}
-                onChange={(e) => setUncertainty(e.target.value as UncertaintyId)}
-                aria-describedby="mc-uncertainty-hint"
-                style={selectStyle}
-              >
-                {UNCERTAINTY_PRESETS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label} (&minus;{formatPct(p.optimistic)} / +{formatPct(p.pessimistic)})
-                  </option>
-                ))}
-              </select>
+              <input type="range" id="mc-uncertainty" min="0" max={UNCERTAINTY_PRESETS.length - 1} step="1"
+                value={UNCERTAINTY_PRESETS.findIndex(preset => preset.id === uncertainty)}
+                disabled={isSimulating} aria-valuetext={uncertainty}
+                onChange={event => setUncertainty(UNCERTAINTY_PRESETS[Number(event.target.value)].id)}
+                aria-describedby="mc-uncertainty-hint" />
+              {UNCERTAINTY_PRESETS.filter(preset => preset.id === uncertainty).map(preset =>
+                <output htmlFor="mc-uncertainty" key={preset.id}>{preset.label} (−{formatPct(preset.optimistic)} / +{formatPct(preset.pessimistic)})</output>)}
             </div>
           </div>
 
@@ -350,7 +345,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
               color: "var(--jantt-text)"
             }}
           >
-            <AlertTriangle size={16} style={{ color: "#EF4444", flexShrink: 0, marginTop: "1px" }} />
+            <AlertTriangle size={16} style={{ color: "var(--jantt-status-bad)", flexShrink: 0, marginTop: "1px" }} />
             <span>
               <strong>Simulation failed.</strong> {error}
               {result ? " The results below are from the previous run." : ""}
@@ -376,7 +371,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              <AlertTriangle size={14} style={{ color: "#F59E0B", flexShrink: 0 }} />
+              <AlertTriangle size={14} style={{ color: "var(--jantt-status-warn)", flexShrink: 0 }} />
               <span><strong>Results out of date.</strong> {staleMessage}</span>
             </span>
             <button type="button" className="btn-nav" onClick={handleRunSimulation} style={{ height: "28px" }}>
@@ -392,6 +387,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
             style={{ display: "flex", flexDirection: "column", gap: "16px", opacity: staleMessage || isSimulating ? 0.6 : 1 }}
             aria-busy={isSimulating}
           >
+            <FinishConfidence result={result} />
             {/* Top KPI Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px" }}>
               {kpis.map((kpi) => (
@@ -418,7 +414,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: "1 1 260px" }}>
-                <TrendingUp size={16} style={{ color: "#3B82F6", flexShrink: 0 }} />
+                <TrendingUp size={16} style={{ color: "var(--jantt-status-info)", flexShrink: 0 }} />
                 <span style={{ fontSize: "12px", color: "var(--jantt-text)" }}>
                   <strong>Recommended Contingency Buffer:</strong> Add{" "}
                   <strong>{Math.max(p90.durationDays - result.baselineDurationDays, 0)} days</strong>{" "}
@@ -434,7 +430,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
                   textTransform: "uppercase",
                   padding: "3px 8px",
                   borderRadius: "4px",
-                  background: `${riskColor}22`,
+                  background: `color-mix(in srgb, ${riskColor} 13%, transparent)`,
                   color: riskColor,
                   flexShrink: 0
                 }}
@@ -477,7 +473,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
                     <tbody>
                       {topDrivers.map((item) => {
                         const pct = Math.round(item.criticalityIndex);
-                        const barColor = pct >= 80 ? "#EF4444" : pct >= 50 ? "#F59E0B" : "#3B82F6";
+                        const barColor = pct >= 80 ? "var(--jantt-status-bad)" : pct >= 50 ? "var(--jantt-status-warn)" : "var(--jantt-status-info)";
 
                         return (
                           <tr key={item.taskId} style={{ borderBottom: "1px solid var(--jantt-border-subtle, #E2E8F0)" }}>

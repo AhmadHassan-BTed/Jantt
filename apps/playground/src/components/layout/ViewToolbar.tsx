@@ -1,3 +1,5 @@
+import { triggerHaptic } from "../../services/platform";
+import { Modal } from "../modals/ModalHost";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Plus,
@@ -165,6 +167,20 @@ export interface ViewToolbarProps {
   onToggleTaskSidebar?: () => void;
 }
 
+function Segment({ active, danger, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  active: boolean;
+  danger?: boolean;
+}) {
+  return <button {...props} type="button" aria-pressed={active}
+    className={`toolbar-segmented-btn${active ? " is-active" : ""}${active && danger ? " is-danger" : ""}`} />;
+}
+
+function ToolbarPanel({ mobile, title, onClose, children }: {
+  mobile: boolean; title: string; onClose: () => void; children: React.ReactNode;
+}) {
+  return mobile ? <Modal ariaLabel={title} onClose={onClose}><div className="toolbar-sheet-content">{children}</div></Modal> : <>{children}</>;
+}
+
 export const ViewToolbar: React.FC<ViewToolbarProps> = ({
   isMobile = false,
   activeView,
@@ -189,7 +205,6 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
 }) => {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const filterPopoverRef = useRef<HTMLDivElement>(null);
   const filterTriggerRef = useRef<HTMLButtonElement>(null);
@@ -199,7 +214,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
 
   // Close filter popover on outside click or Escape
   useEffect(() => {
-    if (!isFilterPopoverOpen) return;
+    if (!isFilterPopoverOpen || isMobile) return;
     const handlePointerDown = (e: MouseEvent) => {
       if (
         filterPopoverRef.current &&
@@ -222,11 +237,11 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isFilterPopoverOpen]);
+  }, [isFilterPopoverOpen, isMobile]);
 
   // Close settings popover on outside click or Escape
   useEffect(() => {
-    if (!isSettingsPopoverOpen) return;
+    if (!isSettingsPopoverOpen || isMobile) return;
     const handlePointerDown = (e: MouseEvent) => {
       if (
         settingsPopoverRef.current &&
@@ -249,7 +264,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isSettingsPopoverOpen]);
+  }, [isSettingsPopoverOpen, isMobile]);
 
   // Assignee task counts
   const assigneeCounts = useMemo(() => {
@@ -433,13 +448,13 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                 {activeView === "gantt" && onToggleTaskSidebar && (
                   <button
                     type="button"
-                    className={`mobile-toolbar-icon-btn ${showTaskSidebar ? "is-active" : ""}`}
+                    className={`mobile-toolbar-icon-btn mobile-toolbar-layout-toggle ${showTaskSidebar ? "is-active" : ""}`}
                     onClick={onToggleTaskSidebar}
-                    aria-label={showTaskSidebar ? "Hide Task & Category sidebar" : "Show Task & Category sidebar"}
+                    aria-label={showTaskSidebar ? "Split view active: click for timeline only" : "Timeline only: click for split view"}
                     aria-pressed={showTaskSidebar}
-                    title={showTaskSidebar ? "Hide Task & Category sidebar" : "Show Task & Category sidebar"}
+                    title={showTaskSidebar ? "Split view active: click for timeline only" : "Timeline only: click for split view"}
                   >
-                    {showTaskSidebar ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+                    {showTaskSidebar ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
                   </button>
                 )}
                 {onJumpToToday && (
@@ -450,42 +465,21 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                     title="Jump to today"
                     aria-label="Jump to today"
                   >
-                    <Crosshair size={12} style={{ color: "#EF4444" }} />
+                    <Crosshair size={16} aria-hidden="true" />
                     <span className="mobile-today-label">Today</span>
                   </button>
                 )}
                 {activeView === "gantt" && viewport && (
-                  <div className="toolbar-scale-group is-mobile-compact" role="group" aria-label="Timeline scale presets">
-                    {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((scale) => (
-                      <button
-                        key={scale}
-                        type="button"
-                        className={`toolbar-scale-btn ${viewport.currentScale === scale ? "is-active" : ""}`}
-                        aria-label={scale[0].toUpperCase() + scale.slice(1)}
-                        title={scale[0].toUpperCase() + scale.slice(1)}
-                        aria-pressed={viewport.currentScale === scale}
-                        onClick={() => {
-                          viewport.setCurrentDayWidth(undefined);
-                          viewport.setCurrentScale(scale);
-                        }}
-                      >
-                        {({ day: "D", week: "W", month: "M", quarter: "Q", year: "Y" } as const)[scale]}
-                      </button>
-                    ))}
-                  </div>
+                  <select className="mobile-scale-picker" aria-label="Timeline scale" value={viewport.currentScale}
+                    onChange={event => {
+                      viewport.setCurrentDayWidth(undefined);
+                      viewport.setCurrentScale(event.target.value as TimeScale);
+                    }}>
+                    {(["day", "week", "month", "quarter", "year"] as const).map(scale =>
+                      <option key={scale} value={scale}>{scale[0].toUpperCase() + scale.slice(1)}</option>)}
+                  </select>
                 )}
                 <div className="mobile-toolbar-actions">
-                  {onSearchChange && (
-                    <button
-                      type="button"
-                      className={`mobile-toolbar-icon-btn ${isMobileSearchOpen || Boolean(searchQuery.trim()) ? "is-active" : ""}`}
-                      onClick={() => setIsMobileSearchOpen((open) => !open)}
-                      aria-label="Search tasks"
-                      aria-expanded={isMobileSearchOpen || Boolean(searchQuery.trim())}
-                    >
-                      <Search size={15} />
-                    </button>
-                  )}
                   <button
                     ref={filterTriggerRef}
                     type="button"
@@ -495,7 +489,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                     aria-expanded={isFilterPopoverOpen}
                     aria-haspopup="dialog"
                   >
-                    <Filter size={15} />
+                    <Filter size={16} /><span className="phone-toolbar-label">Filter</span>
                     {totalActiveFiltersCount > 0 && <span className="mobile-toolbar-badge">{totalActiveFiltersCount}</span>}
                   </button>
                   {activeView === "gantt" && viewport && (
@@ -508,7 +502,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                       aria-expanded={isSettingsPopoverOpen}
                       aria-haspopup="dialog"
                     >
-                      <SettingsIcon size={15} />
+                      <SettingsIcon size={16} /><span className="phone-toolbar-label">Settings</span>
                     </button>
                   )}
                 </div>
@@ -577,33 +571,6 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
               </div>
             )}
           </div>
-
-          {(activeView === "gantt" || activeView === "canvas") && (isMobileSearchOpen || Boolean(searchQuery.trim())) && (
-            <div className="mobile-toolbar-search-row">
-              <div className="toolbar-search-box mobile-toolbar-search-wrap">
-                <Search size={12} className="toolbar-search-icon" />
-                <input
-                  type="text"
-                  className="toolbar-search-input"
-                  placeholder="Search tasks..."
-                  aria-label="Search tasks"
-                  value={searchQuery}
-                  onChange={(e) => onSearchChange?.(e.target.value)}
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    className="toolbar-search-clear"
-                    onClick={() => onSearchChange?.("")}
-                    title="Clear search"
-                    aria-label="Clear search"
-                  >
-                    <X size={10} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
 
           {hasAnyActiveFilter && <div className="mobile-toolbar-chips-row">{activeFilterChips}</div>}
         </>
@@ -719,11 +686,12 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
 
           {/* Grouped Filter Popover Card */}
           {isFilterPopoverOpen && (
+            <ToolbarPanel mobile={isMobile} title="Filters" onClose={() => setIsFilterPopoverOpen(false)}>
             <div
               ref={filterPopoverRef}
               className="toolbar-popover-card"
-              role="dialog"
-              aria-label="Filter Settings"
+              role={isMobile ? undefined : "dialog"}
+              aria-label={isMobile ? undefined : "Filter Settings"}
             >
               <div className="toolbar-popover-header">
                 <div className="toolbar-popover-title">
@@ -736,7 +704,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                   onClick={() => setIsFilterPopoverOpen(false)}
                   aria-label="Close filters"
                 >
-                  <X size={12} />
+                  <X size={16} />
                 </button>
               </div>
 
@@ -747,33 +715,25 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                   <span>Time Scope</span>
                 </div>
                 <div className="toolbar-segmented-control" role="group" aria-label="Date presets">
-                  <button
-                    type="button"
-                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "all" ? "is-active" : ""}`}
+                  <Segment active={dateFilter.dateFilterMode === "all"}
                     onClick={() => dateFilter.setDateFilterMode("all")}
                     title="Show all tasks"
                   >
                     All
-                  </button>
-                  <button
-                    type="button"
-                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "today" ? "is-active" : ""}`}
+                  </Segment>
+                  <Segment active={dateFilter.dateFilterMode === "today"}
                     onClick={() => dateFilter.setDateFilterMode("today")}
                     title={`Filter tasks active today (${getTodayISODate()})`}
                   >
                     Today
-                  </button>
-                  <button
-                    type="button"
-                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "week" ? "is-active" : ""}`}
+                  </Segment>
+                  <Segment active={dateFilter.dateFilterMode === "week"}
                     onClick={() => dateFilter.setDateFilterMode("week")}
                     title="Filter tasks active this week"
                   >
                     This Week
-                  </button>
-                  <button
-                    type="button"
-                    className={`toolbar-segmented-btn ${dateFilter.dateFilterMode === "range" || dateFilter.dateFilterMode === "date" ? "is-active" : ""}`}
+                  </Segment>
+                  <Segment active={dateFilter.dateFilterMode === "range" || dateFilter.dateFilterMode === "date"}
                     onClick={() => {
                       if (dateFilter.dateFilterMode === "range") {
                         dateFilter.setDateFilterMode("all");
@@ -785,7 +745,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                     title="Filter custom date range"
                   >
                     Custom
-                  </button>
+                  </Segment>
                 </div>
 
                 {/* Conditional Date Range Inputs inside Popover */}
@@ -862,27 +822,21 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                     <Zap size={12} style={{ color: "#F59E0B" }} />
                     <span>Schedule Analysis</span>
                   </div>
-                  <div
+                  <button
+                    type="button" role="switch" aria-checked={viewport.showCriticalPath}
+                    aria-label="Toggle Critical Path"
                     className="toolbar-switch-row"
-                    onClick={() => viewport.setShowCriticalPath((prev: boolean) => !prev)}
+                    onClick={() => { viewport.setShowCriticalPath((prev: boolean) => !prev); if (isMobile) triggerHaptic("success"); }}
                     title="Toggle Critical Path Highlighting"
                   >
-                    <div className="toolbar-switch-info">
+                    <span className="toolbar-switch-info">
                       <span className="toolbar-switch-title">
                         Highlight Critical Path {criticalCount > 0 ? `(${criticalCount} tasks)` : ""}
                       </span>
                       <span className="toolbar-switch-desc">Emphasize dependent tasks determining project finish date</span>
-                    </div>
-                    <button
-                      type="button"
-                      className={`toolbar-toggle-switch ${viewport.showCriticalPath ? "is-active" : ""}`}
-                      role="switch"
-                      aria-checked={viewport.showCriticalPath}
-                      aria-label="Toggle Critical Path"
-                    >
-                      <span className="toolbar-toggle-thumb" />
-                    </button>
-                  </div>
+                    </span>
+                    <span className={`toolbar-toggle-switch ${viewport.showCriticalPath ? "is-active" : ""}`} aria-hidden="true"><span className="toolbar-toggle-thumb" /></span>
+                  </button>
                 </div>
               )}
 
@@ -894,33 +848,27 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                     <span>Completed Tasks</span>
                   </div>
                   <div className="toolbar-segmented-control" role="group" aria-label="Completed tasks display mode">
-                    <button
-                      type="button"
-                      className={`toolbar-segmented-btn ${dateFilter.completedFilterMode === "show" ? "is-active" : ""}`}
+                    <Segment active={dateFilter.completedFilterMode === "show"}
                       onClick={() => dateFilter.setCompletedFilterMode?.("show")}
                       title="Show completed tasks normally"
                     >
                       <Eye size={11} />
                       <span>Show</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`toolbar-segmented-btn ${dateFilter.completedFilterMode === "dim" ? "is-active" : ""}`}
+                    </Segment>
+                    <Segment active={dateFilter.completedFilterMode === "dim"}
                       onClick={() => dateFilter.setCompletedFilterMode?.("dim")}
                       title="Dim completed tasks to emphasize active work"
                     >
                       <EyeOff size={11} style={{ color: "#F59E0B" }} />
                       <span>Dim</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`toolbar-segmented-btn ${dateFilter.completedFilterMode === "filter" ? "is-active is-danger" : ""}`}
+                    </Segment>
+                    <Segment active={dateFilter.completedFilterMode === "filter"} danger
                       onClick={() => dateFilter.setCompletedFilterMode?.("filter")}
                       title="Completely hide completed tasks from view"
                     >
                       <Filter size={11} style={{ color: "#EF4444" }} />
                       <span>Hide</span>
-                    </button>
+                    </Segment>
                   </div>
                 </div>
               )}
@@ -932,24 +880,20 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                   <span>Non-Matching Filtered Tasks</span>
                 </div>
                 <div className="toolbar-segmented-control" role="group" aria-label="Non-matching tasks display mode">
-                  <button
-                    type="button"
-                    className={`toolbar-segmented-btn ${dateFilter.dateFilterBehavior === "dim" ? "is-active" : ""}`}
+                  <Segment active={dateFilter.dateFilterBehavior === "dim"}
                     onClick={() => dateFilter.setDateFilterBehavior("dim")}
                     title="Dim: keep every task visible in context, fading non-matching ones"
                   >
                     <EyeOff size={11} style={{ color: "#F59E0B" }} />
                     <span>Dim in Context</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`toolbar-segmented-btn ${dateFilter.dateFilterBehavior === "hide" ? "is-active" : ""}`}
+                  </Segment>
+                  <Segment active={dateFilter.dateFilterBehavior === "hide"}
                     onClick={() => dateFilter.setDateFilterBehavior("hide")}
                     title="Hide: strictly display only matching tasks"
                   >
                     <Filter size={11} style={{ color: "#818CF8" }} />
                     <span>Hide</span>
-                  </button>
+                  </Segment>
                 </div>
               </div>
 
@@ -967,6 +911,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                 </div>
               )}
             </div>
+            </ToolbarPanel>
           )}
         </div>
 
@@ -990,11 +935,12 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
 
             {/* Chart Settings Popover Card */}
             {isSettingsPopoverOpen && (
+              <ToolbarPanel mobile={isMobile} title="Chart settings" onClose={() => setIsSettingsPopoverOpen(false)}>
               <div
                 ref={settingsPopoverRef}
                 className="toolbar-popover-card toolbar-settings-card"
-                role="dialog"
-                aria-label="Chart Settings"
+                role={isMobile ? undefined : "dialog"}
+                aria-label={isMobile ? undefined : "Chart Settings"}
               >
                 <div className="toolbar-popover-header">
                   <div className="toolbar-popover-title">
@@ -1084,9 +1030,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
 
                   {/* Row Density Presets */}
                   <div className="toolbar-segmented-control" role="group" aria-label="Row density presets">
-                    <button
-                      type="button"
-                      className={`toolbar-segmented-btn ${viewport.rowHeightMode === "custom" && viewport.rowHeight === 32 ? "is-active" : ""}`}
+                    <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 32}
                       onClick={() => {
                         viewport.setRowHeightMode("custom");
                         viewport.setRowHeight(32);
@@ -1094,10 +1038,8 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                       title="Compact task rows (32px)"
                     >
                       Compact
-                    </button>
-                    <button
-                      type="button"
-                      className={`toolbar-segmented-btn ${viewport.rowHeightMode === "custom" && viewport.rowHeight === 46 ? "is-active" : ""}`}
+                    </Segment>
+                    <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 46}
                       onClick={() => {
                         viewport.setRowHeightMode("custom");
                         viewport.setRowHeight(46);
@@ -1105,10 +1047,8 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                       title="Default task rows (46px)"
                     >
                       Default
-                    </button>
-                    <button
-                      type="button"
-                      className={`toolbar-segmented-btn ${viewport.rowHeightMode === "custom" && viewport.rowHeight === 64 ? "is-active" : ""}`}
+                    </Segment>
+                    <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 64}
                       onClick={() => {
                         viewport.setRowHeightMode("custom");
                         viewport.setRowHeight(64);
@@ -1116,15 +1056,13 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                       title="Spacious task rows (64px)"
                     >
                       Spacious
-                    </button>
-                    <button
-                      type="button"
-                      className={`toolbar-segmented-btn ${viewport.rowHeightMode === "fit" ? "is-active" : ""}`}
+                    </Segment>
+                    <Segment active={viewport.rowHeightMode === "fit"}
                       onClick={() => viewport.setRowHeightMode("fit")}
                       title="Fit mode: dynamically scale row heights so all tasks fit"
                     >
                       Fit
-                    </button>
+                    </Segment>
                   </div>
                 </div>
 
@@ -1138,27 +1076,21 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                   <div className="toolbar-setting-row">
                     <span className="toolbar-setting-label">Line Routing</span>
                     <div className="toolbar-segmented-control" role="group" aria-label="Connector routing style">
-                      <button
-                        type="button"
-                        className={`toolbar-segmented-btn ${viewport.linkRouting === "orthogonal" ? "is-active" : ""}`}
+                      <Segment active={viewport.linkRouting === "orthogonal"}
                         onClick={() => viewport.setLinkRouting("orthogonal")}
                       >
                         90° Turn
-                      </button>
-                      <button
-                        type="button"
-                        className={`toolbar-segmented-btn ${viewport.linkRouting === "curved" ? "is-active" : ""}`}
+                      </Segment>
+                      <Segment active={viewport.linkRouting === "curved"}
                         onClick={() => viewport.setLinkRouting("curved")}
                       >
                         Curved
-                      </button>
-                      <button
-                        type="button"
-                        className={`toolbar-segmented-btn ${viewport.linkRouting === "direct" ? "is-active" : ""}`}
+                      </Segment>
+                      <Segment active={viewport.linkRouting === "direct"}
                         onClick={() => viewport.setLinkRouting("direct")}
                       >
                         Direct
-                      </button>
+                      </Segment>
                     </div>
                   </div>
                 </div>
@@ -1172,48 +1104,36 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                   </div>
 
                   {/* Auto-Cascade Toggle */}
-                  <div
+                  <button
+                    type="button" role="switch" aria-checked={viewport.autoCascade}
+                    aria-label="Toggle Auto-Cascade" disabled={readOnly}
                     className="toolbar-switch-row"
                     onClick={() => {
                       if (!readOnly) viewport.setAutoCascade((prev: boolean) => !prev);
                     }}
                     title="Toggle auto-cascading dependencies"
                   >
-                    <div className="toolbar-switch-info">
+                    <span className="toolbar-switch-info">
                       <span className="toolbar-switch-title">Auto-Cascade Tasks</span>
                       <span className="toolbar-switch-desc">Downstream tasks shift automatically when predecessor moves</span>
-                    </div>
-                    <button
-                      type="button"
-                      className={`toolbar-toggle-switch ${viewport.autoCascade ? "is-active" : ""}`}
-                      role="switch"
-                      aria-checked={viewport.autoCascade}
-                      aria-label="Toggle Auto-Cascade"
-                    >
-                      <span className="toolbar-toggle-thumb" />
-                    </button>
-                  </div>
+                    </span>
+                    <span className={`toolbar-toggle-switch ${viewport.autoCascade ? "is-active" : ""}`} aria-hidden="true"><span className="toolbar-toggle-thumb" /></span>
+                  </button>
 
                   {/* Baselines Toggle */}
-                  <div
+                  <button
+                    type="button" role="switch" aria-checked={viewport.showBaselines}
+                    aria-label="Toggle Baselines"
                     className="toolbar-switch-row"
                     onClick={() => viewport.setShowBaselines((prev: boolean) => !prev)}
                     title="Toggle baseline comparison bars"
                   >
-                    <div className="toolbar-switch-info">
+                    <span className="toolbar-switch-info">
                       <span className="toolbar-switch-title">Show Baselines</span>
                       <span className="toolbar-switch-desc">Display original planned schedule bars beneath active tasks</span>
-                    </div>
-                    <button
-                      type="button"
-                      className={`toolbar-toggle-switch ${viewport.showBaselines ? "is-active" : ""}`}
-                      role="switch"
-                      aria-checked={viewport.showBaselines}
-                      aria-label="Toggle Baselines"
-                    >
-                      <span className="toolbar-toggle-thumb" />
-                    </button>
-                  </div>
+                    </span>
+                    <span className={`toolbar-toggle-switch ${viewport.showBaselines ? "is-active" : ""}`} aria-hidden="true"><span className="toolbar-toggle-thumb" /></span>
+                  </button>
                 </div>
 
                 {/* Section 4: Data & Persistence */}
@@ -1282,6 +1202,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                   </>
                 )}
               </div>
+              </ToolbarPanel>
             )}
           </div>
         )}

@@ -36,6 +36,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           const isCanvasOnTimeline = tab.id === "gantt" && activeView === "canvas";
           const isActive = activeView === tab.id || isCanvasOnTimeline;
           const label = isCanvasOnTimeline ? "Canvas" : tab.label;
+          const showNotesCount = tab.id === "notes" && notesCount > 0;
+          const accessibleName = showNotesCount ? String(notesCount) + " " + tab.ariaLabel : tab.ariaLabel;
           return (
             <button
               key={tab.id}
@@ -46,14 +48,15 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 setActiveView(tab.id);
               }}
               aria-current={isActive ? "page" : undefined}
-              aria-label={isCanvasOnTimeline ? "Timeline view showing Canvas" : tab.ariaLabel}
+              aria-label={isCanvasOnTimeline ? "Timeline view showing Canvas" : accessibleName}
             >
               <div className="mobile-nav-tab-icon-wrap">
                 {tab.icon}
-                {tab.id === "notes" && notesCount > 0 && (
-                  <span className="mobile-nav-badge">{notesCount}</span>
+                {showNotesCount && (
+                  <span className="mobile-nav-badge" aria-hidden="true">{notesCount}</span>
                 )}
               </div>
+              {" "}
               <span className="mobile-nav-tab-label">{label}</span>
             </button>
           );

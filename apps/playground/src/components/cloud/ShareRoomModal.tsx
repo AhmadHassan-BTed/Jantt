@@ -1,3 +1,4 @@
+import { RoomQr } from "./RoomQr";
 import React, { useState, useEffect, useMemo, useRef, useId } from "react";
 import {
   Users,
@@ -16,7 +17,7 @@ import {
   Edit3
 } from "lucide-react";
 import { normalizeUsername, sanitizeCssColor, type Team, type Person } from "@jantt/core";
-import { ref, onValue } from "firebase/database";
+import { ref, onValue, set } from "firebase/database";
 import {
   rtdb,
   decodePlanFromRtdb,
@@ -208,6 +209,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   selectedThemeId
 }) => {
   const baseId = useId();
+  const [savingForkSetting, setSavingForkSetting] = useState(false);
   const [activeTab, setActiveTab] = useState<ShareTab>("link");
   const [meta, setMeta] = useState<RoomMetadata | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -652,6 +654,19 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                       Anyone with this link can view the plan and its live updates, without signing in. The link never
                       gives edit access.
                     </p>
+                    <RoomQr url={viewLink} />
+                    {isOwner && <label className="room-fork-setting">
+                      <input type="checkbox" checked={meta?.allowViewerForks !== false} disabled={savingForkSetting}
+                        onChange={async event => {
+                          const allow = event.target.checked;
+                          setSavingForkSetting(true);
+                          try {
+                            await set(ref(rtdb, `rooms/${validRoomId}/meta/allowViewerForks`), allow);
+                          } catch (error) { showToast(`Could not save the viewer copy setting. ${errorText(error)}`, true); }
+                          finally { setSavingForkSetting(false); }
+                        }} />
+                      <span>Offer viewers a private local copy<small>Controls the copy action in Jantt. People with the link can still read and export the plan.</small></span>
+                    </label>}
                     <input
                       readOnly
                       aria-label="Room link"

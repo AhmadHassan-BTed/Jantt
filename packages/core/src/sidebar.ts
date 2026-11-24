@@ -40,6 +40,8 @@ export interface TaskSidebarOptions {
 
 export interface TaskSidebarInstance {
   close: () => void;
+  /** Requests a user-initiated dismissal. Returns false while unsaved edits await confirmation. */
+  requestDismiss: () => boolean;
   element: HTMLElement;
 }
 
@@ -117,6 +119,7 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
     });
   }
 
+  let releaseSwipe: (() => void) | undefined;
   let closed = false;
   let form: SidebarForm | null = null;
   let discardArmed = false;
@@ -140,7 +143,9 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
   const close = () => {
     if (closed) return;
     closed = true;
+    releaseSwipe?.();
     document.removeEventListener("keydown", onKeyDown);
+    if (sidebarEl.style.transform !== "translateY(100%)") sidebarEl.style.removeProperty("animation");
     sidebarEl.classList.add("is-closing");
     restoreFocus();
     setTimeout(() => backdrop.remove(), CLOSE_ANIMATION_MS);
@@ -224,7 +229,8 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
             close();
           }
         : undefined,
-      onClose: close
+      onClose: close,
+      onDismiss: requestDismiss
     });
   }
 
@@ -238,12 +244,13 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
   mountTarget.appendChild(backdrop);
 
   if (!isCustomContainer) {
-    bindSheetSwipe(sidebarEl, requestDismiss);
+    releaseSwipe = bindSheetSwipe(sidebarEl, requestDismiss);
   }
   sidebarEl.focus({ preventScroll: true });
 
   return {
     close,
+    requestDismiss,
     element: sidebarEl
   };
 }
@@ -281,48 +288,59 @@ function bindSheetSwipe(sheet: HTMLElement, requestDismiss: () => boolean) {
 
   let pointerId: number | null = null;
   let startY = 0;
-  let startTime = 0;
-  let dy = 0;
-
-  const onMove = (e: PointerEvent) => {
+  let lastY = 0, lastTime = 0, velocity = 0, dy = 0, height = 1;
+  const backdrop = sheet.parentElement;
+  function onMove(e: PointerEvent) {
     if (e.pointerId !== pointerId) return;
-    dy = Math.max(0, e.clientY - startY);
-    sheet.style.transform = dy > 0 ? `translateY(${dy}px)` : "";
-  };
-  const onEnd = (e: PointerEvent) => {
-    if (e.pointerId !== pointerId) return;
+    velocity = .35 * velocity + .65 * (e.clientY - lastY) / Math.max(1, e.timeStamp - lastTime);
+    lastY = e.clientY;
+    lastTime = e.timeStamp;
+    dy = e.clientY - startY;
+    const offset = dy < 0 ? -Math.min(14, Math.sqrt(-dy)) : Math.min(dy, height) + Math.sqrt(Math.max(0, dy - height));
+    sheet.style.transform = `translate3d(0,${offset}px,0)`;
+    backdrop?.style.setProperty("--sheet-opacity", String(Math.max(0, 1 - Math.max(0, offset) / height)));
+  }
+  function release() {
     pointerId = null;
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onEnd);
     window.removeEventListener("pointercancel", onEnd);
-    sheet.style.transition = "transform 0.2s ease-out";
-    const fastFlick = dy > 24 && dy / Math.max(1, Date.now() - startTime) > 0.5;
-    if (e.type === "pointerup" && (dy > sheet.offsetHeight * 0.3 || fastFlick)) {
-      // Finish the slide from where the finger left it instead of replaying the exit animation.
+  }
+  function onEnd(e: PointerEvent) {
+    if (e.pointerId !== pointerId) return;
+    release();
+    sheet.style.transition = "transform 220ms cubic-bezier(.2,.85,.25,1.08)";
+    const flick = dy > 22 && e.timeStamp - lastTime < 125 && velocity > .45;
+    if (e.type === "pointerup" && (dy > height * .3 || flick)) {
       sheet.style.setProperty("animation", "none", "important");
       sheet.style.transform = "translateY(100%)";
-      if (requestDismiss()) return;
-      sheet.style.removeProperty("animation");
+      if (requestDismiss()) { backdrop?.style.setProperty("--sheet-opacity", "0"); return; }
     }
+    backdrop?.style.removeProperty("--sheet-opacity");
     sheet.style.transform = "";
-  };
-
-  grips.forEach((grip) => {
+  }
+  function onStart(e: PointerEvent) {
+    if (pointerId !== null || !e.isPrimary || e.button !== 0 || !handle?.offsetHeight) return;
+    if ((e.target as Element).closest("button, input, select, textarea, a[href]")) return;
+    pointerId = e.pointerId;
+    startY = lastY = e.clientY;
+    lastTime = e.timeStamp;
+    height = Math.max(1, sheet.offsetHeight);
+    dy = velocity = 0;
+    sheet.style.setProperty("animation", "none", "important");
+    sheet.style.transition = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+  }
+  for (const grip of grips) {
     grip.style.touchAction = "none";
-    grip.addEventListener("pointerdown", (e) => {
-      if (pointerId !== null || e.button !== 0) return;
-      if (handle.offsetHeight === 0) return; // Desktop drawer: the handle is not displayed.
-      if ((e.target as Element).closest("button, input, select, textarea, a[href]")) return;
-      pointerId = e.pointerId;
-      startY = e.clientY;
-      startTime = Date.now();
-      dy = 0;
-      sheet.style.transition = "none";
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onEnd);
-      window.addEventListener("pointercancel", onEnd);
-    });
-  });
+    grip.addEventListener("pointerdown", onStart);
+  }
+  return () => {
+    release();
+    for (const grip of grips) grip.removeEventListener("pointerdown", onStart);
+  };
 }
 
 interface SidebarForm {
@@ -343,6 +361,7 @@ interface SidebarContentProps {
   onSave: (task: Task) => void;
   onDelete?: () => void;
   onClose: () => void;
+  onDismiss: () => void;
 }
 
 function renderOptions(options: ReadonlyArray<[string, string]>, selected: string): string {
@@ -464,7 +483,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
     <div class="jantt-sidebar-header">
       <div class="jantt-sidebar-header-info">
         <div class="jantt-sidebar-tags">
-          <span class="jantt-hover-category-pill" style="background: color-mix(in srgb, ${catColor} 12%, transparent); color: ${catColor}; border: 1px solid color-mix(in srgb, ${catColor} 31%, transparent);">
+          <span class="jantt-hover-category-pill" style="background: color-mix(in srgb, ${catColor} 12%, transparent); color: var(--jantt-text); border: 1px solid color-mix(in srgb, ${catColor} 31%, transparent);">
             <span class="jantt-hover-dot" style="background: ${catColor};"></span>
             ${escapeHtml(catLabel)}
           </span>
@@ -630,7 +649,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
   const q = <T extends Element>(selector: string) => container.querySelector<T>(selector);
 
   // Bind close and cancel handlers (explicit actions always discard)
-  q(".jantt-sidebar-close-btn")?.addEventListener("click", () => onClose());
+  q(".jantt-sidebar-close-btn")?.addEventListener("click", () => props.onDismiss());
   q("#jantt-sidebar-cancel")?.addEventListener("click", () => onClose());
 
   const labelInput = q<HTMLInputElement>("#jantt-sidebar-label");
@@ -976,7 +995,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       }
       unsavedNotice.style.display = "flex";
       unsavedNotice.innerHTML =
-        '<span>You have unsaved changes. Save them, or press Esc again to discard.</span>' +
+        '<span>You have unsaved changes. Save your changes or discard them.</span>' +
         '<button type="button" class="jantt-btn jantt-btn-secondary" id="jantt-sidebar-discard" style="padding: 3px 8px; font-size: 11px; margin-left: auto;">Discard</button>';
       const discardBtn = unsavedNotice.querySelector<HTMLButtonElement>("#jantt-sidebar-discard");
       discardBtn?.addEventListener("click", () => discard());

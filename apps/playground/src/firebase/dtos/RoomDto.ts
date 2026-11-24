@@ -47,6 +47,7 @@ export interface RoomMetadata {
    */
   secretKey?: never;
   theme?: string;
+  allowViewerForks?: boolean;
 }
 
 export interface UserRoomPointer {
@@ -82,6 +83,9 @@ export function isValidRole(role: string): role is RoomMemberRole {
  * Validates room metadata schema.
  */
 export function validateRoomMetadata(meta: Partial<RoomMetadata>): { valid: boolean; error?: string } {
+  if (meta.allowViewerForks !== undefined && typeof meta.allowViewerForks !== "boolean") {
+    return { valid: false, error: "Invalid viewer copy setting." };
+  }
   if (!meta.roomId || typeof meta.roomId !== "string" || meta.roomId.trim().length === 0) {
     return { valid: false, error: "Missing or invalid roomId." };
   }

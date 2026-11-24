@@ -8,8 +8,10 @@ import React, {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState
+  useState,
+  useSyncExternalStore
 } from "react";
+import { useSheetSwipeDismiss } from "../../hooks/useSheetSwipeDismiss";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Info, X } from "lucide-react";
 import { exportSpreadsheetCsv } from "@jantt/interop";
@@ -52,15 +54,26 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 // Open dialogs, oldest first. Only the last one reacts to Escape and backdrop clicks.
-const modalStack: { id: number; card: HTMLElement | null }[] = [];
+const modalStack: { id: number; card: HTMLElement | null; close: () => void }[] = [];
+const modalListeners = new Set<() => void>();
+function subscribeModal(listener: () => void) {
+  modalListeners.add(listener);
+  return () => { modalListeners.delete(listener); };
+}
+const topModalId = () => modalStack[modalStack.length - 1]?.id ?? 0;
+export function useTopModalId() {
+  return useSyncExternalStore(subscribeModal, topModalId, () => 0);
+}
+export const closeTopModal = () => modalStack[modalStack.length - 1]?.close();
 let modalIdSequence = 0;
 let lockedBodyOverflow: string | null = null;
 
 /** Root that carries the theme variables; dialogs render there so ancestors cannot clip or offset them. */
 const PORTAL_ROOT_SELECTOR = ".playground-app";
 
-function pushModal(id: number, card: HTMLElement | null): number {
-  modalStack.push({ id, card });
+function pushModal(id: number, card: HTMLElement | null, close: () => void): number {
+  modalStack.push({ id, card, close });
+  modalListeners.forEach(listener => listener());
   if (modalStack.length === 1) {
     lockedBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -70,7 +83,10 @@ function pushModal(id: number, card: HTMLElement | null): number {
 
 function removeModal(id: number) {
   const index = modalStack.findIndex((entry) => entry.id === id);
-  if (index >= 0) modalStack.splice(index, 1);
+  if (index >= 0) {
+    modalStack.splice(index, 1);
+    modalListeners.forEach(listener => listener());
+  }
   if (modalStack.length === 0 && lockedBodyOverflow !== null) {
     document.body.style.overflow = lockedBodyOverflow;
     lockedBodyOverflow = null;
@@ -137,6 +153,7 @@ export interface ModalProps {
   tall?: boolean;
   /** Close when a press starts and ends on the backdrop. Disable while a form holds unsaved input. */
   dismissOnBackdrop?: boolean;
+  swipeToClose?: boolean;
   role?: "dialog" | "alertdialog";
   /** Accessible name; defaults to the <ModalHeader> title. */
   ariaLabel?: string;
@@ -151,11 +168,14 @@ export const Modal: React.FC<ModalProps> = ({
   maxWidth = 580,
   tall = false,
   dismissOnBackdrop = true,
+  swipeToClose = dismissOnBackdrop,
   role = "dialog",
   ariaLabel,
   ariaDescribedBy,
   initialFocusRef
 }) => {
+  const isPhoneSheet = useMediaQuery("(max-width: 640px), (max-height: 519px) and (pointer: coarse)");
+  const swipe = useSheetSwipeDismiss({ enabled: isPhoneSheet && swipeToClose, onClose });
   const titleId = useId();
   const [id] = useState(() => ++modalIdSequence);
   // Captured during render: by the time effects run, autofocus may already have moved focus inside.
@@ -173,7 +193,7 @@ export const Modal: React.FC<ModalProps> = ({
   const pressStartedOnBackdropRef = useRef(false);
 
   useLayoutEffect(() => {
-    const stackIndex = pushModal(id, cardRef.current);
+    const stackIndex = pushModal(id, cardRef.current, () => onCloseRef.current());
     // Stack above every dialog opened earlier, on the --z-modal layer (set before paint).
     if (overlayRef.current && stackIndex > 0) {
       overlayRef.current.style.zIndex = `calc(var(--z-modal, 1000) + ${stackIndex})`;
@@ -256,7 +276,7 @@ export const Modal: React.FC<ModalProps> = ({
     <div
       ref={overlayRef}
       className="prompt-modal-backdrop"
-      style={{ overscrollBehavior: "contain" }}
+      style={{ overscrollBehavior: "contain", ...swipe.backdropStyle }}
       onPointerDown={(event) => {
         pressStartedOnBackdropRef.current = event.target === event.currentTarget;
       }}
@@ -284,6 +304,7 @@ export const Modal: React.FC<ModalProps> = ({
         tabIndex={-1}
         className="prompt-modal-card"
         style={{
+          ...(isPhoneSheet ? swipe.sheetStyle : {}),
           position: "relative",
           maxWidth,
           // Percentages resolve against the backdrop, i.e. the viewport minus its padding.
@@ -291,6 +312,7 @@ export const Modal: React.FC<ModalProps> = ({
           outline: "none"
         }}
       >
+        {isPhoneSheet && swipeToClose && <div className="sheet-grip" aria-hidden="true" {...swipe.handleProps}><i /></div>}
         <ModalContext.Provider value={contextValue}>{children}</ModalContext.Provider>
       </div>
     </div>
@@ -313,7 +335,7 @@ export interface ModalHeaderProps {
 export const ModalHeader: React.FC<ModalHeaderProps> = ({ icon, title, subtitle, actions, tone = "accent" }) => {
   const { titleId, close } = useModalContext();
   return (
-    <div className="prompt-modal-header" style={{ gap: "10px 12px", flexWrap: "wrap", flexShrink: 0 }}>
+    <div className="prompt-modal-header shared-dialog-header" style={{ gap: "10px 12px", flexWrap: "wrap", flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: "1 1 220px", minWidth: 0 }}>
         {icon && (
           <div
@@ -347,27 +369,16 @@ export const ModalHeader: React.FC<ModalHeaderProps> = ({ icon, title, subtitle,
           )}
         </div>
       </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          flexWrap: "wrap",
-          justifyContent: "flex-end",
-          marginLeft: "auto"
-        }}
+      {actions && <div className="shared-dialog-actions">{actions}</div>}
+      <button
+        type="button"
+        className="prompt-modal-close-btn"
+        onClick={close}
+        aria-label="Close dialog"
+        title="Close (Esc)"
       >
-        {actions}
-        <button
-          type="button"
-          className="prompt-modal-close-btn"
-          onClick={close}
-          aria-label="Close dialog"
-          title="Close (Esc)"
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-      </div>
+        <X size={18} aria-hidden="true" />
+      </button>
     </div>
   );
 };
@@ -851,7 +862,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
           onOpenShareRoom={handleOpenShareRoom}
           onLogin={auth.loginWithGitHub}
           onOpenVerificationModal={requireVerification}
-          onMakeLocalCopy={() => {
+          onMakeLocalCopy={roomSync.allowViewerForks === false ? undefined : () => {
             if (editor.parsedData) {
               project.handleCreateLocalCopyFromData(project.currentProjectName, editor.parsedData);
             }

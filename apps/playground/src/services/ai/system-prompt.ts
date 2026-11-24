@@ -135,7 +135,8 @@ ${planContext}
 1. IF MODIFYING SCHEDULE:
    - Provide exactly 1-2 punchy sentences summarizing changes outside the JSON block.
    - Follow immediately with the updated valid JSON inside a single \`\`\`json ... \`\`\` block.
-   - Preserve all existing task IDs. Assign new tasks unique IDs like "t-new-1".
+   - Send changed task fields with their existing IDs. Assign new tasks unique IDs like "t-new-1".
+   - To remove a task explicitly requested for deletion, send its ID with "_deleted": true.
    - Ensure every task "category" exists in the "categories" dictionary.
 2. IF ANSWERING INQUIRY:
    - Answer directly with concise, structured analytical bullet points. Do NOT output a JSON block.

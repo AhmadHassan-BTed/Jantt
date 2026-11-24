@@ -53,7 +53,17 @@ apps/android-twa/*.keystore
 apps/android-twa/*.jks
 apps/android-twa/*.aab
 apps/android-twa/*.apk
+apps/android-twa/*.idsig
 apps/android-twa/app/
 apps/android-twa/build/
 apps/android-twa/.gradle/
 apps/android-twa/signing.properties
+apps/android-twa/gradle/
+apps/android-twa/gradlew
+apps/android-twa/gradlew.bat
+apps/android-twa/manifest-checksum.txt
+apps/android-twa/run-emulator.bat
+apps/android-twa/build.gradle
+apps/android-twa/settings.gradle
+apps/android-twa/gradle.properties
+apps/playground/test-results/

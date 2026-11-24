@@ -6,6 +6,7 @@ interface ReadOnlyForkModalProps {
   show: boolean;
   setShow: (show: boolean) => void;
   roomTitle?: string;
+  allowFork?: boolean;
   onMakeLocalCopy: () => void;
 }
 
@@ -13,6 +14,7 @@ export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
   show,
   setShow,
   roomTitle = "Shared Plan",
+  allowFork = true,
   onMakeLocalCopy
 }) => {
   if (!show) return null;
@@ -48,13 +50,12 @@ export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
             You have <strong>view-only</strong> access to this cloud room, so edits are not saved to the shared plan.
           </p>
           <p style={{ margin: 0, color: "var(--jantt-text-muted)", fontSize: "12.5px" }}>
-            To make changes, create a private <strong>local copy</strong> on this device. You can edit the copy freely;
-            the shared room stays unchanged. To edit the room itself, ask its owner for editor access.
+            {allowFork ? "Create a private local copy to edit on this device, or ask the owner for editor access." : "Ask the room owner for editor access."}
           </p>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <button
+          {allowFork && <button
             type="button"
             className="btn btn-primary"
             data-autofocus
@@ -66,7 +67,7 @@ export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
           >
             <Copy size={16} aria-hidden="true" />
             <span>Make a Private Local Copy</span>
-          </button>
+          </button>}
 
           <button type="button" className="btn btn-secondary" style={{ width: "100%" }} onClick={close}>
             Keep Viewing Read-Only

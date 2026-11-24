@@ -236,10 +236,14 @@ export function useNoteMentionEngine(
     document.addEventListener("selectionchange", onSelectionChange);
     window.addEventListener("scroll", reposition, true);
     window.addEventListener("resize", reposition);
+    window.visualViewport?.addEventListener("resize", reposition);
+    window.visualViewport?.addEventListener("scroll", reposition);
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
       window.removeEventListener("scroll", reposition, true);
       window.removeEventListener("resize", reposition);
+      window.visualViewport?.removeEventListener("resize", reposition);
+      window.visualViewport?.removeEventListener("scroll", reposition);
     };
   }, [mentionPopup.isOpen, contentEditableRef, closeMentionPopup]);
 

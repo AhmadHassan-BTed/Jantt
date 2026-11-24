@@ -18,7 +18,7 @@ export const beenieTheme: ThemeDefinition = {
     "--jantt-text": "#831843",
     "--jantt-text-muted": "#9D174D",
     "--jantt-text-dim": "#DB2777",
-    "--jantt-accent": "#EC4899",
+    "--jantt-accent": "#B51C68",
     "--jantt-accent-glow": "rgba(236, 72, 153, 0.35)",
     "--jantt-accent-contrast": "#FFFFFF",
     "--jantt-today": "#F43F5E",

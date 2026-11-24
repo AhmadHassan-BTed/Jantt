@@ -1,0 +1,78 @@
+.playground-app[data-mode="light"] .summary-mobile-card .kanban-prio-badge { color: var(--jantt-text); }
+.evm-gauge-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,165px),1fr)); gap: 8px; }
+.evm-gauge { display: flex; align-items: center; gap: 10px; min-width: 0; background: var(--jantt-surface); border: 1px solid var(--jantt-border); border-radius: 12px; padding: 12px; }
+.evm-gauge svg { flex: 0 0 42px; width:42px; }
+.evm-gauge circle { fill: none; stroke-width: 3px; }
+.gauge-track { stroke: var(--jantt-border); }
+.gauge-arc { stroke: var(--jantt-status-good); stroke-linecap: round; }
+.gauge-arc.below { stroke: var(--jantt-status-warn); }
+.evm-gauge text { fill: var(--jantt-text); font: bold 8px/1 system-ui; }
+.evm-gauge div, .allocation-heatmap label { display: grid; gap: 3px; min-width: 0; }
+.evm-gauge strong { font: 650 19px/1.2 var(--jantt-font-display, system-ui); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.evm-gauge span, .evm-gauge small, .health-slippage small { color: var(--jantt-text-muted); font-size: 12px; }
+.health-scenarios { flex: none; max-width: 100%; overflow-wrap: anywhere; background: var(--jantt-surface); }
+.health-scenarios summary, .health-slippage summary { cursor: pointer; min-height: 44px; align-content: center; }
+.health-scenarios .btn-nav { min-height: 44px; margin: 3px; }
+.health-scenarios input { max-width: 100%; }
+.health-scenario-result, .allocation-heatmap, .finish-confidence, .health-slippage { padding: 12px; border-radius: 10px; background: var(--jantt-surface); border: 1px solid var(--jantt-border); font-size: 13px; line-height: 1.45; }
+.health-slippage { margin-bottom: 12px; padding-block: 2px; }
+.health-slippage[open] { padding-bottom: 10px; }
+.health-slippage li { padding-block: 2px; }
+.health-slippage strong { margin-inline-start: 6px; color: var(--jantt-critical); }
+.health-slippage ul { padding-inline-start: 18px; margin: 0 0 6px; }
+.allocation-heatmap { margin: 12px 0; background: var(--jantt-bg); }
+.allocation-heatmap select, .allocation-days button, .heatmap-paging button, .confidence-buttons button { background: var(--jantt-surface-solid); color: var(--jantt-text); border: 1px solid var(--jantt-border); border-radius: 8px; min-height: 44px; padding: 3px 8px; font: inherit; }
+.allocation-days { display: grid; grid-template-columns: repeat(auto-fit,minmax(50px,1fr)); gap: 5px; margin-top: 10px; }
+.allocation-days button { display: grid; align-content: center; padding: 5px; background: color-mix(in srgb,var(--jantt-status-warn) 22%,var(--jantt-bg)); }
+.allocation-days button.severe { background: color-mix(in srgb,var(--jantt-status-bad) 28%,var(--jantt-bg)); }
+.allocation-days time { font-size: 11px; }
+.allocation-days button[aria-pressed=true], .confidence-buttons button[aria-pressed=true] { outline: 2px solid var(--jantt-accent); outline-offset: -2px; }
+.heatmap-paging, .confidence-buttons, .confidence-axis { display: flex; align-items: center; gap: 6px; }
+.heatmap-paging { justify-content: space-between; }
+.finish-confidence { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; }
+.finish-confidence h3, .finish-confidence p { margin: 0; }
+.finish-confidence h3 { font-size: 15px; }
+.finish-confidence svg, .confidence-axis, .finish-confidence p { grid-column: 1 / -1; }
+.finish-confidence svg { width: 100%; max-height: 150px; }
+.confidence-buttons button { min-width: 44px; }
+.confidence-grid { stroke: var(--jantt-border); }
+.confidence-curve { fill: none; stroke: var(--jantt-accent); stroke-width: 2; }
+.confidence-mark { stroke: var(--jantt-text-muted); stroke-dasharray: 3 3; }
+.confidence-dot { fill: var(--jantt-accent); }
+.confidence-axis { justify-content: space-between; color: var(--jantt-text-muted); font-size: 11px; }
+.budget-sparkline { display: block; height: 22px; width: 86px; color: var(--jantt-accent); }
+.summary-mobile-card.zero-float { border-inline-start: 3px solid var(--jantt-critical); }
+@media (max-width: 640px) {
+  .finish-confidence { grid-template-columns: 1fr; }
+  .summary-view-container .summary-mode-status { flex-wrap: wrap; }
+  .summary-view-container .summary-mode-status > button, .summary-view-container .summary-mode-tab { min-height: 44px; }
+  .summary-view-container .kpi-value { overflow-wrap: anywhere; white-space: normal !important; }
+  .health-scenarios { padding: 12px !important; }
+  .summary-view-container .summary-mobile-sort-select { min-height: 44px; }
+  .summary-view-container .summary-mobile-card { content-visibility: auto; contain-intrinsic-size: auto 78px; }
+  .evm-gauge-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .evm-gauge { flex-wrap: wrap; gap: 6px; }
+}
+
+.handheld-health.summary-view-container { gap: 12px; }
+.handheld-health .summary-mode-bar { padding: 0; margin: 0; background: transparent; border: 0; gap: 6px; }
+.handheld-health .summary-mode-status { width: 100%; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+.handheld-health .summary-mode-status > div { grid-column: 1/-1; min-height: 20px; padding-inline: 3px; }
+.handheld-health .summary-mode-status > button { width: 100%; background: var(--jantt-surface); border-color: var(--jantt-border); color: var(--jantt-text); }
+.handheld-health .summary-mode-status > button > svg { color: var(--jantt-accent) !important; }
+.handheld-health .health-essential { margin-bottom: 0 !important; gap: 8px !important; }
+.handheld-health .health-slippage { margin-bottom: 0; }
+.handheld-health .summary-kpi-card .kpi-data > .kpi-value { font: 650 clamp(18px,5vw,26px)/1.2 var(--jantt-font-display,system-ui) !important; letter-spacing: -.03em; margin-block: 3px; }
+.handheld-health .summary-kpi-card .kpi-data { font-variant-numeric: tabular-nums; }
+.handheld-health .summary-quick-filter-bar > span:first-child { display: none; }
+.handheld-health .summary-quick-filter-bar > button { min-height: 44px; }
+
+.health-more-tasks { margin-top: 12px; width: 100%; min-height: 44px; border-radius: 8px; color: var(--jantt-text); border: 1px solid var(--jantt-border); background: var(--jantt-surface); cursor: pointer; }
+
+@media (max-width: 640px) {
+  .risk-simulation select, .risk-simulation input[type=range], .risk-simulation button { min-height: 44px; }
+  .risk-simulation { padding-inline: 14px !important; }
+}
+
+.pv-date-control { display: flex; align-items:center; gap:8px; font-size:12px; color:var(--jantt-text-muted); }
+.pv-date-control input { flex:1; min-width:0; min-height:44px; accent-color:var(--jantt-accent); }

@@ -17,9 +17,9 @@ export const swissDarkTheme: ThemeDefinition = {
     "--jantt-border-strong": "rgba(255, 255, 255, 0.28)",
     "--jantt-text": "#FFFFFF",
     "--jantt-text-muted": "#A1A1AA",
-    "--jantt-text-dim": "#71717A",
+    "--jantt-text-dim": "#A0A0A6",
     "--jantt-accent": "#FFFFFF",
-    "--jantt-accent-glow": "rgba(255, 255, 255, 0.30)",
+    "--jantt-accent-glow": "rgba(255, 255, 255, 0.12)",
     "--jantt-accent-contrast": "#000000",
     "--jantt-today": "#EF4444",
     "--jantt-critical": "#F43F5E",
@@ -27,7 +27,7 @@ export const swissDarkTheme: ThemeDefinition = {
     "--jantt-weekend-bg": "transparent",
     "--jantt-grid-line": "rgba(255, 255, 255, 0.08)",
     "--jantt-grid-row-line": "rgba(255, 255, 255, 0.05)",
-    "--jantt-dep-line": "#52525B",
+    "--jantt-dep-line": "#818187",
     "--jantt-dep-line-active": "#FFFFFF",
     "--jantt-shadow": "0 25px 50px -12px rgba(0, 0, 0, 0.95)"
   }

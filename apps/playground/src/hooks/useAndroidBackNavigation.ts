@@ -3,13 +3,13 @@ import { useEffect, useRef } from "react";
 export interface BackNavigationOverlay {
   id: string;
   isOpen: boolean;
-  close: () => void;
+  /** Return false when a draft or confirmation keeps the overlay open. */
+  close: () => void | boolean;
 }
 
 /**
- * Maps Android's hardware/gesture Back button to the top-most open overlay. Each open overlay
- * gets one history sentinel that preserves the current URL verbatim; a UI-initiated close removes
- * its sentinel silently so it cannot pop an unrelated route.
+ * Maps Android's hardware/gesture Back button to the top-most open overlay. The open stack
+ * shares a history sentinel that preserves the current URL, including room credentials.
  */
 export function useAndroidBackNavigation(overlays: BackNavigationOverlay[], enabled: boolean): void {
   const overlaysRef = useRef(overlays);
@@ -45,7 +45,9 @@ export function useAndroidBackNavigation(overlays: BackNavigationOverlay[], enab
         return;
       }
       const top = overlaysRef.current.filter((overlay) => overlay.isOpen).slice(-1)[0];
-      top?.close();
+      if (top?.close() === false) {
+        window.history.pushState({ ...window.history.state, janttOverlay: top.id }, "", window.location.href);
+      }
     };
 
     window.addEventListener("popstate", handlePopState);

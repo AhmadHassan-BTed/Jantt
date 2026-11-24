@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { JanttData, EVMAnalysis, Task } from "@jantt/core";
 import { diffDays, addDays, getTodayISODate, isValidISODate } from "@jantt/core";
 import { TrendingUp } from "lucide-react";
@@ -91,8 +91,17 @@ const COLORS = { pv: "#38BDF8", ev: "#10B981", ac: "#F59E0B" };
 
 export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm, currency }) => {
   const [hoveredPoint, setHoveredPoint] = useState<SCurvePoint | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(640);
   const series = useMemo(() => computePlannedValueSeries(parsedData.tasks || []), [parsedData.tasks]);
 
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || typeof ResizeObserver === "undefined") return;
+    const resize = new ResizeObserver(([entry]) => setChartWidth(Math.max(220, Math.min(640, entry.contentRect.width))));
+    resize.observe(chart);
+    return () => resize.disconnect();
+  }, [Boolean(series?.bac)]);
   const statusDate = isValidISODate(evm.statusDate) ? evm.statusDate : getTodayISODate();
   const money = (val: number) => formatMoney(val, currency);
 
@@ -133,8 +142,8 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
   const hasActualCost = evm.costCoverage > 0 || ac > 0;
   const pvNow = Number.isFinite(evm.pv) ? evm.pv : 0;
 
-  const width = 640;
-  const height = 220;
+  const width = chartWidth;
+  const height = width < 420 ? 166 : 220;
   const padLeft = 64;
   const padRight = 30;
   const padTop = 20;
@@ -176,13 +185,13 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
         recorded, so they are shown at that date only.
       </p>
 
-      <div style={{ position: "relative", width: "100%", overflowX: "auto" }}>
+      <div ref={chartRef} style={{ position: "relative", width: "100%" }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={`Planned value rises to ${money(series.bac)} by ${series.maxDate}. On ${statusDate}: planned ${money(pvNow)}, earned ${money(ev)}, actual cost ${hasActualCost ? money(ac) : "not reported"}.`}
-          style={{ width: "100%", height: "auto", minWidth: "480px", display: "block" }}
-          onMouseMove={(e) => {
+          style={{ width: "100%", height: "auto", display: "block" }}
+          onPointerMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const relX = ((e.clientX - rect.left) / rect.width) * width;
             if (relX < padLeft || relX > padLeft + chartW) return;
@@ -208,7 +217,7 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
                   style={{ stroke: "var(--jantt-border, rgba(255, 255, 255, 0.06))" }}
                   strokeDasharray="3 3"
                 />
-                <text x={padLeft - 8} y={y + 3} textAnchor="end" fontSize="9.5" fill="#64748B" fontFamily="monospace">
+                <text x={padLeft - 8} y={y + 3} textAnchor="end" fontSize="9.5" fill="var(--jantt-text-muted)" fontFamily="monospace">
                   {money(maxVal * pct)}
                 </text>
               </g>
@@ -243,19 +252,25 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
           )}
 
           {/* Date Axis Labels */}
-          <text x={padLeft} y={height - 8} fontSize="10" fill="#64748B" fontFamily="monospace">
+          <text x={padLeft} y={height - 8} fontSize="10" fill="var(--jantt-text-muted)" fontFamily="monospace">
             {series.minDate}
           </text>
-          {statusInRange && (
-            <text x={statusX} y={height - 8} textAnchor="middle" fontSize="10" fill="#94A3B8" fontFamily="monospace">
+          {statusInRange && width >= 420 && (
+            <text x={statusX} y={height - 8} textAnchor="middle" fontSize="10" fill="var(--jantt-text-muted)" fontFamily="monospace">
               Today
             </text>
           )}
-          <text x={padLeft + chartW} y={height - 8} textAnchor="end" fontSize="10" fill="#64748B" fontFamily="monospace">
+          <text x={padLeft + chartW} y={height - 8} textAnchor="end" fontSize="10" fill="var(--jantt-text-muted)" fontFamily="monospace">
             {series.maxDate}
           </text>
         </svg>
 
+        <label className="pv-date-control">Inspect planned value
+          <input type="range" min={0} max={series.points.length - 1} step={1}
+            aria-valuetext={hoveredPoint ? `${hoveredPoint.date}, ${money(hoveredPoint.pv)}` : series.points[0].date}
+            value={Math.max(0, series.points.findIndex(point => point.date === hoveredPoint?.date))}
+            onChange={event => setHoveredPoint(series.points[Number(event.target.value)])} />
+        </label>
         {/* Hover Data Card */}
         {hoveredPoint && (
           <div

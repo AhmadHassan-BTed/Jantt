@@ -114,6 +114,7 @@
             ".write": "auth != null && auth.token.firebase.sign_in_provider === 'github.com' && data.parent().parent().child('members/' + auth.uid + '/role').val() === 'editor'",
             ".validate": "newData.isNumber() && newData.val() >= 0"
           },
+          "allowViewerForks": { ".validate": "newData.isBoolean()" },
           "secretKey": { ".validate": false },
           "theme": { ".validate": "newData.isString() && newData.val().length <= 64" },
           "$other": { ".validate": false }
@@ -158,6 +159,7 @@
             "username": { ".validate": "newData.isString() && (newData.val() === data.val() || root.child('usernames/' + newData.val()).val() === $uid)" },
             "displayName": { ".validate": "newData.isString() && newData.val().length <= 256" },
             "photoURL": { ".validate": "newData.isString() && newData.val().length <= 1024 && newData.val().beginsWith('https://avatars.githubusercontent.com/')" },
+            "inspectedTaskId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 256" },
             "status": { ".validate": "newData.val() === 'online'" },
             "lastSeen": { ".validate": "newData.isString() && newData.val().length <= 40" },
             "joinedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },

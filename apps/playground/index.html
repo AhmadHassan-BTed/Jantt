@@ -11,7 +11,7 @@
     <meta name="keywords" content="create gantt chart with ai, free ai gantt chart generator, online gantt chart maker no sign up, free cloud gantt chart, student study planner timeline, phd application tracker, life organizer timeline, meeting roadmap planner, open source microsoft project alternative, primavera p6 xer viewer, working calendar critical path method, json gantt chart, react gantt chart mit, kanban board, mcp server gantt, ollama gantt chart" />
     <meta name="author" content="Ahmad Hassan" />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#090E1A" />
+    <meta name="theme-color" content="#000000" />
     <link rel="canonical" href="https://ahmadhassan-bted.github.io/Jantt/" />
 
     <!-- Installable app metadata -->
@@ -50,7 +50,7 @@
       body {
         margin: 0;
         height: 100%;
-        background: #090e1a;
+        background: #000000;
       }
 
       #jantt-boot-splash {
@@ -62,7 +62,7 @@
         align-items: center;
         justify-content: center;
         gap: 22px;
-        background: #090e1a;
+        background: #000000;
         color: #f8fafc;
         font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
         opacity: 1;
@@ -117,25 +117,10 @@
         }
       }
 
-      @media (prefers-color-scheme: light) and (display-mode: browser) {
-        html,
-        body,
-        #jantt-boot-splash {
-          background: #ffffff;
-        }
-
-        #jantt-boot-splash {
-          color: #0f172a;
-        }
-
-        .jantt-boot-wordmark {
-          color: #0f172a;
-        }
-
-        .jantt-boot-track {
-          background: #e2e8f0;
-        }
-      }
+      html[data-theme], html[data-theme] body, html[data-theme] #jantt-boot-splash { background: var(--jantt-bg); }
+      html[data-theme] .jantt-boot-wordmark { color: var(--jantt-text); }
+      html[data-theme] .jantt-boot-track { background: var(--jantt-border); }
+      html[data-theme] .jantt-boot-track::after { background: var(--jantt-accent); }
 
       @media (prefers-reduced-motion: reduce) {
         #jantt-boot-splash {
@@ -149,10 +134,7 @@
       }
     </style>
 
-    <!-- Typography Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/fonts/workspace.css">
 
     <!-- Structured Data (JSON-LD) for Search Engines & AI Crawlers -->
     <script type="application/ld+json">

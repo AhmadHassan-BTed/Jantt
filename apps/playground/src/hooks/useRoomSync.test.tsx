@@ -203,6 +203,21 @@ describe("useRoomSync", () => {
     expect(window.location.hash).toBe("");
   });
 
+  it("updates the viewer copy action on a metadata-only change and keeps legacy rooms copyable", async () => {
+    const data = plan([{}]);
+    await mount([roomProject(data)], PROJECT_ID, null);
+    const payload = roomPayload(data, null);
+    await emitRoom(payload);
+    expect(latest.sync.allowViewerForks).toBe(true);
+    await emitRoom({ ...payload, meta: { ...payload.meta, allowViewerForks: false } });
+    expect(latest.sync.allowViewerForks).toBe(false);
+    expect(latest.projects.find(project => project.id === PROJECT_ID)?.allowViewerForks).toBe(false);
+    expect(latest.sync.activeRoomRole).toBe("viewer");
+    await emitRoom(payload);
+    expect(latest.sync.allowViewerForks).toBe(true);
+    expect(mocks.saveRoomDataAtomic).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid room link without touching the database", async () => {
     window.history.replaceState(null, "", "/?room=x%2Fmembers");
     await mount([], "default", null);
@@ -310,6 +325,24 @@ describe("useRoomSync", () => {
     await emitRoom(null);
 
     expect(latest.projects.find((p) => p.id === PROJECT_ID)?.source).toBe("room");
+  });
+
+  it("archives a pending draft and displays the saved room after a metadata-only demotion", async () => {
+    const saved = plan([{ label: "Approved" }]);
+    const draft = plan([{ label: "Unsent edit" }]);
+    await mount([roomProject(saved)], PROJECT_ID, alice);
+    await emitRoom(roomPayload(saved, "editor"));
+    await act(async () => latest.setParsed(draft));
+    await emitRoom(roomPayload(saved, "viewer"));
+    await settle(5000);
+
+    expect(latest.sync.activeRoomRole).toBe("viewer");
+    expect(latest.parsed?.tasks[0].label).toBe("Approved");
+    expect(snapshots).toEqual(["Unsaved edits replaced by the cloud room version"]);
+    expect(mocks.saveRoomDataAtomic).not.toHaveBeenCalled();
+    await emitRoom(roomPayload(saved, "editor"));
+    await settle(5000);
+    expect(mocks.saveRoomDataAtomic).not.toHaveBeenCalled();
   });
 
   it("applies a role change made by the owner", async () => {

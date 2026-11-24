@@ -1,8 +1,9 @@
-export type HapticStyle = "light" | "medium" | "success";
+export type HapticStyle = "light" | "medium" | "success" | "warning";
 
 const HAPTIC_PATTERNS: Record<HapticStyle, number[]> = {
-  light: [8],
-  medium: [14],
+  light: [10],
+  medium: [20],
+  warning: [35],
   success: [10, 30, 10]
 };
 

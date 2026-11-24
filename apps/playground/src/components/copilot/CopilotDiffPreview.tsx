@@ -4,6 +4,7 @@ import type { PlanDiff } from "../../services/ai/types";
 
 interface CopilotDiffPreviewProps {
   diff: PlanDiff;
+  blockedReason?: string;
   onAccept?: () => void;
   onReject?: () => void;
   onRevert?: () => void;
@@ -13,6 +14,7 @@ interface CopilotDiffPreviewProps {
 export const CopilotDiffPreview: React.FC<CopilotDiffPreviewProps> = ({
   diff,
   onAccept,
+  blockedReason,
   onReject,
   onRevert,
   applied
@@ -72,6 +74,7 @@ export const CopilotDiffPreview: React.FC<CopilotDiffPreviewProps> = ({
               {diff.tasksModified.map((item, idx) => (
                 <li key={idx} className="copilot-diff-item">
                   ~ {item.label} <span className="copilot-diff-fields">({item.changedFields.join(", ")})</span>
+                  {item.dateChanges?.map(change => <div key={change} className="diff-date-change">{change}</div>)}
                 </li>
               ))}
             </ul>
@@ -95,15 +98,16 @@ export const CopilotDiffPreview: React.FC<CopilotDiffPreviewProps> = ({
         )}
       </div>
 
+      {applied === undefined && onAccept && blockedReason && <p role="status">{blockedReason}</p>}
       {applied === undefined && onAccept && onReject && (
         <div className="copilot-diff-actions">
-          <button type="button" className="copilot-btn-accept" onClick={onAccept}>
+          <button type="button" className="copilot-btn-accept" disabled={Boolean(blockedReason)} onClick={onAccept}>
             <Check size={13} />
             <span>Apply Changes</span>
           </button>
           <button type="button" className="copilot-btn-reject" onClick={onReject}>
             <X size={13} />
-            <span>Dismiss</span>
+            <span>Discard</span>
           </button>
         </div>
       )}

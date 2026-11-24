@@ -178,7 +178,7 @@ describe("Theme Architecture & ThemeManager Subsystem", () => {
     const light = themeManager.getTheme("swiss-light");
     expect(light).toBeDefined();
     expect(light?.vars["--jantt-bg"]).toBe("#FFFFFF");
-    expect(light?.vars["--jantt-accent"]).toBe("#0284C7");
+    expect(light?.vars["--jantt-accent"]).toBe("#036A9E");
 
     const beenie = themeManager.getTheme("beenie");
     expect(beenie).toBeDefined();
@@ -186,7 +186,7 @@ describe("Theme Architecture & ThemeManager Subsystem", () => {
     expect(beenie?.label).toBe("Pink Beenie");
     expect(beenie?.mode).toBe("light");
     expect(beenie?.vars["--jantt-bg"]).toBe("#FFF5F8");
-    expect(beenie?.vars["--jantt-accent"]).toBe("#EC4899");
+    expect(beenie?.vars["--jantt-accent"]).toBe("#B51C68");
   });
 
   it("creates custom themes extending base tokens", () => {
@@ -220,7 +220,7 @@ describe("Theme Architecture & ThemeManager Subsystem", () => {
     expect(beenieDiv.classList.contains("jantt-theme-beenie")).toBe(true);
     expect(beenieDiv.getAttribute("data-theme")).toBe("beenie");
     expect(beenieDiv.style.getPropertyValue("--jantt-bg")).toBe("#FFF5F8");
-    expect(beenieDiv.style.getPropertyValue("--jantt-accent")).toBe("#EC4899");
+    expect(beenieDiv.style.getPropertyValue("--jantt-accent")).toBe("#B51C68");
   });
 });
 

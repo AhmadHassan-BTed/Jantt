@@ -1,4 +1,4 @@
-import type { JanttData, Task } from "@jantt/core";
+import { diffDays, isValidISODate, type JanttData, type Task } from "@jantt/core";
 import type { PlanDiff } from "./types";
 
 function getTaskLabel(task: Task): string {
@@ -25,20 +25,8 @@ export function computePlanDiff(oldPlan: JanttData | null, newPlan: JanttData): 
     }
 
     const changedFields: string[] = [];
-    const checkedKeys: Array<keyof Task> = [
-      "label",
-      "start",
-      "end",
-      "status",
-      "progress",
-      "priority",
-      "assignee",
-      "phase",
-      "category",
-      "dependsOn",
-      "milestone",
-      "notes"
-    ];
+    const checkedKeys = new Set([...Object.keys(prevTask), ...Object.keys(nextTask)]);
+    for (const stamp of ["updatedAt", "updatedBy", "fieldTimestamps"]) checkedKeys.delete(stamp);
 
     for (const key of checkedKeys) {
       const vOld = prevTask[key];
@@ -52,7 +40,12 @@ export function computePlanDiff(oldPlan: JanttData | null, newPlan: JanttData): 
       tasksModified.push({
         id: nextTask.id,
         label: getTaskLabel(nextTask),
-        changedFields
+        changedFields,
+        dateChanges: (["start", "end"] as const).filter(key => changedFields.includes(key)).map(key => {
+          const from = prevTask[key], to = nextTask[key];
+          const delta = isValidISODate(from) && isValidISODate(to) ? diffDays(from, to) : null;
+          return `${key === "start" ? "Start" : "Finish"} ${from} → ${to}${delta === null ? "" : ` (${delta > 0 ? "+" : ""}${delta}d)`}`;
+        })
       });
     }
   }
@@ -66,16 +59,15 @@ export function computePlanDiff(oldPlan: JanttData | null, newPlan: JanttData): 
 
   // Meta diff
   const metaChanged: string[] = [];
-  if (oldPlan?.meta && newPlan.meta) {
-    for (const k of ["title", "description", "start", "end", "budget", "currency", "scale"]) {
-      if ((oldPlan.meta as any)[k] !== (newPlan.meta as any)[k]) {
-        metaChanged.push(k);
-      }
-    }
+  const beforeMeta = oldPlan?.meta || {}, afterMeta = newPlan.meta || {};
+  const bookkeeping = new Set(["revision", "contentHash", "sync", "updatedAt", "tombstones"]);
+  for (const key of new Set([...Object.keys(beforeMeta), ...Object.keys(afterMeta)])) {
+    if (!bookkeeping.has(key) && JSON.stringify(beforeMeta[key]) !== JSON.stringify(afterMeta[key])) metaChanged.push(key);
   }
 
   const categoriesChanged = JSON.stringify(oldPlan?.categories || {}) !== JSON.stringify(newPlan.categories || {});
   const peopleChanged = JSON.stringify(oldPlan?.people || []) !== JSON.stringify(newPlan.people || []);
+  const otherUpdates = ["teams", "documents", "calendars"].filter(key => JSON.stringify(oldPlan?.[key]) !== JSON.stringify(newPlan[key]));
   const notesChanged = JSON.stringify(oldPlan?.notes || []) !== JSON.stringify(newPlan.notes || []);
 
   // Summary generation
@@ -88,6 +80,7 @@ export function computePlanDiff(oldPlan: JanttData | null, newPlan: JanttData): 
   if (peopleChanged) summaryParts.push("Updated people / teams");
   if (notesChanged) summaryParts.push("Updated notes");
 
+  for (const key of otherUpdates) summaryParts.push(`Updated ${key}`);
   const summary = summaryParts.length > 0 ? summaryParts.join(" • ") : "No structural differences detected";
 
   return {

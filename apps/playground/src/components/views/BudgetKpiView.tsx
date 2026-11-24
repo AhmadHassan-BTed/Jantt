@@ -14,7 +14,8 @@ import {
   Sparkles,
   BarChart3,
   Dice5,
-  X
+  X,
+  ChevronDown
 } from "lucide-react";
 import {
   type JanttData,
@@ -33,11 +34,15 @@ import {
 } from "@jantt/core";
 import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "../../types";
 import { isTaskMatchingPersonFilter } from "../../utils";
+import { ResourceLevelingPanel } from "./ResourceLevelingPanel";
+import "./health.css";
 import { EvmKpiCards, formatMoney, getPlanCurrency } from "./EvmKpiCards";
 import { ScheduleHealthCard } from "./ScheduleHealthCard";
-import { EvmSCurveChart } from "./EvmSCurveChart";
+import { EvmSCurveChart, computePlannedValueSeries } from "./EvmSCurveChart";
 import { tintColor } from "./KanbanView";
-import { MonteCarloModal } from "../modals/MonteCarloModal";
+const MonteCarloModal = React.lazy(() =>
+  import("../modals/MonteCarloModal").then(module => ({ default: module.MonteCarloModal }))
+);
 
 interface BudgetKpiViewProps {
   isMobile?: boolean;
@@ -58,6 +63,9 @@ interface BudgetKpiViewProps {
    * switches. Without it the view hosts the dialog itself.
    */
   onOpenMonteCarlo?: () => void;
+  onCommit?: (data: JanttData) => void;
+  readOnly?: boolean;
+  onPromptFork?: () => void;
 }
 
 type QuickFilter = "all" | "ready" | "blocked" | "bottleneck";
@@ -113,6 +121,9 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   selectedPersonFilter = "all",
   dateFilterBehavior = "dim",
   completedFilterMode = "show",
+  onCommit,
+  readOnly = false,
+  onPromptFork,
   onOpenMonteCarlo
 }) => {
   // Mode switcher: "essential" (simple/hobbyist/team lead) vs "advanced" (senior PM/EVM/audit)
@@ -120,11 +131,22 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
     const saved = storageService.getItem<{ viewMode?: string }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
     return saved?.viewMode === "advanced" ? "advanced" : "essential";
   });
+  const [taskLimit, setTaskLimit] = useState(40);
+  const [showScenarios, setShowScenarios] = useState(false);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(() => {
     const saved = storageService.getItem<{ quickFilter?: QuickFilter }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
     return saved?.quickFilter || "all";
   });
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
+  const [expandedEssentialKeys, setExpandedEssentialKeys] = useState<Set<string>>(() => new Set(["time", "budget"]));
+  const toggleEssentialKey = (key: string) => {
+    setExpandedEssentialKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const prev = storageService.getItem<Record<string, unknown>>(STORAGE_KEYS.SUMMARY_VIEW_STATE) || {};
@@ -223,11 +245,39 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   const daysToForecast = forecastFinish ? Math.max(0, diffDays(today, forecastFinish)) : 0;
   const daysLateVsTarget = forecastFinish && targetDate ? diffDays(targetDate, forecastFinish) : 0;
 
+  const budgetTrend = useMemo(() => {
+    if (!isMobile || viewMode !== "essential" || evm.bac <= 0) return null;
+    const series = computePlannedValueSeries(allProjectTasks);
+    if (!series || !series.bac) return null;
+    return series.points.map(point => `${point.dayIndex / series.totalDays * 100},${23 - point.pv / series.bac * 21}`).join(" ");
+  }, [allProjectTasks, evm.bac, viewMode, isMobile]);
+
+  const pathSpan = useMemo(() => {
+    let longest = 0;
+    for (const path of cpm.criticalPaths) {
+      const first = cpm.metrics.get(path[0]), last = cpm.metrics.get(path[path.length - 1]);
+      if (first && last) longest = Math.max(longest, diffDays(first.earlyStart, last.earlyFinish));
+    }
+    return longest;
+  }, [cpm]);
+
+  const slip = useMemo(() => {
+    const delays = allProjectTasks.flatMap(task => {
+      if (!task.baseline?.end || !isValidISODate(task.baseline.end) || !isValidISODate(task.end)) return [];
+      const days = diffDays(task.baseline.end, task.end);
+      return days > 0 ? [{ days, label: task.label || task.name || task.id }] : [];
+    }).sort((a, b) => b.days - a.days);
+    if (!delays.length) return null;
+    const top = delays.slice(0, 3);
+    const pct = Math.round(100 * top.reduce((sum, item) => sum + item.days, 0) / delays.reduce((sum, item) => sum + item.days, 0));
+    return { top, pct };
+  }, [allProjectTasks]);
   const isOverBudget = evm.bac > 0 && evm.ac > evm.bac;
   // Actual cost is unknown (not $0) when no task reports one, and cost performance is measured
   // only on budgeted tasks that report an actual cost (the same rule as the EVM cards).
   const isActualCostKnown = evm.costCoverage > 0 || evm.ac > 0;
   const isCostMeasured = evm.costDataAvailable && evm.costCoverage > 0;
+  const spentPercent = evm.bac > 0 && Number.isFinite(evm.ac) ? Math.round((evm.ac / evm.bac) * 100) : 0;
   const openMonteCarlo = onOpenMonteCarlo ?? (() => setShowMonteCarlo(true));
 
   const quickFilterButton = (id: QuickFilter, label: React.ReactNode, color: string, activeBg: string) => (
@@ -243,7 +293,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         borderRadius: "5px",
         border: "1px solid var(--jantt-border)",
         background: quickFilter === id ? activeBg : "var(--jantt-bg)",
-        color: quickFilter === id ? (id === "all" ? "var(--jantt-accent-contrast, #FFFFFF)" : "#FFFFFF") : color,
+        color: quickFilter === id ? "var(--jantt-accent-contrast, #FFFFFF)" : color,
         fontSize: "11px",
         fontWeight: 600,
         cursor: "pointer"
@@ -254,7 +304,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   );
 
   return (
-    <div className="summary-view-container">
+    <div className={`summary-view-container ${isMobile ? "handheld-health" : ""}`}>
       {/* SECTION SWITCHER: Clearly distinguishes Essential (Hobbyist) vs Advanced PM (Professional) */}
       <div className="summary-mode-bar">
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", width: isMobile ? "100%" : undefined }}>
@@ -282,10 +332,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         {/* Status pill summary & Monte Carlo Trigger */}
         <div className="summary-mode-status">
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-            <span>Pace: <strong style={{ color: evm.scheduleStatus === "ahead" ? "#10B981" : evm.scheduleStatus === "behind" ? "#EF4444" : "inherit" }}>{evm.scheduleStatus}</strong></span>
+            <span>Pace: <strong style={{ color: evm.scheduleStatus === "ahead" ? "var(--jantt-status-good)" : evm.scheduleStatus === "behind" ? "var(--jantt-status-bad)" : "inherit" }}>{evm.scheduleStatus}</strong></span>
             <span>•</span>
             {isCostMeasured ? (
-              <span>Spend: <strong style={{ color: evm.costStatus === "under-budget" ? "#10B981" : evm.costStatus === "over-budget" ? "#EF4444" : "inherit" }}>{evm.costStatus}</strong></span>
+              <span>Spend: <strong style={{ color: evm.costStatus === "under-budget" ? "var(--jantt-status-good)" : evm.costStatus === "over-budget" ? "var(--jantt-status-bad)" : "inherit" }}>{evm.costStatus}</strong></span>
             ) : (
               <span title={evm.costDataAvailable ? "No budgeted task reports an actualCost" : "No task has an estimatedCost"}>
                 Spend: <strong>n/a</strong>
@@ -293,100 +343,210 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             )}
           </div>
 
+          {onCommit && <button type="button" className="summary-monte-carlo-btn" aria-expanded={showScenarios}
+            onClick={() => setShowScenarios(open => !open)}><Layers size={14} />Schedule scenarios</button>}
           <button
             type="button"
             onClick={openMonteCarlo}
             className="summary-monte-carlo-btn"
             title="Run Monte Carlo Probabilistic Risk Simulation (2,000+ iterations)"
           >
-            <Dice5 size={14} style={{ color: "#F59E0B" }} />
-            <span>Monte Carlo Risk Analysis</span>
+            <Dice5 size={14} style={{ color: "var(--jantt-status-warn)" }} />
+            <span>{isMobile ? "Delivery risk" : "Monte Carlo Risk Analysis"}</span>
           </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
+      {showScenarios && onCommit && <ResourceLevelingPanel data={parsedData} onCommit={onCommit} readOnly={readOnly} onPromptFork={onPromptFork} />}
       {/* SECTION 1: ESSENTIAL MODE (For Everyday Hobbyists, Solo Devs & Management) */}
       {/* ========================================================================= */}
       {viewMode === "essential" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "20px" }}>
-          <div className="summary-kpi-grid">
-            {/* Card 1: Time Countdown */}
-            <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "var(--jantt-accent)", display: isMobile ? "none" : undefined }}>
-                <Clock size={20} />
-              </div>
-              <div className="kpi-data">
-                {isMobile ? <div className="kpi-card-head"><Clock size={14} style={{ color: "var(--jantt-accent)" }} /><span className="kpi-label">Time Remaining</span></div> : <span className="kpi-label">Time Remaining</span>}
-                <span className="kpi-value">{daysToForecast} Days</span>
-                <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  Forecast finish: {forecastFinish || "-"}
-                  {targetDate && <> • Target: {targetDate}</>}
-                  {daysLateVsTarget > 0 && (
-                    <strong style={{ color: "#EF4444", marginLeft: "6px" }}>{daysLateVsTarget}d late</strong>
-                  )}
-                </span>
-              </div>
-            </div>
-
-            {/* Card 2: Budget & Remaining Cash */}
-            <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "#10B981", display: isMobile ? "none" : undefined }}>
-                <DollarSign size={20} />
-              </div>
-              <div className="kpi-data">
-                {isMobile ? <div className="kpi-card-head"><DollarSign size={14} style={{ color: "#10B981" }} /><span className="kpi-label">Budget &amp; Spend</span></div> : <span className="kpi-label">Budget &amp; Spend</span>}
-                <span className="kpi-value">{evm.bac > 0 ? money(evm.bac) : "No budget set"}</span>
-                <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  {!isActualCostKnown ? (
-                    <>Spent: n/a (no actual costs reported)</>
+        <div className="health-essential" style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
+          <div className="kpi-accordion-list" role="region" aria-label="Essential Project Highlights">
+            {/* Row 1: Time Countdown */}
+            <div className={`kpi-accordion-item ${expandedEssentialKeys.has("time") ? "is-expanded" : ""}`}>
+              <button
+                type="button"
+                className="kpi-accordion-header"
+                onClick={() => toggleEssentialKey("time")}
+                aria-expanded={expandedEssentialKeys.has("time")}
+              >
+                <div className="kpi-accordion-lead">
+                  <div className="kpi-accordion-icon" style={{ background: "color-mix(in srgb, var(--jantt-accent) 15%, transparent)", color: "var(--jantt-accent)" }}>
+                    <Clock size={16} />
+                  </div>
+                  <div className="kpi-accordion-title-wrap">
+                    <span className="kpi-accordion-title">Time Remaining</span>
+                    <span className="kpi-accordion-subtitle">
+                      Forecast finish: {forecastFinish || "-"}
+                      {targetDate && ` · Target: ${targetDate}`}
+                    </span>
+                  </div>
+                </div>
+                <div className="kpi-accordion-trailing">
+                  <span className="kpi-accordion-value">{daysToForecast} Days</span>
+                  {daysLateVsTarget > 0 ? (
+                    <span className="kpi-accordion-badge" style={{ background: "color-mix(in srgb, var(--jantt-status-bad) 15%, transparent)", color: "var(--jantt-status-bad)" }}>
+                      {daysLateVsTarget}d late
+                    </span>
                   ) : (
-                    <>
-                      Spent: {money(evm.ac)}
-                      {evm.bac > 0 && (
-                        <>
-                          {" • "}
-                          {isOverBudget ? (
-                            <strong style={{ color: "#EF4444" }}>Over by {money(evm.ac - evm.bac)}</strong>
-                          ) : (
-                            <strong>{money(evm.bac - evm.ac)} left</strong>
-                          )}
-                        </>
-                      )}
-                    </>
+                    <span className="kpi-accordion-badge" style={{ background: "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)", color: "var(--jantt-status-good)" }}>
+                      On Track
+                    </span>
                   )}
-                </span>
-              </div>
+                  <ChevronDown size={14} className="kpi-accordion-chevron" />
+                </div>
+              </button>
+              {expandedEssentialKeys.has("time") && (
+                <div className="kpi-accordion-body">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
+                    <div><strong>Forecast Finish:</strong> {forecastFinish || "Not scheduled"}</div>
+                    <div><strong>Target Date:</strong> {targetDate || "None specified"}</div>
+                    <div><strong>Calendar Days Left:</strong> {daysToForecast} days</div>
+                    <div><strong>Schedule Slippage:</strong> {daysLateVsTarget > 0 ? `${daysLateVsTarget} days past target` : "None (on schedule)"}</div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Card 3: Overall Task Progress */}
-            <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "#3B82F6", display: isMobile ? "none" : undefined }}>
-                <CheckCircle2 size={20} />
-              </div>
-              <div className="kpi-data">
-                {isMobile ? <div className="kpi-card-head"><CheckCircle2 size={14} style={{ color: "#3B82F6" }} /><span className="kpi-label">Work Done</span></div> : <span className="kpi-label">Work Done</span>}
-                <span className="kpi-value">{evm.projectProgressPercent}%</span>
-                <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  {evm.taskCountCompleted} of {evm.taskCountTotal} tasks finished
-                </span>
-              </div>
+            {/* Row 2: Budget & Remaining Cash */}
+            <div className={`kpi-accordion-item ${expandedEssentialKeys.has("budget") ? "is-expanded" : ""}`}>
+              <button
+                type="button"
+                className="kpi-accordion-header"
+                onClick={() => toggleEssentialKey("budget")}
+                aria-expanded={expandedEssentialKeys.has("budget")}
+              >
+                <div className="kpi-accordion-lead">
+                  <div className="kpi-accordion-icon" style={{ background: "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)", color: "var(--jantt-status-good)" }}>
+                    <DollarSign size={16} />
+                  </div>
+                  <div className="kpi-accordion-title-wrap">
+                    <span className="kpi-accordion-title">Budget &amp; Spend</span>
+                    <span className="kpi-accordion-subtitle">
+                      {!isActualCostKnown ? "No actual costs reported" : `Spent: ${money(evm.ac)} (${spentPercent}%)`}
+                    </span>
+                  </div>
+                </div>
+                <div className="kpi-accordion-trailing">
+                  <span className="kpi-accordion-value">{evm.bac > 0 ? money(evm.bac) : "No budget set"}</span>
+                  <span
+                    className="kpi-accordion-badge"
+                    style={{
+                      background: isOverBudget ? "color-mix(in srgb, var(--jantt-status-bad) 15%, transparent)" : "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)",
+                      color: isOverBudget ? "var(--jantt-status-bad)" : "var(--jantt-status-good)"
+                    }}
+                  >
+                    {isOverBudget ? "Over Budget" : "Funded"}
+                  </span>
+                  <ChevronDown size={14} className="kpi-accordion-chevron" />
+                </div>
+              </button>
+              {expandedEssentialKeys.has("budget") && (
+                <div className="kpi-accordion-body">
+                  {budgetTrend && (
+                    <div style={{ marginBottom: "6px" }}>
+                      <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>Cumulative Planned Budget:</span>
+                      <svg className="budget-sparkline" viewBox="0 0 100 26" role="img" aria-label="Cumulative planned budget over the project" style={{ width: "100%", height: "30px", marginTop: "4px" }}>
+                        <polyline points={budgetTrend} fill="none" stroke="currentColor" strokeWidth="2" />
+                      </svg>
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
+                    <div><strong>Budget at Completion (BAC):</strong> {evm.bac > 0 ? money(evm.bac) : "n/a"}</div>
+                    <div><strong>Actual Cost (AC):</strong> {isActualCostKnown ? money(evm.ac) : "n/a"}</div>
+                    <div><strong>Cash Remaining:</strong> {evm.bac > 0 ? (isOverBudget ? `Over by ${money(evm.ac - evm.bac)}` : money(evm.bac - evm.ac)) : "n/a"}</div>
+                    <div><strong>Percent Spent:</strong> {spentPercent}%</div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Card 4: Bottleneck Tasks (least float) */}
-            <div className="summary-kpi-card">
-              <div className="kpi-icon-wrap" style={{ color: "var(--jantt-critical, #EF4444)", display: isMobile ? "none" : undefined }}>
-                <Layers size={20} />
-              </div>
-              <div className="kpi-data">
-                {isMobile ? <div className="kpi-card-head"><Layers size={14} style={{ color: "var(--jantt-critical, #EF4444)" }} /><span className="kpi-label">Bottleneck Tasks</span></div> : <span className="kpi-label">Bottleneck Tasks</span>}
-                <span className="kpi-value" style={{ color: "var(--jantt-critical, #EF4444)" }}>
-                  {cpm.criticalTaskIds.size} Tasks
-                </span>
-                <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  Least buffer: delaying these delays the finish
-                </span>
-              </div>
+            {/* Row 3: Overall Task Progress */}
+            <div className={`kpi-accordion-item ${expandedEssentialKeys.has("progress") ? "is-expanded" : ""}`}>
+              <button
+                type="button"
+                className="kpi-accordion-header"
+                onClick={() => toggleEssentialKey("progress")}
+                aria-expanded={expandedEssentialKeys.has("progress")}
+              >
+                <div className="kpi-accordion-lead">
+                  <div className="kpi-accordion-icon" style={{ background: "color-mix(in srgb, var(--jantt-status-info) 15%, transparent)", color: "var(--jantt-status-info)" }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div className="kpi-accordion-title-wrap">
+                    <span className="kpi-accordion-title">Work Done &amp; Progress</span>
+                    <span className="kpi-accordion-subtitle">
+                      {evm.taskCountCompleted} of {evm.taskCountTotal} tasks completed
+                    </span>
+                  </div>
+                </div>
+                <div className="kpi-accordion-trailing">
+                  <span className="kpi-accordion-value">{evm.projectProgressPercent}%</span>
+                  <span className="kpi-accordion-badge" style={{ background: "color-mix(in srgb, var(--jantt-status-info) 15%, transparent)", color: "var(--jantt-status-info)" }}>
+                    {evm.projectProgressPercent >= 100 ? "Completed" : "In Progress"}
+                  </span>
+                  <ChevronDown size={14} className="kpi-accordion-chevron" />
+                </div>
+              </button>
+              {expandedEssentialKeys.has("progress") && (
+                <div className="kpi-accordion-body">
+                  <div style={{ height: "6px", width: "100%", background: "var(--jantt-border)", borderRadius: "3px", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(100, evm.projectProgressPercent)}%`,
+                        background: "var(--jantt-status-info)"
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", marginTop: "6px" }}>
+                    <div><strong>Tasks Completed:</strong> {evm.taskCountCompleted}</div>
+                    <div><strong>Tasks Remaining:</strong> {evm.taskCountTotal - evm.taskCountCompleted}</div>
+                    <div><strong>Total Tasks in Plan:</strong> {evm.taskCountTotal}</div>
+                    <div><strong>Schedule Pace:</strong> {evm.scheduleStatus}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Row 4: Bottleneck Tasks */}
+            <div className={`kpi-accordion-item ${expandedEssentialKeys.has("bottlenecks") ? "is-expanded" : ""}`}>
+              <button
+                type="button"
+                className="kpi-accordion-header"
+                onClick={() => toggleEssentialKey("bottlenecks")}
+                aria-expanded={expandedEssentialKeys.has("bottlenecks")}
+              >
+                <div className="kpi-accordion-lead">
+                  <div className="kpi-accordion-icon" style={{ background: "color-mix(in srgb, var(--jantt-status-bad) 15%, transparent)", color: "var(--jantt-status-bad)" }}>
+                    <Layers size={16} />
+                  </div>
+                  <div className="kpi-accordion-title-wrap">
+                    <span className="kpi-accordion-title">Bottleneck Tasks (Critical Chain)</span>
+                    <span className="kpi-accordion-subtitle">
+                      {pathSpan} calendar days on critical path · {formatFloatLabel(cpm.projectTotalFloat)}
+                    </span>
+                  </div>
+                </div>
+                <div className="kpi-accordion-trailing">
+                  <span className="kpi-accordion-value" style={{ color: "var(--jantt-status-bad)" }}>
+                    {cpm.criticalTaskIds.size} Tasks
+                  </span>
+                  <ChevronDown size={14} className="kpi-accordion-chevron" />
+                </div>
+              </button>
+              {expandedEssentialKeys.has("bottlenecks") && (
+                <div className="kpi-accordion-body">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
+                    <div><strong>Critical Tasks (0 Slack):</strong> {cpm.criticalTaskIds.size}</div>
+                    <div><strong>Longest Critical Path:</strong> {pathSpan} calendar days</div>
+                    <div><strong>Project Total Float:</strong> {formatFloatLabel(cpm.projectTotalFloat)}</div>
+                    <div><strong>Float Description:</strong> {describeFloatForPeople(cpm.projectTotalFloat)}</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -416,8 +576,8 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                 <PlayCircle size={12} />
                 <span>Ready to Start ({readyTaskIds.size})</span>
               </>,
-              "#10B981",
-              "#10B981"
+              "var(--jantt-status-good)",
+              "var(--jantt-status-good)"
             )}
             {quickFilterButton(
               "blocked",
@@ -425,8 +585,8 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                 <AlertTriangle size={12} />
                 <span>Blocked Tasks ({blockedTaskIds.size})</span>
               </>,
-              "#F59E0B",
-              "#F59E0B"
+              "var(--jantt-status-warn)",
+              "var(--jantt-status-warn)"
             )}
             {quickFilterButton(
               "bottleneck",
@@ -434,8 +594,8 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                 <Layers size={12} />
                 <span>Critical Bottlenecks ({cpm.criticalTaskIds.size})</span>
               </>,
-              "var(--jantt-critical, #EF4444)",
-              "var(--jantt-critical, #EF4444)"
+              "var(--jantt-status-bad)",
+              "var(--jantt-status-bad)"
             )}
           </div>
         </div>
@@ -460,6 +620,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
       {/* ========================================================================= */}
       {/* WORK BREAKDOWN & METRICS TABLE (Adaptable to Active Mode)                 */}
       {/* ========================================================================= */}
+      {slip && <details className="health-slippage">
+        <summary>{slip.top.length} {slip.top.length === 1 ? "task accounts" : "tasks account"} for {slip.pct}% of late task-days</summary>
+        <ul>{slip.top.map((item, index) => <li key={index}>{item.label}<strong>+{item.days}d</strong></li>)}</ul>
+        <small>Compared with each task’s baseline finish.</small>
+      </details>}
       <div className="summary-breakdown-card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
           <h3 style={{ fontSize: "14px", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
@@ -518,13 +683,13 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               <option value="wbs">WBS</option><option value="name">Name</option><option value="buffer">Float / Wiggle Room</option><option value="budget">Budget</option><option value="status">Status</option><option value="progress">Progress</option>
             </select>
             <div className="summary-mobile-card-list">
-              {displayTasks.map((task) => {
+              {displayTasks.slice(0, taskLimit).map((task) => {
                 const metric = cpm.metrics.get(task.id);
                 const completed = isTaskDone(task);
                 const progress = completed ? 100 : Math.round(Math.min(1, Math.max(0, Number(task.progress) || 0)) * 100);
                 const blocked = blockedTaskIds.has(task.id);
                 const critical = Boolean(metric?.isCritical);
-                return <article className="summary-mobile-card" key={task.id}>
+                return <article className={`summary-mobile-card ${metric?.totalFloat === 0 ? "zero-float" : ""}`} key={task.id}>
                   <div className="summary-mobile-card-top">
                     <span className="kanban-wbs-badge">{task.wbs || "-"}</span>
                     <span className="summary-mobile-card-title">{task.label || task.name || task.id}</span>
@@ -537,6 +702,9 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                 </article>;
               })}
             </div>
+            {taskLimit < displayTasks.length && <button type="button" className="health-more-tasks" onClick={() => setTaskLimit(current => current + 40)}>
+              Show {Math.min(40, displayTasks.length - taskLimit)} more tasks
+            </button>}
           </>
         )}
         {!isMobile && <table className="summary-table">
@@ -605,12 +773,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                 tf === undefined
                   ? "var(--jantt-text-muted)"
                   : tf < 0
-                  ? "#EF4444"
+                  ? "var(--jantt-status-bad)"
                   : isCrit
-                  ? "var(--jantt-critical, #EF4444)"
+                  ? "var(--jantt-status-bad)"
                   : isNearCrit
-                  ? "#F59E0B"
-                  : "#10B981";
+                  ? "var(--jantt-status-warn)"
+                  : "var(--jantt-status-good)";
 
               return (
                 <tr key={t.id} className={`${isCompleted ? "summary-row-completed" : ""} ${isDimmed ? "summary-row-dimmed" : ""}`.trim()}>
@@ -626,9 +794,9 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                             fontWeight: 800,
                             padding: "1px 5px",
                             borderRadius: "4px",
-                            background: tintColor("var(--jantt-critical, #EF4444)", 12),
-                            color: "var(--jantt-critical, #EF4444)",
-                            border: `1px solid ${tintColor("var(--jantt-critical, #EF4444)", 25)}`,
+                            background: tintColor("var(--jantt-status-bad)", 12),
+                            color: "var(--jantt-status-bad)",
+                            border: `1px solid ${tintColor("var(--jantt-status-bad)", 25)}`,
                             textTransform: "uppercase"
                           }}
                         >
@@ -644,7 +812,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                             padding: "1px 5px",
                             borderRadius: "4px",
                             background: "#10B98120",
-                            color: "#10B981",
+                            color: "var(--jantt-status-good)",
                             border: "1px solid #10B98140"
                           }}
                         >
@@ -660,7 +828,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                             padding: "1px 5px",
                             borderRadius: "4px",
                             background: "#F59E0B20",
-                            color: "#F59E0B",
+                            color: "var(--jantt-status-warn)",
                             border: "1px solid #F59E0B40"
                           }}
                         >
@@ -767,8 +935,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         </table>}
       </div>
 
-      {!onOpenMonteCarlo && (
-        <MonteCarloModal show={showMonteCarlo} onClose={() => setShowMonteCarlo(false)} parsedData={parsedData} />
+      {!onOpenMonteCarlo && showMonteCarlo && (
+        <React.Suspense fallback={<p role="status">Loading simulation…</p>}>
+          <MonteCarloModal show onClose={() => setShowMonteCarlo(false)} parsedData={parsedData} />
+        </React.Suspense>
       )}
     </div>
   );

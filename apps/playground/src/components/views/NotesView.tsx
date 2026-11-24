@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type { JanttData, NoteItem, Task, Team } from "@jantt/core";
 import type { EffectivePerson } from "../../types";
+import { commandBus } from "../../services/bus";
 import { storageService } from "../../services/storage";
 import { STORAGE_KEYS } from "../../constants";
 import {
@@ -29,6 +30,7 @@ interface NotesViewProps {
   isViewer?: boolean;
   onPromptFork?: () => void;
   activeProjectId?: string;
+  registerNoteBack?: (close: (() => void) | null) => void;
 }
 
 export const NotesView: React.FC<NotesViewProps> = ({
@@ -38,6 +40,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   teams = [],
   isViewer = false,
   onPromptFork,
+  registerNoteBack,
   activeProjectId = "default"
 }) => {
   const notes: NoteItem[] = useMemo(
@@ -183,6 +186,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setSaveStatus("saved");
   }, [commitNoteChanges]);
 
+  useEffect(() => commandBus.on("FLUSH_NOTE_DRAFT", () => {
+    if (pendingRef.current) flushPendingSave();
+  }), [flushPendingSave]);
+
   const scheduleSave = useCallback(
     (noteId: string, patch: NotePatch) => {
       const prev = pendingRef.current;
@@ -269,7 +276,12 @@ export const NotesView: React.FC<NotesViewProps> = ({
     [flushPendingSave, setActiveNoteId]
   );
 
-  const handleBackToGallery = () => handleSelectNote(null);
+  const handleBackToGallery = useCallback(() => handleSelectNote(null), [handleSelectNote]);
+  useEffect(() => {
+    if (!activeNoteKey || !registerNoteBack) return;
+    registerNoteBack(handleBackToGallery);
+    return () => registerNoteBack(null);
+  }, [activeNoteKey, handleBackToGallery, registerNoteBack]);
 
   // Create a fresh note
   const handleCreateNote = () => {

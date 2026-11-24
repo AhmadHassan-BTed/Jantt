@@ -79,6 +79,23 @@ describe("trackRoomPresence", () => {
     expect(Object.values(db.values.get(PATH) as object)).not.toContain(undefined);
   });
 
+  it("updates and clears the inspected task while retaining room membership and join time", async () => {
+    let select: (taskId: string | null) => void = () => {};
+    const unsubscribe = vi.fn();
+    const stop = trackRoomPresence("room_1", user, publish => { select = publish; return unsubscribe; });
+    db.connect();
+    await flush();
+    const joinedAt = (db.values.get(PATH) as { joinedAt: string }).joinedAt;
+    select("first-task");
+    expect(db.values.get(PATH)).toMatchObject({ inspectedTaskId: "first-task", joinedAt });
+    select(null);
+    expect(db.values.get(PATH)).not.toHaveProperty("inspectedTaskId");
+    stop();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    select("stale-task");
+    expect(db.values.has(PATH)).toBe(false);
+  });
+
   it("restores presence another tab of the same user removed", async () => {
     trackRoomPresence("room_1", user);
     db.connect();

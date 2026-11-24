@@ -1,0 +1,14 @@
+.room-avatar-stack { display: inline-flex; align-items: center; isolation: isolate; padding-inline-start: 3px; }
+.room-avatar-ring, .room-avatar-overflow { display: grid; place-items: center; width: 21px; height: 21px; margin-inline-start: -3px; border: 2px solid var(--jantt-border); border-radius: 50%; background: var(--jantt-surface-solid); color: var(--jantt-text); font: 650 10px/1 system-ui; }
+.room-avatar-ring img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.room-qr { margin: 6px 0 12px; }
+.room-qr summary { min-height: 44px; align-content: center; color: var(--jantt-accent); cursor: pointer; }
+.room-qr svg { display: block; margin: 6px auto 14px; border-radius: 6px; }
+.task-presence-tag, [data-room-inspector]::after { display: inline-flex; align-items: center; gap: 6px; align-self: start; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-radius: 5px; padding: 3px 6px; background: var(--jantt-surface-solid); color: var(--jantt-text); font: 600 11px/1.2 system-ui; }
+.task-presence-tag i { width: 7px; height: 7px; flex: none; border-radius: 50%; }
+.kanban-card:has(.task-presence-tag), .today-card:has(.task-presence-tag), .tasks-todo-row:has(.task-presence-tag), [data-room-inspector] { outline: 2px solid var(--jantt-accent); outline-offset: -1px; }
+[data-room-inspector]::after { content: attr(data-room-inspector); position: absolute; inset-inline-end: 1px; top: 0; pointer-events: none; }
+
+.room-fork-setting { display:flex; gap:10px; align-items:center; margin-block:10px; min-height:44px; font-size:13px; }
+.room-fork-setting input { width:20px; height:20px; flex:none; accent-color:var(--jantt-accent); }
+.room-fork-setting small { display:block; margin-top:3px; color:var(--jantt-text-muted); }

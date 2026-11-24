@@ -20,7 +20,7 @@ export const sunsetCrimsonTheme: ThemeDefinition = {
     "--jantt-text-dim": "#FB923C",
     "--jantt-accent": "#F97316",
     "--jantt-accent-glow": "rgba(249, 115, 22, 0.4)",
-    "--jantt-accent-contrast": "#FFFFFF",
+    "--jantt-accent-contrast": "#271006",
     "--jantt-today": "#38BDF8",
     "--jantt-critical": "#E11D48",
     "--jantt-critical-glow": "rgba(225, 29, 72, 0.4)",

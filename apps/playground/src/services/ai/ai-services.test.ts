@@ -18,8 +18,6 @@ import {
   setApiKey,
   getModelForProvider,
   setModelForProvider,
-  getAutoApply,
-  setAutoApply,
   clearAllCopilotStorage
 } from "./storage";
 
@@ -200,6 +198,29 @@ Full schedule:
     expect(t2?.progress).toBe(1.0);
     expect(t2?.category).toBe("des"); // preserved from master!
   });
+  it("preserves omitted task data and literal punctuation when a model echoes a condensed plan", () => {
+    const task = { id: "a", category: "work", start: "2026-01-01", end: "2026-01-10", estimatedCost: 350 };
+    const source = { tasks: [task, { ...task, id: "b" }], meta: { revision: 7 },
+      customReport: { owner: "Alex" } };
+    const updated = extractJsonFromResponse(JSON.stringify({
+      meta: { revision: 1, tombstones: { b: {} } },
+      tasks: [{ id: "a", notes: "See /* draft */ and literal ,} // annotations" }, { ...task, id: "c" }]
+    }), source).data!;
+    expect(updated.tasks.map(t => t.id)).toEqual(["a", "b", "c"]);
+    expect(updated.tasks[0]).toMatchObject({ ...task, notes: "See /* draft */ and literal ,} // annotations" });
+    expect(updated.customReport).toEqual(source.customReport);
+    expect(updated.meta).toEqual(source.meta);
+  });
+
+  it("removes only explicitly deleted tasks and records canonical tombstones and dependency cleanup", () => {
+    const task = { id: "a", category: "work", start: "2026-01-01", end: "2026-01-10" };
+    const source = { tasks: [task, { ...task, id: "b", dependsOn: "a" }, { ...task, id: "c", _deleted: true }] };
+    const updated = extractJsonFromResponse(JSON.stringify({ tasks: [{ id: "a", _deleted: true }] }), source).data!;
+    expect(updated.tasks.map(t => t.id)).toEqual(["b", "c"]);
+    expect(updated.tasks[0].dependsOn).toBeNull();
+    expect(updated.meta?.tombstones?.a.entityType).toBe("task");
+  });
+
 });
 
 describe("AI Copilot - plan-differ", () => {
@@ -306,14 +327,6 @@ describe("AI Copilot - storage", () => {
   it("persists model selection per provider", () => {
     setModelForProvider("gemini", "gemini-2.5-pro");
     expect(getModelForProvider("gemini", "gemini-2.5-flash")).toBe("gemini-2.5-pro");
-  });
-
-  it("persists auto-apply preference (defaults to true for seamless live editing)", () => {
-    expect(getAutoApply()).toBe(true);
-    setAutoApply(false);
-    expect(getAutoApply()).toBe(false);
-    setAutoApply(true);
-    expect(getAutoApply()).toBe(true);
   });
 });
 

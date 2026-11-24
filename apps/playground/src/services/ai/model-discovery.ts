@@ -12,6 +12,7 @@ export interface DiscoveredModelsCacheEntry {
 }
 
 export interface ModelDiscoveryResult {
+  latencyMs?: number;
   models: ModelDefinition[];
   source: "live" | "cache" | "fallback";
   fetchedAt: number | null;

@@ -401,6 +401,9 @@ export function layout(
   const linkRouting: LinkRoutingStyle = viewport.linkRouting;
   const dependencies: DependencyLine[] = [];
 
+  // A range query gives the extent of intervening bars in logarithmic time, even for long links.
+  const obstacles = linkRouting === "curved" && taskLayouts.length > 2 ? rowObstacles(taskLayouts) : null;
+
   tasks.forEach((task, rowIndex) => {
     // Laid-out ids resolve ids that look like lag shorthand ("render-3d" is a task, not "render" - 3d)
     const relations = getTaskDependencyRelations(task, layoutById);
@@ -428,7 +431,8 @@ export function layout(
         viewport.rowHeight,
         linkRouting,
         fromStart ? "start" : "end",
-        toEnd ? "end" : "start"
+        toEnd ? "end" : "start",
+        obstacles?.(prereq.rowIndex, curr.rowIndex)
       );
       const isCritical = criticalDepKeys.has(`${prereq.task.id}->${curr.task.id}`);
 
@@ -616,6 +620,48 @@ function getWeekNumber(date: Date): number {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
+interface BarExtents { left: number; right: number }
+
+/** Query the rows strictly between two linked tasks. The tree is only built for curved routing. */
+function rowObstacles(rows: TaskLayout[]) {
+  let size = 1;
+  while (size < rows.length) size *= 2;
+  const lefts = new Float64Array(size * 2).fill(Infinity);
+  const rights = new Float64Array(size * 2).fill(-Infinity);
+  for (const row of rows) {
+    lefts[size + row.rowIndex] = row.anchorInX ?? row.x;
+    rights[size + row.rowIndex] = row.anchorOutX ?? row.x + row.width;
+  }
+  for (let index = size - 1; index > 0; --index) {
+    lefts[index] = Math.min(lefts[index * 2], lefts[index * 2 + 1]);
+    rights[index] = Math.max(rights[index * 2], rights[index * 2 + 1]);
+  }
+  return (a: number, b: number): BarExtents | undefined => {
+    let start = size + Math.min(a, b) + 1, end = size + Math.max(a, b);
+    if (start >= end) return undefined;
+    let left = Infinity, right = -Infinity;
+    while (start < end) {
+      if (start % 2) { left = Math.min(left, lefts[start]); right = Math.max(right, rights[start++]); }
+      if (end % 2) { --end; left = Math.min(left, lefts[end]); right = Math.max(right, rights[end]); }
+      start = Math.floor(start / 2); end = Math.floor(end / 2);
+    }
+    return { left, right };
+  };
+}
+
+/** Round the turns of a clear route without leaving the gutter around each bar. */
+function roundedRoute(points: [number, number][]) {
+  let path = `M ${points[0][0]} ${points[0][1]}`;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [x, y] = points[i], [prevX, prevY] = points[i - 1], [nextX, nextY] = points[i + 1];
+    const radius = Math.min(4, Math.hypot(prevX - x, prevY - y) / 2, Math.hypot(nextX - x, nextY - y) / 2);
+    path += ` L ${x + Math.sign(prevX - x) * radius} ${y + Math.sign(prevY - y) * radius}`;
+    path += ` Q ${x} ${y} ${x + Math.sign(nextX - x) * radius} ${y + Math.sign(nextY - y) * radius}`;
+  }
+  const [x, y] = points[points.length - 1];
+  return `${path} L ${x} ${y}`;
+}
+
 /** Which edge of a bar a dependency wire is attached to. */
 export type DependencyAnchorSide = "start" | "end";
 
@@ -637,7 +683,8 @@ export function computeDependencyPath(
   rowHeight = 46,
   style: LinkRoutingStyle = "orthogonal",
   fromSide: DependencyAnchorSide = "end",
-  toSide: DependencyAnchorSide = "start"
+  toSide: DependencyAnchorSide = "start",
+  obstacles?: BarExtents
 ): string {
   if (Math.abs(toX - fromX) < 2 && Math.abs(toY - fromY) < 2) {
     return "";
@@ -646,6 +693,18 @@ export function computeDependencyPath(
   // Horizontal travel direction when leaving the predecessor and when arriving at the successor.
   const outDir = fromSide === "end" ? 1 : -1;
   const inDir = toSide === "start" ? 1 : -1;
+
+  if (style === "curved" && obstacles) {
+    const exit = fromX + outDir * 9, entry = toX - inDir * 9;
+    if (Math.max(exit, entry) + 8 >= obstacles.left && Math.min(exit, entry) - 8 <= obstacles.right) {
+      const leftRail = obstacles.left - 8, rightRail = obstacles.right + 8;
+      const travel = (x: number) => Math.abs(exit - x) + Math.abs(entry - x);
+      const rail = leftRail >= 2 && travel(leftRail) < travel(rightRail) ? leftRail : rightRail;
+      const step = Math.sign(toY - fromY) * rowHeight / 2;
+      return roundedRoute([[fromX, fromY], [exit, fromY], [exit, fromY + step], [rail, fromY + step],
+        [rail, toY - step], [entry, toY - step], [entry, toY], [toX, toY]]);
+    }
+  }
 
   // SS / FF: both anchors face the same way, so wrap around the outer edge on a vertical rail
   // that clears both bars.

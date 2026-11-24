@@ -1,6 +1,8 @@
-import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { closeTopModal, useTopModalId } from "./components/modals/ModalHost";
+import { QuickCapture } from "./components/modals/QuickCapture";
+import React, { useMemo, useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import { RefreshCw, WifiOff, X } from "lucide-react";
-import { validate, type JanttData, type Task, type TimeScale } from "@jantt/core";
+import { themeManager, validate, type JanttData, type Task, type TimeScale } from "@jantt/core";
 
 import type { SavedProject } from "./types";
 import {
@@ -58,7 +60,6 @@ import {
   MobileNavbar,
   MobileBottomNav,
   MobileQuickFab,
-  OrientationBanner,
   ReadOnlyForkModal,
   EditorLoginModal,
   CommandPalette,
@@ -78,6 +79,7 @@ const IMPORT_ACCEPT = ".json,.xml,.xer,.csv,application/json,text/xml,text/csv";
 /** Timeline zoom ladder used by the +, - and 0 shortcuts (finest first). */
 const ZOOM_SCALES: TimeScale[] = ["day", "week", "month", "quarter", "year"];
 const DEFAULT_ZOOM_SCALE: TimeScale = "week";
+const RiskDialog = React.lazy(() => import("./components/modals/MonteCarloModal").then(module => ({ default: module.MonteCarloModal })));
 
 /** Any open dialog, sheet, drawer or Navbar popover: single-key shortcuts must not act behind it. */
 const OPEN_DIALOG_SELECTOR =
@@ -101,8 +103,8 @@ function isDialogOpen(): boolean {
 type PendingConfirm = Omit<ConfirmDialogProps, "onCancel">;
 
 export function App() {
-  const init = useMemo(() => loadInitialState(), []);
   const mobile = useMobileDetection();
+  const [init] = useState(() => loadInitialState(mobile.isMobile));
   const platform = useAppPlatform(mobile.isMobile);
   useVisualViewport();
 
@@ -113,9 +115,15 @@ export function App() {
   const [showReadOnlyForkModal, setShowReadOnlyForkModal] = useState(false);
   const [showEditorLoginModal, setShowEditorLoginModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showRisk, setShowRisk] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [showCopilot, setShowCopilot] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [inspectedTaskId, setInspectedTaskId] = useState<string | null>(null);
+  const [noteBack, setNoteBack] = useState<(() => void) | null>(null);
+  const registerNoteBack = useCallback((close: (() => void) | null) => setNoteBack(() => close), []);
+  const [captureExpanded, setCaptureExpanded] = useState(false);
+  const [capture, setCapture] = useState<{ milestone: boolean; status?: string } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
 
@@ -176,9 +184,9 @@ export function App() {
       const { isViewer: viewer, isPendingLoginEditor: pending } = readOnlyRef.current;
       if (viewer || pending) {
         promptRestrictedRef.current();
-        return;
+        return null;
       }
-      handleChartCommit(next);
+      return handleChartCommit(next);
     },
     [handleChartCommit]
   );
@@ -196,8 +204,10 @@ export function App() {
     initialView: init.initialView
   });
 
-  // Android status bar and gesture navigation bar follow the selected Jantt theme.
-  useEffect(() => {
+  // Keep the overscroll canvas, detached sheets and browser chrome in the workspace theme.
+  useLayoutEffect(() => {
+    themeManager.applyTheme(document, viewport.activeTheme.id);
+    document.documentElement.style.colorScheme = viewport.activeTheme.mode;
     syncThemeColorMeta(viewport.activeTheme.mode, viewport.activeTheme.vars["--jantt-bg"]);
   }, [viewport.activeTheme]);
 
@@ -302,6 +312,7 @@ export function App() {
 
   // Auto-Save Engine with Configurable Cadence, Collision Check, and Cross-Tab Broadcast
   const autoSave = useAutoSave({
+    flushEditorDraft: editor.flushEditorDraft,
     jsonText: editor.jsonText,
     parsedData: editor.parsedData,
     activeProjectId: project.activeProjectId,
@@ -318,6 +329,10 @@ export function App() {
 
   /** Persists pending edits of the current plan; call before any switch of the active plan. */
   const flushPendingSave = useCallback(() => commandBus.emit("FLUSH_SAVE", undefined), []);
+  const applySavedUpdate = () => {
+    if (autoSave.prepareReload()) platform.applyUpdate();
+    else toast.showToast("Update deferred. Save your changes or correct the JSON before refreshing.", true);
+  };
 
   /**
    * Applies one plan-list change to storage (read-modify-write of the latest stored list, so
@@ -336,6 +351,7 @@ export function App() {
 
   // Firebase Realtime Database cloud room sync (the active room, its presence and deep links)
   const roomSync = useRoomSync({
+    inspectedTaskId,
     customProjects: project.customProjects,
     setCustomProjects: project.setCustomProjects,
     activeProjectId: project.activeProjectId,
@@ -412,6 +428,10 @@ export function App() {
   // 1-Click Fork: Make a private local copy so viewers can edit freely
   const { activeProject, handleForkToLocalPlan, handleCreateLocalCopyFromData } = project;
   const handleForkToLocalCopy = useCallback(() => {
+    if (!roomSync.allowViewerForks && isReadOnly) {
+      toast.showToast("The room owner has disabled local copies.", true);
+      return;
+    }
     if (activeProject) {
       // Copies the live editor data, flushes the plan being left and opens the copy (URL included).
       handleForkToLocalPlan();
@@ -422,7 +442,7 @@ export function App() {
     }
     setShowReadOnlyForkModal(false);
     setShowEditorLoginModal(false);
-  }, [activeProject, handleForkToLocalPlan, handleCreateLocalCopyFromData, editor.parsedData, activeRoomTitle]);
+  }, [activeProject, handleForkToLocalPlan, handleCreateLocalCopyFromData, editor.parsedData, activeRoomTitle, roomSync.allowViewerForks, isReadOnly, toast.showToast]);
 
   // Handlers for Cloud Rooms & User Hub
   /**
@@ -659,6 +679,7 @@ export function App() {
 
   // Task Actions, Multi-Sort Engines, and View Filters
   const tasks = useTaskActions({
+    compact: mobile.isMobile,
     parsedData: editor.parsedData,
     setParsedData: editor.setParsedData,
     setJsonText: editor.setJsonText,
@@ -677,6 +698,7 @@ export function App() {
 
   // Interactive Slide-Out Task Detail Drawer
   const taskDetail = useTaskDetailSidebar({
+    onInspectTask: setInspectedTaskId,
     parsedData: editor.parsedData,
     activeTheme: viewport.activeTheme,
     activeView: viewport.activeView,
@@ -688,6 +710,7 @@ export function App() {
 
   // AI Copilot Live Assistant
   const copilot = useCopilot({
+    projectId: project.activeProjectId, activeView: viewport.activeView, inspectedTaskId,
     parsedData: editor.parsedData,
     commitPlan,
     showToast: toast.showToast,
@@ -1036,7 +1059,16 @@ export function App() {
     [editor.parsedData?.notes]
   );
 
+  useEffect(() => { setCaptureExpanded(false); setCapture(null); }, [viewport.activeView, project.activeProjectId, isReadOnly]);
+
+  const remotePresence = useMemo(() => roomSync.onlineUsers.filter(user => user.uid !== auth.currentUser?.uid), [roomSync.onlineUsers, auth.currentUser?.uid]);
+  const roomConnection = !platform.isOnline || roomSync.syncStatus === "offline" ? "Offline" :
+    { idle: "Connecting", syncing: "Syncing", "in-sync": "Connected", merged: "Connected", conflict: "Conflict", error: "Sync error" }[roomSync.syncStatus];
+  const topModalId = useTopModalId();
   const isAnyOverlayOpen =
+    Boolean(topModalId) ||
+    showRisk ||
+    capture !== null ||
     isMobileMenuOpen ||
     showCopilot ||
     taskDetail.isTaskDetailOpen ||
@@ -1058,6 +1090,9 @@ export function App() {
     auth.showVerificationModal;
 
   const backNavigationOverlays: BackNavigationOverlay[] = [
+    { id: "note-editor", isOpen: mobile.isMobile && Boolean(noteBack), close: () => noteBack?.() },
+    { id: "capture-menu", isOpen: captureExpanded, close: () => setCaptureExpanded(false) },
+    { id: "quick-capture", isOpen: Boolean(capture), close: () => setCapture(null) },
     { id: "mobile-menu", isOpen: mobile.isMobile && isMobileMenuOpen, close: () => setIsMobileMenuOpen(false) },
     { id: "copilot", isOpen: showCopilot, close: () => setShowCopilot(false) },
     {
@@ -1088,7 +1123,8 @@ export function App() {
     { id: "verification", isOpen: auth.showVerificationModal, close: () => auth.setShowVerificationModal(false) },
     { id: "command-palette", isOpen: showCommandPalette, close: () => setShowCommandPalette(false) },
     { id: "shortcuts", isOpen: showShortcutsModal, close: () => setShowShortcutsModal(false) },
-    { id: "confirm", isOpen: pendingConfirm !== null, close: () => setPendingConfirm(null) }
+    { id: "confirm", isOpen: pendingConfirm !== null, close: () => setPendingConfirm(null) },
+    { id: `modal-${topModalId}`, isOpen: Boolean(topModalId), close: closeTopModal }
   ];
   useAndroidBackNavigation(backNavigationOverlays, mobile.isMobile || platform.isStandalone);
 
@@ -1121,6 +1157,7 @@ export function App() {
 
       {mobile.isMobile ? (
         <MobileNavbar
+          onSearch={() => setShowCommandPalette(true)}
           variant={mobile.isImmersiveLandscape ? "floating" : "bar"}
           activePlanName={activePlanName}
           handleOpenAddPlanModal={project.handleOpenAddPlanModal}
@@ -1151,7 +1188,10 @@ export function App() {
           onOpenEditorLogin={() => setShowEditorLoginModal(true)}
           onPromptFork={() => setShowReadOnlyForkModal(true)}
           cloudPanel={renderCloudPanel}
-          cloudStatusLabel={roomSync.activeRoomId ? `Live • ${roomRoleLabel}` : "Local plan"}
+          cloudStatusLabel={roomSync.activeRoomId ? `${roomConnection} · ${roomRoleLabel}` : "Local plan"}
+          roomConnection={roomConnection}
+          onUndo={undoRedo.canUndo && !isReadOnly ? undoRedo.undo : undefined}
+          onRedo={undoRedo.canRedo && !isReadOnly ? undoRedo.redo : undefined}
           isSigningIn={auth.isSigningIn}
           activeView={viewport.activeView}
           notesCount={notesCount}
@@ -1159,17 +1199,17 @@ export function App() {
           isMenuOpen={isMobileMenuOpen}
           onMenuOpenChange={setIsMobileMenuOpen}
           isOnline={platform.isOnline}
-          isCopilotOpen={showCopilot}
           updateAvailable={platform.updateAvailable}
           canInstall={platform.canInstall}
           isIosSafari={platform.isIosSafari}
           isStandalone={platform.isStandalone}
           onInstall={platform.promptInstall}
-          onApplyUpdate={platform.applyUpdate}
+          onApplyUpdate={applySavedUpdate}
           appModeLabel={platform.isTwa ? "Android App" : platform.isStandalone ? "Standalone App" : "Web"}
         />
       ) : (
         <Navbar
+          onlineUsers={roomSync.onlineUsers}
           saveStatus={autoSave.saveStatus}
           lastSavedAt={autoSave.lastSavedAt}
           autoSaveInterval={autoSave.autoSaveInterval}
@@ -1224,26 +1264,20 @@ export function App() {
         />
       )}
 
-      {/* Suggest landscape orientation on mobile portrait for Gantt view */}
-      <OrientationBanner
-        isMobile={mobile.isMobile}
-        isPortrait={mobile.isPortrait}
-        activeView={viewport.activeView}
-      />
-
       {(platform.isOnline === false || (platform.updateAvailable && !isUpdateDismissed)) && (
         <div className="jantt-platform-pill-stack" role="status" aria-live="polite">
           {!platform.isOnline && (
             <div className="jantt-platform-pill is-offline">
               <WifiOff size={13} aria-hidden="true" />
-              <span>Offline - Local changes saved</span>
+              <span>{autoSave.saveError ? "Offline · Save failed" : autoSave.saveStatus === "saved"
+                ? "Offline · Saved on this device" : "Offline · Changes pending"}</span>
             </div>
           )}
           {platform.updateAvailable && !isUpdateDismissed && (
             <div className="jantt-platform-pill is-update">
               <RefreshCw size={13} aria-hidden="true" />
               <span>New version ready</span>
-              <button type="button" className="jantt-platform-pill-action" onClick={platform.applyUpdate}>
+              <button type="button" className="jantt-platform-pill-action" onClick={applySavedUpdate}>
                 Refresh
               </button>
               <button
@@ -1302,6 +1336,12 @@ export function App() {
             {/* A crashing view stays contained; switching view or plan retries it. */}
             <ErrorBoundary scope="pane" resetKey={`${viewport.activeView}:${project.activeProjectId}`}>
               <ViewRouter
+                key={project.activeProjectId}
+                registerNoteBack={registerNoteBack}
+                onOpenMonteCarlo={() => setShowRisk(true)}
+                remotePresence={remotePresence}
+                onInspectTask={setInspectedTaskId}
+                onQuickTask={status => setCapture({ milestone: false, status })}
                 activeView={viewport.activeView}
                 setActiveView={viewport.setActiveView}
                 notesCount={notesCount}
@@ -1343,9 +1383,13 @@ export function App() {
       )}
 
       {mobile.isMobile && !mobile.isImmersiveLandscape && !isReadOnly && !isAnyOverlayOpen && (
-        <MobileQuickFab activeView={viewport.activeView} onAddTask={tasks.handleAddNewTask} />
+        <MobileQuickFab activeView={viewport.activeView} expanded={captureExpanded}
+          onToggle={() => setCaptureExpanded(value => !value)}
+          onCapture={milestone => { setCaptureExpanded(false); setCapture({ milestone }); }} />
       )}
 
+      {capture && !isReadOnly && <QuickCapture milestone={capture.milestone} onClose={() => setCapture(null)}
+        onCreate={draft => tasks.createTask({ ...draft, status: capture.status })} />}
       {/* Modals & Popups */}
       <ModalHost
         showPromptModal={showPromptModal}
@@ -1377,6 +1421,7 @@ export function App() {
       />
 
       <ReadOnlyForkModal
+        allowFork={roomSync.allowViewerForks}
         show={showReadOnlyForkModal}
         setShow={setShowReadOnlyForkModal}
         roomTitle={activeRoomTitle}
@@ -1384,6 +1429,7 @@ export function App() {
       />
 
       <EditorLoginModal
+        allowFork={roomSync.allowViewerForks}
         show={showEditorLoginModal}
         setShow={setShowEditorLoginModal}
         roomTitle={activeRoomTitle}
@@ -1404,7 +1450,7 @@ export function App() {
         showBaselines={viewport.showBaselines}
         onToggleBaselines={() => viewport.setShowBaselines((prev) => !prev)}
         onSelectTask={(task) => taskDetail.openTaskDetailSidebar(task)}
-        onOpenMonteCarlo={() => viewport.setActiveView("summary")}
+        onOpenMonteCarlo={editor.parsedData ? () => setShowRisk(true) : undefined}
         onOpenShare={handleOpenShare}
         onOpenAddPlan={project.handleOpenAddPlanModal}
         onOpenPlanManager={() => setShowPlanManagerModal(true)}
@@ -1417,6 +1463,10 @@ export function App() {
         onJumpToday={() => dateFilter.setDateFilterMode("today")}
         onFilterWeek={() => dateFilter.setDateFilterMode("week")}
       />
+
+      {showRisk && editor.parsedData && <React.Suspense fallback={null}>
+        <RiskDialog show onClose={() => setShowRisk(false)} parsedData={editor.parsedData} />
+      </React.Suspense>}
 
       <ShortcutsModal
         show={showShortcutsModal}

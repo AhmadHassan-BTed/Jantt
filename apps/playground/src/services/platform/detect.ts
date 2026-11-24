@@ -82,7 +82,7 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  */
 export function syncThemeColorMeta(mode: "dark" | "light", bgColor?: string | null): void {
   if (typeof document === "undefined") return;
-  const content = bgColor && HEX_COLOR.test(bgColor) ? bgColor : mode === "light" ? "#FFFFFF" : "#090E1A";
+  const content = bgColor && HEX_COLOR.test(bgColor) ? bgColor : mode === "light" ? "#FFFFFF" : "#000000";
   let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   if (!meta) {
     meta = document.createElement("meta");

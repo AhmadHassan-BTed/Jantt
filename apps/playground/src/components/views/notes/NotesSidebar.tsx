@@ -166,23 +166,12 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
             return (
               <div
                 key={note.id}
-                role="button"
-                tabIndex={0}
-                aria-current={isActive ? "true" : undefined}
-                aria-label={`Open note ${title}`}
                 className={`note-list-item ${isActive ? "is-active" : ""} ${note.pinned ? "is-pinned" : ""}`}
                 style={{ borderLeftColor: sanitizeCssColor(note.color, DEFAULT_NOTE_COLOR) }}
-                onClick={() => onSelectNote(note.id)}
-                onKeyDown={(e) => {
-                  if (e.target !== e.currentTarget) return;
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelectNote(note.id);
-                  }
-                }}
               >
                 <div className="note-item-header">
-                  <span className="note-item-title">{title}</span>
+                  <button type="button" className="note-item-title note-open-button" onClick={() => onSelectNote(note.id)}
+                    aria-label={`Open note ${title}`} aria-current={isActive ? "true" : undefined}>{title}</button>
                   <div className="note-item-badges">
                     {note.pinned && <Pin size={11} className="note-pin-badge" aria-label="Pinned" />}
                     {!isViewer && (

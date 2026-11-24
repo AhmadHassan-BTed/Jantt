@@ -11,8 +11,7 @@ const KEYS = {
   API_KEY_PREFIX: `${STORAGE_PREFIX}key_`,
   BASE_URL_PREFIX: `${STORAGE_PREFIX}base_url_`,
   PROXY_URL_PREFIX: `${STORAGE_PREFIX}proxy_url_`,
-  TEMPERATURE: `${STORAGE_PREFIX}temperature`,
-  AUTO_APPLY: `${STORAGE_PREFIX}auto_apply`
+  TEMPERATURE: `${STORAGE_PREFIX}temperature`
 } as const;
 
 export const VALID_PROVIDERS: readonly ProviderId[] = [
@@ -127,20 +126,6 @@ export function setTemperature(val: number): void {
   const storage = getStorage();
   if (!storage) return;
   storage.setItem(KEYS.TEMPERATURE, String(val));
-}
-
-export function getAutoApply(): boolean {
-  const storage = getStorage();
-  if (!storage) return true;
-  const stored = storage.getItem(KEYS.AUTO_APPLY);
-  if (stored === null) return true; // Default ON for seamless live editing
-  return stored === "true";
-}
-
-export function setAutoApply(val: boolean): void {
-  const storage = getStorage();
-  if (!storage) return;
-  storage.setItem(KEYS.AUTO_APPLY, String(val));
 }
 
 export function getCustomModels(provider: ProviderId): string[] {

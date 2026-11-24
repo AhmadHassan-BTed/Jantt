@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { flushSync } from "react-dom";
+import { commandBus } from "../services/bus";
 import type { JanttData } from "@jantt/core";
 import type { AutoSaveInterval } from "../types";
 import { STORAGE_KEYS } from "../constants";
@@ -8,6 +10,7 @@ interface UseAutoSaveOptions {
   /** @deprecated Not used any more: saves persist the parsed plan, never half-typed JSON. */
   jsonText?: string;
   parsedData: JanttData | null;
+  flushEditorDraft?: () => boolean;
   activeProjectId: string;
   /** Persists a plan; returning false reports a failed (non-durable) write. */
   onSaveProject?: (projectId: string, data: JanttData) => boolean | void;
@@ -32,6 +35,7 @@ export const SAVE_FAILED_MESSAGE =
 export function useAutoSave({
   parsedData,
   activeProjectId,
+  flushEditorDraft,
   onSaveProject,
   showToast,
   captureSnapshot,
@@ -138,8 +142,20 @@ export function useAutoSave({
 
   /** Saves the active plan only if it has unsaved edits (plan switch, tab close). */
   const flushSave = useCallback(() => {
-    if (isDirtyRef.current || autoSaveTimerRef.current !== null) runSave(false);
+    return isDirtyRef.current || autoSaveTimerRef.current !== null ? runSave(false) : true;
   }, [runSave]);
+
+  // Reload/pagehide skips React unmount. Commit debounced input first so persistence sees
+  // the latest plan, even if the user chose manual autosave.
+  const prepareReload = useCallback(() => {
+    let validDraft = true;
+    flushSync(() => {
+      validDraft = flushEditorDraft?.() ?? true;
+      if (validDraft) commandBus.emit("FLUSH_NOTE_DRAFT", undefined);
+    });
+    const durable = flushSave();
+    return validDraft && durable;
+  }, [flushEditorDraft, flushSave]);
 
   const handleManualSaveNow = useCallback(() => {
     if (runSave(true)) showToast("Plan saved to browser storage.");
@@ -149,17 +165,17 @@ export function useAutoSave({
   // so pagehide and visibilitychange are handled too.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handleHide = () => flushSave();
+    const handleHide = () => { prepareReload(); };
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      flushSave();
+      const ready = prepareReload();
       // The edits could not reach durable storage (full or blocked): ask before they are lost
-      if (isDirtyRef.current) {
+      if (!ready) {
         e.preventDefault();
         e.returnValue = "";
       }
     };
     const handleVisibility = () => {
-      if (document.visibilityState === "hidden") flushSave();
+      if (document.visibilityState === "hidden") prepareReload();
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("pagehide", handleHide);
@@ -169,7 +185,7 @@ export function useAutoSave({
       window.removeEventListener("pagehide", handleHide);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [flushSave]);
+  }, [prepareReload]);
 
   useEffect(() => {
     const lastSeen = lastSeenRef.current;
@@ -280,6 +296,7 @@ export function useAutoSave({
     setShowAutoSaveModal,
     handleManualSaveNow,
     executeSave,
+    prepareReload,
     flushSave
   };
 }

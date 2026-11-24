@@ -1,4 +1,4 @@
-import { IGestureStrategy, DragState, GestureContext } from "../contracts";
+import { IGestureStrategy, DragState, GestureContext, constrainedStart } from "../contracts";
 import { addDays, diffDays } from "../../date-math";
 
 export class ResizeGestureStrategy implements IGestureStrategy {
@@ -19,15 +19,24 @@ export class ResizeGestureStrategy implements IGestureStrategy {
     }
 
     const origStart = state.origStart ?? task.start;
+    const origEnd = state.origEnd ?? task.end;
     const minDays = task.milestone ? 0 : 1;
-    let newEnd = addDays(state.origEnd ?? task.end, deltaDays);
-    if (diffDays(origStart, newEnd) < minDays) {
-      newEnd = addDays(origStart, minDays);
+    let start = origStart, end = origEnd;
+    if (state.resizeStart) {
+      start = addDays(origStart, deltaDays);
+      if (diffDays(start, end) < minDays) start = addDays(end, -minDays);
+      if (!ctx.autoCascade) {
+        state.origById ??= new Map(base.map(item => [item.id, item]));
+        const lookup = state.origById;
+        const limit = constrainedStart({ ...task, start, end }, id => lookup.get(id), ctx.resolve, lookup);
+        if (start < limit) start = limit;
+        if (diffDays(start, end) < minDays) return false;
+      }
+    } else {
+      end = addDays(origEnd, deltaDays);
+      if (diffDays(start, end) < minDays) end = addDays(start, minDays);
     }
-    ctx.setTasks(
-      base.map((t) => (t === task ? { ...t, end: newEnd } : t)),
-      true
-    );
+    ctx.setTasks(base.map(t => t === task ? { ...t, start, end } : t), true);
     return true;
   }
 

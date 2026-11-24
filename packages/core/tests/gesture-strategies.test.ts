@@ -220,6 +220,17 @@ describe("Gesture Strategies", () => {
       expect(ctx.data.tasks[0].end).toBe("2026-09-07");
     });
 
+    it("resizes the start edge without moving the finish or breaking a strict predecessor", () => {
+      const tasks: Task[] = [
+        { id: "a", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+        { id: "b", category: "dev", start: "2026-09-10", end: "2026-09-13", dependsOn: "a" }
+      ];
+      const { ctx } = createMockContext(tasks, { autoCascade: false });
+      const state = moveState(tasks, "b", { mode: "resize", resizeStart: true });
+      new ResizeGestureStrategy().onMove(at(-140), state, ctx);
+      expect(ctx.data.tasks[1]).toMatchObject({ start: "2026-09-07", end: "2026-09-13" });
+    });
+
     it("clamps to the minimum duration instead of freezing at the last valid size", () => {
       const strategy = new ResizeGestureStrategy();
       const tasks: Task[] = [{ id: "t1", category: "dev", start: "2026-09-01", end: "2026-09-10" }];
@@ -304,6 +315,26 @@ describe("Gesture Strategies", () => {
       expect(ctx.options.onLinkCreate).toHaveBeenCalledWith("a", "b");
       expect(commits).toHaveLength(1);
     });
+
+    it.each([["left", "left", "SS"], ["right", "right", "FF"], ["left", "right", "SF"]])(
+      "serializes a %s to %s edge gesture as %s", (from, to, expected) => {
+        const tasks: Task[] = [
+          { id: "a", category: "dev", start: "2026-09-01", end: "2026-09-05" },
+          { id: "b", category: "dev", start: "2026-09-08", end: "2026-09-12" }
+        ];
+        const { ctx, state, restore } = linkSetup(tasks, "b");
+        const target = document.elementFromPoint(0, 0) as HTMLElement;
+        const port = document.createElement("div");
+        port.className = `jantt-link-port-${to}`;
+        target.appendChild(port);
+        vi.mocked(document.elementFromPoint).mockReturnValue(port);
+        state.element = document.createElement("div");
+        state.element.className = `jantt-link-port-${from}`;
+        new LinkGestureStrategy().onUp(at(0, 0), state, ctx);
+        restore();
+        expect(ctx.data.tasks[1].dependsOn).toEqual({ id: "a", type: expected });
+      }
+    );
 
     it("ignores drops onto an existing link (no event, no commit)", () => {
       const strategy = new LinkGestureStrategy();

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, X, Settings, Trash2, ArrowLeft, Zap, BookOpen } from "lucide-react";
+import { Sparkles, X, Settings, Trash2, ArrowLeft, BookOpen } from "lucide-react";
 import type { UseCopilotReturn } from "../../hooks/useCopilot";
 import { useSheetSwipeDismiss } from "../../hooks/useSheetSwipeDismiss";
 import { triggerHaptic } from "../../services/platform";
@@ -24,6 +24,30 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
   onOpenPromptModal
 }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const drawer = React.useRef<HTMLElement>(null);
+  React.useEffect(() => {
+    if (!isOpen || !isMobile) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const panel = drawer.current;
+    if (!panel) return;
+    panel.focus({ preventScroll: true });
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !panel.contains(e.target as Node)) return;
+      const controls = Array.from(panel.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex='0']"))
+        .filter(control => control.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+        e.preventDefault(); last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first?.focus();
+      }
+    };
+    panel.addEventListener("keydown", trap);
+    return () => {
+      panel.removeEventListener("keydown", trap);
+      if (opener?.isConnected && document.activeElement === document.body) opener.focus({ preventScroll: true });
+    };
+  }, [isOpen, isMobile]);
   const swipe = useSheetSwipeDismiss({ onClose, enabled: isMobile && isOpen });
 
   if (!isOpen) return null;
@@ -39,6 +63,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
       {/* Mobile backdrop */}
       {isMobile && (
         <div
+          style={swipe.backdropStyle}
           className="jantt-copilot-backdrop is-visible"
           onClick={onClose}
           aria-hidden="true"
@@ -50,9 +75,11 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
           isMobile ? "is-mobile-sheet" : ""
         } ${swipe.isDragging ? "is-dragging" : ""}`}
         style={isMobile ? swipe.sheetStyle : undefined}
+        ref={drawer}
+        tabIndex={-1}
         role="dialog"
         aria-label="Jantt AI Copilot"
-        aria-modal="true"
+        aria-modal={isMobile || undefined}
       >
         {isMobile && (
           <div className="copilot-sheet-pull-handle" aria-hidden="true" {...swipe.handleProps} />
@@ -80,21 +107,6 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
           <div className="copilot-header-actions">
             {!showSettings && (
               <>
-                <button
-                  type="button"
-                  className={`copilot-auto-apply-pill ${copilot.config.autoApply ? "is-active" : ""}`}
-                  onClick={() => copilot.updateConfig({ autoApply: !copilot.config.autoApply })}
-                  title={
-                    copilot.config.autoApply
-                      ? "Live Auto-Commit active: valid AI changes are immediately applied to the chart"
-                      : "Manual Review active: click Apply Changes before updates take effect"
-                  }
-                  aria-pressed={copilot.config.autoApply}
-                >
-                  <Zap size={11} className={copilot.config.autoApply ? "is-active-icon" : ""} />
-                  <span>{copilot.config.autoApply ? "Live" : "Review"}</span>
-                </button>
-
                  {onOpenPromptModal && (
                    <button
                      type="button"
@@ -162,10 +174,11 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
               <CopilotMessages
                 messages={copilot.messages}
                 pendingDiff={copilot.pendingDiff}
+                readOnly={copilot.isReadOnly}
+                stale={copilot.isProposalStale}
                 onAcceptDiff={handleAcceptDiff}
                 onRejectDiff={copilot.rejectChange}
                 onRevertDiff={copilot.revertChange}
-                onPromptClick={(prompt) => copilot.sendMessage(prompt)}
               />
 
               <CopilotInput

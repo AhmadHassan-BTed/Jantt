@@ -25,7 +25,7 @@ import {
  */
 export type { DragMode, DragState, GestureContext, IGestureStrategy, InteractionHooks };
 
-type LiveLinkWire = { fromX: number; fromY: number; toX: number; toY: number };
+import type { LiveLinkWire } from "./controller/contracts";
 
 /** Pointer travel (px) before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 3;
@@ -392,6 +392,7 @@ export class InteractionController {
       moved: false,
       element: el,
       pointerId: e.pointerId,
+      resizeStart: mode === "resize" && e.target instanceof Element && e.target.classList.contains("is-start"),
       linkFromTaskId: mode === "link" ? current.id : undefined,
       multiTasks,
       origTasks: this.data.tasks,
@@ -620,6 +621,7 @@ export class InteractionController {
       }
     }
 
+    state.dragHint?.remove();
     state.selectionBoxEl?.remove();
     if (state.canvasEl) state.canvasEl.style.cursor = "";
     state.element?.classList.remove("is-dragging", "is-dragging-progress");
@@ -669,6 +671,22 @@ export class InteractionController {
     const state = this.dragState;
     if (!state) return;
     const changed = this.strategies.get(state.mode)?.onMove(e, state, this.ctx);
+    if (changed !== false && (state.mode === "move" || state.mode === "resize") && state.taskId && this.container) {
+      const task = this.findTask(state.taskId);
+      if (task) {
+        if (!state.dragHint) {
+          state.dragHint = document.createElement("output");
+          state.dragHint.className = "jantt-drag-date-hint";
+          this.container.appendChild(state.dragHint);
+        }
+        const original = state.resizeStart || state.mode === "move" ? state.origStart : state.origEnd;
+        const current = state.resizeStart || state.mode === "move" ? task.start : task.end;
+        const days = original ? diffDays(original, current) : 0;
+        state.dragHint.textContent = `${days > 0 ? "+" : ""}${days}d · ${task.start} – ${task.end}`;
+        state.dragHint.style.left = `${Math.max(4, Math.min(window.innerWidth - 205, e.clientX + 12))}px`;
+        state.dragHint.style.top = `${Math.max(4, e.clientY - 36)}px`;
+      }
+    }
     if (changed !== false && DATA_MODES.has(state.mode)) {
       this.scheduleRender(true, true);
     }

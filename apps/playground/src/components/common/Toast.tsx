@@ -21,7 +21,7 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss, toastMessage, i
     toasts ?? (toastMessage ? [{ id: 0, message: toastMessage, isError: isToastError }] : []);
 
   return (
-    <div className="jantt-toast-region" aria-label="Notifications">
+    <div className="jantt-toast-region" role="region" aria-label="Notifications">
       {items.map((toast) => (
         <div
           key={toast.id}
