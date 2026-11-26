@@ -15,7 +15,7 @@ This document is the official, comprehensive specification and prompt benchmark 
 
 Traditional project management tools force an unacceptable compromise:
 
-1. **Enterprise Bloat**: Commercial Gantt suites (DHTMLX, Bryntum) require 200KB to 800KB runtime dependencies, complex imperative APIs (`gantt.init()`, `gantt.addTask()`, listener bindings), and costly recurring per-seat licenses.
+1. **Enterprise Bloat**: Traditional Gantt suites (DHTMLX, Bryntum) saddle projects with 200KB–800KB+ runtime bundles, complex imperative APIs (`gantt.init()`, `gantt.addTask()`, listener bindings), and—once you need real scheduling features beyond barebones free tiers—costly recurring per-seat (plus OEM) licenses in DHTMLX Pro and Bryntum's Core/Enterprise tiers.
 2. **Brittle AI Generations**: Asking LLMs (ChatGPT, Claude, Gemini) to generate React JSX, SVG coordinate math, or Canvas rendering logic produces broken layouts, coordinate hallucinations, and wastes thousands of output tokens on boilerplate UI code.
 3. **Static Limitations**: DSLs like Mermaid.js are static, read-only images. They cannot be dragged, edited, recalculated, or synchronized back to living project state.
 

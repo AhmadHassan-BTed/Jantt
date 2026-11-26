@@ -196,13 +196,13 @@ Jantt features **7 handcrafted Swiss Modernism themes** (grouped cleanly into Da
 
 | Capability | Jantt (`@jantt/core`) | DHTMLX Gantt | Bryntum Gantt | Frappe Gantt | Mermaid.js |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **License & Pricing** | **MIT (Free Forever)** | GPL / Commercial (\$1k+/yr) | Commercial (\$940+/yr) | MIT | MIT |
+| **License & Pricing** | **MIT (Free Forever)** | GPL / Commercial (\$1k+/yr) | MIT (Basic Community) / Commercial (\$699–\$1,100+/yr + OEM) | MIT | MIT |
 | **Core Runtime Dependencies** | **1 tiny (`fflate`)** | Multiple | Multiple | Multiple | Multiple |
 | **State Paradigm** | **100% Declarative JSON** | Imperative JS API | Imperative JS API | Imperative JS API | Text DSL |
-| **Working-Calendar CPM & Float** | **Built-In (Mixed Calendars)** | Pro / Commercial tier | Commercial tier | Not supported | Not supported |
-| **EVM, DCMA-14, Monte Carlo, Leveling** | **Built-In** | Not included | Partial | Not supported | Not supported |
+| **Working-Calendar CPM & Float** | **Built-In (Mixed Calendars)** | Pro / Commercial tier | Paid tiers (CPM: Enterprise) | Not supported | Not supported |
+| **EVM, DCMA-14, Monte Carlo, Leveling** | **Built-In** | Not included | Partial (Enterprise only) | Not supported | Not supported |
 | **60 FPS 2D Canvas (100k+ tasks)** | **Included (`@jantt/render-canvas`)** | Commercial tier | DOM virtualization | Not supported | Static SVG |
-| **Official AI MCP Server + Copilot** | **Included (`@jantt/mcp`)** | Not included | Not included | Not included | Not included |
+| **Official AI MCP Server + Copilot** | **Included (`@jantt/mcp` + Copilot)** | Not included | Docs-only MCP ([mcp.bryntum.com](https://mcp.bryntum.com)); AI Enterprise-only | Not included | Not included |
 | **Frameworks** | **React, Vue, Svelte, WC, HTML, Python** | Wrappers | Wrappers | Vanilla JS | Static render |
 | **Core Bundle Size (gzip)** | **~89 KB JS + 9 KB CSS** | ~200+ KB | ~300+ KB | ~35 KB | ~800 KB |
 
