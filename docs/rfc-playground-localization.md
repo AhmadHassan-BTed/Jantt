@@ -8,21 +8,19 @@ Jantt Playground currently presents its controls in English. I’d like to use i
 - Start with a coherent planning workflow: navigation, creating and editing tasks, status labels, and reading the timeline and board. The Gantt and Canvas renderers have labels of their own, so the timeline work would include both. Keep project JSON, task IDs, status values, and user-authored content as entered.
 - Consider exports, sample plans, SDK documentation, and Copilot output in separate follow-ups if there is demand.
 
-## One configuration for all interface languages
+## One translation file per language
 
-Keep all supported languages in one `messages.json` file, with a section for each locale. UI components and chart renderers reference shared message keys. The active locale determines which template is displayed, with English as the fallback for missing entries.
+Store translations in separate files such as `locales/en.json` and `locales/zh-CN.json`. Load the selected language on demand and use English as the fallback for missing entries. UI components and chart renderers use the same message keys across languages.
 
-```json
-{
-  "en": { "task.assignedTo": "Assigned to {name}" },
-  "zh-CN": { "task.assignedTo": "负责人：{name}" }
-}
-```
+| File | Value for `task.assignedTo` |
+| --- | --- |
+| `locales/en.json` | `Assigned to {name}` |
+| `locales/zh-CN.json` | `负责人：{name}` |
 
-For example, `t("task.assignedTo", { name: assigneeName })` resolves the key and fills in the dynamic value. Each language controls the complete phrase, including where the placeholder appears. Use the selected locale for display dates and numbers. Adding a language means adding its section to this configuration and reviewing its translations.
+For example, `t("task.assignedTo", { name: assigneeName })` resolves the key and fills in the dynamic value. Each language controls the complete phrase, including where the placeholder appears. Use the selected locale for display dates and numbers. Contributors can add a language by providing its translation file and registering the locale for the selector.
 
 ## Questions for maintainers
 
 1. Does an interface in multiple languages fit the project’s priorities? Have you heard of similar needs from other users?
 2. Would English and Simplified Chinese covering the core planning workflow be a useful first release? Which workflow should determine whether it is ready?
-3. Would a single contributor-maintained language configuration with English fallback be sustainable? What translation review or checks would you want for future interface changes?
+3. Would contributor-maintained translation files with English fallback be sustainable? What translation review or checks would you want for future interface changes?
