@@ -7,9 +7,9 @@ import type { JanttData } from "@jantt/core";
 export const JANTT_JSON_SCHEMA_RULES = `
 # JANTT JSON SCHEMA BENCHMARK & SPECIFICATION (COMPACT CONTRACT)
 
-type DateISO = string; // "YYYY-MM-DD"
+type DateISO = string; // "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm"
 type HexColor = string; // "#38BDF8"
-type Dependency = string | { id: string; type?: "FS"|"SS"|"FF"|"SF"; lag?: number };
+type Dependency = string | { id: string; type?: "FS"|"SS"|"FF"|"SF"; lag?: number; lagMinutes?: number };
 
 interface JanttData {
   $schema?: "https://jantt.dev/schema/v1.json";
@@ -21,7 +21,8 @@ interface JanttData {
     start?: DateISO;
     end?: DateISO;
     defaultGapDays?: number; // default 2
-    scale?: "day" | "week" | "month" | "quarter" | "year";
+    scale?: "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year";
+    timeFormat?: "12h" | "24h";
     linkRouting?: "orthogonal" | "curved" | "direct";
     showCriticalPath?: boolean;
     showBaselines?: boolean;

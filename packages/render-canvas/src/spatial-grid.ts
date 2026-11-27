@@ -3,7 +3,15 @@
  */
 
 import type { Task } from "@jantt/core";
-import { diffDays, isValidISODate } from "@jantt/core";
+import {
+  diffDays,
+  hasTimeComponent,
+  isValidISODate,
+  MINUTES_PER_DAY,
+  toEpochDay,
+  toEpochMinutes,
+  toTaskEndEpochMinutes
+} from "@jantt/core";
 
 export type HitTestType = "bar" | "handle-start" | "handle-end" | "progress" | "none";
 
@@ -49,11 +57,10 @@ export class SpatialGanttGrid {
     const task = this.tasks[rowIndex];
     if (!hasValidDates(task)) return null;
 
-    const startOffsetDays = diffDays(this.timelineStart, task.start);
-    const durationDays = Math.max(1, diffDays(task.start, task.end) + 1);
+    const { startOffsetDays, durationDays } = this.computeSpanDays(task);
 
     const barX = startOffsetDays * this.dayWidth;
-    const barWidth = durationDays * this.dayWidth;
+    const barWidth = Math.max(durationDays * this.dayWidth, hasTimeComponent(task.start) || hasTimeComponent(task.end) ? 6 : this.dayWidth);
 
     // Check horizontal bounds with 4px margin
     if (worldX < barX - 4 || worldX > barX + barWidth + 4) {
@@ -90,15 +97,31 @@ export class SpatialGanttGrid {
     const task = this.tasks[index];
     if (!hasValidDates(task)) return null;
 
-    const startOffsetDays = diffDays(this.timelineStart, task.start);
-    const durationDays = Math.max(1, diffDays(task.start, task.end) + 1);
+    const { startOffsetDays, durationDays } = this.computeSpanDays(task);
 
     return {
       x: startOffsetDays * this.dayWidth,
       y: index * this.rowHeight,
-      width: durationDays * this.dayWidth,
+      width: Math.max(durationDays * this.dayWidth, hasTimeComponent(task.start) || hasTimeComponent(task.end) ? 6 : this.dayWidth),
       height: this.rowHeight
     };
+  }
+
+  private computeSpanDays(task: Task): { startOffsetDays: number; durationDays: number } {
+    if (hasTimeComponent(task.start) || hasTimeComponent(task.end)) {
+      const originMin = toEpochDay(this.timelineStart) * MINUTES_PER_DAY;
+      const startMin = toEpochMinutes(task.start);
+      const endMin = task.milestone ? startMin : toTaskEndEpochMinutes(task.end);
+      if (Number.isFinite(originMin) && Number.isFinite(startMin) && Number.isFinite(endMin)) {
+        return {
+          startOffsetDays: (startMin - originMin) / MINUTES_PER_DAY,
+          durationDays: Math.max(0, endMin - startMin) / MINUTES_PER_DAY
+        };
+      }
+    }
+    const startOffsetDays = diffDays(this.timelineStart, task.start);
+    const durationDays = Math.max(1, diffDays(task.start, task.end) + 1);
+    return { startOffsetDays, durationDays };
   }
 }
 

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   type TimeScale,
+  type TimeFormat,
   type LinkRoutingStyle,
   type RowHeightMode,
   type ThemeDefinition,
@@ -18,6 +19,8 @@ function isKnownThemeId(themeId: unknown): themeId is string {
 interface UseGanttViewportOptions {
   initialTheme: string;
   initialScale: TimeScale;
+  initialTimeFormat?: TimeFormat;
+  onTimeFormatPersist?: (format: TimeFormat) => void;
   initialRouting: LinkRoutingStyle;
   initialRowHeightMode: RowHeightMode;
   initialRowHeight: number;
@@ -40,6 +43,23 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
   }, [requestedThemeId]);
   const selectedThemeId = activeTheme.id;
   const [currentScale, setCurrentScale] = useState<TimeScale>(options.initialScale);
+  const [timeFormat, setTimeFormatState] = useState<TimeFormat>(
+    options.initialTimeFormat === "24h" ? "24h" : "12h"
+  );
+  const onTimeFormatPersistRef = useRef(options.onTimeFormatPersist);
+  onTimeFormatPersistRef.current = options.onTimeFormatPersist;
+  const setTimeFormat = useCallback((next: TimeFormat) => {
+    const normalized: TimeFormat = next === "24h" ? "24h" : "12h";
+    setTimeFormatState(normalized);
+    if (onTimeFormatPersistRef.current) {
+      onTimeFormatPersistRef.current(normalized);
+    } else {
+      storageService.setItem(STORAGE_KEYS.TIME_FORMAT, normalized);
+    }
+  }, []);
+  const syncTimeFormat = useCallback((next: TimeFormat) => {
+    setTimeFormatState(next === "24h" ? "24h" : "12h");
+  }, []);
   const [currentDayWidth, setCurrentDayWidth] = useState<number | undefined>(() => {
     const raw = storageService.getItem<string>(STORAGE_KEYS.DAY_WIDTH);
     if (!raw) return undefined;
@@ -78,22 +98,43 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
     } catch {}
   }, []);
 
+  const pendingPersist = useRef<(() => void) | null>(null);
+  // Flush the latest committed settings even if navigation beats the debounce.
+  useEffect(() => {
+    const flush = () => {
+      pendingPersist.current?.();
+      pendingPersist.current = null;
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+
   // storageService never throws and keeps the newest value in memory when storage is full.
   useEffect(() => {
-    storageService.setItem(STORAGE_KEYS.THEME, personalThemeId);
-    storageService.setItem(STORAGE_KEYS.SCALE, currentScale);
-    if (currentDayWidth !== undefined && Number.isFinite(currentDayWidth)) {
-      storageService.setItem(STORAGE_KEYS.DAY_WIDTH, String(currentDayWidth));
-    } else {
-      storageService.removeItem(STORAGE_KEYS.DAY_WIDTH);
-    }
-    storageService.setItem(STORAGE_KEYS.ROUTING, linkRouting);
-    storageService.setItem(STORAGE_KEYS.ROW_HEIGHT_MODE, rowHeightMode);
-    storageService.setItem(STORAGE_KEYS.ROW_HEIGHT, String(rowHeight));
-    storageService.setItem(STORAGE_KEYS.CRITICAL, String(showCriticalPath));
-    storageService.setItem(STORAGE_KEYS.BASELINES, String(showBaselines));
-    storageService.setItem(STORAGE_KEYS.AUTO_CASCADE, String(autoCascade));
-    storageService.setItem(STORAGE_KEYS.VIEW, activeView);
+    pendingPersist.current = () => {
+      storageService.setItem(STORAGE_KEYS.THEME, personalThemeId);
+      storageService.setItem(STORAGE_KEYS.SCALE, currentScale);
+      if (currentDayWidth !== undefined && Number.isFinite(currentDayWidth)) {
+        storageService.setItem(STORAGE_KEYS.DAY_WIDTH, String(currentDayWidth));
+      } else {
+        storageService.removeItem(STORAGE_KEYS.DAY_WIDTH);
+      }
+      storageService.setItem(STORAGE_KEYS.ROUTING, linkRouting);
+      storageService.setItem(STORAGE_KEYS.ROW_HEIGHT_MODE, rowHeightMode);
+      storageService.setItem(STORAGE_KEYS.ROW_HEIGHT, String(rowHeight));
+      storageService.setItem(STORAGE_KEYS.CRITICAL, String(showCriticalPath));
+      storageService.setItem(STORAGE_KEYS.BASELINES, String(showBaselines));
+      storageService.setItem(STORAGE_KEYS.AUTO_CASCADE, String(autoCascade));
+      storageService.setItem(STORAGE_KEYS.VIEW, activeView);
+    };
+    const timer = setTimeout(() => {
+      pendingPersist.current?.();
+      pendingPersist.current = null;
+    }, 150);
+    return () => clearTimeout(timer);
   }, [
     personalThemeId,
     currentScale,
@@ -116,6 +157,9 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
       activeTheme,
       currentScale,
       setCurrentScale,
+      timeFormat,
+      setTimeFormat,
+      syncTimeFormat,
       currentDayWidth,
       setCurrentDayWidth,
       linkRouting,
@@ -139,6 +183,9 @@ export function useGanttViewport(options: UseGanttViewportOptions) {
       applyPlanTheme,
       activeTheme,
       currentScale,
+      timeFormat,
+      setTimeFormat,
+      syncTimeFormat,
       currentDayWidth,
       linkRouting,
       rowHeightMode,

@@ -1,7 +1,9 @@
 import { GridHeader, HeaderDay } from "../types";
+import { addDays, formatHumanDate, formatTimeOfDay, getDatePart, MINUTES_PER_DAY } from "../date-math";
 import { clampDayWidth } from "../utils";
 
 export interface TimelineHeaderOptions {
+  visibleXRange?: { startX: number; endX: number };
   selectedDate?: string | null;
   dayWidth?: number;
   showToday?: boolean;
@@ -51,7 +53,7 @@ function startColumnDragSession(
   const startX = initialPointerEvt.clientX;
   const startY = initialPointerEvt.clientY;
   const initialWidth = startDayWidth;
-  const effectiveCellDays = Math.max(1, Number.isFinite(cellDays) ? cellDays : 1);
+  const effectiveCellDays = Math.max(1 / 1440, Number.isFinite(cellDays) && cellDays > 0 ? cellDays : 1);
   let hasMoved = false;
   let lastClientX = startX;
   let framePending = false;
@@ -63,9 +65,9 @@ function startColumnDragSession(
   const computeWidth = (): number => {
     const deltaX = lastClientX - startX;
     if (mode === "handle") {
-      // Scale border handle drag to the duration of the grabbed cell so a 1-day, 7-day (week),
-      // or 30-day (month) border tracks the pointer naturally instead of exploding at zoomed-out scales.
-      const gain = effectiveCellDays <= 1 ? 0.35 : 0.85 / effectiveCellDays;
+      // Scale border handle drag to the duration of the grabbed cell so minute, hour, day, week,
+      // and month borders track the pointer smoothly across all zoom scales.
+      const gain = Math.abs(effectiveCellDays - 1) < 1e-6 ? 0.35 : 0.85 / effectiveCellDays;
       if (deltaX >= 0) {
         return clampDayWidth(initialWidth + deltaX * gain);
       }
@@ -158,13 +160,20 @@ function buildTierRow(
   cellClass: string,
   cells: TierCell[],
   withResizeHandles: boolean,
-  cellDays: number
+  cellDays: number,
+  window?: { startX: number; endX: number; totalWidth: number }
 ): HTMLElement {
   const row = document.createElement("div");
   row.className = rowClass;
+  if (window) {
+    row.classList.add("is-windowed");
+    row.style.width = `${window.totalWidth}px`;
+  }
   cells.forEach((c) => {
+    if (window && (c.x + c.width < window.startX || c.x > window.endX)) return;
     const cell = document.createElement("div");
     cell.className = cellClass;
+    if (window) cell.style.left = `${c.x}px`;
     cell.style.width = `${c.width}px`;
     cell.title = c.title;
     cell.dataset.zoomCell = "";
@@ -238,8 +247,12 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
   const currentDayW = options?.dayWidth || header.days[0]?.width || 36;
   const zoomable = Boolean(options?.onColumnResize);
   const scale = header.scale;
+  const timeFormat = header.timeFormat || "12h";
   const showDays = scale === "day" || scale === "week";
+  const isSubDay = scale === "hour" || scale === "minute";
   const isCompactWeek = scale === "week";
+  const window = header.totalWidth > 5000 && options?.visibleXRange
+    ? { ...options.visibleXRange, totalWidth: header.totalWidth } : undefined;
 
   // 1. Years tier (rendered when timeline spans multiple years)
   if (header.spansMultipleYears && header.years.length > 0) {
@@ -255,25 +268,143 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     timelineHeader.appendChild(yearsRow);
   }
 
-  if (showDays) {
+  if (isSubDay) {
+    const subTicks = header.subTicks || [];
+    const winStart = subTicks.length > 0 ? subTicks[0].x : 0;
+    const winEnd =
+      subTicks.length > 0 ? subTicks[subTicks.length - 1].x + subTicks[subTicks.length - 1].width : Math.min(header.totalWidth, 4800);
+
+    // Top sub-day tier: Days (at Hour scale) or Hours (at Minute scale)
+    const upperRow = document.createElement("div");
+    upperRow.className = "jantt-header-months is-subday";
+    upperRow.style.width = `${header.totalWidth}px`;
+
+    if (scale === "hour") {
+      header.days.forEach((d) => {
+        if (d.x + d.width < winStart || d.x > winEnd) return;
+        const isSelected = options?.selectedDate === d.dateStr;
+        const dCell = document.createElement("div");
+        dCell.className = `jantt-month-cell jantt-subday-upper is-day-header ${d.isToday ? "is-today" : ""} ${
+          isSelected ? "is-date-selected" : ""
+        }`.trim();
+        dCell.style.left = `${d.x}px`;
+        dCell.style.width = `${d.width}px`;
+        dCell.title = `${d.dateStr} (Click to show only tasks on this date)`;
+        dCell.setAttribute("data-date", d.dateStr);
+        dCell.dataset.zoomCell = "";
+        dCell.dataset.cellDays = "1";
+        if (options?.onDateClick) {
+          dCell.style.cursor = "pointer";
+          dCell.setAttribute("role", "button");
+          dCell.setAttribute("aria-pressed", String(isSelected));
+          dCell.tabIndex = -1;
+        }
+        const mIdx = parseInt(d.dateStr.slice(5, 7), 10) - 1;
+        const label = document.createElement("span");
+        label.className = "jantt-tier-label";
+        label.textContent = `${d.dayName}, ${MONTH_SHORT[mIdx]} ${d.dayOfMonth}${d.isToday ? " · Today" : ""}`;
+        dCell.appendChild(label);
+        if (zoomable) {
+          const handle = document.createElement("div");
+          handle.className = "jantt-col-resize-handle";
+          handle.title = "Drag to resize column width / zoom timeline";
+          dCell.appendChild(handle);
+        }
+        upperRow.appendChild(dCell);
+      });
+    } else {
+      const hourW = currentDayW / 24;
+      const pxPerMin = currentDayW / MINUTES_PER_DAY;
+      const startHourIdx = Math.max(0, Math.floor(winStart / Math.max(hourW, 1)));
+      const endHourIdx = Math.min(header.totalDays * 24 - 1, Math.ceil(winEnd / Math.max(hourW, 1)), startHourIdx + 120);
+      for (let hIdx = startHourIdx; hIdx <= endHourIdx; hIdx++) {
+        const dayIdx = Math.floor(hIdx / 24);
+        const hour24 = hIdx % 24;
+        const dateStr = addDays(header.startDate, dayIdx);
+        const dayInfo = header.days[dayIdx];
+        const mIdx = parseInt(dateStr.slice(5, 7), 10) - 1;
+        const dayNum = parseInt(dateStr.slice(8, 10), 10);
+        const showDatePrefix = hour24 === 0 || hIdx === startHourIdx || hourW >= 110;
+        const timeText = formatTimeOfDay(hour24, 0, timeFormat, true);
+        const hCell = document.createElement("div");
+        hCell.className = `jantt-month-cell jantt-subday-upper is-hour-header ${hour24 === 0 ? "is-day-start" : ""} ${
+          dayInfo?.isToday ? "is-today" : ""
+        }`.trim();
+        hCell.style.left = `${hIdx * 60 * pxPerMin}px`;
+        hCell.style.width = `${hourW}px`;
+        hCell.title = `${formatHumanDate(dateStr, false, timeFormat)} · ${timeText}`;
+        hCell.dataset.zoomCell = "";
+        hCell.dataset.cellDays = String(1 / 24);
+        const label = document.createElement("span");
+        label.className = "jantt-tier-label";
+        label.textContent = showDatePrefix ? `${MONTH_SHORT[mIdx]} ${dayNum} · ${timeText}` : timeText;
+        hCell.appendChild(label);
+        if (zoomable && hourW >= 18) {
+          const handle = document.createElement("div");
+          handle.className = "jantt-col-resize-handle";
+          handle.title = "Drag to resize column width / zoom timeline";
+          hCell.appendChild(handle);
+        }
+        upperRow.appendChild(hCell);
+      }
+    }
+    timelineHeader.appendChild(upperRow);
+
+    // Lower sub-day tier: Hours (at Hour scale) or Minutes (at Minute scale)
+    const lowerRow = document.createElement("div");
+    lowerRow.className = "jantt-header-days is-subday";
+    lowerRow.style.width = `${header.totalWidth}px`;
+    const firstTickMin = subTicks.length > 1 ? Math.round((subTicks[1].x - subTicks[0].x) / (currentDayW / MINUTES_PER_DAY)) : 60;
+    const cellDaysVal = Math.max(1 / 1440, firstTickMin / MINUTES_PER_DAY);
+    subTicks.forEach((tick) => {
+      const tCell = document.createElement("div");
+      tCell.className = `jantt-subtick-cell ${tick.isDayStart ? "is-day-start" : ""} ${
+        tick.isHourStart ? "is-hour-start" : ""
+      } ${tick.isMajor ? "is-major" : ""}`.trim();
+      tCell.style.left = `${tick.x}px`;
+      tCell.style.width = `${tick.width}px`;
+      tCell.title = tick.title;
+      tCell.dataset.zoomCell = "";
+      tCell.dataset.cellDays = String(cellDaysVal);
+      const text = document.createElement("span");
+      text.className = "jantt-tier-label";
+      text.textContent = tick.label;
+      tCell.appendChild(text);
+      if (zoomable && tick.width >= 16) {
+        const handle = document.createElement("div");
+        handle.className = "jantt-col-resize-handle";
+        handle.title = "Drag to resize column width / zoom timeline";
+        tCell.appendChild(handle);
+      }
+      lowerRow.appendChild(tCell);
+    });
+    timelineHeader.appendChild(lowerRow);
+  } else if (showDays) {
     // 2. Months tier (active grid granularity is days, so border drags match day-column responsiveness)
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), zoomable, 1)
+      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), zoomable, 1, window)
     );
 
     // 3. Days tier (click to filter; roving tabindex keeps the header a single tab stop)
     const daysRow = document.createElement("div");
     daysRow.className = "jantt-header-days";
+    if (window) {
+      daysRow.classList.add("is-windowed");
+      daysRow.style.width = `${header.totalWidth}px`;
+    }
+    const visibleDays = window ? header.days.filter(d => d.dateStr === options?.selectedDate ||
+      (d.x + d.width >= window.startX && d.x <= window.endX)) : header.days;
     const focusDate =
-      header.days.find((d) => d.dateStr === options?.selectedDate)?.dateStr ||
-      header.days.find((d) => d.isToday)?.dateStr ||
-      header.days[0]?.dateStr;
+      visibleDays.find((d) => d.dateStr === options?.selectedDate)?.dateStr ||
+      visibleDays.find((d) => d.isToday)?.dateStr ||
+      visibleDays[0]?.dateStr;
 
     let lastRenderedLabelX = -999;
     const minLabelSpacing = 28; // Minimum pixels between labels to prevent ANY visual overlap
 
-    header.days.forEach((d) => {
+    visibleDays.forEach((d) => {
       const dCell = document.createElement("div");
+      if (window) dCell.style.left = `${d.x}px`;
       const isBoundary = Boolean(d.isTaskBoundary);
       const isSelected = options?.selectedDate === d.dateStr;
       dCell.className = `jantt-day-cell ${d.isWeekend ? "is-weekend" : ""} ${d.isToday ? "is-today" : ""} ${
@@ -312,7 +443,13 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       } else {
         // Standard Day scale with comfortable cell width:
         const todayCls = d.isToday ? " is-today" : "";
-        if (d.width >= 32) {
+        if (d.width >= 96) {
+          const mIdx = parseInt(d.dateStr.slice(5, 7), 10) - 1;
+          dCell.append(
+            dayLabel(`jantt-day-name${todayCls}`, `${d.dayName} · ${MONTH_SHORT[mIdx]}`),
+            dayLabel(`jantt-day-num${todayCls}`, d.label)
+          );
+        } else if (d.width >= 32) {
           dCell.append(dayLabel(`jantt-day-name${todayCls}`, d.dayName), dayLabel(`jantt-day-num${todayCls}`, d.label));
         } else {
           dCell.appendChild(dayLabel(`jantt-day-num${todayCls}`, d.label));
@@ -443,8 +580,8 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       didMoveDrag = false;
       if (suppress) return;
       const dateStr =
-        target.closest<HTMLElement>(".jantt-day-cell[data-date]")?.dataset.date ??
-        (!showDays && target.closest("[data-zoom-cell]") ? dateAtClientX(e.clientX) : undefined);
+        target.closest<HTMLElement>("[data-date]")?.dataset.date ??
+        (!showDays && !isSubDay && target.closest("[data-zoom-cell]") ? dateAtClientX(e.clientX) : undefined);
       if (!dateStr) return;
       e.stopPropagation();
       onDateClick(dateStr);
@@ -477,7 +614,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     todayMarker.style.left = `${header.todayX}px`;
 
     const todayDay = header.days.find((d) => d.isToday);
-    const todayDateStr = todayDay?.dateStr || "";
+    const todayDateStr = todayDay?.dateStr || getDatePart(header.startDate);
 
     todayMarker.setAttribute("data-today-date", todayDateStr);
     todayMarker.title = todayDateStr

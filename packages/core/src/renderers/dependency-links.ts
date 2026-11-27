@@ -4,6 +4,8 @@ export interface DependencyLinksProps {
   dependencies: DependencyLine[];
   canvasWidth: number;
   canvasHeight: number;
+  visibleXRange?: { startX: number; endX: number };
+  depPathElements?: Map<string, SVGPathElement>;
   showCritical: boolean;
   /**
    * Called after the user confirms removing a link. When omitted (read-only charts) links are
@@ -106,17 +108,21 @@ export function renderDependencyLinks(props: DependencyLinksProps): DependencyLi
   const arrowActiveId = `jantt-arrow-active-${instanceId}`;
   const arrowCriticalId = `jantt-arrow-critical-${instanceId}`;
   const editable = typeof props.onLinkDelete === "function";
+  const windowed = props.canvasWidth > 5000 && props.visibleXRange;
+  const winLeft = windowed ? Math.max(0, Math.min(props.canvasWidth, windowed.startX)) : 0;
+  const winRight = windowed ? Math.min(props.canvasWidth, Math.max(winLeft, windowed.endX)) : props.canvasWidth;
+  const winW = winRight - winLeft;
 
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "jantt-svg-overlay");
   svg.style.position = "absolute";
   svg.style.top = "0";
-  svg.style.left = "0";
-  svg.style.width = `${props.canvasWidth}px`;
+  svg.style.left = `${winLeft}px`;
+  svg.style.width = `${winW}px`;
   svg.style.height = `${props.canvasHeight}px`;
-  svg.setAttribute("width", String(props.canvasWidth));
+  svg.setAttribute("width", String(winW));
   svg.setAttribute("height", String(props.canvasHeight));
-  svg.setAttribute("viewBox", `0 0 ${props.canvasWidth} ${props.canvasHeight}`);
+  svg.setAttribute("viewBox", `${winLeft} 0 ${winW} ${props.canvasHeight}`);
   svg.dataset.arrowId = arrowId;
   svg.dataset.arrowActiveId = arrowActiveId;
   svg.dataset.arrowCriticalId = arrowCriticalId;
@@ -134,10 +140,12 @@ export function renderDependencyLinks(props: DependencyLinksProps): DependencyLi
   previewWireSvg.setAttribute("class", "jantt-link-preview-line");
   svg.appendChild(previewWireSvg);
 
-  const depPathElements = new Map<string, SVGPathElement>();
+  const depPathElements = props.depPathElements ?? new Map<string, SVGPathElement>();
+  depPathElements.clear();
   const labelOf = (id: string) => props.taskLabels?.get(id) || id;
 
   const renderLink = (dep: DependencyLine, isCrit: boolean) => {
+    if (windowed && (Math.max(dep.fromX, dep.toX) + 120 < winLeft || Math.min(dep.fromX, dep.toX) - 120 > winRight)) return;
     const normalMarker = isCrit ? `url(#${arrowCriticalId})` : `url(#${arrowId})`;
     const activeMarker = `url(#${arrowActiveId})`;
     const typeSuffix = dep.type && dep.type !== "FS" ? ` (${dep.type})` : "";

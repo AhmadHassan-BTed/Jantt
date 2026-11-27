@@ -67,6 +67,7 @@ export interface JanttProps {
 const STATEFUL_VIEWPORT_KEYS: (keyof ViewportOptions)[] = [
   "scale",
   "dayWidth",
+  "timeFormat",
   "linkRouting",
   "rowHeight",
   "rowHeightMode",
@@ -402,6 +403,12 @@ export const Jantt: React.FC<JanttProps> = ({
     if (searchQueryChanged) options.searchQuery = searchQuery;
     if (dataChanged) lastEmittedRef.current = null;
     try {
+      if (!dataChanged && !configChanged && !selectedDateChanged && !autoCascadeChanged && !searchQueryChanged &&
+        viewportChanges?.dayWidth !== undefined &&
+        WATCHED_VIEWPORT_KEYS.every(key => key === "dayWidth" || prev.viewport?.[key] === viewport?.[key])) {
+        instance.setDayWidth(viewportChanges.dayWidth);
+        return;
+      }
       // Unchanged data means the engine's own plan is the newest; never revert it to the prop.
       instance.update(dataChanged ? data : instance.getData(), options);
     } catch (error) {

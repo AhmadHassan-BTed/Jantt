@@ -1,5 +1,14 @@
-import { Task, Category, TaskScheduleMetrics } from "../types";
-import { diffDays, formatHumanDate, isValidISODate, taskDurationDays } from "../date-math";
+import { Task, Category, TaskScheduleMetrics, TimeFormat } from "../types";
+import {
+  diffDays,
+  formatDurationLabel,
+  formatHumanDate,
+  hasTimeComponent,
+  isValidISODate,
+  MINUTES_PER_DAY,
+  taskDurationMinutes,
+  toTaskEndEpochMinutes
+} from "../date-math";
 import { escapeHtml, getTaskDisplayName, sanitizeCssColor } from "../utils";
 import { DEFAULT_CATEGORY } from "../constants";
 import { applyThemeVariables } from "../themes/manager";
@@ -7,12 +16,13 @@ import { applyThemeVariables } from "../themes/manager";
 export interface TooltipOptions {
   theme?: Record<string, string>;
   themeClassName?: string;
+  timeFormat?: TimeFormat;
 }
 
 export interface TooltipController {
   show: (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics) => void;
   hide: () => void;
-  updateTheme: (theme?: Record<string, string>, themeClassName?: string) => void;
+  updateTheme: (theme?: Record<string, string>, themeClassName?: string, timeFormat?: TimeFormat) => void;
 }
 
 function formatDependsOn(dependsOn: Task["dependsOn"]): string {
@@ -37,10 +47,12 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
   let activeCard: HTMLElement | null = null;
   let currentTheme = initialOptions.theme;
   let currentThemeClassName = initialOptions.themeClassName;
+  let currentTimeFormat: TimeFormat = initialOptions.timeFormat === "24h" ? "24h" : "12h";
 
-  const updateTheme = (theme?: Record<string, string>, themeClassName?: string) => {
+  const updateTheme = (theme?: Record<string, string>, themeClassName?: string, timeFormat?: TimeFormat) => {
     currentTheme = theme;
     currentThemeClassName = themeClassName;
+    if (timeFormat) currentTimeFormat = timeFormat;
   };
 
   const hide = () => {
@@ -54,7 +66,8 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
     hide();
     // Same rules as the layout/grid: only flagged tasks are milestones, durations are inclusive.
     const isMilestone = task.milestone === true;
-    const duration = taskDurationDays(task.start, task.end, isMilestone);
+    const durationMinutes = taskDurationMinutes(task.start, task.end, isMilestone);
+    const durationTag = isMilestone ? "0m" : formatDurationLabel(durationMinutes, "compact");
     const rawProgress = typeof task.progress === "number" && Number.isFinite(task.progress) ? task.progress : 0;
     const progressPercent = Math.max(0, Math.min(100, Math.round(rawProgress * 100)));
 
@@ -70,10 +83,18 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
 
     let baselineHtml = "";
     if (task.baseline && isValidISODate(task.baseline.start) && isValidISODate(task.baseline.end)) {
-      const variance = diffDays(task.baseline.end, task.end);
+      const subDayBaseline =
+        hasTimeComponent(task.baseline.end) || hasTimeComponent(task.end);
+      const diffM = subDayBaseline
+        ? toTaskEndEpochMinutes(task.end) - toTaskEndEpochMinutes(task.baseline.end)
+        : diffDays(task.baseline.end, task.end) * MINUTES_PER_DAY;
+      const absLabel =
+        diffM % MINUTES_PER_DAY === 0
+          ? `${Math.abs(diffM) / MINUTES_PER_DAY}d`
+          : formatDurationLabel(Math.abs(diffM), "compact");
       const varianceText =
-        variance > 0 ? `+${variance}d slip` : variance < 0 ? `${variance}d ahead` : "on plan";
-      const varianceColor = variance > 0 ? "#F59E0B" : variance < 0 ? "#10B981" : "var(--jantt-text-muted)";
+        diffM > 0 ? `+${absLabel} slip` : diffM < 0 ? `-${absLabel} ahead` : "on plan";
+      const varianceColor = diffM > 0 ? "#F59E0B" : diffM < 0 ? "#10B981" : "var(--jantt-text-muted)";
       baselineHtml = `
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Baseline Plan</span>
@@ -125,8 +146,8 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
         <div class="jantt-hover-stat-row">
           <span class="jantt-hover-stat-label">Timeline</span>
           <span class="jantt-hover-stat-value">
-            ${escapeHtml(formatHumanDate(task.start))} → ${escapeHtml(formatHumanDate(task.end))}
-            <span class="jantt-hover-duration-tag">(${escapeHtml(duration)}d)</span>
+            ${escapeHtml(formatHumanDate(task.start, true, currentTimeFormat))} → ${escapeHtml(formatHumanDate(task.end, true, currentTimeFormat))}
+            <span class="jantt-hover-duration-tag">(${escapeHtml(durationTag)})</span>
           </span>
         </div>
 

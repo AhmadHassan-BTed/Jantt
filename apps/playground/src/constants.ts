@@ -32,6 +32,7 @@ export const STORAGE_KEYS = {
   DEFAULT_PLAN: "jantt_default_plan",
   THEME: "jantt_saved_theme",
   SCALE: "jantt_saved_scale",
+  TIME_FORMAT: "jantt_saved_time_format",
   DAY_WIDTH: "jantt_saved_day_width",
   GANTT_SCROLL: "jantt_gantt_scroll",
   CANVAS_STATE: "jantt_canvas_state",

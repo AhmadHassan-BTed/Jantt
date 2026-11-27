@@ -1,8 +1,14 @@
 import React, { useMemo } from "react";
-import { StickyNote, Plus, Search, Trash2, Pin, Clock, Paperclip } from "lucide-react";
-import { sanitizeCssColor, type NoteItem } from "@jantt/core";
+import { StickyNote, Plus, Search, Trash2, Pin, Clock, Paperclip, CheckSquare, X } from "lucide-react";
+import {
+  sanitizeCssColor,
+  formatTimestampWithFormat,
+  type NoteItem,
+  type Task,
+  type TimeFormat
+} from "@jantt/core";
 import { formatRelativeTime } from "../../../utils";
-import { DEFAULT_NOTE_COLOR, NOTE_PALETTE, noteContentToPlainText, toText } from "./note-markdown";
+import { DEFAULT_NOTE_COLOR, NOTE_PALETTE, getTaskTitle, noteContentToPlainText, toText } from "./note-markdown";
 
 export interface NotesSidebarProps {
   notes: NoteItem[];
@@ -17,10 +23,14 @@ export interface NotesSidebarProps {
   isViewer?: boolean;
   /** IDs of live tasks; attachment counts ignore links to deleted/missing tasks when provided. */
   liveTaskIds?: ReadonlySet<string>;
+  timeFormat?: TimeFormat;
+  allTasks?: Task[];
+  selectedTaskFilterId?: string | null;
+  onSelectTaskFilter?: (taskId: string | null) => void;
 }
 
 const timeOf = (note: NoteItem) => {
-  const t = new Date(toText(note.updatedAt || note.createdAt) || 0).getTime();
+  const t = new Date(toText(note.updatedAt || note.timestamp || note.createdAt) || 0).getTime();
   return Number.isFinite(t) ? t : 0;
 };
 
@@ -35,7 +45,11 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
   selectedColor,
   onSelectColor,
   isViewer = false,
-  liveTaskIds
+  liveTaskIds,
+  timeFormat = "12h",
+  allTasks = [],
+  selectedTaskFilterId = null,
+  onSelectTaskFilter
 }) => {
   // Plain-text excerpts depend only on the notes, not on the search or on keystrokes in the
   // open editor (which re-render this list), so they are derived once per notes change.
@@ -44,9 +58,29 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
     [notes]
   );
 
+  const taskNoteCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const note of notes) {
+      if (!Array.isArray(note.task_ids)) continue;
+      for (const tid of new Set(note.task_ids)) {
+        counts.set(tid, (counts.get(tid) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [notes]);
+
+  const filteredTask = useMemo(
+    () => (selectedTaskFilterId ? allTasks.find((t) => t.id === selectedTaskFilterId) || null : null),
+    [allTasks, selectedTaskFilterId]
+  );
+
   const sortedNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const filtered = notes.filter((n) => {
+      if (selectedTaskFilterId) {
+        const linked = Array.isArray(n.task_ids) ? n.task_ids : [];
+        if (!linked.includes(selectedTaskFilterId)) return false;
+      }
       if (selectedColor !== "all" && n.color !== selectedColor) return false;
       if (!q) return true;
       if (toText(n.title).toLowerCase().includes(q)) return true;
@@ -58,12 +92,13 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
       if (!a.pinned && b.pinned) return 1;
       return timeOf(b) - timeOf(a);
     });
-  }, [notes, plainTextById, searchQuery, selectedColor]);
+  }, [notes, plainTextById, searchQuery, selectedColor, selectedTaskFilterId]);
 
-  const hasFilter = searchQuery.trim() !== "" || selectedColor !== "all";
+  const hasFilter = searchQuery.trim() !== "" || selectedColor !== "all" || Boolean(selectedTaskFilterId);
   const clearFilters = () => {
     onSearchChange("");
     onSelectColor("all");
+    onSelectTaskFilter?.(null);
   };
 
   const countAttached = (note: NoteItem) => {
@@ -77,8 +112,8 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
         <div className="notes-sidebar-title-row">
           <div className="notes-sidebar-brand">
             <StickyNote size={18} className="notes-brand-icon" />
-            <span className="notes-brand-title">Project Notes</span>
-            <span className="notes-count-badge">{notes.length}</span>
+            <span className="notes-brand-title">{filteredTask ? "Task Notes" : "Project Notes"}</span>
+            <span className="notes-count-badge">{selectedTaskFilterId ? sortedNotes.length : notes.length}</span>
             {isViewer && <span className="notes-view-only-badge">View-Only</span>}
           </div>
           {!isViewer && (
@@ -86,10 +121,10 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
               type="button"
               className="notes-new-btn"
               onClick={onCreateNote}
-              title="Create a new note"
+              title={filteredTask ? `Add note for ${getTaskTitle(filteredTask)}` : "Create a new note"}
             >
               <Plus size={14} />
-              <span>New Note</span>
+              <span>{filteredTask ? "Add Note" : "New Note"}</span>
             </button>
           )}
         </div>
@@ -105,6 +140,46 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
+
+        {onSelectTaskFilter && allTasks.length > 0 && (
+          <div className="notes-task-filter-bar">
+            {selectedTaskFilterId ? (
+              <div className="notes-task-banner">
+                <CheckSquare size={13} className="notes-task-banner-icon" />
+                <span className="notes-task-banner-label" title={filteredTask ? getTaskTitle(filteredTask) : selectedTaskFilterId}>
+                  {filteredTask ? getTaskTitle(filteredTask) : selectedTaskFilterId}
+                </span>
+                <button
+                  type="button"
+                  className="notes-task-clear-btn"
+                  onClick={() => onSelectTaskFilter(null)}
+                  title="Show all project notes"
+                  aria-label="Clear task filter and show all notes"
+                >
+                  <X size={12} />
+                  <span>All Notes</span>
+                </button>
+              </div>
+            ) : (
+              <select
+                className="notes-task-filter-select"
+                value=""
+                onChange={(e) => onSelectTaskFilter(e.target.value || null)}
+                aria-label="Filter notes by task"
+              >
+                <option value="">All Tasks ({notes.length} notes)</option>
+                {allTasks.map((t) => {
+                  const count = taskNoteCounts.get(t.id) || 0;
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {getTaskTitle(t)} (#{t.id}){count > 0 ? ` [${count}]` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+          </div>
+        )}
 
         <div className="notes-color-filter-strip" role="group" aria-label="Filter notes by color">
           <button
@@ -135,7 +210,27 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
         {sortedNotes.length === 0 ? (
           <div className="notes-empty-list">
             <StickyNote size={28} className="notes-empty-icon" />
-            {notes.length > 0 && hasFilter ? (
+            {selectedTaskFilterId ? (
+              <>
+                <p className="notes-empty-text">
+                  {hasFilter && (searchQuery.trim() || selectedColor !== "all")
+                    ? "No notes match your filters for this task."
+                    : isViewer
+                      ? "No notes linked to this task yet."
+                      : "No notes linked to this task yet."}
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
+                  {!isViewer && (
+                    <button type="button" className="notes-empty-create-btn" onClick={onCreateNote}>
+                      Add Note to Task
+                    </button>
+                  )}
+                  <button type="button" className="notes-empty-create-btn" onClick={clearFilters}>
+                    Show All Notes
+                  </button>
+                </div>
+              </>
+            ) : notes.length > 0 && hasFilter ? (
               <>
                 <p className="notes-empty-text">
                   {searchQuery.trim() ? "No notes match your search." : "No notes with this color."}
@@ -191,10 +286,25 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
                 <p className="note-item-preview">{preview || "Empty note..."}</p>
 
                 <div className="note-item-footer">
-                  <span className="note-item-time">
-                    <Clock size={11} />
-                    <span>{formatRelativeTime(toText(note.updatedAt || note.createdAt) || undefined)}</span>
-                  </span>
+                  {(() => {
+                    const primaryIso = toText(note.timestamp || note.updatedAt || note.createdAt) || undefined;
+                    const exactStamp = primaryIso ? formatTimestampWithFormat(primaryIso, timeFormat, false) : "";
+                    const relLabel = formatRelativeTime(primaryIso);
+                    const createdLabel = note.createdAt ? formatTimestampWithFormat(toText(note.createdAt), timeFormat, true) : "";
+                    const updatedLabel = note.updatedAt ? formatTimestampWithFormat(toText(note.updatedAt), timeFormat, true) : "";
+                    const tooltipParts = [
+                      note.timestamp ? `Timestamp: ${formatTimestampWithFormat(toText(note.timestamp), timeFormat, true)}` : "",
+                      createdLabel ? `Created: ${createdLabel}` : "",
+                      updatedLabel ? `Updated: ${updatedLabel}` : ""
+                    ].filter(Boolean);
+                    return (
+                      <span className="note-item-time" title={tooltipParts.join(" | ") || relLabel}>
+                        <Clock size={11} />
+                        <span>{exactStamp || relLabel}</span>
+                        {exactStamp && <span className="note-item-rel-sep">· {relLabel}</span>}
+                      </span>
+                    );
+                  })()}
                   {attachedCount > 0 && (
                     <span className="note-item-attached-count" title={`${attachedCount} linked task(s)`}>
                       <Paperclip size={10} />

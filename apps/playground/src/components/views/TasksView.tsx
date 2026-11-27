@@ -37,6 +37,7 @@ interface TasksViewProps {
   remotePresence?: RoomPresence[];
   isMobile?: boolean;
   selectedMobileTaskId?: string | null;
+  timeFormat?: "12h" | "24h";
   parsedData: JanttData;
   dateFilterMode: DateFilterMode;
   dateFilterBehavior: "dim" | "hide";
@@ -81,6 +82,7 @@ const asLower = (value: unknown) => (typeof value === "string" ? value : value =
 export const TasksView: React.FC<TasksViewProps> = ({
   isMobile = false,
   remotePresence,
+  timeFormat = "12h",
   parsedData,
   dateFilterMode,
   dateFilterBehavior,
@@ -415,7 +417,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 const { isCompleted, isDimmed, dimReason } = describeDim(t);
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 const title = t.label || t.name || t.id;
-                const dateLabel = formatShortRange(t.start, t.end);
+                const dateLabel = formatShortRange(t.start, t.end, timeFormat);
                 const assigneeLabel = t.assignee ? [assigneeInfo.initials, assigneeInfo.displayName].join(" ") : "Unassigned";
                 if (isMobile) return <div key={t.id} role="group" aria-label={title}
                   className={`tasks-todo-row phone-task-line ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
@@ -554,7 +556,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
                   </div>
                   <div className="tasks-mobile-card-bottom">
-                    <span className="kanban-mobile-date">{formatShortRange(t.start, t.end)}</span>
+                    <span className="kanban-mobile-date">{formatShortRange(t.start, t.end, timeFormat)}</span>
                     {t.assignee && <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
                     <span className="tasks-mobile-prog-chip">{progressPct}%</span>
                     <TaskStatusSelect task={t} value={getStatusValue(t)} disabled={isViewer} onStatusChange={(status) => handleStatusChange(t.id, status)} />

@@ -798,4 +798,30 @@ describe("Jantt Schema Validator", () => {
       }
     });
   });
+
+  describe("minute-precision validation", () => {
+    it("accepts YYYY-MM-DDTHH:mm timestamps and flags same-day inverted times", () => {
+      const validRes = validate({
+        meta: { scale: "minute", timeFormat: "12h" },
+        tasks: [{ id: "A", category: "g", start: "2026-09-01T09:00", end: "2026-09-01T10:30" }]
+      });
+      expect(validRes.valid).toBe(true);
+
+      const invertedTime = validate({
+        tasks: [{ id: "A", category: "g", start: "2026-09-01T14:00", end: "2026-09-01T09:00" }]
+      });
+      expect(invertedTime.valid).toBe(false);
+      expect(invertedTime.errors.some((e) => e.code === "INVALID_DATE_RANGE")).toBe(true);
+    });
+
+    it("detects sub-day locked dependency conflicts in minutes", () => {
+      const res = validate({
+        tasks: [
+          { id: "A", category: "g", start: "2026-09-01T09:00", end: "2026-09-01T11:00" },
+          { id: "B", category: "g", start: "2026-09-01T10:30", end: "2026-09-01T12:00", locked: true, dependsOn: "A:FS+30m" }
+        ]
+      });
+      expect(res.warnings?.some((w) => w.code === "DEP_TIMING_CONFLICT")).toBe(true);
+    });
+  });
 });

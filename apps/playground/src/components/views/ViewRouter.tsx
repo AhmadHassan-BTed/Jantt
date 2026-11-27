@@ -2,7 +2,7 @@ import React from "react";
 import { PhoneTimeline as Jantt } from "./PhoneTimeline";
 import type { RoomPresence } from "../../firebase/types";
 import { getTodayISODate, type JanttData } from "@jantt/core";
-import type { ActiveView } from "../../types";
+import type { ActiveView, NotesNavigationIntent } from "../../types";
 import type { useGanttViewport } from "../../hooks/useGanttViewport";
 import type { useDateFilter } from "../../hooks/useDateFilter";
 import type { useTaskActions } from "../../hooks/useTaskActions";
@@ -36,6 +36,8 @@ const viewLoadingFallback = (
 export interface ViewRouterProps {
   remotePresence?: RoomPresence[];
   registerNoteBack?: (close: (() => void) | null) => void;
+  notesIntent?: NotesNavigationIntent | null;
+  onConsumeNotesIntent?: () => void;
   onInspectTask?: (id: string | null) => void;
   onQuickTask?: (status: string) => void;
   activeView: ActiveView;
@@ -121,6 +123,8 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
   activeView,
   onQuickTask,
   registerNoteBack,
+  notesIntent,
+  onConsumeNotesIntent,
   remotePresence = [],
   onInspectTask,
   setActiveView,
@@ -274,6 +278,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               viewport={{
                 scale: viewport.currentScale,
                 dayWidth: viewport.currentDayWidth,
+                timeFormat: viewport.timeFormat,
                 linkRouting: viewport.linkRouting,
                 rowHeight: viewport.rowHeight,
                 rowHeightMode: viewport.rowHeightMode,
@@ -304,6 +309,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               inspectingUsers={inspectingUsers}
               onTaskClick={taskDetail.openTaskDetailSidebar}
               activeTheme={viewport.activeTheme}
+              timeFormat={viewport.timeFormat}
               isViewer={isViewer}
               onOpenScratchPlan={project.handleCreateLocalCopyFromData}
               scrollToTodayTrigger={jumpToTodayCount}
@@ -327,6 +333,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               teams={people.teams}
               selectedPersonFilter={people.selectedPersonFilter}
               openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
+              timeFormat={viewport.timeFormat}
               remotePresence={remotePresence}
               handleChartCommit={commitFullPlan}
               isViewer={isViewer}
@@ -354,6 +361,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               setDateFilterMode={dateFilter.setDateFilterMode}
               setCompletedFilterMode={dateFilter.setCompletedFilterMode}
               openTaskDetailSidebar={taskDetail.openTaskDetailSidebar}
+              timeFormat={viewport.timeFormat}
               remotePresence={remotePresence}
               handleChartCommit={commitFullPlan}
               isViewer={isViewer}
@@ -391,6 +399,9 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
               isViewer={isViewer}
               onPromptFork={onPromptFork}
               activeProjectId={project.activeProjectId}
+              timeFormat={viewport.timeFormat}
+              notesIntent={notesIntent}
+              onConsumeNotesIntent={onConsumeNotesIntent}
             />
           )}
         </React.Suspense>

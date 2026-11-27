@@ -2,13 +2,14 @@ import { closeTopModal, useTopModalId } from "./components/modals/ModalHost";
 import { QuickCapture } from "./components/modals/QuickCapture";
 import React, { useMemo, useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import { RefreshCw, WifiOff, X } from "lucide-react";
-import { themeManager, validate, type JanttData, type Task, type TimeScale } from "@jantt/core";
+import { themeManager, validate, type JanttData, type NoteItem, type Task, type TimeScale } from "@jantt/core";
 
-import type { SavedProject } from "./types";
+import type { NotesNavigationIntent, SavedProject } from "./types";
 import {
   loadInitialState,
   updateStoredProjects,
   deleteTasks,
+  generateId,
   getPeerId,
   importSharedPlan,
   purgeProjectStorage,
@@ -52,6 +53,7 @@ import {
   syncThemeColorMeta
 } from "./services/platform";
 import { STORAGE_KEYS } from "./constants";
+import { storageService } from "./services/storage";
 import { exportMsProjectXml, exportPrimaveraXer, exportExecutiveReportHtml } from "@jantt/interop";
 import { OPEN_JSON_EDITOR_EVENT } from "./components/common/EmptyChartState";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
@@ -88,7 +90,7 @@ import {
 const IMPORT_ACCEPT = ".json,.xml,.xer,.csv,application/json,text/xml,text/csv";
 
 /** Timeline zoom ladder used by the +, - and 0 shortcuts (finest first). */
-const ZOOM_SCALES: TimeScale[] = ["day", "week", "month", "quarter", "year"];
+const ZOOM_SCALES: TimeScale[] = ["minute", "hour", "day", "week", "month", "quarter", "year"];
 const DEFAULT_ZOOM_SCALE: TimeScale = "week";
 const RiskDialog = React.lazy(() => import("./components/modals/MonteCarloModal").then(module => ({ default: module.MonteCarloModal })));
 
@@ -234,6 +236,8 @@ export function App() {
   const viewport = useGanttViewport({
     initialTheme: init.initialTheme,
     initialScale: init.initialScale,
+    initialTimeFormat: init.initialTimeFormat,
+    onTimeFormatPersist: auth.currentUser ? auth.updateTimeFormat : undefined,
     initialRouting: init.initialRouting,
     initialRowHeightMode: init.initialRowHeightMode,
     initialRowHeight: init.initialRowHeight,
@@ -242,6 +246,30 @@ export function App() {
     initialAutoCascade: init.initialAutoCascade,
     initialView: init.initialView
   });
+
+  // Account vs Browser time-format preference:
+  // - Logged-in accounts store & load `timeFormat` on `users/{uid}/timeFormat` (defaulting to "12h" AM/PM).
+  // - Guests / logged-out sessions keep their preference in browser localStorage.
+  const lastAuthUidRef = useRef<string | null>(null);
+  const { syncTimeFormat } = viewport;
+  useEffect(() => {
+    const uid = auth.userProfile?.uid || null;
+    if (!uid) {
+      if (lastAuthUidRef.current !== null) {
+        const guest = storageService.getItem<string>(STORAGE_KEYS.TIME_FORMAT);
+        syncTimeFormat(guest === "24h" ? "24h" : "12h");
+      }
+      lastAuthUidRef.current = null;
+      return;
+    }
+    const cloudFmt = auth.userProfile?.timeFormat;
+    if (cloudFmt === "12h" || cloudFmt === "24h") {
+      syncTimeFormat(cloudFmt);
+    } else if (lastAuthUidRef.current !== uid) {
+      syncTimeFormat("12h");
+    }
+    lastAuthUidRef.current = uid;
+  }, [auth.userProfile?.uid, auth.userProfile?.timeFormat, syncTimeFormat]);
 
   // Keep the overscroll canvas, detached sheets and browser chrome in the workspace theme.
   useLayoutEffect(() => {
@@ -735,6 +763,44 @@ export function App() {
     autoCascade: viewport.autoCascade
   });
 
+  const [notesIntent, setNotesIntent] = useState<NotesNavigationIntent | null>(null);
+  const handleConsumeNotesIntent = useCallback(() => setNotesIntent(null), []);
+  useEffect(() => { setNotesIntent(null); }, [project.activeProjectId]);
+
+  const handleAddTaskNote = useCallback((task: Task) => {
+    if (isReadOnly) {
+      handlePromptRestrictedAction();
+      return;
+    }
+    const currentData = editor.parsedData;
+    if (!currentData) return;
+    const now = new Date().toISOString();
+    const taskTitle = String(task.label || task.name || task.id || "Task").trim();
+    const newId = generateId("note");
+    const newNote: NoteItem = {
+      id: newId,
+      title: `${taskTitle} Note`,
+      content: "",
+      color: "#3B82F6",
+      pinned: false,
+      task_ids: [task.id],
+      createdAt: now,
+      updatedAt: now,
+      timestamp: now
+    };
+    commitPlan({
+      ...currentData,
+      notes: [newNote, ...(Array.isArray(currentData.notes) ? currentData.notes : [])]
+    });
+    setNotesIntent({ taskId: task.id, noteId: newId, mode: "add", nonce: Date.now() });
+    viewport.setActiveView("notes");
+  }, [isReadOnly, handlePromptRestrictedAction, editor.parsedData, commitPlan, viewport.setActiveView]);
+
+  const handleOpenTaskNotes = useCallback((task: Task, noteId?: string) => {
+    setNotesIntent({ taskId: task.id, noteId: noteId ?? null, mode: "manage", nonce: Date.now() });
+    viewport.setActiveView("notes");
+  }, [viewport.setActiveView]);
+
   // Interactive Slide-Out Task Detail Drawer
   const taskDetail = useTaskDetailSidebar({
     onInspectTask: setInspectedTaskId,
@@ -744,7 +810,10 @@ export function App() {
     handleChartCommit: commitPlan,
     readOnly: isReadOnly,
     onPromptFork: handlePromptRestrictedAction,
-    autoCascade: viewport.autoCascade
+    autoCascade: viewport.autoCascade,
+    timeFormat: viewport.timeFormat,
+    onAddTaskNote: handleAddTaskNote,
+    onOpenTaskNotes: handleOpenTaskNotes
   });
 
   // AI Copilot Live Assistant
@@ -1404,6 +1473,8 @@ export function App() {
               <ViewRouter
                 key={project.activeProjectId}
                 registerNoteBack={registerNoteBack}
+                notesIntent={notesIntent}
+                onConsumeNotesIntent={handleConsumeNotesIntent}
                 onOpenMonteCarlo={() => setShowRisk(true)}
                 remotePresence={remotePresence}
                 onInspectTask={setInspectedTaskId}

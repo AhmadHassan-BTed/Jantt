@@ -23,6 +23,9 @@ interface UseTaskDetailSidebarOptions {
   onPromptFork?: () => void;
   /** Auto-Cascade toggle. When omitted, the persisted preference is used. */
   autoCascade?: boolean;
+  timeFormat?: "12h" | "24h";
+  onAddTaskNote?: (task: Task) => void;
+  onOpenTaskNotes?: (task: Task, noteId?: string) => void;
 }
 
 /** Keys the sidebar never edits; ignored when diffing the edited task. */
@@ -61,7 +64,10 @@ export function useTaskDetailSidebar({
   handleChartCommit,
   readOnly = false,
   onPromptFork,
-  autoCascade
+  autoCascade,
+  timeFormat = "12h",
+  onAddTaskNote,
+  onOpenTaskNotes
 }: UseTaskDetailSidebarOptions) {
   const inspectRef = useRef(onInspectTask);
   inspectRef.current = onInspectTask;
@@ -80,6 +86,12 @@ export function useTaskDetailSidebar({
   handleChartCommitRef.current = handleChartCommit;
   const autoCascadeRef = useRef(autoCascade);
   autoCascadeRef.current = autoCascade;
+  const timeFormatRef = useRef(timeFormat);
+  timeFormatRef.current = timeFormat;
+  const addTaskNoteRef = useRef(onAddTaskNote);
+  addTaskNoteRef.current = onAddTaskNote;
+  const openTaskNotesRef = useRef(onOpenTaskNotes);
+  openTaskNotesRef.current = onOpenTaskNotes;
 
   const closeSidebar = useCallback(() => {
     const sidebar = activeSidebarRef.current;
@@ -132,6 +144,12 @@ export function useTaskDetailSidebar({
         theme: activeThemeRef.current.vars,
         themeClassName: activeThemeRef.current.className,
         readOnly: readOnlyRef.current,
+        timeFormat: timeFormatRef.current,
+        taskNotes: Array.isArray(openedWith.notes)
+          ? openedWith.notes.filter((n) => n && !n._deleted && Array.isArray(n.task_ids) && n.task_ids.includes(task.id))
+          : [],
+        onAddNote: addTaskNoteRef.current ? (t) => addTaskNoteRef.current?.(t) : undefined,
+        onOpenTaskNotes: openTaskNotesRef.current ? (t, nid) => openTaskNotesRef.current?.(t, nid) : undefined,
         onClose: () => {
           if (activeSidebarRef.current === sidebarInstance) activeSidebarRef.current = null;
           inspectRef.current?.(null);

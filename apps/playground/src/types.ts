@@ -48,3 +48,10 @@ export type AutoSaveInterval = "5s" | "10s" | "30s" | "60s" | "immediate" | "off
 export interface EffectivePerson extends Person {
   isInferred?: boolean;
 }
+
+export interface NotesNavigationIntent {
+  taskId: string;
+  noteId?: string | null;
+  mode: "add" | "manage";
+  nonce: number;
+}

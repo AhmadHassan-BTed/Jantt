@@ -18,7 +18,21 @@ import {
   isTaskToday,
   isStrictISODate,
   toEpochDay,
-  fromEpochDay
+  fromEpochDay,
+  hasTimeComponent,
+  toEpochMinutes,
+  toTaskEndEpochMinutes,
+  fromEpochMinutes,
+  getDatePart,
+  getTimePart,
+  addMinutes,
+  diffMinutes,
+  taskDurationMinutes,
+  formatDurationLabel,
+  formatTimeOfDay,
+  formatTimestampWithFormat,
+  splitTimestampToLocalInputs,
+  combineLocalInputsToISO
 } from "../src/date-math";
 
 
@@ -369,6 +383,62 @@ describe("Date Math Utilities", () => {
       expect(toEpochDay("garbage")).toBeNaN();
       expect(toEpochDay("2026-02-30")).toBeNaN();
       expect(toEpochDay(undefined)).toBeNaN();
+    });
+  });
+
+  // ─── Minute precision & 12h/24h formatting ─────────────────────────────
+
+  describe("minute precision helpers", () => {
+    it("distinguishes plain dates from explicit timestamps", () => {
+      expect(hasTimeComponent("2026-09-01")).toBe(false);
+      expect(hasTimeComponent("2026-09-01T09:30")).toBe(true);
+      expect(hasTimeComponent("2026-09-01T25:00")).toBe(false);
+      expect(isValidISODate("2026-09-01T25:00")).toBe(false);
+      expect(getDatePart("2026-09-01T09:30")).toBe("2026-09-01");
+      expect(getTimePart("2026-09-01T09:30")).toBe("09:30");
+      expect(getTimePart("2026-09-01")).toBe("");
+    });
+
+    it("round-trips epoch minutes and computes timed durations accurately", () => {
+      const m1 = toEpochMinutes("2026-09-01T09:15");
+      const m2 = toTaskEndEpochMinutes("2026-09-01T11:45");
+      expect(m2 - m1).toBe(150);
+      expect(fromEpochMinutes(m1)).toBe("2026-09-01T09:15");
+      expect(diffMinutes("2026-09-01T09:15", "2026-09-01T11:45")).toBe(150);
+      expect(taskDurationMinutes("2026-09-01T09:15", "2026-09-01T11:45")).toBe(150);
+      expect(taskDurationMinutes("2026-09-01", "2026-09-01")).toBe(1440);
+      expect(taskDurationMinutes("2026-09-01T09:00", "2026-09-01T11:00", true)).toBe(0);
+      expect(addMinutes("2026-09-01T09:15", 45)).toBe("2026-09-01T10:00");
+      expect(addDays("2026-09-01T09:15", 2)).toBe("2026-09-03T09:15");
+    });
+
+    it("formats times in default 12h AM/PM and 24h mode", () => {
+      expect(formatTimeOfDay(0, 0, "12h", true)).toBe("12 AM");
+      expect(formatTimeOfDay(14, 5, "12h")).toBe("2:05 PM");
+      expect(formatTimeOfDay(14, 5, "24h")).toBe("14:05");
+      expect(formatHumanDate("2026-09-05")).toBe("Sep 5, 2026");
+      expect(formatHumanDate("2026-09-05T14:30")).toBe("Sep 5, 2026, 2:30 PM");
+      expect(formatHumanDate("2026-09-05T14:30", true, "24h")).toBe("Sep 5, 2026, 14:30");
+      expect(formatDurationLabel(45)).toBe("45m");
+      expect(formatDurationLabel(150)).toBe("2h 30m");
+      expect(formatDurationLabel(1440)).toBe("1d");
+    });
+
+    it("evaluates sub-day overlap cleanly in isTaskOnDate", () => {
+      expect(isTaskOnDate("2026-09-01T09:00", "2026-09-01T17:00", "2026-09-01")).toBe(true);
+      expect(isTaskOnDate("2026-09-01T09:00", "2026-09-01T17:00", "2026-09-02")).toBe(false);
+    });
+
+    it("formats note timestamps in 12h and 24h formats and round-trips input values", () => {
+      expect(formatTimestampWithFormat("2026-11-27T18:22", "12h", true)).toBe("Nov 27, 2026, 6:22 PM");
+      expect(formatTimestampWithFormat("2026-11-27T18:22", "24h", true)).toBe("Nov 27, 2026, 18:22");
+      expect(formatTimestampWithFormat("2026-11-27T18:22", "12h", false)).toBe("Nov 27, 6:22 PM");
+      expect(formatTimestampWithFormat("invalid", "12h")).toBe("");
+
+      const iso = combineLocalInputsToISO("2026-11-27", "18:22");
+      expect(isStrictISODate(iso)).toBe(true);
+      expect(splitTimestampToLocalInputs(iso)).toEqual({ date: "2026-11-27", time: "18:22" });
+      expect(combineLocalInputsToISO("2026-11-27")).toBe("2026-11-27");
     });
   });
 });

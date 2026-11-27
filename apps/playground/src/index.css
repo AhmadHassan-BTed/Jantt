@@ -527,7 +527,7 @@ select option,
 .select-input:hover,
 .select-input:focus {
   border-color: var(--jantt-accent, #38BDF8);
-  box-shadow: 0 0 0 2px var(--jantt-accent-glow, rgba(56, 189, 248, 0.2));
+  box-shadow: none;
 }
 
 /* ==========================================================================
@@ -1788,7 +1788,7 @@ select option,
 
 .prompt-modal-textarea:focus {
   border-color: var(--jantt-accent, #0284C7);
-  box-shadow: 0 0 0 3px var(--jantt-accent-glow, rgba(2, 132, 199, 0.14));
+  box-shadow: none;
 }
 
 .prompt-input {
@@ -1806,7 +1806,7 @@ select option,
 
 .prompt-input:focus {
   border-color: var(--jantt-accent, #0284C7);
-  box-shadow: 0 0 0 3px var(--jantt-accent-glow, rgba(2, 132, 199, 0.14));
+  box-shadow: none;
 }
 
 /* Ideology & Architecture Explainer */
@@ -4767,7 +4767,7 @@ path.jantt-dep-path.jantt-task-dimmed {
 }
 
 .notes-search-bar:focus-within {
-  border-color: var(--jantt-accent, #38BDF8);
+  border-color: color-mix(in srgb, var(--jantt-accent, #38BDF8) 45%, var(--jantt-border));
 }
 
 .notes-search-icon {
@@ -4786,6 +4786,75 @@ path.jantt-dep-path.jantt-task-dimmed {
 
 .notes-search-input::placeholder {
   color: var(--jantt-text-muted, #64748B);
+}
+
+.notes-task-filter-bar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.notes-task-filter-select {
+  width: 100%;
+  background: var(--jantt-bg, rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--jantt-text, #F8FAFC);
+  outline: none;
+  cursor: pointer;
+}
+
+.notes-task-filter-select:focus {
+  border-color: var(--jantt-accent, #38BDF8);
+}
+
+.notes-task-banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--jantt-accent, #38BDF8) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--jantt-accent, #38BDF8) 32%, transparent);
+  color: var(--jantt-text, #F8FAFC);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.notes-task-banner-icon {
+  color: var(--jantt-accent, #38BDF8);
+  flex-shrink: 0;
+}
+
+.notes-task-banner-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-task-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.14));
+  background: var(--jantt-surface-solid, #1E293B);
+  color: var(--jantt-text-muted, #94A3B8);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.notes-task-clear-btn:hover {
+  color: var(--jantt-text, #F8FAFC);
+  border-color: var(--jantt-accent, #38BDF8);
 }
 
 .notes-color-filter-strip {
@@ -4988,6 +5057,14 @@ path.jantt-dep-path.jantt-task-dimmed {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-item-rel-sep {
+  color: inherit;
 }
 
 .note-item-attached-count {
@@ -5137,6 +5214,31 @@ path.jantt-dep-path.jantt-task-dimmed {
   transition: all 0.15s ease;
 }
 
+.note-stamp-btn {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: color-mix(in srgb, var(--jantt-accent, #38BDF8) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--jantt-accent, #38BDF8) 32%, transparent);
+  color: var(--jantt-accent, #38BDF8);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.note-stamp-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--jantt-accent, #38BDF8) 20%, transparent);
+}
+
+.note-stamp-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .note-action-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--jantt-text, #F8FAFC);
@@ -5236,6 +5338,82 @@ path.jantt-dep-path.jantt-task-dimmed {
 .note-title-input.is-readonly {
   cursor: default;
   user-select: none;
+}
+
+.note-timestamps-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.08));
+}
+
+.note-ts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-family: var(--jantt-font-mono);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--jantt-accent, #38BDF8) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--jantt-accent, #38BDF8) 30%, transparent);
+  color: var(--jantt-accent, #38BDF8);
+}
+
+.note-ts-chip.is-editable {
+  cursor: pointer;
+}
+
+.note-ts-chip.is-editable:hover,
+.note-ts-chip.is-open {
+  background: color-mix(in srgb, var(--jantt-accent, #38BDF8) 20%, transparent);
+  border-color: var(--jantt-accent, #38BDF8);
+}
+
+.note-ts-meta {
+  font-size: 11px;
+  font-family: var(--jantt-font-mono);
+  color: var(--jantt-text-muted, #94A3B8);
+}
+
+.note-ts-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.1));
+}
+
+.note-ts-input {
+  background: var(--jantt-bg, #0F172A);
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.14));
+  border-radius: 6px;
+  color: var(--jantt-text, #F8FAFC);
+  font-size: 12px;
+  font-family: var(--jantt-font-mono);
+  padding: 4px 8px;
+}
+
+.note-ts-action-btn {
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--jantt-border, rgba(255, 255, 255, 0.14));
+  background: var(--jantt-surface-solid, #1E293B);
+  color: var(--jantt-text, #F8FAFC);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.note-ts-action-btn:hover {
+  border-color: var(--jantt-accent, #38BDF8);
+  color: var(--jantt-accent, #38BDF8);
 }
 
 .note-contenteditable-surface {
@@ -7508,13 +7686,15 @@ path.jantt-dep-path.jantt-task-dimmed {
   border: 0;
 }
 
-/* Visible keyboard focus everywhere (mouse clicks do not trigger :focus-visible). */
+/* A single thin focus ring, including text fields that match :focus-visible on click. */
 :where(button, [href], input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--jantt-accent, #38BDF8);
-  outline-offset: 2px;
+  outline: 1px solid var(--jantt-accent, #38BDF8);
+  outline-offset: 1px;
 }
 
 /* Text surfaces that already show focus through their caret/frame. */
+.notes-search-input:focus,
+.notes-search-input:focus-visible,
 .code-textarea:focus-visible,
 .command-palette-input:focus-visible,
 .plan-switcher-search input:focus-visible,

@@ -4,16 +4,18 @@ import {
   Task,
   TaskLayout,
   TimeScale,
+  TimeFormat,
   LinkRoutingStyle,
   RowHeightMode,
   ViewportOptions,
-  CriticalPathResult
+  CriticalPathResult,
+  JanttLayoutResult
 } from "../types";
-import { layout, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "../layout";
+import { layout, buildSubTicks, getSubDayTickStepMinutes, computeChartBounds, computeDependencyPath, getScaleFromDayWidth, SCALE_DAY_WIDTHS } from "../layout";
 import { InteractionController } from "../controller";
 import { createTaskSidebar } from "../sidebar";
 import { resolveSchedule, calculateCriticalPath } from "../resolver";
-import { clampDayWidth } from "../utils";
+import { clampDayWidth, isTaskDone } from "../utils";
 import { diffDays, getTodayISODate, getTodayProgressFraction } from "../date-math";
 import {
   DEFAULT_GAP_DAYS,
@@ -69,6 +71,9 @@ export class JanttRendererEngine {
   private container: HTMLElement;
   private root: HTMLElement;
   private currentData: JanttData;
+  private lastInputData: JanttData;
+  private lastInputSnapshot: string;
+  private lastResolvedSnapshot: string;
   private currentOptions: JanttOptions;
 
   private state: ViewportCoordinationState;
@@ -86,6 +91,16 @@ export class JanttRendererEngine {
   private resizeTimer: number | null = null;
   private todayTimer: ReturnType<typeof setInterval> | null = null;
   private frameRenderId: number | null = null;
+  private wheelSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  private windowFrameId: number | null = null;
+  private timelineAreaEl: HTMLElement | null = null;
+  private gridContainerEl: HTMLElement | null = null;
+  private labelColumnEl: HTMLElement | null = null;
+  private labelSignature: unknown[] = [];
+  private structureSignature: unknown[] = [];
+  private lastLayoutResult: JanttLayoutResult | null = null;
+  private barNodes: ReturnType<typeof renderTaskBars>["barNodes"] = new Map();
+  private readonly depPathElements = new Map<string, SVGPathElement>();
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Aborted on destroy: tears down window-level listeners owned by this chart (e.g. header drags). */
@@ -112,16 +127,23 @@ export class JanttRendererEngine {
   private wheelZoomAnchored = false;
   /** True while dragging a timeline header column/handle: defers host viewport broadcasts until release. */
   private isColumnDragging = false;
+  /** Rendered pixel window for sub-day ticks (triggers lightweight panning updates near edges). */
+  private renderedSubTickWindow: { startX: number; endX: number; totalWidth: number; scale: TimeScale } | null = null;
 
   constructor(container: HTMLElement, initialData: JanttData, options: JanttOptions = {}) {
     this.container = container;
     this.currentOptions = { ...options };
+    this.lastInputData = initialData;
+    this.lastInputSnapshot = JSON.stringify(initialData);
     this.currentData = { ...initialData, tasks: this.resolveTasks(initialData) };
+    this.lastResolvedSnapshot = JSON.stringify(this.currentData);
 
     const initialScale: TimeScale = this.currentOptions.viewport?.scale || this.currentData.meta?.scale || "day";
     const initialDayWidth: number = clampDayWidth(
       this.currentOptions.viewport?.dayWidth || SCALE_DAY_WIDTHS[initialScale] || 36
     );
+    const initialTimeFormat: TimeFormat =
+      (this.currentOptions.viewport?.timeFormat || this.currentData.meta?.timeFormat) === "24h" ? "24h" : "12h";
     const initialRouting: LinkRoutingStyle =
       this.currentOptions.viewport?.linkRouting || this.currentData.meta?.linkRouting || "orthogonal";
     const initialRowHeightMode: RowHeightMode = this.currentOptions.viewport?.rowHeightMode || "fit";
@@ -138,6 +160,7 @@ export class JanttRendererEngine {
     this.state = {
       currentScale: getScaleFromDayWidth(initialDayWidth),
       currentDayWidth: initialDayWidth,
+      timeFormat: initialTimeFormat,
       currentRouting: initialRouting,
       rowHeightMode: initialRowHeightMode,
       customRowHeight: initialCustomRowHeight,
@@ -164,7 +187,8 @@ export class JanttRendererEngine {
     // Body-mounted hover cards receive the resolved theme tokens, so they always match the chart.
     this.tooltip = createTooltipController({
       theme: this.resolveThemeVars(),
-      themeClassName: this.currentOptions.themeClassName
+      themeClassName: this.currentOptions.themeClassName,
+      timeFormat: this.state.timeFormat
     });
   }
 
@@ -339,14 +363,22 @@ export class JanttRendererEngine {
     e.preventDefault();
     const deltaPx = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
     const zoomFactor = Math.min(2, Math.max(0.5, Math.exp(-deltaPx * 0.0025)));
-    // Anchor before applying: a host that re-renders synchronously from onDayWidthChange
-    // consumes the anchor in that render instead.
+    // Anchor before applying so all wheel events in this frame share the same date.
     const anchorNow = !this.wheelZoomAnchored && this.state.dragAnchorLeftmostDays === null;
     if (anchorNow) {
       this.setZoomAnchor(e.clientX);
       this.wheelZoomAnchored = true;
     }
-    if (this.applyDayWidth(this.state.currentDayWidth * zoomFactor)) {
+    if (this.applyDayWidth(this.state.currentDayWidth * zoomFactor, false)) {
+      this.root.classList.add("is-zooming");
+      if (this.wheelSettleTimer !== null) clearTimeout(this.wheelSettleTimer);
+      this.wheelSettleTimer = setTimeout(() => {
+        this.wheelSettleTimer = null;
+        if (this.isColumnDragging) return;
+        this.root.classList.remove("is-zooming");
+        this.currentOptions.onDayWidthChange?.(this.state.currentDayWidth);
+        this.broadcastViewport();
+      }, 140);
       this.scheduleFrameRender();
     } else if (anchorNow) {
       this.wheelZoomAnchored = false;
@@ -381,6 +413,29 @@ export class JanttRendererEngine {
     bodyWrap.addEventListener("contextmenu", (e) => {
       if (e.target instanceof Element && e.target.closest(".jantt-grid-container")) e.preventDefault();
     });
+    bodyWrap.addEventListener(
+      "scroll",
+      () => {
+        if (this.destroyed || !this.renderedSubTickWindow) return;
+        const win = this.renderedSubTickWindow;
+        const left = bodyWrap.scrollLeft;
+        const labelColW = this.currentOptions.hideLabelColumn ? 0 : this.state.labelWidth;
+        const visibleW = Math.max(bodyWrap.clientWidth - labelColW, 300);
+        const right = left + visibleW;
+        const margin = 450;
+        if (
+          (left < win.startX + margin && win.startX > 2) ||
+          (right > win.endX - margin && win.endX < win.totalWidth - 2)
+        ) {
+          if (this.windowFrameId !== null) return;
+          this.windowFrameId = requestAnimationFrame(() => {
+            this.windowFrameId = null;
+            if (!this.destroyed) this.refreshViewportWindow();
+          });
+        }
+      },
+      { passive: true }
+    );
     this.root.appendChild(bodyWrap);
     this.bodyWrap = bodyWrap;
     return bodyWrap;
@@ -407,6 +462,7 @@ export class JanttRendererEngine {
       theme: this.resolveThemeVars(),
       themeClassName: this.currentOptions.themeClassName,
       readOnly: this.currentOptions.readOnly,
+      timeFormat: this.state.timeFormat,
       // Same gap and working calendars as the cascade, so conflict hints match the drawn schedule
       scheduleOptions: TaskScheduleCoordinator.scheduleOptions(this.currentData),
       customRenderer: this.currentOptions.renderDetail,
@@ -522,6 +578,7 @@ export class JanttRendererEngine {
       meta: this.currentData.meta,
       taskCount,
       currentScale: this.state.currentScale,
+      timeFormat: this.state.timeFormat,
       currentRouting: this.state.currentRouting,
       rowHeightMode: this.state.rowHeightMode,
       rowHeight,
@@ -541,6 +598,13 @@ export class JanttRendererEngine {
         this.state.currentDayWidth = SCALE_DAY_WIDTHS[s] || 36;
         this.state.currentScale = getScaleFromDayWidth(this.state.currentDayWidth);
         this.currentOptions.onDayWidthChange?.(this.state.currentDayWidth);
+        this.broadcastViewport();
+        this.render();
+      },
+      onTimeFormatChange: (fmt: TimeFormat) => {
+        if (this.state.timeFormat === fmt) return;
+        this.state.timeFormat = fmt;
+        this.tooltip.updateTheme(this.resolveThemeVars(), this.currentOptions.themeClassName, fmt);
         this.broadcastViewport();
         this.render();
       },
@@ -621,6 +685,160 @@ export class JanttRendererEngine {
     }
   };
 
+  private createTimelineHeader(
+    { header, viewport }: JanttLayoutResult,
+    visibleXRange?: { startX: number; endX: number }
+  ): HTMLElement {
+    return renderTimelineHeader(header, {
+      visibleXRange,
+      selectedDate: this.state.selectedDateFilter,
+      dayWidth: this.state.currentDayWidth,
+      showToday: viewport.showToday,
+      showTodayTag: viewport.showTodayTag,
+      signal: this.lifecycle.signal,
+      onColumnResize: (w) => this.handleColumnDragResize(w),
+      // The grabbed date stays under the pointer for the whole drag session
+      onColumnResizeStart: (clientX) => {
+        this.wheelZoomAnchored = false; // the drag session owns the anchor until it ends
+        this.isColumnDragging = true;
+        if (this.wheelSettleTimer !== null) clearTimeout(this.wheelSettleTimer);
+        this.wheelSettleTimer = null;
+        this.root.classList.add("is-zooming");
+        this.setZoomAnchor(clientX);
+      },
+      onColumnResizeEnd: () => {
+        this.clearZoomAnchor();
+        if (this.isColumnDragging) {
+          this.isColumnDragging = false;
+          this.root.classList.remove("is-zooming");
+          // Persist/sync the settled zoom once on drag release (prevents React round-trip stutter mid-drag)
+          this.currentOptions.onDayWidthChange?.(this.state.currentDayWidth);
+          this.broadcastViewport();
+        }
+      },
+      onDateClick: (dateStr: string) => {
+        const shouldFilter =
+          this.currentOptions.filterTasksByDate !== false &&
+          this.currentOptions.viewport?.filterTasksByDate !== false;
+        if (shouldFilter) {
+          this.state.selectedDateFilter = this.state.selectedDateFilter === dateStr ? null : dateStr;
+        }
+        this.currentOptions.onDateClick?.(dateStr);
+        this.broadcastViewport();
+        this.render();
+      }
+    });
+  }
+
+  private visibleWindow(scrollLeft: number): { startX: number; endX: number } {
+    const labelW = this.currentOptions.hideLabelColumn ? 0 : this.state.labelWidth;
+    const visibleW = Math.max((this.bodyWrap?.clientWidth || this.container.clientWidth || 1200) - labelW, 360);
+    let overscan = Math.max(visibleW * 0.75, 800);
+    if (this.state.currentScale === "hour" || this.state.currentScale === "minute") {
+      const tickWidth = getSubDayTickStepMinutes(this.state.currentScale, this.state.currentDayWidth) * this.state.currentDayWidth / 1440;
+      // Reserve the visible viewport first: the tick cap must never leave a 4K screen blank.
+      overscan = Math.min(overscan, Math.max(0, (218 * tickWidth - visibleW) / 2));
+    }
+    return { startX: Math.max(0, scrollLeft - overscan), endX: scrollLeft + visibleW + overscan };
+  }
+
+  private rememberWindow(result: JanttLayoutResult, range?: { startX: number; endX: number }) {
+    this.renderedSubTickWindow = range ? {
+      startX: range.startX, endX: Math.min(range.endX, result.canvasWidth),
+      totalWidth: result.canvasWidth, scale: result.header.scale
+    } : null;
+  }
+
+  /** Replaces only the vector/background layers. Bars and the sticky table stay mounted. */
+  private replaceViewportLayers(result: JanttLayoutResult, visibleXRange?: { startX: number; endX: number }) {
+    const { header, tasks: taskLayouts, viewport, dependencies, canvasWidth, canvasHeight } = result;
+    const grid = this.gridContainerEl!;
+    const focus = this.captureFocus();
+    this.timelineAreaEl!.querySelector(".jantt-timeline-header")!.replaceWith(this.createTimelineHeader(result, visibleXRange));
+    const { gridLayer, todayLine } = renderTimelineGrid({
+      header, taskLayouts, rowHeight: viewport.rowHeight, showToday: viewport.showToday,
+      showCritical: this.state.showCritical, hasAddRow: !this.currentOptions.readOnly,
+      selectedDate: this.state.selectedDateFilter, visibleXRange
+    });
+    // Carry row hover state to the replacement grid while its label stays under the pointer.
+    grid.querySelectorAll(".jantt-grid-row.is-row-highlighted").forEach(row => {
+      const id = row.getAttribute("data-grid-row-id");
+      if (id) gridLayer.querySelector(`[data-grid-row-id="${cssAttrValue(id)}"]`)?.classList.add("is-row-highlighted");
+    });
+    grid.querySelector(".jantt-grid-layer")!.replaceWith(gridLayer);
+    const oldToday = grid.querySelector<HTMLElement>(".jantt-today-line");
+    if (oldToday && todayLine) oldToday.style.left = todayLine.style.left;
+    else if (todayLine) grid.appendChild(todayLine);
+    else oldToday?.remove();
+    const activePaths = new Map(Array.from(this.depPathElements, ([key, path]) => [key, {
+      active: path.classList.contains("is-active"), chain: path.classList.contains("is-critical-chain")
+    }]));
+    const wire = this.previewWireSvg?.getAttribute("d");
+    const { svg, previewWireSvg } = renderDependencyLinks({
+      dependencies, canvasWidth, canvasHeight, visibleXRange, depPathElements: this.depPathElements,
+      showCritical: this.state.showCritical,
+      onLinkDelete: this.currentOptions.readOnly ? undefined : this.handleLinkDelete,
+      taskLabels: new Map(taskLayouts.map(t => [t.task.id, t.displayLabel]))
+    });
+    for (const [key, path] of this.depPathElements) {
+      const previous = activePaths.get(key);
+      if (!previous?.active) continue;
+      path.classList.add("is-active");
+      if (previous.chain) path.classList.add("is-critical-chain");
+      path.setAttribute("marker-end", previous.chain ? `url(#${svg.dataset.arrowCriticalId})` : path.dataset.activeMarker!);
+    }
+    if (wire) previewWireSvg.setAttribute("d", wire);
+    this.previewWireSvg = previewWireSvg;
+    grid.querySelector(".jantt-svg-overlay")!.replaceWith(svg);
+    this.rememberWindow(result, visibleXRange);
+    this.restoreFocus(focus);
+  }
+
+  /** Passive horizontal panning never invokes layout or rebuilds the interactive task DOM. */
+  private refreshViewportWindow() {
+    const result = this.lastLayoutResult;
+    if (!result || !this.bodyWrap || !this.timelineAreaEl || !this.gridContainerEl) return;
+    const range = this.visibleWindow(this.bodyWrap.scrollLeft);
+    if (result.header.scale === "hour" || result.header.scale === "minute") {
+      result.header.subTicks = buildSubTicks(result.header.scale, result.viewport.dayWidth,
+        result.header.startDate, result.header.totalDays, this.state.timeFormat, range);
+    }
+    this.replaceViewportLayers(result, range);
+  }
+
+  private patchTaskBars(taskLayouts: TaskLayout[]) {
+    for (const item of taskLayouts) {
+      const nodes = this.barNodes.get(item.task.id)!;
+      nodes.bar.style.left = `${item.x}px`;
+      nodes.bar.style.width = `${item.width}px`;
+      nodes.bar.classList.toggle("is-selected", this.controller.isSelected(item.task.id));
+      if (nodes.baseline && item.baselineLayout) {
+        nodes.baseline.style.left = `${item.baselineLayout.x}px`;
+        nodes.baseline.style.width = `${item.baselineLayout.width}px`;
+      }
+      // Width-dependent badges retain the same visibility rules across zoom thresholds.
+      if (!nodes.isMilestone && Number.isFinite(item.task.progress)) {
+        let badges = nodes.bar.querySelector<HTMLElement>(".jantt-bar-badges");
+        const percent = badges?.querySelector(".jantt-bar-percent");
+        if (item.width < 90) {
+          percent?.remove();
+          if (badges?.childElementCount === 0) badges.remove();
+        }
+        else if (!percent) {
+          if (!badges) {
+            badges = document.createElement("div");
+            badges.className = "jantt-bar-badges";
+            nodes.bar.querySelector(".jantt-bar-content")!.appendChild(badges);
+          }
+          const next = document.createElement("span");
+          next.className = "jantt-bar-percent";
+          next.textContent = `${Math.round(Math.min(1, Math.max(0, isTaskDone(item.task) ? 1 : item.task.progress!)) * 100)}%`;
+          badges.prepend(next);
+        }
+      }
+    }
+  }
+
   private renderFrame() {
     // Cards anchored to bars that are about to be replaced would otherwise stay stuck on screen
     this.tooltip.hide();
@@ -665,6 +883,7 @@ export class JanttRendererEngine {
       ...this.currentOptions.viewport,
       scale: this.state.currentScale,
       dayWidth: this.state.currentDayWidth,
+      timeFormat: this.state.timeFormat,
       linkRouting: this.state.currentRouting,
       rowHeightMode: this.state.rowHeightMode,
       showCriticalPath: this.state.showCritical,
@@ -673,6 +892,19 @@ export class JanttRendererEngine {
       selectedDate: this.state.selectedDateFilter,
       criticalResult: masterCriticalResult
     };
+    const predictedBounds = computeChartBounds(layoutData, layoutOptions);
+    const targetScrollLeft = ViewportCoordinator.calculateScrollTarget(
+      savedScrollLeft,
+      hadPreviousRender,
+      predictedBounds.startDate,
+      this.state.currentDayWidth,
+      this.state
+    );
+    const predictedCanvasWidth = Math.max(predictedBounds.totalDays * this.state.currentDayWidth, 600);
+    if (this.state.currentScale === "hour" || this.state.currentScale === "minute" || predictedCanvasWidth > 5000) {
+      layoutOptions.visibleXRange = this.visibleWindow(targetScrollLeft);
+    }
+
     const effectiveRowHeight = ViewportCoordinator.calculateRowHeight(
       this.container,
       this.root,
@@ -680,21 +912,16 @@ export class JanttRendererEngine {
       layoutOptions,
       this.state.rowHeightMode,
       this.state.customRowHeight,
-      this.currentOptions.readOnly
+      this.currentOptions.readOnly,
+      predictedBounds
     );
-    const layoutResult = layout(layoutData, { ...layoutOptions, rowHeight: effectiveRowHeight });
+    const layoutResult = layout(layoutData, { ...layoutOptions, rowHeight: effectiveRowHeight }, predictedBounds);
 
     const { tasks: taskLayouts, dependencies, header, viewport, canvasWidth, canvasHeight } = layoutResult;
     const newStartDate = layoutResult.viewport.startDate;
     this.lastRowHeight = viewport.rowHeight;
+    this.rememberWindow(layoutResult, layoutOptions.visibleXRange);
 
-    const targetScrollLeft = ViewportCoordinator.calculateScrollTarget(
-      savedScrollLeft,
-      hadPreviousRender,
-      newStartDate,
-      this.state.currentDayWidth,
-      this.state
-    );
     if (this.wheelZoomAnchored) {
       this.wheelZoomAnchored = false;
       this.clearZoomAnchor();
@@ -743,155 +970,158 @@ export class JanttRendererEngine {
       updateToolbar(toolbar, this.buildToolbarProps(displayTasks.length, criticalCount, effectiveRowHeight));
     }
 
-    // 7. Right Timeline Area Container
-    const timelineArea = document.createElement("div");
-    timelineArea.className = "jantt-timeline-area";
-    timelineArea.style.width = `${canvasWidth}px`;
-    timelineArea.style.minWidth = `${canvasWidth}px`;
+    const labelSignature = [this.currentData.tasks, displayTasks.length, this.state.filterQuery,
+      this.state.selectedDateFilter, this.state.labelWidth, header.totalHeight, viewport.rowHeight,
+      this.state.showCritical, this.currentOptions.hideLabelColumn, this.currentOptions.readOnly,
+      this.currentData.people, this.currentData.teams, this.state.timeFormat, this.currentData.categories,
+      masterCriticalResult, this.currentOptions.theme, this.currentOptions.themeClassName,
+      this.currentOptions.className, getTodayISODate(viewport.currentTime)];
+    const same = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const reuseLabel = Boolean(this.labelColumnEl?.parentElement === this.bodyWrap && same(labelSignature, this.labelSignature));
+    const structureSignature = [...labelSignature, this.state.showBaselines, this.state.currentRouting];
+    const patchInPlace = !this.currentOptions.hideLabelColumn && this.timelineAreaEl?.parentElement === this.bodyWrap &&
+      this.gridContainerEl?.parentElement === this.timelineAreaEl && this.barNodes.size === taskLayouts.length &&
+      same(structureSignature, this.structureSignature);
 
-    // 7a. Timeline Header
-    const timelineHeader = renderTimelineHeader(header, {
-      selectedDate: this.state.selectedDateFilter,
-      dayWidth: this.state.currentDayWidth,
-      showToday: viewport.showToday,
-      showTodayTag: viewport.showTodayTag,
-      signal: this.lifecycle.signal,
-      onColumnResize: (w) => this.handleColumnDragResize(w),
-      // The grabbed date stays under the pointer for the whole drag session
-      onColumnResizeStart: (clientX) => {
-        this.wheelZoomAnchored = false; // the drag session owns the anchor until it ends
-        this.isColumnDragging = true;
-        this.setZoomAnchor(clientX);
-      },
-      onColumnResizeEnd: () => {
-        this.clearZoomAnchor();
-        if (this.isColumnDragging) {
-          this.isColumnDragging = false;
-          // Persist/sync the settled zoom once on drag release (prevents React round-trip stutter mid-drag)
-          this.currentOptions.onDayWidthChange?.(this.state.currentDayWidth);
-          this.broadcastViewport();
-        }
-      },
-      onDateClick: (dateStr: string) => {
-        const shouldFilter =
-          this.currentOptions.filterTasksByDate !== false &&
-          this.currentOptions.viewport?.filterTasksByDate !== false;
-        if (shouldFilter) {
-          this.state.selectedDateFilter = this.state.selectedDateFilter === dateStr ? null : dateStr;
-        }
-        this.currentOptions.onDateClick?.(dateStr);
-        this.broadcastViewport();
-        this.render();
-      }
-    });
-    timelineArea.appendChild(timelineHeader);
+    if (patchInPlace) {
+      this.timelineAreaEl!.style.width = `${canvasWidth}px`;
+      this.timelineAreaEl!.style.minWidth = `${canvasWidth}px`;
+      this.gridContainerEl!.style.width = `${canvasWidth}px`;
+      this.replaceViewportLayers(layoutResult, layoutOptions.visibleXRange);
+      this.patchTaskBars(taskLayouts);
+    } else {
+      // 7. Right Timeline Area Container
+      const timelineArea = document.createElement("div");
+      timelineArea.className = "jantt-timeline-area";
+      timelineArea.style.width = `${canvasWidth}px`;
+      timelineArea.style.minWidth = `${canvasWidth}px`;
 
-    // 7b. Canvas Body Container: an isolated stacking context (see .jantt-grid-container), so bars,
-    // critical-path styling, links and the marquee can never paint over the sticky header or table.
-    const hasAddRow = !this.currentOptions.readOnly;
-    const addRowHeight = hasAddRow ? Math.min(viewport.rowHeight, 38) : 0;
-    const totalCanvasHeight = canvasHeight + addRowHeight;
+      // 7a. Timeline Header
+      const timelineHeader = this.createTimelineHeader(layoutResult, layoutOptions.visibleXRange);
+      timelineArea.appendChild(timelineHeader);
 
-    const gridContainer = document.createElement("div");
-    gridContainer.className = "jantt-grid-container";
-    gridContainer.style.position = "relative";
-    gridContainer.style.width = `${canvasWidth}px`;
-    gridContainer.style.height = `${totalCanvasHeight}px`;
+      // 7b. Canvas Body Container: an isolated stacking context (see .jantt-grid-container), so bars,
+      // critical-path styling, links and the marquee can never paint over the sticky header or table.
+      const hasAddRow = !this.currentOptions.readOnly;
+      const addRowHeight = hasAddRow ? Math.min(viewport.rowHeight, 38) : 0;
+      const totalCanvasHeight = canvasHeight + addRowHeight;
 
-    const hideLabelColumn = Boolean(this.currentOptions.hideLabelColumn);
-    this.root.classList.toggle("jantt-label-col-hidden", hideLabelColumn);
+      const gridContainer = document.createElement("div");
+      gridContainer.className = "jantt-grid-container";
+      gridContainer.style.position = "relative";
+      gridContainer.style.width = `${canvasWidth}px`;
+      gridContainer.style.height = `${totalCanvasHeight}px`;
 
-    // 8. Render Sticky Data Grid Table (omitted when hideLabelColumn is active)
-    const labelCol = hideLabelColumn
-      ? null
-      : renderGridTable({
+      const hideLabelColumn = Boolean(this.currentOptions.hideLabelColumn);
+      this.root.classList.toggle("jantt-label-col-hidden", hideLabelColumn);
+
+      // 8. Render Sticky Data Grid Table (omitted when hideLabelColumn is active)
+      const labelCol = hideLabelColumn
+        ? null
+        : reuseLabel ? this.labelColumnEl : renderGridTable({
+            taskLayouts,
+            labelWidth: this.state.labelWidth,
+            headerHeight: header.totalHeight,
+            rowHeight: viewport.rowHeight,
+            gridContainer,
+            getGridContainer: () => this.gridContainerEl,
+            controller: this.controller,
+            showCritical: this.state.showCritical,
+            people: this.currentData.people,
+            teams: this.currentData.teams,
+            onTaskClick: (task: Task) => {
+              if (this.currentOptions.mobileDoubleTapToOpen) {
+                const now = Date.now();
+                if (this.lastLabelTaskTap?.id === task.id && now - this.lastLabelTaskTap.time <= 420) {
+                  this.lastLabelTaskTap = null;
+                  this.currentOptions.onTaskClick?.(task);
+                  this.openTaskSidebar(task);
+                } else {
+                  this.lastLabelTaskTap = { id: task.id, time: now };
+                  this.controller.selectTask(task.id, false);
+                }
+                return;
+              }
+              this.currentOptions.onTaskClick?.(task);
+              this.openTaskSidebar(task);
+            },
+            onTaskKeyOpen: (task: Task) => {
+              this.lastLabelTaskTap = null;
+              this.currentOptions.onTaskClick?.(task);
+              this.openTaskSidebar(task);
+            },
+            onAddTask: this.currentOptions.readOnly ? undefined : this.handleAddTask,
+            onLabelWidthChange: this.handleLabelWidthChange
+          }).labelCol;
+
+      // 9. Render Timeline Grid Lines & Today Line
+      const { gridLayer, todayLine } = renderTimelineGrid({
+        header,
+        taskLayouts,
+        rowHeight: viewport.rowHeight,
+        showToday: viewport.showToday,
+        showCritical: this.state.showCritical,
+        hasAddRow,
+        selectedDate: this.state.selectedDateFilter,
+        visibleXRange: layoutOptions.visibleXRange
+      });
+      gridContainer.appendChild(gridLayer);
+      if (todayLine) gridContainer.appendChild(todayLine);
+
+      // 10. Render SVG Dependency Connectors & Preview Wire (links are not editable in read-only mode)
+      const { svg, previewWireSvg: pWire, depPathElements } = renderDependencyLinks({
+        dependencies,
+        canvasWidth,
+        canvasHeight,
+        visibleXRange: layoutOptions.visibleXRange,
+        depPathElements: this.depPathElements,
+        showCritical: this.state.showCritical,
+        onLinkDelete: this.currentOptions.readOnly ? undefined : this.handleLinkDelete,
+        taskLabels: this.currentOptions.readOnly
+          ? undefined
+          : new Map(taskLayouts.map((t) => [t.task.id, t.displayLabel]))
+      });
+      this.previewWireSvg = pWire;
+      gridContainer.appendChild(svg);
+
+      // 11. Render Task Bars, Milestones, and Progress Handles
+      this.barNodes = renderTaskBars(
+        {
           taskLayouts,
-          labelWidth: this.state.labelWidth,
-          headerHeight: header.totalHeight,
-          rowHeight: viewport.rowHeight,
-          gridContainer,
-          controller: this.controller,
+          dependencies,
+          depPathElements,
           showCritical: this.state.showCritical,
+          showBaselines: this.state.showBaselines,
+          readOnly: this.currentOptions.readOnly,
+          timeFormat: this.state.timeFormat,
+          showOutsideLabels: hideLabelColumn,
           people: this.currentData.people,
           teams: this.currentData.teams,
-          onTaskClick: (task: Task) => {
-            if (this.currentOptions.mobileDoubleTapToOpen) {
-              const now = Date.now();
-              if (this.lastLabelTaskTap?.id === task.id && now - this.lastLabelTaskTap.time <= 420) {
-                this.lastLabelTaskTap = null;
-                this.currentOptions.onTaskClick?.(task);
-                this.openTaskSidebar(task);
-              } else {
-                this.lastLabelTaskTap = { id: task.id, time: now };
-                this.controller.selectTask(task.id, false);
-              }
-              return;
-            }
-            this.currentOptions.onTaskClick?.(task);
-            this.openTaskSidebar(task);
-          },
-          onTaskKeyOpen: (task: Task) => {
-            this.lastLabelTaskTap = null;
-            this.currentOptions.onTaskClick?.(task);
-            this.openTaskSidebar(task);
-          },
-          onAddTask: this.currentOptions.readOnly ? undefined : this.handleAddTask,
-          onLabelWidthChange: this.handleLabelWidthChange
-        }).labelCol;
+          controller: this.controller,
+          tooltip: this.tooltip
+        },
+        gridContainer
+      ).barNodes;
+      timelineArea.appendChild(gridContainer);
 
-    // 9. Render Timeline Grid Lines & Today Line
-    const { gridLayer, todayLine } = renderTimelineGrid({
-      header,
-      taskLayouts,
-      rowHeight: viewport.rowHeight,
-      showToday: viewport.showToday,
-      showCritical: this.state.showCritical,
-      hasAddRow,
-      selectedDate: this.state.selectedDateFilter
-    });
-    gridContainer.appendChild(gridLayer);
-    if (todayLine) gridContainer.appendChild(todayLine);
-
-    // 10. Render SVG Dependency Connectors & Preview Wire (links are not editable in read-only mode)
-    const { svg, previewWireSvg: pWire, depPathElements } = renderDependencyLinks({
-      dependencies,
-      canvasWidth,
-      canvasHeight,
-      showCritical: this.state.showCritical,
-      onLinkDelete: this.currentOptions.readOnly ? undefined : this.handleLinkDelete,
-      taskLabels: this.currentOptions.readOnly
-        ? undefined
-        : new Map(taskLayouts.map((t) => [t.task.id, t.displayLabel]))
-    });
-    this.previewWireSvg = pWire;
-    gridContainer.appendChild(svg);
-
-    // 11. Render Task Bars, Milestones, and Progress Handles
-    renderTaskBars(
-      {
-        taskLayouts,
-        dependencies,
-        depPathElements,
-        showCritical: this.state.showCritical,
-        showBaselines: this.state.showBaselines,
-        readOnly: this.currentOptions.readOnly,
-        showOutsideLabels: hideLabelColumn,
-        people: this.currentData.people,
-        teams: this.currentData.teams,
-        controller: this.controller,
-        tooltip: this.tooltip
-      },
-      gridContainer
-    );
-    timelineArea.appendChild(gridContainer);
-
-    // 12. Swap the new body in only once it is fully built (a failed render keeps the previous one)
-    const bodyWrap = this.ensureBodyWrap();
-    if (labelCol) {
-      bodyWrap.replaceChildren(labelCol, timelineArea);
-    } else {
-      bodyWrap.replaceChildren(timelineArea);
+      // 12. Swap the new body in only once it is fully built (a failed render keeps the previous one)
+      const bodyWrap = this.ensureBodyWrap();
+      if (reuseLabel && labelCol) {
+        this.timelineAreaEl?.remove();
+        bodyWrap.appendChild(timelineArea);
+      } else if (labelCol) {
+        bodyWrap.replaceChildren(labelCol, timelineArea);
+      } else {
+        bodyWrap.replaceChildren(timelineArea);
+      }
+      this.timelineAreaEl = timelineArea;
+      this.gridContainerEl = gridContainer;
+      this.labelColumnEl = labelCol;
     }
+    this.labelSignature = labelSignature;
+    this.structureSignature = structureSignature;
+    this.lastLayoutResult = layoutResult;
+    const bodyWrap = this.bodyWrap!;
     this.lastTaskLayouts = taskLayouts;
 
     this.state.renderedDayWidth = this.state.currentDayWidth;
@@ -922,6 +1152,8 @@ export class JanttRendererEngine {
     if (this.resizeTimer) cancelAnimationFrame(this.resizeTimer);
     if (this.frameRenderId !== null) cancelAnimationFrame(this.frameRenderId);
     if (this.searchTimer) clearTimeout(this.searchTimer);
+    if (this.wheelSettleTimer !== null) clearTimeout(this.wheelSettleTimer);
+    if (this.windowFrameId !== null) cancelAnimationFrame(this.windowFrameId);
     if (this.todayTimer) clearInterval(this.todayTimer);
     this.resizeObserver?.disconnect();
     this.tooltip.hide();
@@ -968,7 +1200,18 @@ export class JanttRendererEngine {
           // Options first: the resolve below reports its warnings to the latest onError
           this.currentOptions = { ...this.currentOptions, ...newOpts };
         }
-        this.currentData = { ...newData, tasks: this.resolveTasks(newData) };
+        // Explicit updates may reuse a mutated object (including getData()). Identity alone
+        // cannot distinguish those edits from a viewport update or restoring an older plan.
+        // Wheel/slider zoom uses setDayWidth directly, so this comparison stays off that path.
+        const inputSnapshot = JSON.stringify(newData);
+        const resolvedSnapshot = newData === this.currentData ? inputSnapshot : JSON.stringify(this.currentData);
+        const unchangedInput = newData === this.lastInputData && inputSnapshot === this.lastInputSnapshot;
+        if (resolvedSnapshot !== this.lastResolvedSnapshot || (newData !== this.currentData && !unchangedInput)) {
+          this.currentData = { ...newData, tasks: this.resolveTasks(newData) };
+          this.lastInputData = newData;
+          this.lastInputSnapshot = inputSnapshot;
+          this.lastResolvedSnapshot = JSON.stringify(this.currentData);
+        }
         if (newOpts) {
           if (newOpts.searchQuery !== undefined) {
             this.state.filterQuery = newOpts.searchQuery;
@@ -983,6 +1226,9 @@ export class JanttRendererEngine {
           } else if (newOpts.viewport?.scale) {
             this.state.currentDayWidth = SCALE_DAY_WIDTHS[newOpts.viewport.scale] || 36;
             this.state.currentScale = getScaleFromDayWidth(this.state.currentDayWidth);
+          }
+          if (newOpts.viewport?.timeFormat) {
+            this.state.timeFormat = newOpts.viewport.timeFormat === "24h" ? "24h" : "12h";
           }
           if (newOpts.viewport?.linkRouting) this.state.currentRouting = newOpts.viewport.linkRouting;
           if (newOpts.viewport?.rowHeight !== undefined) this.state.customRowHeight = newOpts.viewport.rowHeight;
@@ -1005,7 +1251,7 @@ export class JanttRendererEngine {
           } else if (newOpts.viewport?.selectedDate !== undefined) {
             this.state.selectedDateFilter = newOpts.viewport.selectedDate;
           }
-          this.tooltip.updateTheme(this.resolveThemeVars(), this.currentOptions.themeClassName);
+          this.tooltip.updateTheme(this.resolveThemeVars(), this.currentOptions.themeClassName, this.state.timeFormat);
         }
         this.render();
       },

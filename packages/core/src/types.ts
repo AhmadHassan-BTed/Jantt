@@ -14,8 +14,8 @@ export type { ProjectBaselineSnapshot, TaskBaselineEntry, TaskVarianceMetric, Ba
 export interface JanttMeta {
   title?: string;
   person?: string;
-  start?: string; // YYYY-MM-DD
-  end?: string; // YYYY-MM-DD
+  start?: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
+  end?: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
   chartStart?: string; // Backwards-compatible alias for start
   chartEnd?: string; // Backwards-compatible alias for end
   defaultGapDays?: number;
@@ -28,6 +28,7 @@ export interface JanttMeta {
   showCriticalPath?: boolean;
   showBaselines?: boolean;
   autoCascade?: boolean;
+  timeFormat?: TimeFormat;
   calendar?: WorkingCalendar | CalendarPreset;
   useWorkingDays?: boolean;
   /** Contractual completion deadline (YYYY-MM-DD) used for float and on-time probability. */
@@ -114,6 +115,7 @@ export interface NoteItem {
   content: string; // Markdown or plaintext body
   createdAt?: string; // ISO 8601 string
   updatedAt?: string; // ISO 8601 string
+  timestamp?: string; // Optional explicit ISO 8601 date/time stamp for log or event time
   color?: string; // Hex tint / accent (e.g. #3B82F6, #10B981, #F59E0B, #8B5CF6, #EF4444)
   pinned?: boolean;
   category?: string;
@@ -149,8 +151,8 @@ export interface Person {
 }
 
 export interface TaskBaseline {
-  start: string; // YYYY-MM-DD
-  end: string; // YYYY-MM-DD
+  start: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
+  end: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
 }
 
 export interface Task {
@@ -158,8 +160,8 @@ export interface Task {
   label?: string;
   name?: string; // Backwards-compatible alias for label
   category: string;
-  start: string; // YYYY-MM-DD
-  end: string; // YYYY-MM-DD
+  start: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
+  end: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
   dependsOn?: string | DependencyItem[] | DependencyObject | null;
   gapDays?: number | null;
   minGapDays?: number | null; // Backwards-compatible alias for gapDays
@@ -247,7 +249,8 @@ export interface ValidationResult {
   warnings?: ValidationError[];
 }
 
-export type TimeScale = "day" | "week" | "month" | "quarter" | "year";
+export type TimeScale = "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year";
+export type TimeFormat = "12h" | "24h";
 
 export interface GridColumn {
   id: string;
@@ -267,7 +270,9 @@ export interface ViewportOptions {
   headerHeight?: number; // Default 58px
   startDate?: string;
   endDate?: string;
-  scale?: TimeScale; // "day" | "week" | "month" | "quarter" | "year"
+  scale?: TimeScale; // "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year"
+  timeFormat?: TimeFormat; // "12h" (default AM/PM) or "24h"
+  visibleXRange?: { startX: number; endX: number }; // Optional horizontal viewport window (px) to keep sub-day DOM bounded
   linkRouting?: LinkRoutingStyle; // "orthogonal" | "curved" | "direct"
   showToday?: boolean;
   showTodayTag?: boolean;
@@ -431,6 +436,8 @@ export interface TaskLayout {
   category: Category;
   displayLabel: string;
   durationDays: number;
+  durationMinutes?: number;
+  durationLabel?: string;
   isMilestone: boolean;
   isCritical: boolean;
   scheduleMetrics?: TaskScheduleMetrics;
@@ -493,11 +500,22 @@ export interface HeaderDay {
   isTaskBoundary?: boolean;
 }
 
+export interface HeaderSubTick {
+  label: string;
+  title: string;
+  x: number;
+  width: number;
+  isMajor: boolean;
+  isHourStart?: boolean;
+  isDayStart?: boolean;
+}
+
 export interface GridHeader {
   years: HeaderYear[];
   months: HeaderMonth[];
   weeks: HeaderWeek[];
   days: HeaderDay[];
+  subTicks?: HeaderSubTick[];
   spansMultipleYears: boolean;
   todayX: number | null;
   totalWidth: number;
@@ -506,18 +524,20 @@ export interface GridHeader {
   endDate: string;
   totalDays: number;
   scale: TimeScale;
+  timeFormat?: TimeFormat;
 }
 
 export interface JanttLayoutResult {
   tasks: TaskLayout[];
   dependencies: DependencyLine[];
   header: GridHeader;
-  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> & {
+  viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate" | "visibleXRange">> & {
     columns?: GridColumn[];
     currentTime?: Date;
     selectedDate?: string | null;
     showDateFilterBadge?: boolean;
     filterTasksByDate?: boolean;
+    visibleXRange?: { startX: number; endX: number };
     criticalResult?: CriticalPathResult;
   };
   canvasWidth: number;

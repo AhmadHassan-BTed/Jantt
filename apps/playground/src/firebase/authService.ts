@@ -355,6 +355,17 @@ export async function updateUserGitHubVerification(
 }
 
 /**
+ * Persists the user's preferred timeline clock display (`12h` AM/PM or `24h`) on their account.
+ */
+export async function updateUserTimeFormat(uid: string, timeFormat: "12h" | "24h"): Promise<void> {
+  if (!uid) return;
+  await update(ref(rtdb, `users/${uid}`), {
+    timeFormat,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+/**
  * Fetches user profile by UID from `/users/{uid}`.
  */
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {

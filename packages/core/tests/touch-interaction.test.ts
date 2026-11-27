@@ -999,7 +999,7 @@ describe("Task sidebar (detail drawer)", () => {
     const b: Task = { id: "b", category: "dev", start: "2026-09-06", end: "2026-09-08", dependsOn: "a" };
     const withGap = open(b, { allTasks: [a, b] });
     expect(withGap.sidebar.element.querySelector("#jantt-sidebar-duration")?.textContent?.trim()).toBe("3 days");
-    expect(withGap.sidebar.element.querySelector("#jantt-sidebar-dep-conflict-box")?.textContent).toContain("2026-09-07");
+    expect(withGap.sidebar.element.querySelector("#jantt-sidebar-dep-conflict-box")?.textContent).toContain("Sep 7, 2026");
 
     const noGap = open(b, { allTasks: [a, b], scheduleOptions: { defaultGapDays: 0 } });
     expect((noGap.sidebar.element.querySelector("#jantt-sidebar-dep-conflict-box") as HTMLElement).style.display).toBe("none");
@@ -1074,6 +1074,57 @@ describe("Task sidebar (detail drawer)", () => {
     api.updateTask({ notes: "x" });
     expect(onSave).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders Task Notes near the bottom, triggers Add Note / Manage Notes, and guards unsaved edits", () => {
+    const onAddNote = vi.fn();
+    const onOpenTaskNotes = vi.fn();
+    const task: Task = { id: "t1", label: "API Audit", category: "dev", start: "2026-09-01", end: "2026-09-05" };
+
+    const { sidebar, onClose } = open(task, {
+      taskNotes: [
+        {
+          id: "n1",
+          title: "Security Checklist",
+          content: "Verify tokens",
+          color: "#10B981",
+          task_ids: ["t1"],
+          createdAt: "2026-09-02T14:30",
+          updatedAt: "2026-09-02T14:30"
+        },
+        {
+          id: "n-other",
+          title: "Unrelated Note",
+          content: "Ignored",
+          task_ids: ["t99"],
+          createdAt: "2026-09-02T10:00"
+        }
+      ],
+      onAddNote,
+      onOpenTaskNotes
+    });
+
+    const section = sidebar.element.querySelector("#jantt-sidebar-task-notes")!;
+    expect(section).not.toBeNull();
+    expect(section.querySelector("#jantt-sidebar-task-notes-count")?.textContent).toBe("1");
+    expect(section.textContent).toContain("Security Checklist");
+    expect(section.textContent).not.toContain("Unrelated Note");
+    expect(section.textContent).toContain("Sep 2, 2:30 PM");
+
+    // Clicking Manage Notes closes sidebar & opens task notes
+    section.querySelector<HTMLButtonElement>("#jantt-sidebar-manage-notes")!.click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOpenTaskNotes).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }), undefined);
+
+    // Dirty check: Add Note warns when unsaved task edits exist, then navigates after Discard
+    const dirty = open(task, { taskNotes: [], onAddNote, onOpenTaskNotes });
+    dirty.sidebar.element.querySelector<HTMLTextAreaElement>("#jantt-sidebar-notes")!.value = "unsaved";
+    dirty.sidebar.element.querySelector<HTMLButtonElement>("#jantt-sidebar-add-note")!.click();
+    expect(onAddNote).not.toHaveBeenCalled();
+    expect((dirty.sidebar.element.querySelector("#jantt-sidebar-unsaved") as HTMLElement).style.display).toBe("flex");
+    dirty.sidebar.element.querySelector<HTMLButtonElement>("#jantt-sidebar-discard")!.click();
+    expect(dirty.onClose).toHaveBeenCalledTimes(1);
+    expect(onAddNote).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
   });
 
   it("createDetailModal opens the same hardened editor as a modal overlay", () => {

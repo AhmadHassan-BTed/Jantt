@@ -319,7 +319,8 @@ function storedProfile(p: Persona): Required<StoredUserProfile> {
     githubVerified: true,
     isFollowingCreator: true,
     missingReposCount: 0,
-    lastVerifiedAt: NOW
+    lastVerifiedAt: NOW,
+    timeFormat: "12h"
   };
 }
 
@@ -517,6 +518,13 @@ describe("identity: users, public_profiles, usernames", () => {
     expect(db.update(alice.auth, Object.fromEntries(Object.entries(flags).map(([k, v]) => [`users/${alice.uid}/${k}`, v])))).toBe(true);
     expect(db.set(alice.auth, `users/${alice.uid}/githubVerified`, "yes")).toBe(false);
     expect(db.update(alice.auth, { [`users/${alice.uid}/isDevBypass`]: false, [`users/${alice.uid}/updatedAt`]: NOW })).toBe(false);
+  });
+
+  it("lets profile owners store 12h or 24h timeFormat and rejects invalid values or foreign writes", () => {
+    expect(db.set(alice.auth, `users/${alice.uid}/timeFormat`, "24h")).toBe(true);
+    expect(db.set(alice.auth, `users/${alice.uid}/timeFormat`, "12h")).toBe(true);
+    expect(db.set(alice.auth, `users/${alice.uid}/timeFormat`, "100h")).toBe(false);
+    expect(db.set(bob.auth, `users/${alice.uid}/timeFormat`, "24h")).toBe(false);
   });
 
   it("binds handles: no theft, one active handle per account, release only when unused", () => {

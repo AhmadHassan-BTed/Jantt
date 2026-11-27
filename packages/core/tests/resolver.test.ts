@@ -745,3 +745,23 @@ describe("PERT risk on the critical path", () => {
     expect(risk.expectedProjectDurationDays).toBe(10);
   });
 });
+
+describe("Minute-precision schedule cascade and CPM", () => {
+  it("cascades timed tasks with minute and hour lag shorthand accurately", () => {
+    const resolved = resolveSchedule([
+      { id: "A", category: "c", start: "2026-09-01T09:00", end: "2026-09-01T10:00" },
+      { id: "B", category: "c", start: "2026-09-01T09:30", end: "2026-09-01T11:30", dependsOn: "A:FS+30m" },
+      { id: "C", category: "c", start: "2026-09-01T10:00", end: "2026-09-01T10:45", dependsOn: "B+1h" }
+    ]);
+    const b = resolved.find((t) => t.id === "B")!;
+    const c = resolved.find((t) => t.id === "C")!;
+    expect(b.start).toBe("2026-09-01T10:30");
+    expect(b.end).toBe("2026-09-01T12:30");
+    expect(c.start).toBe("2026-09-01T13:30");
+    expect(c.end).toBe("2026-09-01T14:15");
+
+    const cpm = calculateCriticalPath(resolved);
+    expect(cpm.projectEarlyFinish).toBe("2026-09-01T14:15");
+    expect([...cpm.criticalTaskIds].sort()).toEqual(["A", "B", "C"]);
+  });
+});

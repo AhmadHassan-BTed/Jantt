@@ -312,8 +312,10 @@ export const JanttTimeline = defineComponent({
       if (autoCascadeChanged) options.autoCascade = props.autoCascade;
       if (dataChanged) lastEmitted = null;
       try {
+        // Deep Vue mutations keep object identity; give the engine a new input container to resolve.
+        const nextData = dataMutated ? { ...data } : data;
         // Unchanged data means the engine's own plan is the newest; never revert it to the prop.
-        instance.update(dataChanged ? data : instance.getData(), options);
+        instance.update(dataChanged ? nextData : instance.getData(), options);
       } catch (err) {
         reportError(err);
       }

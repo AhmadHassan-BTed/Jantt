@@ -38,6 +38,7 @@ export interface UserProfile {
   isFollowingCreator?: boolean;
   missingReposCount?: number;
   lastVerifiedAt?: string;
+  timeFormat?: "12h" | "24h";
 }
 
 /**

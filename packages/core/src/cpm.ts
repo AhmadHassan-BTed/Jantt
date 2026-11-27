@@ -17,7 +17,18 @@
  */
 
 import { Task, CriticalPathResult, CriticalPathOptions, TaskScheduleMetrics } from "./types";
-import { toEpochDay, fromEpochDay, parseISODate, isValidISODate } from "./date-math";
+import {
+  toEpochDay,
+  fromEpochDay,
+  parseISODate,
+  isValidISODate,
+  toEpochMinutes,
+  toTaskEndEpochMinutes,
+  fromEpochMinutes,
+  hasTimeComponent,
+  formatDurationLabel,
+  MINUTES_PER_DAY
+} from "./date-math";
 import { addWorkingDays, diffWorkingDays, getPreviousWorkingDay, resolveTaskCalendar, type WorkingCalendar } from "./calendar";
 import { getEffectiveGap } from "./utils";
 import { DEFAULT_GAP_DAYS } from "./constants";
@@ -26,6 +37,7 @@ import {
   buildDependencyGraph,
   getTaskDependencyRelations,
   resolveRelationLag,
+  resolveRelationLagMinutes,
   relationEarliestStartDay,
   isStartAnchoredRelation,
   isFinishConstrainedRelation
@@ -61,6 +73,41 @@ function dayOf(iso: string, invalid: Set<string>, taskId: string): number {
   if (!Number.isNaN(day)) return day;
   invalid.add(taskId);
   return Math.round(parseISODate(iso).getTime() / DAY_MS);
+}
+
+/** Epoch minute of an ISO date/time; invalid values fall back cleanly to lenient day * 1440. */
+function minuteOf(iso: string, invalid: Set<string>, taskId: string): number {
+  const mins = toEpochMinutes(iso);
+  if (!Number.isNaN(mins)) return mins;
+  invalid.add(taskId);
+  return Math.round(parseISODate(iso).getTime() / DAY_MS) * MINUTES_PER_DAY;
+}
+
+/** Exclusive end minute of a task's `end` field (plain YYYY-MM-DD extends through 24:00 of that day). */
+function endMinuteOf(iso: string, invalid: Set<string>, taskId: string): number {
+  const mins = toTaskEndEpochMinutes(iso);
+  if (!Number.isNaN(mins)) return mins;
+  invalid.add(taskId);
+  return (Math.round(parseISODate(iso).getTime() / DAY_MS) + 1) * MINUTES_PER_DAY;
+}
+
+function toDayFloat(value: number, usesMinutes: boolean): number {
+  if (!usesMinutes) return value;
+  return value % MINUTES_PER_DAY === 0 ? value / MINUTES_PER_DAY : Math.round((value / MINUTES_PER_DAY) * 1000) / 1000;
+}
+
+function formatCpmSlack(tfUnits: number, isCriticalTask: boolean, usesMinutes: boolean): string {
+  const tfDays = toDayFloat(tfUnits, usesMinutes);
+  const wholeOrCompact = (absVal: number) =>
+    usesMinutes
+      ? absVal % MINUTES_PER_DAY === 0
+        ? `${absVal / MINUTES_PER_DAY}d`
+        : formatDurationLabel(absVal, "compact")
+      : `${absVal}d`;
+  if (tfUnits < 0) return `Overdue by ${wholeOrCompact(Math.abs(tfUnits))}`;
+  if (tfUnits === 0) return "0d (Critical)";
+  if (isCriticalTask) return `Critical · ${usesMinutes ? wholeOrCompact(tfUnits) : `${tfDays}d`} to deadline`;
+  return `${wholeOrCompact(tfUnits)} buffer`;
 }
 
 /**
@@ -140,18 +187,32 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   const incoming: CpmEdge[][] = [];
   const outgoing: CpmEdge[][] = ids.map(() => []);
   let hasAnyCalendar = false;
+  let wantsMinutes = typeof options?.targetDate === "string" && hasTimeComponent(options.targetDate);
 
   for (let i = 0; i < n; i++) {
     const id = ids[i];
     const task = graph.nodes.get(id)!;
-    const s = dayOf(task.start, invalidDates, id);
-    const e = dayOf(task.end, invalidDates, id);
-    // Match CascadeResolveStage: explicit useWorkingDays: false opts out globally while honoring task calendars.
     const calendar = globalUseWorking || task.calendar || task.calendarId
       ? resolveTaskCalendar(task, calendarContext)
       : undefined;
     if (calendar) hasAnyCalendar = true;
     calendars.push(calendar);
+    if (hasTimeComponent(task.start) || (!task.milestone && hasTimeComponent(task.end))) {
+      wantsMinutes = true;
+    }
+    for (const rel of graph.predecessors.get(id)!) {
+      if (!graph.isCyclicEdge(rel.id, id) && rel.lagMinutes !== undefined) wantsMinutes = true;
+    }
+  }
+
+  const usesMinutes = !hasAnyCalendar && wantsMinutes;
+  const formatOut = (val: number) => (usesMinutes ? fromEpochMinutes(val, true) : fromEpochDay(val));
+
+  for (let i = 0; i < n; i++) {
+    const id = ids[i];
+    const task = graph.nodes.get(id)!;
+    const s = usesMinutes ? minuteOf(task.start, invalidDates, id) : dayOf(task.start, invalidDates, id);
+    const e = usesMinutes ? endMinuteOf(task.end, invalidDates, id) : dayOf(task.end, invalidDates, id);
     start[i] = s;
     rawEnd[i] = task.milestone || e < s ? s : e;
     dur[i] = task.milestone ? 0 : Math.max(0, difference(i, s, rawEnd[i]));
@@ -160,7 +221,8 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
     const edges: CpmEdge[] = [];
     for (const rel of graph.predecessors.get(id)!) {
       if (graph.isCyclicEdge(rel.id, id)) continue;
-      const edge: CpmEdge = { from: position.get(rel.id)!, to: i, type: rel.type, lag: resolveRelationLag(rel, gap) };
+      const lag = usesMinutes ? resolveRelationLagMinutes(rel, gap) : resolveRelationLag(rel, gap);
+      const edge: CpmEdge = { from: position.get(rel.id)!, to: i, type: rel.type, lag };
       edges.push(edge);
       outgoing[edge.from].push(edge);
     }
@@ -205,7 +267,11 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   const target = options?.targetDate;
   if (target !== undefined && target !== null && target !== "") {
     if (typeof target === "string" && isValidISODate(target)) {
-      projectLF = toEpochDay(target);
+      projectLF = usesMinutes
+        ? hasTimeComponent(target)
+          ? toEpochMinutes(target)
+          : toTaskEndEpochMinutes(target)
+        : toEpochDay(target);
     } else {
       warnings.push(`Ignored invalid targetDate '${String(target)}' (expected YYYY-MM-DD).`);
     }
@@ -267,7 +333,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
   }
 
   // 4. Critical & Near-Critical Classification (near-critical is measured from the critical float)
-  const nearCriticalThreshold = options?.nearCriticalThresholdDays ?? 3;
+  const nearCriticalThreshold = (options?.nearCriticalThresholdDays ?? 3) * (usesMinutes ? MINUTES_PER_DAY : 1);
   const criticalFloatRef = Math.max(minTotalFloat, 0);
   const isCritical = new Uint8Array(n);
   const isDriving = (e: CpmEdge) => forwardCandidate(e) === es[e.to];
@@ -299,23 +365,16 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
       freeFloat = Math.max(0, Math.min(tf, minSlack));
     }
 
-    let slackLabel = `${tf}d buffer`;
-    if (tf < 0) {
-      slackLabel = `Overdue by ${Math.abs(tf)}d`;
-    } else if (tf === 0) {
-      slackLabel = "0d (Critical)";
-    } else if (critical) {
-      slackLabel = `Critical · ${tf}d to deadline`;
-    }
+    const slackLabel = formatCpmSlack(tf, critical, usesMinutes);
 
     metrics.set(id, {
       taskId: id,
-      earlyStart: fromEpochDay(es[i]),
-      earlyFinish: fromEpochDay(ef[i]),
-      lateStart: fromEpochDay(ls[i]),
-      lateFinish: fromEpochDay(lf[i]),
-      totalFloat: tf,
-      freeFloat,
+      earlyStart: formatOut(es[i]),
+      earlyFinish: formatOut(ef[i]),
+      lateStart: formatOut(ls[i]),
+      lateFinish: formatOut(lf[i]),
+      totalFloat: toDayFloat(tf, usesMinutes),
+      freeFloat: toDayFloat(freeFloat, usesMinutes),
       isCritical: critical,
       isNearCritical: nearCritical,
       drivingPredecessors: incoming[i].filter(isDriving).map((e) => ids[e.from]),
@@ -369,7 +428,7 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
     warnings.push(`Critical path listing truncated to ${MAX_CRITICAL_PATHS} paths.`);
   }
 
-  const projectTotalFloat =
+  const rawProjectFloat =
     longestLs && minCriticalFloat !== Infinity
       ? minCriticalFloat
       : minTotalFloat === Infinity
@@ -380,9 +439,9 @@ export function calculateCriticalPath(tasks: Task[], options?: CriticalPathOptio
     criticalTaskIds,
     criticalDepKeys,
     nearCriticalTaskIds,
-    projectEarlyFinish: fromEpochDay(projectEF),
-    projectLateFinish: fromEpochDay(projectLF),
-    projectTotalFloat,
+    projectEarlyFinish: formatOut(projectEF),
+    projectLateFinish: formatOut(projectLF),
+    projectTotalFloat: toDayFloat(rawProjectFloat, usesMinutes),
     criticalPaths,
     metrics,
     warnings

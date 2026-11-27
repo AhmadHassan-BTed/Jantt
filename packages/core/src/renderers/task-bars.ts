@@ -1,7 +1,7 @@
-import { TaskLayout, DependencyLine, Person, Team } from "../types";
+import { TaskLayout, DependencyLine, Person, Team, TimeFormat } from "../types";
 import { InteractionController } from "../controller";
 import { TooltipController } from "./tooltip";
-import { formatHumanDate, addDays, getTodayISODate } from "../date-math";
+import { formatHumanDate, addDays, getDatePart, getTodayISODate, MINUTES_PER_DAY } from "../date-math";
 import { resolveTaskAssignee } from "../team-resolver";
 import { isTaskDone, sanitizeCssColor } from "../utils";
 
@@ -12,6 +12,7 @@ export interface TaskBarsProps {
   showCritical: boolean;
   showBaselines: boolean;
   readOnly?: boolean;
+  timeFormat?: TimeFormat;
   /** When true (label column hidden), renders readable labels beside milestones and narrow bars. */
   showOutsideLabels?: boolean;
   people?: Person[];
@@ -26,7 +27,15 @@ const NARROW_BAR_LABEL_THRESHOLD_PX = 104;
 /**
  * Renders task bars, milestone diamonds, baseline ghost bars, progress indicators, and link ports.
  */
-export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): void {
+export interface TaskBarNode {
+  bar: HTMLElement;
+  baseline?: HTMLElement;
+  outsideLabel?: HTMLElement;
+  isMilestone: boolean;
+}
+
+export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): { barNodes: Map<string, TaskBarNode> } {
+  const barNodes = new Map<string, TaskBarNode>();
   // Pre-index dependency lines by connected task IDs for O(1) hover lookups
   const today = getTodayISODate();
   const upcoming = addDays(today, 7);
@@ -69,7 +78,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
   const highlightedTasks = new Set<HTMLElement>();
   let highlighted: SVGPathElement[] = [];
   const deactivateDeps = () => {
-    for (const path of highlighted) {
+    for (const path of new Set([...highlighted, ...props.depPathElements.values()])) {
       path.classList.remove("is-active", "is-critical-chain");
       if (path.dataset.normalMarker) path.setAttribute("marker-end", path.dataset.normalMarker);
     }
@@ -107,6 +116,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
   props.taskLayouts.forEach((item) => {
     const fillColor = sanitizeCssColor(item.task.color, item.category.color);
 
+    let baseline: HTMLElement | undefined;
     // 1. Baseline Ghost Bar
     if (item.baselineLayout && props.showBaselines) {
       const baseBar = document.createElement("div");
@@ -117,16 +127,19 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       baseBar.style.height = `${item.baselineLayout.height}px`;
       baseBar.title = `Baseline: ${item.task.baseline?.start} to ${item.task.baseline?.end}`;
       container.appendChild(baseBar);
+      baseline = baseBar;
     }
 
     // 2. Milestone Diamond Pin
     const isSelected = props.controller.isSelected(item.task.id);
     const isDone = isTaskDone(item.task);
+    const timeFormat: TimeFormat = props.timeFormat === "24h" ? "24h" : "12h";
 
     if (item.isMilestone) {
       const mStone = document.createElement("div");
       mStone.className = `jantt-milestone ${isDone ? "is-done" : ""} ${props.showCritical && item.isCritical ? "is-critical" : ""} ${isSelected ? "is-selected" : ""}`;
-      if (!isDone && item.task.end >= today && item.task.end <= upcoming) mStone.classList.add("is-upcoming");
+      const endDateOnly = getDatePart(item.task.end);
+      if (!isDone && endDateOnly >= today && endDateOnly <= upcoming) mStone.classList.add("is-upcoming");
       mStone.style.left = `${item.x}px`;
       mStone.style.top = `${item.y}px`;
       mStone.style.width = `${item.width}px`;
@@ -136,7 +149,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       mStone.setAttribute("data-task-id", item.task.id);
       mStone.setAttribute("tabindex", "0");
       mStone.setAttribute("role", "button");
-      mStone.setAttribute("aria-label", `Milestone: ${item.displayLabel}, Date: ${formatHumanDate(item.task.start)}`);
+      mStone.setAttribute("aria-label", `Milestone: ${item.displayLabel}, Date: ${formatHumanDate(item.task.start, true, timeFormat)}`);
 
       mStone.addEventListener("focus", () => activateDeps(item.task.id));
       mStone.addEventListener("blur", deactivateDeps);
@@ -167,6 +180,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       }
 
       bars.set(item.task.id, mStone);
+      barNodes.set(item.task.id, { bar: mStone, baseline, isMilestone: true });
       container.appendChild(mStone);
 
       if (props.showOutsideLabels) {
@@ -185,6 +199,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
           props.controller.handleKeyDown(e, item.task);
         });
         container.appendChild(mLabel);
+        barNodes.get(item.task.id)!.outsideLabel = mLabel;
       }
       return;
     }
@@ -204,8 +219,13 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     // Use the visible title and badges as the accessible name. Narrow bars place their text
     // outside the button, so they need an explicit name. Dates are available as a description.
     if (useOutsideBarLabel) bar.setAttribute("aria-label", item.displayLabel);
+    const durMins = item.durationMinutes ?? item.durationDays * MINUTES_PER_DAY;
+    const ariaDuration =
+      durMins > 0 && durMins % MINUTES_PER_DAY !== 0
+        ? (item.durationLabel || `${item.durationDays} days`)
+        : `${item.durationDays} days`;
     bar.setAttribute("aria-description",
-      `Category: ${item.category.label}, Start: ${formatHumanDate(item.task.start)}, End: ${formatHumanDate(item.task.end)}, Duration: ${item.durationDays} days`);
+      `Category: ${item.category.label}, Start: ${formatHumanDate(item.task.start, true, timeFormat)}, End: ${formatHumanDate(item.task.end, true, timeFormat)}, Duration: ${ariaDuration}`);
 
     // Progress Fill
     const progressRatio = isDone ? 1.0 : (item.task.progress ?? 0);
@@ -367,6 +387,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     });
 
     bars.set(item.task.id, bar);
+    barNodes.set(item.task.id, { bar, baseline, isMilestone: false });
     container.appendChild(bar);
 
     if (useOutsideBarLabel) {
@@ -385,7 +406,8 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
         props.controller.handleKeyDown(e, item.task);
       });
       container.appendChild(outsideLabel);
+      barNodes.get(item.task.id)!.outsideLabel = outsideLabel;
     }
   });
+  return { barNodes };
 }
-

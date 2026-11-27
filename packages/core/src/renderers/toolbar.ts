@@ -1,5 +1,5 @@
-import { JanttMeta, TimeScale, LinkRoutingStyle, RowHeightMode } from "../types";
-import { escapeHtml } from "../utils";
+import { JanttMeta, TimeScale, TimeFormat, LinkRoutingStyle, RowHeightMode } from "../types";
+import { dayWidthToSlider, escapeHtml, formatZoomReadout, sliderToDayWidth } from "../utils";
 import {
   DAY_WIDTH_MIN,
   DAY_WIDTH_MAX,
@@ -11,6 +11,7 @@ export interface ToolbarProps {
   meta?: JanttMeta;
   taskCount: number;
   currentScale: TimeScale;
+  timeFormat?: TimeFormat;
   currentRouting: LinkRoutingStyle;
   rowHeightMode: RowHeightMode;
   rowHeight: number;
@@ -26,6 +27,7 @@ export interface ToolbarProps {
   dayWidth: number;
   onDayWidthChange: (dayWidth: number) => void;
   onScaleChange: (scale: TimeScale) => void;
+  onTimeFormatChange?: (format: TimeFormat) => void;
   onRoutingChange: (routing: LinkRoutingStyle) => void;
   onRowHeightModeChange: (mode: RowHeightMode) => void;
   onRowHeightChange: (height: number) => void;
@@ -130,12 +132,13 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   // 2a. Timeline Scale Presets Group
   const scaleGroup = document.createElement("div");
   scaleGroup.className = "jantt-scale-group jantt-time-scale-group";
-  scaleGroup.title = "Timeline Scale Presets (Day / Week / Month / Quarter / Year)";
+  scaleGroup.title = "Timeline Scale Presets (Minute / Hour / Day / Week / Month / Quarter / Year)";
 
-  (["day", "week", "month", "quarter", "year"] as TimeScale[]).forEach((s) => {
+  (["minute", "hour", "day", "week", "month", "quarter", "year"] as TimeScale[]).forEach((s) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `jantt-scale-btn ${s === props.currentScale ? "is-active" : ""}`;
+    btn.dataset.scale = s;
     btn.textContent = s;
     btn.title = `Switch to ${s} scale view`;
     btn.setAttribute("aria-pressed", String(s === props.currentScale));
@@ -367,13 +370,13 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   // 2a. Zoom Slider & Presets
   const zoomSlider = toolbar.querySelector<HTMLInputElement>(".jantt-zoom-slider");
   if (zoomSlider && document.activeElement !== zoomSlider) {
-    zoomSlider.value = String(nextProps.dayWidth);
+    zoomSlider.value = String(dayWidthToSlider(nextProps.dayWidth));
   }
   const zoomLabel = toolbar.querySelector<HTMLSpanElement>(".jantt-zoom-label");
-  if (zoomLabel) zoomLabel.textContent = `${Math.round(nextProps.dayWidth)}px`;
+  if (zoomLabel) zoomLabel.textContent = formatZoomReadout(nextProps.dayWidth);
 
   toolbar.querySelectorAll<HTMLButtonElement>(".jantt-time-scale-group .jantt-scale-btn, .jantt-zoom-strip .jantt-scale-btn").forEach((btn) => {
-    const isActive = btn.textContent === nextProps.currentScale;
+    const isActive = (btn.dataset.scale || btn.textContent) === nextProps.currentScale;
     btn.classList.toggle("is-active", isActive);
     btn.setAttribute("aria-pressed", String(isActive));
   });
@@ -464,6 +467,12 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   // 4. Settings Popover internal states
   toolbar.querySelectorAll<HTMLButtonElement>(".jantt-routing-group .jantt-scale-btn").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.routing === nextProps.currentRouting);
+  });
+  const activeTimeFmt = nextProps.timeFormat === "24h" ? "24h" : "12h";
+  toolbar.querySelectorAll<HTMLButtonElement>(".jantt-timeformat-group .jantt-scale-btn").forEach((btn) => {
+    const active = btn.dataset.timeformat === activeTimeFmt;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", String(active));
   });
 
   syncCascadeSwitch(toolbar, nextProps);
@@ -614,14 +623,21 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" aria-label="Timeline zoom (pixels per day)" />
+          <input type="range" class="jantt-zoom-slider" min="0" max="1000" step="1" value="${dayWidthToSlider(props.dayWidth)}" aria-label="Timeline zoom density" />
           <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <span class="jantt-zoom-label">${Math.round(props.dayWidth)}px</span>
+          <span class="jantt-zoom-label">${formatZoomReadout(props.dayWidth)}</span>
+        </div>
+      </div>
+      <div class="jantt-settings-row">
+        <label class="jantt-settings-label">Time Clock</label>
+        <div class="jantt-scale-group jantt-timeformat-group">
+          <button type="button" class="jantt-scale-btn ${(props.timeFormat || "12h") === "12h" ? "is-active" : ""}" data-timeformat="12h" aria-pressed="${(props.timeFormat || "12h") === "12h"}">12h AM/PM</button>
+          <button type="button" class="jantt-scale-btn ${props.timeFormat === "24h" ? "is-active" : ""}" data-timeformat="24h" aria-pressed="${props.timeFormat === "24h"}">24h</button>
         </div>
       </div>
       <div class="jantt-settings-row">
@@ -701,9 +717,10 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
 
   zoomSlider?.addEventListener("input", (e) => {
     const val = parseFloat((e.target as HTMLInputElement).value);
-    if (!isNaN(val) && val > 0) {
-      if (zoomLabel) zoomLabel.textContent = `${Math.round(val)}px`;
-      propsRef.current.onDayWidthChange(val);
+    if (!isNaN(val)) {
+      const nextWidth = sliderToDayWidth(val);
+      if (zoomLabel) zoomLabel.textContent = formatZoomReadout(nextWidth);
+      propsRef.current.onDayWidthChange(nextWidth);
     }
   });
 
@@ -734,6 +751,16 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
       e.stopPropagation();
       const routing = btn.dataset.routing as LinkRoutingStyle;
       propsRef.current.onRoutingChange(routing);
+    });
+  });
+
+  // Time clock format buttons (12h AM/PM vs 24h)
+  const tfBtns = panel.querySelectorAll<HTMLButtonElement>(".jantt-timeformat-group .jantt-scale-btn");
+  tfBtns.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const fmt = btn.dataset.timeformat === "24h" ? "24h" : "12h";
+      propsRef.current.onTimeFormatChange?.(fmt);
     });
   });
 

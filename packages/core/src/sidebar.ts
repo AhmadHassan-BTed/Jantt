@@ -1,5 +1,19 @@
-import { Task, Category, CategoriesMap, DependencyItem } from "./types";
-import { diffDays, addDays, taskDurationDays } from "./date-math";
+import { Task, Category, CategoriesMap, DependencyItem, TimeFormat, NoteItem } from "./types";
+import {
+  diffDays,
+  addDays,
+  addMinutes,
+  taskDurationDays,
+  taskDurationMinutes,
+  formatDurationLabel,
+  formatHumanDate,
+  formatTimeOfDay,
+  formatTimestampWithFormat,
+  getDatePart,
+  getTimePart,
+  hasTimeComponent,
+  toEpochMinutes
+} from "./date-math";
 import { resolveSchedule, ResolveScheduleOptions } from "./resolver";
 import { getDependsOnItems, getTaskDependencyRelations, parseDependencyRelation, TaskIdLookup } from "./dependencies";
 import { escapeHtml, syncTaskProgressAndStatus } from "./utils";
@@ -14,6 +28,13 @@ export interface TaskSidebarOptions {
   theme?: Record<string, string>;
   themeClassName?: string;
   readOnly?: boolean;
+  timeFormat?: TimeFormat;
+  /** Notes attached to this task (rendered near the bottom of the inspector). */
+  taskNotes?: NoteItem[];
+  /** Invoked when the user clicks "Add Note" in the task inspector. */
+  onAddNote?: (task: Task) => void;
+  /** Invoked when the user opens a linked note or clicks "Manage Notes" for this task. */
+  onOpenTaskNotes?: (task: Task, noteId?: string) => void;
   /**
    * Scheduling rules (gap, working calendars) used to flag dependency timing conflicts.
    * Defaults to the standard project gap.
@@ -78,6 +99,10 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
     theme,
     themeClassName,
     readOnly = false,
+    timeFormat = "12h",
+    taskNotes = [],
+    onAddNote,
+    onOpenTaskNotes,
     scheduleOptions,
     onSave,
     onDelete,
@@ -216,8 +241,12 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
       allTasks,
       categories,
       readOnly,
+      timeFormat,
+      taskNotes,
       uid,
       scheduleOptions,
+      onAddNote: onAddNote ? () => onAddNote(currentTask) : undefined,
+      onOpenTaskNotes: onOpenTaskNotes ? (noteId?: string) => onOpenTaskNotes(currentTask, noteId) : undefined,
       onSave: (updated) => {
         currentTask = updated;
         onSave(updated);
@@ -356,8 +385,12 @@ interface SidebarContentProps {
   allTasks: Task[];
   categories: CategoriesMap;
   readOnly: boolean;
+  timeFormat: TimeFormat;
+  taskNotes: NoteItem[];
   uid: string;
   scheduleOptions?: ResolveScheduleOptions;
+  onAddNote?: () => void;
+  onOpenTaskNotes?: (noteId?: string) => void;
   onSave: (task: Task) => void;
   onDelete?: () => void;
   onClose: () => void;
@@ -414,7 +447,49 @@ function formatDependencyKind(item: DependencyItem, knownIds: TaskIdLookup): str
  * Only fields the user actually changed are written back on save.
  */
 function renderDefaultSidebarContent(container: HTMLElement, props: SidebarContentProps): SidebarForm {
-  const { task, original, allTasks, categories, readOnly, uid, scheduleOptions, onSave, onDelete, onClose } = props;
+  const {
+    task,
+    original,
+    allTasks,
+    categories,
+    readOnly,
+    timeFormat,
+    taskNotes,
+    uid,
+    scheduleOptions,
+    onAddNote,
+    onOpenTaskNotes,
+    onSave,
+    onDelete,
+    onClose
+  } = props;
+  const linkedNotes = (Array.isArray(taskNotes) ? taskNotes : [])
+    .filter((n) => n && !n._deleted && (!Array.isArray(n.task_ids) || n.task_ids.includes(task.id)))
+    .slice()
+    .sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+      const ta = new Date(a.updatedAt || a.timestamp || a.createdAt || 0).getTime() || 0;
+      const tb = new Date(b.updatedAt || b.timestamp || b.createdAt || 0).getTime() || 0;
+      return tb - ta;
+    });
+  const showTaskNotesSection = Boolean(onAddNote || onOpenTaskNotes || linkedNotes.length > 0);
+  const taskNotePreviewHtml =
+    linkedNotes.length > 0
+      ? `<div class="jantt-sidebar-notes-list">${linkedNotes
+          .slice(0, 3)
+          .map((note) => {
+            const noteColor = sanitizeCssColor(note.color, "#38BDF8");
+            const noteTitle = String(note.title || "").trim() || "Untitled Note";
+            const tsIso = note.timestamp || note.updatedAt || note.createdAt;
+            const tsLabel = formatTimestampWithFormat(tsIso, timeFormat, false);
+            return `<button type="button" class="jantt-sidebar-note-row" data-task-note-id="${escapeHtml(note.id)}" title="Open in Notes view">
+              <span class="jantt-sidebar-note-dot" style="background: ${noteColor};"></span>
+              <span class="jantt-sidebar-note-title">${escapeHtml(noteTitle)}</span>
+              ${tsLabel ? `<span class="jantt-sidebar-note-time">${escapeHtml(tsLabel)}</span>` : ""}
+            </button>`;
+          })
+          .join("")}</div>`
+      : `<p class="jantt-sidebar-notes-empty">Keep timestamped notes, logs, and @mentions linked directly to this task.</p>`;
   const hasCategory = typeof task.category === "string" && Object.prototype.hasOwnProperty.call(categories, task.category);
   const cat: Category | undefined = hasCategory ? categories[task.category] : undefined;
   const catLabel = String(cat?.label || task.category || "General");
@@ -457,11 +532,19 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
   );
   let depsDirty = false;
 
+  const combineDateTime = (dateVal: string, timeVal: string): string => (dateVal && timeVal ? `${dateVal}T${timeVal}` : dateVal);
+  const startDateInit = getDatePart(task.start);
+  const startTimeInit = getTimePart(task.start);
+  const endDateInit = getDatePart(task.end);
+  const endTimeInit = getTimePart(task.end);
+  const initialStartCanonical = combineDateTime(startDateInit, startTimeInit);
+  const initialEndCanonical = combineDateTime(endDateInit, endTimeInit);
+
   const initial = {
     label: task.label || task.name || task.id,
     category: typeof task.category === "string" ? task.category : "",
-    start: task.start,
-    end: task.end,
+    start: initialStartCanonical || task.start,
+    end: initialEndCanonical || task.end,
     status: typeof task.status === "string" ? task.status : "",
     priority: typeof task.priority === "string" ? task.priority : "",
     cost: typeof task.estimatedCost === "number" && Number.isFinite(task.estimatedCost) ? String(task.estimatedCost) : "",
@@ -471,9 +554,19 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
   const categoryOptions: Array<[string, string]> = Object.entries(categories).map(([key, c]) => [key, String(c?.label || key)]);
   const statusOptions: Array<[string, string]> = initial.status ? [...STATUS_OPTIONS] : [["", "(none)"], ...STATUS_OPTIONS];
   const durationText = (s: string, e: string) => {
+    if (hasTimeComponent(s) || hasTimeComponent(e)) {
+      const mins = taskDurationMinutes(s, e, Boolean(task.milestone));
+      return formatDurationLabel(mins, "long");
+    }
     // Same rule as the chart: flagged or same-day tasks are milestones (0 days).
     const days = taskDurationDays(s, e, Boolean(task.milestone) || diffDays(s, e) === 0);
     return `${days} day${days === 1 ? "" : "s"}`;
+  };
+  const previewTimeLabel = (timeVal: string): string => {
+    if (!timeVal) return "All day (optional time)";
+    const [hh, mm] = timeVal.split(":").map((n) => parseInt(n, 10));
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return "";
+    return formatTimeOfDay(hh, mm, timeFormat, false);
   };
 
   container.innerHTML = `
@@ -525,12 +618,28 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <div class="jantt-sidebar-card">
         <div class="jantt-form-grid-2">
           <div class="jantt-form-group">
-            <label class="jantt-form-label" id="${labelId("start-l")}">Start Date</label>
-            <input type="date" id="jantt-sidebar-start" aria-labelledby="${labelId("start-l")}" class="jantt-input" value="${escapeHtml(task.start)}" ${disabledIf(editLocked)} />
+            <label class="jantt-form-label" id="${labelId("start-l")}">Start Date &amp; Time</label>
+            <div class="jantt-datetime-stack">
+              <input type="date" id="jantt-sidebar-start" aria-labelledby="${labelId("start-l")}" class="jantt-input" value="${escapeHtml(startDateInit)}" ${disabledIf(editLocked)} />
+              <div class="jantt-time-row">
+                <input type="time" id="jantt-sidebar-start-time" aria-label="Start time" step="60" class="jantt-input jantt-time-input" value="${escapeHtml(startTimeInit)}" ${disabledIf(editLocked)} />
+                ${!editLocked && timeFormat === "12h" ? `<button type="button" class="jantt-time-ampm-pill" id="jantt-sidebar-start-ampm" title="Toggle AM/PM">${startTimeInit && Number(startTimeInit.slice(0, 2)) >= 12 ? "PM" : "AM"}</button>` : ""}
+                ${!editLocked ? `<button type="button" class="jantt-time-clear-btn" id="jantt-sidebar-start-clear" title="Clear time (all day)" style="display: ${startTimeInit ? "inline-flex" : "none"};">All day</button>` : ""}
+              </div>
+              <div class="jantt-time-preview" id="jantt-sidebar-start-preview">${escapeHtml(previewTimeLabel(startTimeInit))}</div>
+            </div>
           </div>
           <div class="jantt-form-group">
-            <label class="jantt-form-label" id="${labelId("end-l")}">End Date</label>
-            <input type="date" id="jantt-sidebar-end" aria-labelledby="${labelId("end-l")}" class="jantt-input" value="${escapeHtml(task.end)}" ${disabledIf(editLocked)} />
+            <label class="jantt-form-label" id="${labelId("end-l")}">End Date &amp; Time</label>
+            <div class="jantt-datetime-stack">
+              <input type="date" id="jantt-sidebar-end" aria-labelledby="${labelId("end-l")}" class="jantt-input" value="${escapeHtml(endDateInit)}" ${disabledIf(editLocked)} />
+              <div class="jantt-time-row">
+                <input type="time" id="jantt-sidebar-end-time" aria-label="End time" step="60" class="jantt-input jantt-time-input" value="${escapeHtml(endTimeInit)}" ${disabledIf(editLocked)} />
+                ${!editLocked && timeFormat === "12h" ? `<button type="button" class="jantt-time-ampm-pill" id="jantt-sidebar-end-ampm" title="Toggle AM/PM">${endTimeInit && Number(endTimeInit.slice(0, 2)) >= 12 ? "PM" : "AM"}</button>` : ""}
+                ${!editLocked ? `<button type="button" class="jantt-time-clear-btn" id="jantt-sidebar-end-clear" title="Clear time (all day)" style="display: ${endTimeInit ? "inline-flex" : "none"};">All day</button>` : ""}
+              </div>
+              <div class="jantt-time-preview" id="jantt-sidebar-end-preview">${escapeHtml(previewTimeLabel(endTimeInit))}</div>
+            </div>
           </div>
         </div>
         <div class="jantt-sidebar-stat-footer">
@@ -625,6 +734,39 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
         <label class="jantt-form-label">Custom Attributes</label>
         <div id="jantt-sidebar-fields" class="jantt-sidebar-fields-container"></div>
       </div>
+
+      ${
+        showTaskNotesSection
+          ? `<!-- Linked Task Notes Section -->
+      <div class="jantt-sidebar-notes-card" id="jantt-sidebar-task-notes">
+        <div class="jantt-sidebar-notes-head">
+          <span class="jantt-form-label" style="margin: 0; display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>
+            Task Notes
+          </span>
+          <span class="jantt-sidebar-notes-count" id="jantt-sidebar-task-notes-count">${linkedNotes.length}</span>
+        </div>
+        ${taskNotePreviewHtml}
+        <div class="jantt-sidebar-notes-actions">
+          ${
+            onAddNote
+              ? `<button type="button" id="jantt-sidebar-add-note" class="jantt-sidebar-add-note-btn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  <span>Add Note</span>
+                </button>`
+              : ""
+          }
+          ${
+            onOpenTaskNotes && linkedNotes.length > 0
+              ? `<button type="button" id="jantt-sidebar-manage-notes" class="jantt-btn jantt-btn-secondary" style="font-size: 11.5px; padding: 6px 10px;">
+                  Manage Notes (${linkedNotes.length})
+                </button>`
+              : ""
+          }
+        </div>
+      </div>`
+          : ""
+      }
     </div>
 
     <!-- Footer Actions -->
@@ -655,7 +797,17 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
   const labelInput = q<HTMLInputElement>("#jantt-sidebar-label");
   const categorySelect = q<HTMLSelectElement>("#jantt-sidebar-category");
   const startInput = q<HTMLInputElement>("#jantt-sidebar-start");
+  const startTimeInput = q<HTMLInputElement>("#jantt-sidebar-start-time");
+  const startAmpmBtn = q<HTMLButtonElement>("#jantt-sidebar-start-ampm");
+  const startClearBtn = q<HTMLButtonElement>("#jantt-sidebar-start-clear");
+  const startPreviewEl = q<HTMLElement>("#jantt-sidebar-start-preview");
   const endInput = q<HTMLInputElement>("#jantt-sidebar-end");
+  const endTimeInput = q<HTMLInputElement>("#jantt-sidebar-end-time");
+  const endAmpmBtn = q<HTMLButtonElement>("#jantt-sidebar-end-ampm");
+  const endClearBtn = q<HTMLButtonElement>("#jantt-sidebar-end-clear");
+  const endPreviewEl = q<HTMLElement>("#jantt-sidebar-end-preview");
+  const currentStartValue = () => combineDateTime(startInput?.value || "", startTimeInput?.value || "");
+  const currentEndValue = () => combineDateTime(endInput?.value || "", endTimeInput?.value || "");
   const durLabel = q<HTMLElement>("#jantt-sidebar-duration");
   const conflictBox = q<HTMLElement>("#jantt-sidebar-dep-conflict-box");
   const chipsContainer = q<HTMLElement>("#jantt-sidebar-dep-chips");
@@ -733,11 +885,11 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
     renderConflicts();
   };
 
-  // Flags a start date earlier than the scheduler allows, using the scheduler's own rules.
+  // Flags a start date/time earlier than the scheduler allows, using the scheduler's own rules.
   const renderConflicts = () => {
     if (!conflictBox || !startInput || !endInput) return;
-    const curStart = startInput.value;
-    const curEnd = endInput.value || curStart;
+    const curStart = currentStartValue();
+    const curEnd = currentEndValue() || curStart;
     const allowed =
       curStart && depItems.length > 0
         ? constrainedStart(
@@ -748,12 +900,14 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
           )
         : curStart;
 
-    if (!curStart || diffDays(curStart, allowed) <= 0) {
+    if (!curStart || toEpochMinutes(allowed) <= toEpochMinutes(curStart)) {
       conflictBox.style.display = "none";
       conflictBox.innerHTML = "";
       return;
     }
 
+    const allowedHuman = formatHumanDate(allowed, true, timeFormat);
+    const curStartHuman = formatHumanDate(curStart, true, timeFormat);
     conflictBox.style.display = "block";
     conflictBox.innerHTML = `
       <div style="background: rgba(244, 63, 94, 0.12); border-left: 3px solid #F43F5E; padding: 8px 12px; border-radius: 6px; font-size: 11.5px; margin-top: 4px;">
@@ -762,20 +916,27 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
           Dependency Timing Conflict:
         </div>
         <div style="color: var(--jantt-text-muted);">
-          Starts on <strong>${escapeHtml(curStart)}</strong>, but its prerequisites allow <strong>${escapeHtml(allowed)}</strong> at the earliest.
+          Starts on <strong>${escapeHtml(curStartHuman)}</strong>, but its prerequisites allow <strong>${escapeHtml(allowedHuman)}</strong> at the earliest.
         </div>
         ${
           !editLocked
-            ? `<button type="button" id="jantt-sidebar-align-btn" class="jantt-btn jantt-btn-secondary" style="padding: 3px 8px; font-size: 11px; margin-top: 6px;">Align Start Date to ${escapeHtml(allowed)}</button>`
+            ? `<button type="button" id="jantt-sidebar-align-btn" class="jantt-btn jantt-btn-secondary" style="padding: 3px 8px; font-size: 11px; margin-top: 6px;">Align Start to ${escapeHtml(allowedHuman)}</button>`
             : ""
         }
       </div>
     `;
 
     conflictBox.querySelector("#jantt-sidebar-align-btn")?.addEventListener("click", () => {
-      const oldSpan = Math.max(diffDays(startInput.value, endInput.value), 0);
-      startInput.value = allowed;
-      endInput.value = addDays(allowed, oldSpan);
+      const oldSpanMin = Math.max(toEpochMinutes(curEnd) - toEpochMinutes(curStart), 0);
+      startInput.value = getDatePart(allowed);
+      if (startTimeInput) startTimeInput.value = getTimePart(allowed);
+      const nextEndIso = hasTimeComponent(allowed) || hasTimeComponent(curEnd)
+        ? addMinutes(allowed, taskDurationMinutes(curStart, curEnd, Boolean(task.milestone)))
+        : addDays(allowed, Math.max(diffDays(curStart, curEnd), 0));
+      endInput.value = getDatePart(nextEndIso);
+      if (endTimeInput) endTimeInput.value = getTimePart(nextEndIso);
+      void oldSpanMin;
+      syncTimeUi();
       updateDuration();
     });
   };
@@ -789,25 +950,72 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
     }
   });
 
+  const syncTimeUi = () => {
+    const st = startTimeInput?.value || "";
+    const et = endTimeInput?.value || "";
+    if (startPreviewEl) startPreviewEl.textContent = previewTimeLabel(st);
+    if (endPreviewEl) endPreviewEl.textContent = previewTimeLabel(et);
+    if (startClearBtn) startClearBtn.style.display = st ? "inline-flex" : "none";
+    if (endClearBtn) endClearBtn.style.display = et ? "inline-flex" : "none";
+    if (startAmpmBtn) startAmpmBtn.textContent = st && Number(st.slice(0, 2)) >= 12 ? "PM" : "AM";
+    if (endAmpmBtn) endAmpmBtn.textContent = et && Number(et.slice(0, 2)) >= 12 ? "PM" : "AM";
+  };
+
   const updateDuration = () => {
-    if (startInput && endInput && durLabel && startInput.value && endInput.value) {
-      durLabel.textContent = durationText(startInput.value, endInput.value);
+    const sVal = currentStartValue();
+    const eVal = currentEndValue();
+    if (durLabel && sVal && eVal) {
+      durLabel.textContent = durationText(sVal, eVal);
     }
+    syncTimeUi();
     renderConflicts();
   };
 
-  startInput?.addEventListener("change", () => {
-    if (startInput && endInput && startInput.value && endInput.value && diffDays(startInput.value, endInput.value) < 0) {
-      endInput.value = startInput.value;
+  const clampEndAfterStart = () => {
+    const sVal = currentStartValue();
+    const eVal = currentEndValue();
+    if (sVal && eVal && toEpochMinutes(sVal) > toEpochMinutes(eVal)) {
+      if (endInput) endInput.value = startInput?.value || "";
+      if (endTimeInput) endTimeInput.value = startTimeInput?.value || "";
     }
     updateDuration();
+  };
+
+  const clampStartBeforeEnd = () => {
+    const sVal = currentStartValue();
+    const eVal = currentEndValue();
+    if (sVal && eVal && toEpochMinutes(sVal) > toEpochMinutes(eVal)) {
+      if (startInput) startInput.value = endInput?.value || "";
+      if (startTimeInput) startTimeInput.value = endTimeInput?.value || "";
+    }
+    updateDuration();
+  };
+
+  const flipAmPm = (input: HTMLInputElement | null, onAfter: () => void) => {
+    if (!input) return;
+    const raw = input.value || "09:00";
+    const [hStr, mStr] = raw.split(":");
+    const nextH = ((parseInt(hStr, 10) || 0) + 12) % 24;
+    input.value = `${String(nextH).padStart(2, "0")}:${(mStr || "00").padStart(2, "0")}`;
+    onAfter();
+  };
+
+  startInput?.addEventListener("change", clampEndAfterStart);
+  startTimeInput?.addEventListener("change", clampEndAfterStart);
+  startTimeInput?.addEventListener("input", syncTimeUi);
+  startAmpmBtn?.addEventListener("click", () => flipAmPm(startTimeInput, clampEndAfterStart));
+  startClearBtn?.addEventListener("click", () => {
+    if (startTimeInput) startTimeInput.value = "";
+    clampEndAfterStart();
   });
 
-  endInput?.addEventListener("change", () => {
-    if (startInput && endInput && startInput.value && endInput.value && diffDays(startInput.value, endInput.value) < 0) {
-      startInput.value = endInput.value;
-    }
-    updateDuration();
+  endInput?.addEventListener("change", clampStartBeforeEnd);
+  endTimeInput?.addEventListener("change", clampStartBeforeEnd);
+  endTimeInput?.addEventListener("input", syncTimeUi);
+  endAmpmBtn?.addEventListener("click", () => flipAmPm(endTimeInput, clampStartBeforeEnd));
+  endClearBtn?.addEventListener("click", () => {
+    if (endTimeInput) endTimeInput.value = "";
+    clampStartBeforeEnd();
   });
 
   renderDeps();
@@ -935,8 +1143,10 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       if (original.name !== undefined) patch.name = label;
     }
     if (categorySelect && categorySelect.value !== initial.category) patch.category = categorySelect.value;
-    if (startInput?.value && startInput.value !== initial.start) patch.start = startInput.value;
-    if (endInput?.value && endInput.value !== initial.end) patch.end = endInput.value;
+    const nextStart = currentStartValue();
+    const nextEnd = currentEndValue();
+    if (nextStart && nextStart !== initial.start) patch.start = nextStart;
+    if (nextEnd && nextEnd !== initial.end) patch.end = nextEnd;
     if (depsDirty) patch.dependsOn = currentDependsOn();
     if (assigneeInput && assigneeInput.value !== (task.assignee || "")) patch.assignee = assigneeInput.value || undefined;
     if (prioritySelect && prioritySelect.value !== initial.priority) patch.priority = prioritySelect.value || undefined;
@@ -974,6 +1184,46 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
     return patch;
   };
 
+  const isDirty = () => !readOnly && Object.keys(collectChanges()).length > 0;
+  const showUnsavedNotice = (discard: () => void, noticeText = "You have unsaved changes. Save your changes or discard them.") => {
+    if (!unsavedNotice) {
+      discard();
+      return;
+    }
+    unsavedNotice.style.display = "flex";
+    unsavedNotice.innerHTML =
+      `<span>${escapeHtml(noticeText)}</span>` +
+      '<button type="button" class="jantt-btn jantt-btn-secondary" id="jantt-sidebar-discard" style="padding: 3px 8px; font-size: 11px; margin-left: auto;">Discard</button>';
+    const discardBtn = unsavedNotice.querySelector<HTMLButtonElement>("#jantt-sidebar-discard");
+    discardBtn?.addEventListener("click", () => discard());
+    discardBtn?.focus();
+  };
+
+  const navigateToNotes = (action: () => void) => {
+    const proceed = () => {
+      onClose();
+      action();
+    };
+    if (!isDirty()) {
+      proceed();
+      return;
+    }
+    showUnsavedNotice(proceed, "Save or discard task edits before switching to Notes.");
+  };
+
+  q("#jantt-sidebar-add-note")?.addEventListener("click", () => {
+    if (onAddNote) navigateToNotes(() => onAddNote());
+  });
+  q("#jantt-sidebar-manage-notes")?.addEventListener("click", () => {
+    if (onOpenTaskNotes) navigateToNotes(() => onOpenTaskNotes());
+  });
+  container.querySelectorAll<HTMLButtonElement>(".jantt-sidebar-note-row").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const noteId = btn.dataset.taskNoteId;
+      if (onOpenTaskNotes) navigateToNotes(() => onOpenTaskNotes(noteId));
+    });
+  });
+
   // Delete Task Handler
   q("#jantt-sidebar-delete")?.addEventListener("click", () => {
     if (confirm(`Are you sure you want to delete task "${task.label || task.id}"?`)) {
@@ -987,19 +1237,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
   });
 
   return {
-    isDirty: () => !readOnly && Object.keys(collectChanges()).length > 0,
-    showUnsavedNotice: (discard) => {
-      if (!unsavedNotice) {
-        discard();
-        return;
-      }
-      unsavedNotice.style.display = "flex";
-      unsavedNotice.innerHTML =
-        '<span>You have unsaved changes. Save your changes or discard them.</span>' +
-        '<button type="button" class="jantt-btn jantt-btn-secondary" id="jantt-sidebar-discard" style="padding: 3px 8px; font-size: 11px; margin-left: auto;">Discard</button>';
-      const discardBtn = unsavedNotice.querySelector<HTMLButtonElement>("#jantt-sidebar-discard");
-      discardBtn?.addEventListener("click", () => discard());
-      discardBtn?.focus();
-    }
+    isDirty,
+    showUnsavedNotice
   };
 }

@@ -623,5 +623,21 @@ describe("Renderer hardening (escaping, read-only links, stacking, themes)", () 
     expect(container.innerHTML).toBe("");
     container.remove();
   });
+
+  it("renders adaptive hour and minute headers with bounded DOM nodes on long plans", () => {
+    const longPlan: JanttData = {
+      categories: { dev: { label: "Dev", color: "#3B82F6" } },
+      tasks: [{ id: "t1", label: "Work", category: "dev", start: "2026-09-01T09:00", end: "2026-10-15T17:00" }]
+    };
+    const hourRes = layout(longPlan, { scale: "hour", timeFormat: "12h", showToday: false });
+    const hourEl = renderTimelineHeader(hourRes.header);
+    expect(hourEl.querySelectorAll(".jantt-subtick-cell").length).toBeGreaterThan(0);
+    expect(hourEl.querySelectorAll(".jantt-subtick-cell").length).toBeLessThan(450);
+
+    const minRes = layout(longPlan, { dayWidth: 36000, timeFormat: "24h", showToday: false });
+    const minEl = renderTimelineHeader(minRes.header);
+    expect(minEl.querySelectorAll(".jantt-subday-upper.is-hour-header").length).toBeGreaterThan(0);
+    expect(minEl.querySelectorAll(".jantt-subtick-cell").length).toBeLessThan(450);
+  });
 });
 

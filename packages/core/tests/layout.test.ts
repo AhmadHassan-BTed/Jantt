@@ -726,3 +726,49 @@ describe("Fit row height sizing", () => {
     expect(h).toBe(Math.floor((600 - 50 - 78) / 4));
   });
 });
+
+describe("Hour and minute scales, sub-day layout positioning, and timeFormat", () => {
+  it("resolves hour and minute scale presets dynamically from dayWidth", () => {
+    expect(getScaleFromDayWidth(480)).toBe("hour");
+    expect(getScaleFromDayWidth(2880)).toBe("minute");
+    expect(getScaleFromDayWidth(36000)).toBe("minute");
+  });
+
+  it("positions sub-day tasks and timed milestones accurately to the minute", () => {
+    const plan: JanttData = {
+      tasks: [
+        { id: "m1", category: "dev", start: "2026-09-02T09:00", end: "2026-09-02T09:30" },
+        { id: "m2", category: "dev", start: "2026-09-02T12:00", end: "2026-09-02T12:00", milestone: true }
+      ]
+    };
+    const res = layout(plan, { dayWidth: 1440, startDate: "2026-09-02", endDate: "2026-09-03", showToday: false });
+    expect(res.header.scale).toBe("minute");
+    const t1 = res.tasks.find((t) => t.task.id === "m1")!;
+    const t2 = res.tasks.find((t) => t.task.id === "m2")!;
+    // 1440 px/day => 1 px/minute: 09:00 is 540px into day 0, 30m duration is 30px
+    expect(t1.x).toBe(540);
+    expect(t1.width).toBe(30);
+    expect(t1.durationMinutes).toBe(30);
+    expect(t1.durationLabel).toBe("30m");
+    expect(t2.x).toBe(720);
+  });
+
+  it("generates bounded adaptive subTicks with AM/PM default and optional 24h formatting", () => {
+    const plan: JanttData = {
+      tasks: [{ id: "h1", category: "dev", start: "2026-09-01T08:00", end: "2026-09-01T14:00" }]
+    };
+    const hour12 = layout(plan, { scale: "hour", startDate: "2026-09-01", endDate: "2026-09-02", showToday: false });
+    expect(hour12.header.timeFormat).toBe("12h");
+    expect(hour12.header.subTicks!.some((t) => t.label.includes("AM") || t.label.includes("PM"))).toBe(true);
+
+    const hour24 = layout(plan, { scale: "hour", timeFormat: "24h", startDate: "2026-09-01", endDate: "2026-09-02", showToday: false });
+    expect(hour24.header.timeFormat).toBe("24h");
+    expect(hour24.header.subTicks!.some((t) => /^\d{2}:00$/.test(t.label))).toBe(true);
+
+    const fineMin = layout(plan, { dayWidth: 36000, startDate: "2026-09-01", endDate: "2026-09-02", visibleXRange: { startX: 0, endX: 600 }, showToday: false });
+    expect(fineMin.header.subTicks!.length).toBeGreaterThan(10);
+    expect(fineMin.header.subTicks!.length).toBeLessThanOrEqual(400);
+    // 25px/min -> 1-minute tick spacing
+    expect(Math.round(fineMin.header.subTicks![1].x - fineMin.header.subTicks![0].x)).toBe(25);
+  });
+});

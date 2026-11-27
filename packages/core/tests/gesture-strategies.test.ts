@@ -65,6 +65,35 @@ const at = (clientX: number, clientY = 100) => ({ clientX, clientY }) as Pointer
 
 describe("Gesture Strategies", () => {
   describe("MoveGestureStrategy", () => {
+    it("preserves timed endpoints when moving by whole days at day zoom", () => {
+      const tasks: Task[] = [{ id: "t1", category: "dev", start: "2026-09-01T09:00", end: "2026-09-01T17:00" }];
+      const { ctx } = createMockContext(tasks);
+      new MoveGestureStrategy().onMove(at(140), moveState(tasks, "t1"), ctx);
+      expect(ctx.data.tasks[0]).toMatchObject({ start: "2026-09-02T09:00", end: "2026-09-02T17:00" });
+    });
+
+    it.each([1440, -1440, 720])("preserves all-day duration after a %i-minute move at subday zoom", (minutes) => {
+      const tasks: Task[] = [{ id: "t1", category: "dev", start: "2026-09-02", end: "2026-09-02" }];
+      const { ctx } = createMockContext(tasks, { dayWidth: 1440 });
+      new MoveGestureStrategy().onMove(at(100 + minutes), moveState(tasks, "t1"), ctx);
+      const expected = minutes === 1440
+        ? { start: "2026-09-03", end: "2026-09-03" }
+        : minutes === -1440
+          ? { start: "2026-09-01", end: "2026-09-01" }
+          : { start: "2026-09-02T12:00", end: "2026-09-03T12:00" };
+      expect(ctx.data.tasks[0]).toMatchObject(expected);
+    });
+
+    it("keeps whole-day moves after a timed predecessor in strict mode", () => {
+      const tasks: Task[] = [
+        { id: "a", category: "dev", start: "2026-09-01T09:00", end: "2026-09-01T17:00" },
+        { id: "b", category: "dev", start: "2026-09-02T09:00", end: "2026-09-02T17:00", dependsOn: "a:FS+0" }
+      ];
+      const { ctx } = createMockContext(tasks, { autoCascade: false });
+      new MoveGestureStrategy().onMove(at(60), moveState(tasks, "b"), ctx);
+      expect(ctx.data.tasks[1]).toMatchObject({ start: "2026-09-02T09:00", end: "2026-09-02T17:00" });
+    });
+
     it("shifts single task by calculated delta days and cascades dependents", () => {
       const strategy = new MoveGestureStrategy();
       const tasks: Task[] = [
@@ -545,6 +574,34 @@ describe("Gesture Strategies", () => {
       const valid: Task = { id: "b", category: "dev", start: "2026-09-20", end: "2026-09-22", dependsOn: "a" };
       expect(constrainedStart(valid, () => a, resolve)).toBe("2026-09-20");
       expect(constrainedStart({ ...valid, dependsOn: "missing" }, () => undefined, resolve)).toBe("2026-09-20");
+    });
+
+    it("snaps drag and resize by minutes at minute scale while preserving sub-day duration", () => {
+      const move = new MoveGestureStrategy();
+      const resize = new ResizeGestureStrategy();
+      const tasks: Task[] = [
+        { id: "t1", category: "dev", start: "2026-09-01T09:00", end: "2026-09-01T10:00" }
+      ];
+      // dayWidth = 14400 => 10 px/min, step = 1m (10px per minute)
+      const { ctx } = createMockContext(tasks, { dayWidth: 14400, defaultGapDays: 0 });
+      const mState = moveState(tasks, "t1");
+      move.onMove(at(250), mState, ctx); // +150px / 10 px/min = +15m
+      expect(ctx.data.tasks[0].start).toBe("2026-09-01T09:15");
+      expect(ctx.data.tasks[0].end).toBe("2026-09-01T10:15");
+
+      const rState: DragState = {
+        mode: "resize",
+        taskId: "t1",
+        startX: 100,
+        startY: 100,
+        origStart: ctx.data.tasks[0].start,
+        origEnd: ctx.data.tasks[0].end,
+        moved: true,
+        origTasks: ctx.data.tasks
+      };
+      resize.onMove(at(400), rState, ctx); // +300px => +30m
+      expect(ctx.data.tasks[0].start).toBe("2026-09-01T09:15");
+      expect(ctx.data.tasks[0].end).toBe("2026-09-01T10:45");
     });
   });
 });

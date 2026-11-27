@@ -11,6 +11,7 @@ import {
   getStoredGitHubToken,
   clearStoredGitHubToken,
   updateUserGitHubVerification,
+  updateUserTimeFormat,
   syncPublicProfile,
   describeAuthError,
   type GitHubSignInResult
@@ -50,6 +51,7 @@ export interface UseAuthReturn {
   logout: () => Promise<void>;
   completeUsernameOnboarding: (rawUsername: string) => Promise<UserProfile>;
   refreshProfile: () => Promise<void>;
+  updateTimeFormat: (timeFormat: "12h" | "24h") => Promise<void>;
   checkVerification: () => Promise<VerificationStatus>;
   followCreatorHandler: () => Promise<boolean>;
   followOrgHandler: () => Promise<boolean>;
@@ -322,6 +324,19 @@ export function useAuth(): UseAuthReturn {
     setProfileEpoch((epoch) => epoch + 1);
   }, []);
 
+  const updateTimeFormatHandler = useCallback(
+    async (timeFormat: "12h" | "24h") => {
+      if (!uid) return;
+      setUserProfileState((prev) => (prev ? { ...prev, timeFormat } : prev));
+      try {
+        await updateUserTimeFormat(uid, timeFormat);
+      } catch (err) {
+        console.warn("[useAuth] Could not save time format to account:", err);
+      }
+    },
+    [uid]
+  );
+
   const dismissAuthError = useCallback(() => setAuthError(null), []);
 
   const followCreatorHandler = useCallback(() => followCreator(), []);
@@ -356,6 +371,7 @@ export function useAuth(): UseAuthReturn {
     logout: logoutHandler,
     completeUsernameOnboarding,
     refreshProfile,
+    updateTimeFormat: updateTimeFormatHandler,
     checkVerification,
     followCreatorHandler,
     followOrgHandler,

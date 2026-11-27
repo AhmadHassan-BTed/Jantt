@@ -9,9 +9,20 @@ import {
   CheckCircle2,
   RefreshCw,
   User,
-  CheckSquare
+  CheckSquare,
+  Clock,
+  CalendarClock
 } from "lucide-react";
-import { sanitizeCssColor, type Task, type Team, type NoteItem } from "@jantt/core";
+import {
+  sanitizeCssColor,
+  formatTimestampWithFormat,
+  splitTimestampToLocalInputs,
+  combineLocalInputsToISO,
+  type Task,
+  type Team,
+  type NoteItem,
+  type TimeFormat
+} from "@jantt/core";
 import type { EffectivePerson } from "../../../types";
 import {
   DEFAULT_NOTE_COLOR,
@@ -35,6 +46,9 @@ export interface NoteEditorProps {
   setEditColor: (c: string) => void;
   editPinned: boolean;
   setEditPinned: (p: boolean) => void;
+  editTimestamp?: string;
+  setEditTimestamp?: (ts: string) => void;
+  timeFormat?: TimeFormat;
   editContent: string;
   saveStatus: "saved" | "saving";
   isPreviewMode: boolean;
@@ -132,6 +146,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   setEditColor,
   editPinned,
   setEditPinned,
+  editTimestamp = "",
+  setEditTimestamp,
+  timeFormat = "12h",
   editContent,
   saveStatus,
   isPreviewMode,
@@ -188,9 +205,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     };
   }, []);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showTimestampEditor, setShowTimestampEditor] = useState(false);
   const colorAnchorRef = useRef<HTMLDivElement>(null);
   const colorTriggerRef = useRef<HTMLButtonElement>(null);
   usePopoverDismiss(showColorPicker, () => setShowColorPicker(false), colorAnchorRef, colorTriggerRef);
+
+  useEffect(() => {
+    setShowTimestampEditor(false);
+  }, [activeNote.id]);
 
   const idBase = useId();
   const listboxId = `${idBase}-mentions`;
@@ -230,6 +252,44 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     if (!editorEl || !insertPlainTextAt(editorEl, text, range)) return;
     closeMentionPopup();
     onContentChange();
+  };
+
+  const handleInsertInlineTimestamp = () => {
+    const editorEl = contentEditableRef.current;
+    if (!editorEl || isViewer || isPreviewMode) return;
+    const stamp = `[${formatTimestampWithFormat(new Date().toISOString(), timeFormat, true)}] `;
+    const sel = window.getSelection();
+    const hasRangeInEditor = Boolean(
+      sel && sel.rangeCount > 0 && editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)
+    );
+    if (!hasRangeInEditor) {
+      editorEl.focus();
+      const range = document.createRange();
+      range.selectNodeContents(editorEl);
+      range.collapse(false);
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }
+    const existing = toText(editContent);
+    const prefix = !hasRangeInEditor && existing.trim().length > 0 && !existing.endsWith("\n") ? "\n" : "";
+    insertPlainText(`${prefix}${stamp}`);
+  };
+
+  const primaryTimestampIso = editTimestamp || activeNote.createdAt || activeNote.updatedAt;
+  const primaryTimestampLabel = formatTimestampWithFormat(primaryTimestampIso, timeFormat, true);
+  const createdTimestampLabel = activeNote.createdAt ? formatTimestampWithFormat(activeNote.createdAt, timeFormat, true) : "";
+  const updatedTimestampLabel = activeNote.updatedAt ? formatTimestampWithFormat(activeNote.updatedAt, timeFormat, true) : "";
+  const timestampInputs = useMemo(
+    () => splitTimestampToLocalInputs(editTimestamp || activeNote.createdAt),
+    [editTimestamp, activeNote.createdAt]
+  );
+
+  const handleTimestampInputUpdate = (nextDate: string, nextTime: string) => {
+    if (!setEditTimestamp || isViewer) return;
+    const iso = combineLocalInputsToISO(nextDate, nextTime);
+    setEditTimestamp(iso);
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -304,6 +364,21 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         </div>
 
         <div className="note-topbar-actions">
+          {!isViewer && (
+            <button
+              type="button"
+              className="note-stamp-btn"
+              disabled={isPreviewMode}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleInsertInlineTimestamp}
+              aria-label="Insert current timestamp into note body"
+              title={isPreviewMode ? "Switch to editing to insert a timestamp" : "Insert current date & time stamp at cursor"}
+            >
+              <Clock size={13} />
+              <span>Timestamp</span>
+            </button>
+          )}
+
           <button
             type="button"
             className={`note-action-btn ${editPinned ? "is-pinned" : ""}`}
@@ -394,6 +469,73 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               if (!isViewer) setEditTitle(e.target.value);
             }}
           />
+
+          {/* Timestamps metadata bar (12h/24h aware + custom note timestamp picker) */}
+          <div className="note-timestamps-bar">
+            {setEditTimestamp && !isViewer ? (
+              <button
+                type="button"
+                className={`note-ts-chip is-editable ${showTimestampEditor ? "is-open" : ""}`}
+                onClick={() => setShowTimestampEditor((open) => !open)}
+                aria-expanded={showTimestampEditor}
+                title="Click to customize note timestamp"
+              >
+                <CalendarClock size={12} />
+                <span>{primaryTimestampLabel || "Set Timestamp"}</span>
+              </button>
+            ) : (
+              primaryTimestampLabel && (
+                <span className="note-ts-chip">
+                  <CalendarClock size={12} />
+                  <span>{primaryTimestampLabel}</span>
+                </span>
+              )
+            )}
+            {createdTimestampLabel && (
+              <span className="note-ts-meta">Created {createdTimestampLabel}</span>
+            )}
+            {updatedTimestampLabel && updatedTimestampLabel !== createdTimestampLabel && (
+              <span className="note-ts-meta">Updated {updatedTimestampLabel}</span>
+            )}
+          </div>
+
+          {!isViewer && setEditTimestamp && showTimestampEditor && (
+            <div className="note-ts-editor" role="group" aria-label="Edit note timestamp">
+              <input
+                type="date"
+                className="note-ts-input"
+                aria-label="Note timestamp date"
+                value={timestampInputs.date}
+                onChange={(e) => handleTimestampInputUpdate(e.target.value, timestampInputs.time)}
+              />
+              <input
+                type="time"
+                step="60"
+                className="note-ts-input"
+                aria-label="Note timestamp time"
+                value={timestampInputs.time}
+                onChange={(e) => handleTimestampInputUpdate(timestampInputs.date, e.target.value)}
+              />
+              <button
+                type="button"
+                className="note-ts-action-btn"
+                onClick={() => setEditTimestamp(new Date().toISOString())}
+                title="Set timestamp to right now"
+              >
+                Now
+              </button>
+              {editTimestamp && (
+                <button
+                  type="button"
+                  className="note-ts-action-btn"
+                  onClick={() => setEditTimestamp("")}
+                  title="Clear custom timestamp"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Rich ContentEditable Body or formatted preview */}
           {isPreviewMode ? (

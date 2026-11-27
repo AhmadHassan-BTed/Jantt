@@ -4,6 +4,7 @@ import {
   type Task,
   type Team,
   type TimeScale,
+  type TimeFormat,
   type LinkRoutingStyle,
   type RowHeightMode,
   validate,
@@ -51,7 +52,7 @@ const ROW_HEIGHT_MIN = 20;
 const ROW_HEIGHT_MAX = 120;
 
 const VALID_VIEWS: ActiveView[] = ["gantt", "canvas", "kanban", "summary", "tasks", "notes"];
-const VALID_SCALES: TimeScale[] = ["day", "week", "month", "quarter", "year"];
+const VALID_SCALES: TimeScale[] = ["minute", "hour", "day", "week", "month", "quarter", "year"];
 const VALID_KANBAN_SORT_FIELDS: KanbanSortField[] = ["priority", "start", "end", "wbs", "assignee", "progress", "name"];
 
 export function formatRelativeTime(isoStr?: string): string {
@@ -715,6 +716,12 @@ export function loadInitialState(compact = false) {
     if (savedScale && VALID_SCALES.includes(savedScale)) initialScale = savedScale;
   } catch {}
 
+  let initialTimeFormat: TimeFormat = "12h";
+  try {
+    const savedTf = storageService.getItem<string>(STORAGE_KEYS.TIME_FORMAT);
+    if (savedTf === "12h" || savedTf === "24h") initialTimeFormat = savedTf;
+  } catch {}
+
   let initialRouting: LinkRoutingStyle = "curved";
   try {
     const savedRouting = storageService.getItem<LinkRoutingStyle>(STORAGE_KEYS.ROUTING);
@@ -896,6 +903,7 @@ export function loadInitialState(compact = false) {
     savedProjects,
     initialTheme,
     initialScale: initialScale ?? (overview && VALID_SCALES.includes(overview) ? overview : "week"),
+    initialTimeFormat,
     initialRouting,
     initialRowHeightMode,
     initialRowHeight,

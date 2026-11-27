@@ -1,6 +1,7 @@
 import { GridHeader, TaskLayout } from "../types";
 
 export interface TimelineGridProps {
+  visibleXRange?: { startX: number; endX: number };
   header: GridHeader;
   taskLayouts: TaskLayout[];
   rowHeight: number;
@@ -30,22 +31,47 @@ export function renderTimelineGrid(props: TimelineGridProps): {
   const gridLayer = document.createElement("div");
   gridLayer.className = "jantt-grid-layer";
   const scale = props.header.scale;
+  const window = props.header.totalWidth > 5000 ? props.visibleXRange : undefined;
+  const appendVisibleColumn = (layer: HTMLElement, className: string, x: number, width: number) => {
+    if (window && (x + width < window.startX || x > window.endX)) return;
+    appendColumn(layer, className, x, width);
+  };
 
   // 1. Vertical column boundary grid lines extending from the header's lowest tier
   if (scale === "month" || scale === "quarter" || scale === "year") {
     const columns = scale === "month" ? props.header.weeks : props.header.months;
-    columns.forEach((c) => appendColumn(gridLayer, "jantt-grid-day-col", c.x, c.width));
+    columns.forEach((c) => appendVisibleColumn(gridLayer, "jantt-grid-day-col", c.x, c.width));
     const selected = props.selectedDate ? props.header.days.find((d) => d.dateStr === props.selectedDate) : undefined;
     if (selected) {
-      appendColumn(gridLayer, "jantt-grid-day-col is-selected-date-col", selected.x, selected.width);
+      appendVisibleColumn(gridLayer, "jantt-grid-day-col is-selected-date-col", selected.x, selected.width);
     }
+  } else if ((scale === "hour" || scale === "minute") && props.header.subTicks && props.header.subTicks.length > 0) {
+    const ticks = props.header.subTicks;
+    const minX = ticks[0].x;
+    const maxX = ticks[ticks.length - 1].x + ticks[ticks.length - 1].width;
+    props.header.days.forEach((d) => {
+      if (d.x + d.width < minX || d.x > maxX) return;
+      const isSelected = props.selectedDate === d.dateStr;
+      if (d.isWeekend || isSelected) {
+        const tintClass = `jantt-grid-day-col jantt-grid-day-tint ${d.isWeekend ? "is-weekend" : ""} ${
+          isSelected ? "is-selected-date-col" : ""
+        }`.trim();
+        appendVisibleColumn(gridLayer, tintClass, d.x, d.width);
+      }
+    });
+    ticks.forEach((tick) => {
+      const cls = `jantt-grid-day-col jantt-grid-subtick ${tick.isDayStart ? "is-day-start" : ""} ${
+        tick.isHourStart ? "is-hour-start" : ""
+      } ${tick.isMajor ? "is-major" : ""}`.trim();
+      appendVisibleColumn(gridLayer, cls, tick.x, tick.width);
+    });
   } else {
     props.header.days.forEach((d) => {
       const isSelected = props.selectedDate === d.dateStr;
       const className = `jantt-grid-day-col ${d.isWeekend ? "is-weekend" : ""} ${
         isSelected ? "is-selected-date-col" : ""
       }`.trim();
-      appendColumn(gridLayer, className, d.x, d.width);
+      appendVisibleColumn(gridLayer, className, d.x, d.width);
     });
   }
 

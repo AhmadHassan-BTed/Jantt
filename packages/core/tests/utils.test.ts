@@ -7,8 +7,13 @@ import {
   clampDayWidth,
   buildViewportSnapshot,
   syncTaskProgressAndStatus,
-  isTaskDone
+  isTaskDone,
+  dayWidthToSlider,
+  sliderToDayWidth,
+  getDragStepMinutes,
+  formatZoomReadout
 } from "../src/utils";
+import { DAY_WIDTH_MAX, DAY_WIDTH_MIN } from "../src/constants";
 import { resolveSchedule } from "../src/resolver";
 import { Task } from "../src/types";
 
@@ -115,8 +120,9 @@ describe("Core Utilities & Robustness", () => {
       expect(clampDayWidth(-10)).toBe(1.2);
     });
 
-    it("clamps values above maximum to 80", () => {
-      expect(clampDayWidth(150)).toBe(80);
+    it("clamps values above maximum to DAY_WIDTH_MAX", () => {
+      expect(clampDayWidth(150)).toBe(150);
+      expect(clampDayWidth(50000)).toBe(DAY_WIDTH_MAX);
     });
 
     it("rounds to 1 decimal place", () => {
@@ -130,6 +136,33 @@ describe("Core Utilities & Robustness", () => {
       expect(clampDayWidth(Number.POSITIVE_INFINITY)).toBe(52);
       expect(clampDayWidth(Number.NaN, 24)).toBe(24);
       expect(clampDayWidth(Number.NaN, Number.NaN)).toBe(52);
+    });
+  });
+
+  describe("logarithmic zoom slider and sub-day drag snap helpers", () => {
+    it("round-trips dayWidth through the 0..1000 slider range", () => {
+      expect(sliderToDayWidth(dayWidthToSlider(DAY_WIDTH_MIN))).toBeCloseTo(DAY_WIDTH_MIN, 1);
+      expect(sliderToDayWidth(dayWidthToSlider(DAY_WIDTH_MAX))).toBe(DAY_WIDTH_MAX);
+      for (const dw of [5, 26, 180, 480, 2880, 14400]) {
+        const roundTrip = sliderToDayWidth(dayWidthToSlider(dw));
+        // Integer slider quantization (0..1000) across 1.2..36000 log scale preserves ~1% relative precision
+        expect(Math.abs(roundTrip - dw) / dw).toBeLessThan(0.015);
+      }
+    });
+
+    it("decreases drag step from 1 day down to 1 minute as zoom increases", () => {
+      expect(getDragStepMinutes(40)).toBe(1440);
+      expect(getDragStepMinutes(200)).toBe(60);
+      expect(getDragStepMinutes(600)).toBe(30);
+      expect(getDragStepMinutes(1600)).toBe(15);
+      expect(getDragStepMinutes(3200)).toBe(5);
+      expect(getDragStepMinutes(15000)).toBe(1);
+    });
+
+    it("formats zoom readout for day, hour, and minute zoom tiers", () => {
+      expect(formatZoomReadout(26)).toBe("26px/d");
+      expect(formatZoomReadout(480)).toBe("20px/h");
+      expect(formatZoomReadout(2880)).toBe("2px/m");
     });
   });
 

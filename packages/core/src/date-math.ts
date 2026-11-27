@@ -3,10 +3,14 @@
  * Zero external dependencies. Operates safely in UTC.
  */
 
+import type { TimeFormat } from "./types";
+
 const DAY_MS = 86400000;
+export const MINUTES_PER_HOUR = 60;
+export const MINUTES_PER_DAY = 1440;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 /** Optional, well-formed ISO time suffix (`T08:30`, `T08:30:00.000Z`, `T08:30:00+02:00`). */
-const ISO_TIME_SUFFIX_REGEX = /^T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?(Z|[+-]([01]\d|2[0-3]):?[0-5]\d)?$/;
+const ISO_TIME_SUFFIX_REGEX = /^T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.(\d{1,9}))?)?(Z|([+-])([01]\d|2[0-3]):?([0-5]\d))?$/;
 /** Date prefix accepted by toEpochDay (same rules as isValidISODate). */
 const EPOCH_DAY_INPUT_REGEX = /^\s*(\d{4})-(\d{2})-(\d{2})\s*(?:T|$)/;
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -24,14 +28,20 @@ const MONTH_NAMES_FULL = [
 const DAY_NAMES_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 /**
- * Checks if a string conforms to YYYY-MM-DD and represents a real calendar date.
+ * Checks if a string conforms to YYYY-MM-DD (optionally followed by a valid ISO time suffix)
+ * and represents a real calendar date.
  */
 export function isValidISODate(dateStr: string): boolean {
   if (typeof dateStr !== "string") {
     return false;
   }
-  const clean = dateStr.split("T")[0].trim();
+  const trimmed = dateStr.trim();
+  const tIdx = trimmed.indexOf("T");
+  const clean = tIdx === -1 ? trimmed : trimmed.slice(0, tIdx);
   if (!ISO_DATE_REGEX.test(clean)) {
+    return false;
+  }
+  if (tIdx !== -1 && !ISO_TIME_SUFFIX_REGEX.test(trimmed.slice(tIdx))) {
     return false;
   }
   const [yearStr, monthStr, dayStr] = clean.split("-");
@@ -49,6 +59,88 @@ export function isValidISODate(dateStr: string): boolean {
     d.getUTCMonth() === month - 1 &&
     d.getUTCDate() === day
   );
+}
+
+/**
+ * Returns true when `dateStr` is a valid ISO date that includes an explicit time component (`T...`).
+ */
+export function hasTimeComponent(dateStr: unknown): boolean {
+  if (typeof dateStr !== "string") return false;
+  const trimmed = dateStr.trim();
+  return trimmed.length > 10 && trimmed[10] === "T" && isValidISODate(trimmed);
+}
+
+/**
+ * Converts a date/time string into whole UTC minutes since 1970-01-01T00:00.
+ * Plain `YYYY-MM-DD` maps to 00:00 UTC of that day; naive `YYYY-MM-DDTHH:mm` preserves UTC wall-clock
+ * minutes; explicit `Z` or `+-HH:mm` offsets are normalized to UTC. Returns NaN for invalid values.
+ */
+export function toEpochMinutes(dateStr: string | null | undefined): number {
+  if (typeof dateStr !== "string") return NaN;
+  const trimmed = dateStr.trim();
+  const day = toEpochDay(trimmed);
+  if (Number.isNaN(day)) return NaN;
+  const tIdx = trimmed.indexOf("T");
+  if (tIdx === -1) return day * MINUTES_PER_DAY;
+  const match = ISO_TIME_SUFFIX_REGEX.exec(trimmed.slice(tIdx));
+  if (!match) return NaN;
+  let totalMinutes = day * MINUTES_PER_DAY + +match[1] * MINUTES_PER_HOUR + +match[2];
+  if (match[6]) {
+    const offsetMinutes = +match[7] * MINUTES_PER_HOUR + +match[8];
+    totalMinutes += match[6] === "+" ? -offsetMinutes : offsetMinutes;
+  }
+  return totalMinutes;
+}
+
+/**
+ * Converts a non-milestone task's `end` boundary into exclusive end epoch minutes.
+ * Plain dates (`YYYY-MM-DD`) are treated as inclusive through 24:00 of that day (`(day + 1) * 1440`),
+ * while explicit timestamps (`YYYY-MM-DDTHH:mm`) map to their exact minute.
+ */
+export function toTaskEndEpochMinutes(dateStr: string | null | undefined): number {
+  const min = toEpochMinutes(dateStr);
+  if (Number.isNaN(min)) return NaN;
+  return hasTimeComponent(dateStr) ? min : min + MINUTES_PER_DAY;
+}
+
+/**
+ * Inverse of {@link toEpochMinutes}: formats minutes since 1970-01-01T00:00 (UTC)
+ * as `YYYY-MM-DDTHH:mm` (or `YYYY-MM-DD` when `includeTime` is false).
+ */
+export function fromEpochMinutes(epochMinutes: number, includeTime = true): string {
+  if (!Number.isFinite(epochMinutes)) return includeTime ? "2026-01-01T00:00" : "2026-01-01";
+  const rounded = Math.round(epochMinutes);
+  const day = Math.floor(rounded / MINUTES_PER_DAY);
+  const datePart = fromEpochDay(day);
+  if (!includeTime) return datePart;
+  const minsOfDay = ((rounded % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const hh = String(Math.floor(minsOfDay / MINUTES_PER_HOUR)).padStart(2, "0");
+  const mm = String(minsOfDay % MINUTES_PER_HOUR).padStart(2, "0");
+  return `${datePart}T${hh}:${mm}`;
+}
+
+/**
+ * Extracts the UTC `YYYY-MM-DD` calendar date portion of an ISO date or timestamp string.
+ */
+export function getDatePart(dateStr: string): string {
+  if (hasTimeComponent(dateStr)) {
+    const mins = toEpochMinutes(dateStr);
+    if (Number.isFinite(mins)) return fromEpochDay(Math.floor(mins / MINUTES_PER_DAY));
+  }
+  return formatISODate(parseISODate(dateStr));
+}
+
+/**
+ * Extracts the UTC `HH:mm` time portion of a timestamp string, or `""` for plain `YYYY-MM-DD` dates.
+ */
+export function getTimePart(dateStr: string): string {
+  if (!hasTimeComponent(dateStr)) return "";
+  const mins = toEpochMinutes(dateStr);
+  if (!Number.isFinite(mins)) return "";
+  const minsOfDay = ((Math.round(mins) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const hh = String(Math.floor(minsOfDay / MINUTES_PER_HOUR)).padStart(2, "0");
+  const mm = String(minsOfDay % MINUTES_PER_HOUR).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 /**
@@ -123,14 +215,35 @@ export function formatISODate(date: Date): string {
 }
 
 /**
- * Adds an integer number of days to an ISO date string and returns the resulting ISO date.
+ * Adds an integer number of days to an ISO date or timestamp string, preserving any explicit `HH:mm` time.
  * Safely guards against non-finite/NaN day inputs.
  */
 export function addDays(dateStr: string, days: number): string {
   const safeDays = Number.isFinite(days) ? Math.round(days) : 0;
+  if (hasTimeComponent(dateStr)) {
+    const mins = toEpochMinutes(dateStr);
+    if (Number.isFinite(mins)) return fromEpochMinutes(mins + safeDays * MINUTES_PER_DAY, true);
+  }
   const d = parseISODate(dateStr);
   d.setUTCDate(d.getUTCDate() + safeDays);
   return formatISODate(d);
+}
+
+/**
+ * Adds an integer number of minutes to an ISO date or timestamp string.
+ * Preserves plain `YYYY-MM-DD` format only when adding whole days to a plain calendar date.
+ */
+export function addMinutes(dateStr: string, minutes: number): string {
+  const safeMinutes = Number.isFinite(minutes) ? Math.round(minutes) : 0;
+  const baseMin = toEpochMinutes(dateStr);
+  if (!Number.isFinite(baseMin)) {
+    const d = parseISODate(dateStr);
+    const fallbackMin = Math.round(d.getTime() / 60000) + safeMinutes;
+    return fromEpochMinutes(fallbackMin, safeMinutes % MINUTES_PER_DAY !== 0);
+  }
+  const nextMin = baseMin + safeMinutes;
+  const keepPlain = !hasTimeComponent(dateStr) && safeMinutes % MINUTES_PER_DAY === 0;
+  return keepPlain ? fromEpochDay(Math.floor(nextMin / MINUTES_PER_DAY)) : fromEpochMinutes(nextMin, true);
 }
 
 /**
@@ -141,6 +254,18 @@ export function diffDays(startDateStr: string, endDateStr: string): number {
   const a = parseISODate(startDateStr);
   const b = parseISODate(endDateStr);
   return Math.round((b.getTime() - a.getTime()) / DAY_MS);
+}
+
+/**
+ * Returns (b - a) in whole minutes using {@link toEpochMinutes}.
+ */
+export function diffMinutes(startDateStr: string, endDateStr: string): number {
+  const a = toEpochMinutes(startDateStr);
+  const b = toEpochMinutes(endDateStr);
+  if (Number.isFinite(a) && Number.isFinite(b)) {
+    return Math.round(b - a);
+  }
+  return diffDays(startDateStr, endDateStr) * MINUTES_PER_DAY;
 }
 
 /**
@@ -155,16 +280,58 @@ export function taskDurationDays(startDateStr: string, endDateStr: string, isMil
 }
 
 /**
- * Returns the earlier of two dates.
+ * Computes the effective duration of a task in minutes.
+ * Plain-date endpoints treat `end` inclusively through 24:00 of the end day (`1d` = 1440m),
+ * while timed endpoints compute exact `end - start` minutes. Milestones return 0.
+ */
+export function taskDurationMinutes(startDateStr: string, endDateStr: string, isMilestone = false): number {
+  if (isMilestone) return 0;
+  const startMin = toEpochMinutes(startDateStr);
+  const endMin = toTaskEndEpochMinutes(endDateStr);
+  if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return 0;
+  return Math.max(0, Math.round(endMin - startMin));
+}
+
+/**
+ * Formats a minute duration cleanly (e.g. `45m`, `2h 30m`, `5d`, `1d 4h`).
+ */
+export function formatDurationLabel(minutes: number, style: "compact" | "long" = "compact"): string {
+  const safe = Math.max(0, Math.round(Number.isFinite(minutes) ? minutes : 0));
+  if (safe === 0) return style === "compact" ? "0m" : "0 min";
+  const days = Math.floor(safe / MINUTES_PER_DAY);
+  const rem = safe % MINUTES_PER_DAY;
+  if (style === "long" && rem === 0) {
+    return `${days} ${days === 1 ? "day" : "days"}`;
+  }
+  const hours = Math.floor(rem / MINUTES_PER_HOUR);
+  const mins = rem % MINUTES_PER_HOUR;
+  if (style === "long" && days === 0 && hours === 0) {
+    return `${mins} min`;
+  }
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0) parts.push(`${mins}m`);
+  return parts.join(" ");
+}
+
+/**
+ * Returns the earlier of two dates/timestamps.
  */
 export function minISODate(a: string, b: string): string {
+  const ma = toEpochMinutes(a);
+  const mb = toEpochMinutes(b);
+  if (Number.isFinite(ma) && Number.isFinite(mb)) return ma <= mb ? a : b;
   return diffDays(a, b) >= 0 ? a : b;
 }
 
 /**
- * Returns the later of two dates.
+ * Returns the later of two dates/timestamps.
  */
 export function maxISODate(a: string, b: string): string {
+  const ma = toEpochMinutes(a);
+  const mb = toEpochMinutes(b);
+  if (Number.isFinite(ma) && Number.isFinite(mb)) return ma <= mb ? b : a;
   return diffDays(a, b) >= 0 ? b : a;
 }
 
@@ -230,26 +397,158 @@ export function isWeekend(dateStr: string): boolean {
 }
 
 /**
- * Formats a date nicely for humans (e.g. 'Sep 12, 2026').
+ * Formats an hour/minute time-of-day in either 12-hour AM/PM (default) or 24-hour clock format.
  */
-export function formatHumanDate(dateStr: string): string {
+export function formatTimeOfDay(
+  hours24: number,
+  minutes: number,
+  timeFormat: TimeFormat = "12h",
+  compact = false
+): string {
+  const h = ((Math.floor(hours24) % 24) + 24) % 24;
+  const m = ((Math.floor(minutes) % 60) + 60) % 60;
+  if (timeFormat === "24h") {
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  if (compact && m === 0) return `${h12} ${period}`;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+interface ParsedWallClockTimestamp {
+  year: number;
+  monthIndex: number;
+  day: number;
+  hours: number;
+  minutes: number;
+  hasTime: boolean;
+}
+
+const HAS_TZ_SUFFIX_RE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+function parseWallClockTimestamp(isoStr?: string): ParsedWallClockTimestamp | null {
+  if (typeof isoStr !== "string") return null;
+  const trimmed = isoStr.trim();
+  if (!trimmed) return null;
+
+  if (HAS_TZ_SUFFIX_RE.test(trimmed)) {
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return {
+      year: parsed.getFullYear(),
+      monthIndex: parsed.getMonth(),
+      day: parsed.getDate(),
+      hours: parsed.getHours(),
+      minutes: parsed.getMinutes(),
+      hasTime: true
+    };
+  }
+
+  if (!isValidISODate(trimmed)) return null;
+  const mins = toEpochMinutes(trimmed);
+  if (!Number.isFinite(mins)) return null;
+  const d = new Date(Math.floor(mins / MINUTES_PER_DAY) * DAY_MS);
+  const minsOfDay = ((Math.round(mins) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  return {
+    year: d.getUTCFullYear(),
+    monthIndex: d.getUTCMonth(),
+    day: d.getUTCDate(),
+    hours: Math.floor(minsOfDay / MINUTES_PER_HOUR),
+    minutes: minsOfDay % MINUTES_PER_HOUR,
+    hasTime: hasTimeComponent(trimmed)
+  };
+}
+
+/**
+ * Formats an ISO note timestamp into readable local wall-clock form respecting `12h` or `24h`.
+ */
+export function formatTimestampWithFormat(
+  isoStr?: string,
+  timeFormat: TimeFormat = "12h",
+  includeYear = true
+): string {
+  const parts = parseWallClockTimestamp(isoStr);
+  if (!parts) return "";
+  const m = MONTH_NAMES_SHORT[parts.monthIndex] || "Jan";
+  const dateLabel = includeYear ? `${m} ${parts.day}, ${parts.year}` : `${m} ${parts.day}`;
+  if (!parts.hasTime) return dateLabel;
+  return `${dateLabel}, ${formatTimeOfDay(parts.hours, parts.minutes, timeFormat, false)}`;
+}
+
+/**
+ * Extracts local `YYYY-MM-DD` and `HH:mm` values from a note timestamp for date/time inputs.
+ */
+export function splitTimestampToLocalInputs(isoStr?: string): { date: string; time: string } {
+  const parts = parseWallClockTimestamp(isoStr);
+  if (!parts) return { date: "", time: "" };
+  const date = `${String(parts.year).padStart(4, "0")}-${String(parts.monthIndex + 1).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+  const time = parts.hasTime
+    ? `${String(parts.hours).padStart(2, "0")}:${String(parts.minutes).padStart(2, "0")}`
+    : "";
+  return { date, time };
+}
+
+/**
+ * Combines `<input type="date">` and `<input type="time">` local values back into an ISO 8601 timestamp.
+ */
+export function combineLocalInputsToISO(dateVal: string, timeVal?: string): string {
+  const cleanDate = typeof dateVal === "string" ? dateVal.trim() : "";
+  if (!cleanDate) return "";
+  const cleanTime = typeof timeVal === "string" ? timeVal.trim() : "";
+  if (!cleanTime) return cleanDate;
+  const dm = cleanDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const tm = cleanTime.match(/^(\d{2}):(\d{2})/);
+  if (!dm || !tm) return "";
+  const local = new Date(
+    Number(dm[1]),
+    Number(dm[2]) - 1,
+    Number(dm[3]),
+    Number(tm[1]),
+    Number(tm[2]),
+    0,
+    0
+  );
+  return Number.isNaN(local.getTime()) ? "" : local.toISOString();
+}
+
+/**
+ * Formats a date/time nicely for humans (e.g. 'Sep 12, 2026' or 'Sep 12, 2026, 2:30 PM').
+ */
+export function formatHumanDate(
+  dateStr: string,
+  includeTime = true,
+  timeFormat: TimeFormat = "12h"
+): string {
   if (!isValidISODate(dateStr)) return dateStr;
-  const d = parseISODate(dateStr);
+  const mins = toEpochMinutes(dateStr);
+  const d = Number.isFinite(mins) ? new Date(Math.floor(mins / MINUTES_PER_DAY) * DAY_MS) : parseISODate(dateStr);
   const m = MONTH_NAMES_SHORT[d.getUTCMonth()];
   const day = d.getUTCDate();
   const y = d.getUTCFullYear();
+  if (includeTime && hasTimeComponent(dateStr) && Number.isFinite(mins)) {
+    const minsOfDay = ((Math.round(mins) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+    const formattedTime = formatTimeOfDay(Math.floor(minsOfDay / MINUTES_PER_HOUR), minsOfDay % MINUTES_PER_HOUR, timeFormat, false);
+    return `${m} ${day}, ${y}, ${formattedTime}`;
+  }
   return `${m} ${day}, ${y}`;
 }
 
 /**
  * Checks if a task's date range [start, end] overlaps with a specific date.
- * Returns true if: start <= date <= end
+ * Plain-date `end` is inclusive through 24:00 of that date; timed `end` is exclusive at exact minute.
  */
 export function isTaskOnDate(taskStart: string, taskEnd: string, date: string): boolean {
   if (!isValidISODate(taskStart) || !isValidISODate(taskEnd) || !isValidISODate(date)) {
     return false;
   }
-  return diffDays(taskStart, date) >= 0 && diffDays(date, taskEnd) >= 0;
+  const dayStartMin = toEpochDay(date) * MINUTES_PER_DAY;
+  const dayEndMin = dayStartMin + MINUTES_PER_DAY;
+  const sMin = toEpochMinutes(taskStart);
+  const eMin = toTaskEndEpochMinutes(taskEnd);
+  if (!Number.isFinite(sMin) || !Number.isFinite(eMin)) return false;
+  if (sMin === eMin) return sMin >= dayStartMin && sMin < dayEndMin;
+  return sMin < dayEndMin && eMin > dayStartMin;
 }
 
 

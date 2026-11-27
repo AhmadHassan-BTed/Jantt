@@ -9,21 +9,31 @@ import {
   HeaderMonth,
   HeaderWeek,
   HeaderDay,
+  HeaderSubTick,
   JanttLayoutResult,
   TimeScale,
-  LinkRoutingStyle,
-  CriticalPathResult
+  TimeFormat,
+  LinkRoutingStyle
 } from "./types";
 import {
   addDays,
   diffDays,
+  formatDurationLabel,
+  formatHumanDate,
+  formatISODate,
+  formatTimeOfDay,
+  getDatePart,
   getTodayISODate,
   getTodayProgressFraction,
+  hasTimeComponent,
   isValidISODate,
-  isWeekend,
   maxISODate,
   minISODate,
-  parseISODate
+  MINUTES_PER_DAY,
+  parseISODate,
+  toEpochDay,
+  toEpochMinutes,
+  toTaskEndEpochMinutes
 } from "./date-math";
 import { calculateCriticalPath } from "./resolver";
 import { getTaskDependencyRelations } from "./dependencies";
@@ -44,7 +54,9 @@ export { sanitizeCssColor };
 
 /**
  * Derives the optimal header scale tier from a continuous day width in pixels.
- * - dayWidth >= 28px: Day tier (detailed dates and day names)
+ * - dayWidth >= 1440px: Minute tier (hours over adaptive 30m/15m/10m/5m/1m intervals)
+ * - 180px <= dayWidth < 1440px: Hour tier (days over adaptive 6h/4h/3h/2h/1h intervals)
+ * - 28px <= dayWidth < 180px: Day tier (detailed dates and day names)
  * - 12px <= dayWidth < 28px: Week tier (compact day numbers)
  * - 5px <= dayWidth < 12px: Month tier (months over ISO weeks)
  * - 2.2px < dayWidth < 5px: Quarter tier (quarters over months)
@@ -52,11 +64,108 @@ export { sanitizeCssColor };
  *   (SCALE_DAY_WIDTHS.year) maps back to "year", so presets round-trip.
  */
 export function getScaleFromDayWidth(dayWidth: number): TimeScale {
+  if (dayWidth >= 1440) return "minute";
+  if (dayWidth >= 180) return "hour";
   if (dayWidth >= 28) return "day";
   if (dayWidth >= 12) return "week";
   if (dayWidth >= 5) return "month";
   if (dayWidth > SCALE_DAY_WIDTHS.year) return "quarter";
   return "year";
+}
+
+/** Upper bound for extreme zoomed-in box widths in browsers (~12M px). */
+const MAX_SUBDAY_CANVAS_PX = 12_000_000;
+
+/**
+ * Picks the largest sub-day tick interval (in minutes) whose rendered cell is comfortably legible.
+ */
+export function getSubDayTickStepMinutes(scale: TimeScale, dayWidth: number): number {
+  if (scale === "minute") {
+    const pxPerMin = dayWidth / MINUTES_PER_DAY;
+    if (pxPerMin >= 22) return 1;
+    if (pxPerMin >= 4.5) return 5;
+    if (pxPerMin >= 2.6) return 10;
+    if (pxPerMin >= 1.5) return 15;
+    return 30;
+  }
+  const hourW = dayWidth / 24;
+  if (hourW >= 38) return 60;
+  if (hourW >= 22) return 120;
+  if (hourW >= 14) return 180;
+  if (hourW >= 10) return 240;
+  return 360;
+}
+
+export function buildSubTicks(
+  scale: TimeScale,
+  dayWidth: number,
+  chartStart: string,
+  totalDays: number,
+  timeFormat: TimeFormat,
+  visibleXRange?: { startX: number; endX: number },
+  fallbackFocusX = 0
+): HeaderSubTick[] {
+  const stepMinutes = getSubDayTickStepMinutes(scale, dayWidth);
+  const pxPerMin = dayWidth / MINUTES_PER_DAY;
+  const gridWidth = totalDays * dayWidth;
+  const DEFAULT_HEADLESS_SPAN = 4800;
+
+  let winStart: number;
+  let winEnd: number;
+  if (visibleXRange && Number.isFinite(visibleXRange.startX) && Number.isFinite(visibleXRange.endX)) {
+    winStart = Math.max(0, Math.floor(visibleXRange.startX));
+    winEnd = Math.min(gridWidth, Math.ceil(Math.max(visibleXRange.endX, winStart + 1)));
+  } else {
+    winStart = Math.min(Math.max(0, fallbackFocusX - 400), Math.max(0, gridWidth - DEFAULT_HEADLESS_SPAN));
+    winEnd = Math.min(gridWidth, winStart + DEFAULT_HEADLESS_SPAN);
+  }
+
+  const totalSteps = Math.max(1, Math.ceil((totalDays * MINUTES_PER_DAY) / stepMinutes));
+  const firstIdx = Math.max(0, Math.floor((winStart / pxPerMin) / stepMinutes));
+  const lastIdx = Math.min(totalSteps - 1, Math.ceil((winEnd / pxPerMin) / stepMinutes), firstIdx + 219);
+
+  const ticks: HeaderSubTick[] = [];
+  let cachedDayIdx = -1;
+  let cachedDateLabel = "";
+  for (let idx = firstIdx; idx <= lastIdx; idx++) {
+    const mStart = idx * stepMinutes;
+    const dayIdx = Math.floor(mStart / MINUTES_PER_DAY);
+    const dayMin = mStart % MINUTES_PER_DAY;
+    const hour24 = Math.floor(dayMin / 60);
+    const minOfHour = dayMin % 60;
+    const x = mStart * pxPerMin;
+    const width = stepMinutes * pxPerMin;
+    if (dayIdx !== cachedDayIdx) {
+      cachedDayIdx = dayIdx;
+      cachedDateLabel = formatHumanDate(addDays(chartStart, dayIdx), false, timeFormat);
+    }
+    const title = `${cachedDateLabel} · ${formatTimeOfDay(hour24, minOfHour, timeFormat, false)}`;
+
+    let label: string;
+    if (scale === "hour") {
+      label = formatTimeOfDay(hour24, 0, timeFormat, true);
+    } else if (width >= 60) {
+      label = minOfHour === 0 ? formatTimeOfDay(hour24, 0, timeFormat, true) : formatTimeOfDay(hour24, minOfHour, timeFormat, false);
+    } else if (width >= 36) {
+      label =
+        timeFormat === "24h"
+          ? `${String(hour24).padStart(2, "0")}:${String(minOfHour).padStart(2, "0")}`
+          : `${hour24 % 12 || 12}:${String(minOfHour).padStart(2, "0")}`;
+    } else {
+      label = width >= 24 && stepMinutes > 1 ? `:${String(minOfHour).padStart(2, "0")}` : String(minOfHour).padStart(2, "0");
+    }
+
+    ticks.push({
+      label,
+      title,
+      x,
+      width,
+      isMajor: scale === "hour" ? hour24 === 0 : minOfHour === 0 || (stepMinutes === 1 && minOfHour % 5 === 0),
+      isHourStart: minOfHour === 0,
+      isDayStart: dayMin === 0
+    });
+  }
+  return ticks;
 }
 
 /**
@@ -126,44 +235,55 @@ export function computeChartBounds(data: JanttData, viewportOptions: ViewportOpt
   include(viewportOptions.selectedDate);
 
   // Generous runway buffer (scale-dependent)
-  const bufferBefore = scale === "year" || scale === "quarter" ? 30 : scale === "month" ? 14 : 4;
-  const bufferAfter = scale === "year" || scale === "quarter" ? 90 : scale === "month" ? 30 : 14;
+  const isSubDayScale = scale === "minute" || scale === "hour";
+  const bufferBefore = scale === "year" || scale === "quarter" ? 30 : scale === "month" ? 14 : isSubDayScale ? 1 : 4;
+  const bufferAfter = scale === "year" || scale === "quarter" ? 90 : scale === "month" ? 30 : isSubDayScale ? 2 : 14;
 
-  const firstValidDate = (...candidates: unknown[]): string =>
-    (candidates.find((c) => typeof c === "string" && isValidISODate(c)) as string | undefined) || "";
+  const firstValidDate = (...candidates: unknown[]): string => {
+    const found = candidates.find((c) => typeof c === "string" && isValidISODate(c));
+    return typeof found === "string" ? getDatePart(found) : "";
+  };
   let chartStart = firstValidDate(viewportOptions.startDate, data.meta?.start, data.meta?.chartStart);
   let chartEnd = firstValidDate(viewportOptions.endDate, data.meta?.end, data.meta?.chartEnd);
 
+  const minTaskDay = getDatePart(minTaskStart);
+  const maxTaskDay = getDatePart(maxTaskEnd);
+
   if (!chartStart) {
-    const effectiveStart = showToday ? minISODate(minTaskStart, todayStr) : minTaskStart;
-    chartStart = addDays(effectiveStart, -bufferBefore);
-  } else if (diffDays(chartStart, minTaskStart) < 0) {
+    const effectiveStart = showToday ? minISODate(minTaskDay, todayStr) : minTaskDay;
+    chartStart = addDays(getDatePart(effectiveStart), -bufferBefore);
+  } else if (diffDays(chartStart, minTaskDay) < 0) {
     // If a task was moved BEFORE the specified chartStart, dynamically expand chartStart
-    chartStart = addDays(minTaskStart, -bufferBefore);
+    chartStart = addDays(minTaskDay, -bufferBefore);
   }
 
   if (!chartEnd) {
-    const effectiveEnd = showToday ? maxISODate(maxTaskEnd, todayStr) : maxTaskEnd;
-    chartEnd = addDays(effectiveEnd, bufferAfter);
-  } else if (diffDays(chartEnd, maxTaskEnd) > 0) {
+    const effectiveEnd = showToday ? maxISODate(maxTaskDay, todayStr) : maxTaskDay;
+    chartEnd = addDays(getDatePart(effectiveEnd), bufferAfter);
+  } else if (diffDays(chartEnd, maxTaskDay) > 0) {
     // If a task was pushed forward PAST the specified chartEnd, dynamically expand chartEnd!
-    chartEnd = addDays(maxTaskEnd, bufferAfter);
+    chartEnd = addDays(maxTaskDay, bufferAfter);
   }
 
-  // Ensure minimum span of at least 7 days
-  if (diffDays(chartStart, chartEnd) < 7) {
+  // Ensure minimum span (7 days normally; at hour/minute scales, 1 day min so single-day focus works)
+  if (!isSubDayScale && diffDays(chartStart, chartEnd) < 7) {
     chartEnd = addDays(chartStart, 14);
+  } else if (isSubDayScale && diffDays(chartStart, chartEnd) < 1) {
+    chartEnd = addDays(chartStart, 2);
   }
 
-  // Bound the span: first drop extensions caused by explicit bounds or a distant "today", then
-  // hard-cap whatever is left so pathological plans stay renderable.
-  if (diffDays(chartStart, chartEnd) > MAX_TIMELINE_DAYS) {
-    const taskWindowStart = addDays(minTaskStart, -bufferBefore);
-    const taskWindowEnd = addDays(maxTaskEnd, bufferAfter);
+  // Bound the span: keep total pixels well inside browser box limits even at 25px/min zoom
+  const dayWidthForCap = resolveScale(data, viewportOptions).dayWidth;
+  const maxDaysCap = isSubDayScale
+    ? Math.min(MAX_TIMELINE_DAYS, Math.max(7, Math.floor(MAX_SUBDAY_CANVAS_PX / Math.max(dayWidthForCap, 1))))
+    : MAX_TIMELINE_DAYS;
+  if (diffDays(chartStart, chartEnd) > maxDaysCap) {
+    const taskWindowStart = addDays(minTaskDay, -bufferBefore);
+    const taskWindowEnd = addDays(maxTaskDay, bufferAfter);
     if (diffDays(chartStart, taskWindowStart) > 0) chartStart = taskWindowStart;
     if (diffDays(taskWindowEnd, chartEnd) > 0) chartEnd = taskWindowEnd;
-    if (diffDays(chartStart, chartEnd) > MAX_TIMELINE_DAYS) {
-      chartEnd = addDays(chartStart, MAX_TIMELINE_DAYS);
+    if (diffDays(chartStart, chartEnd) > maxDaysCap) {
+      chartEnd = addDays(chartStart, maxDaysCap);
     }
   }
 
@@ -175,7 +295,7 @@ export function computeChartBounds(data: JanttData, viewportOptions: ViewportOpt
   };
 }
 
-const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> = {
+const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate" | "visibleXRange">> = {
   dayWidth: 32,
   rowHeight: DEFAULT_ROW_HEIGHT,
   rowHeightMode: "fit",
@@ -184,6 +304,7 @@ const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime"
   startDate: "",
   endDate: "",
   scale: "day",
+  timeFormat: "12h",
   linkRouting: "orthogonal",
   showToday: true,
   showTodayTag: false,
@@ -198,25 +319,22 @@ const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime"
  */
 export function layout(
   data: JanttData,
-  viewportOptions: ViewportOptions = {}
+  viewportOptions: ViewportOptions = {},
+  precomputedBounds?: ChartBounds
 ): JanttLayoutResult {
   const tasks = (data.tasks || []).filter((t) => !t._deleted);
   const categories = data.categories || {};
 
   // Auto-adjust scale tier based on continuous dayWidth (an explicit dayWidth always wins)
   const { scale, dayWidth } = resolveScale(data, viewportOptions);
+  const requestedTf = viewportOptions.timeFormat || data.meta?.timeFormat;
+  const timeFormat: TimeFormat = requestedTf === "24h" ? "24h" : "12h";
 
-  const viewport: Required<Omit<ViewportOptions, "columns" | "currentTime" | "selectedDate" | "criticalResult" | "showDateFilterBadge" | "filterTasksByDate">> & {
-    columns?: ViewportOptions["columns"];
-    currentTime?: Date;
-    selectedDate?: string | null;
-    showDateFilterBadge?: boolean;
-    filterTasksByDate?: boolean;
-    criticalResult?: CriticalPathResult;
-  } = {
+  const viewport: JanttLayoutResult["viewport"] = {
     ...DEFAULT_VIEWPORT,
     dayWidth,
     scale,
+    timeFormat,
     linkRouting: viewportOptions.linkRouting || data.meta?.linkRouting || "orthogonal",
     showCriticalPath: viewportOptions.showCriticalPath ?? (data.meta?.showCriticalPath ?? false),
     showBaselines: viewportOptions.showBaselines ?? (data.meta?.showBaselines ?? false),
@@ -239,7 +357,7 @@ export function layout(
 
   // Determine overall timeline bounds dynamically based on active tasks
   const todayStr = getTodayISODate(viewport.currentTime);
-  const bounds = computeChartBounds(data, viewportOptions);
+  const bounds = precomputedBounds ?? computeChartBounds(data, viewportOptions);
   const chartStart = bounds.startDate;
   const chartEnd = bounds.endDate;
   const totalDays = bounds.totalDays;
@@ -298,13 +416,25 @@ export function layout(
 
   const taskLayouts: TaskLayout[] = [];
   const layoutById = new Map<string, TaskLayout>();
+  const chartStartMin = toEpochDay(chartStart) * MINUTES_PER_DAY;
+  let firstRelevantX: number | null = null;
 
   tasks.forEach((task, rowIndex) => {
     const rawDiff = diffDays(task.start, task.end);
-    // Only flagged tasks are milestones: a start === end task is a one-day bar, exactly as the
-    // cascade and the CPM schedule it.
+    // Only flagged tasks are milestones: a start === end task is a one-day (or exact-minute) bar,
+    // matching the cascade and CPM schedule.
     const isMilestone = task.milestone === true;
-    const durationDays = isMilestone ? 0 : Math.max(0, rawDiff) + 1;
+    const hasExplicitTime = hasTimeComponent(task.start) || hasTimeComponent(task.end);
+    const startMin = toEpochMinutes(task.start);
+    const endMin = toTaskEndEpochMinutes(task.end);
+    const validMins = Number.isFinite(startMin) && Number.isFinite(endMin);
+    const durationMinutes = isMilestone ? 0 : validMins ? Math.max(0, endMin - startMin) : (Math.max(0, rawDiff) + 1) * MINUTES_PER_DAY;
+    const durationDays = isMilestone
+      ? 0
+      : durationMinutes % MINUTES_PER_DAY === 0
+        ? durationMinutes / MINUTES_PER_DAY
+        : Math.round((durationMinutes / MINUTES_PER_DAY) * 1000) / 1000;
+    const durationLabel = isMilestone ? "0m" : formatDurationLabel(durationMinutes, "compact");
 
     const centerY = rowIndex * viewport.rowHeight + viewport.rowHeight / 2;
 
@@ -318,8 +448,10 @@ export function layout(
     let anchorOutY: number;
 
     if (isMilestone) {
-      const colStartX = diffDays(chartStart, task.start) * viewport.dayWidth;
-      const centerX = colStartX + viewport.dayWidth / 2;
+      const colStartX = hasExplicitTime && validMins
+        ? ((startMin - chartStartMin) / MINUTES_PER_DAY) * viewport.dayWidth
+        : diffDays(chartStart, task.start) * viewport.dayWidth;
+      const centerX = hasExplicitTime ? colStartX : colStartX + viewport.dayWidth / 2;
       const size = Math.max(14, Math.min(22, Math.round(barHeight * 0.62)));
       const radius = size * 0.7071;
       x = centerX;
@@ -331,18 +463,31 @@ export function layout(
       anchorOutX = Math.round(centerX + radius);
       anchorOutY = centerY;
     } else {
-      const earlierDate = rawDiff < 0 ? task.end : task.start;
-      const laterDate = rawDiff < 0 ? task.start : task.end;
-      const colStartX = diffDays(chartStart, earlierDate) * viewport.dayWidth;
-      const colEndX = (diffDays(chartStart, laterDate) + 1) * viewport.dayWidth;
+      let colStartX: number;
+      let colEndX: number;
+      if (hasExplicitTime && validMins) {
+        const minM = Math.min(startMin, endMin);
+        const maxM = Math.max(startMin, endMin);
+        colStartX = ((minM - chartStartMin) / MINUTES_PER_DAY) * viewport.dayWidth;
+        colEndX = ((maxM - chartStartMin) / MINUTES_PER_DAY) * viewport.dayWidth;
+      } else {
+        const earlierDate = rawDiff < 0 ? task.end : task.start;
+        const laterDate = rawDiff < 0 ? task.start : task.end;
+        colStartX = diffDays(chartStart, earlierDate) * viewport.dayWidth;
+        colEndX = (diffDays(chartStart, laterDate) + 1) * viewport.dayWidth;
+      }
       x = colStartX;
-      width = Math.max(colEndX - colStartX, 14);
+      width = Math.max(colEndX - colStartX, hasExplicitTime ? 6 : 14);
       y = rowIndex * viewport.rowHeight + barYOffset;
       height = barHeight;
       anchorInX = x;
       anchorInY = y + height / 2;
       anchorOutX = x + width;
       anchorOutY = anchorInY;
+    }
+
+    if (firstRelevantX === null || x < firstRelevantX) {
+      firstRelevantX = x;
     }
 
     const cat = resolveCategory(task.category);
@@ -352,12 +497,28 @@ export function layout(
 
     let baselineLayout: TaskLayout["baselineLayout"] | undefined;
     if (task.baseline && viewport.showBaselines) {
-      const bDiff = diffDays(task.baseline.start, task.baseline.end);
-      const bEarlier = bDiff < 0 ? task.baseline.end : task.baseline.start;
-      const bLater = bDiff < 0 ? task.baseline.start : task.baseline.end;
-      const bx = diffDays(chartStart, bEarlier) * viewport.dayWidth;
-      const bColEnd = (diffDays(chartStart, bLater) + 1) * viewport.dayWidth;
-      const bWidth = Math.max(bColEnd - bx, 12);
+      const bHasTime = hasTimeComponent(task.baseline.start) || hasTimeComponent(task.baseline.end);
+      const bStartMin = toEpochMinutes(task.baseline.start);
+      const bEndMin = toTaskEndEpochMinutes(task.baseline.end);
+      let bx: number;
+      let bColEnd: number;
+      if (bHasTime && Number.isFinite(bStartMin) && Number.isFinite(bEndMin)) {
+        const bMinM = Math.min(bStartMin, bEndMin);
+        const bMaxM = Math.max(bStartMin, bEndMin);
+        bx = ((bMinM - chartStartMin) / MINUTES_PER_DAY) * viewport.dayWidth;
+        bColEnd = ((bMaxM - chartStartMin) / MINUTES_PER_DAY) * viewport.dayWidth;
+      } else {
+        const bDiff = diffDays(task.baseline.start, task.baseline.end);
+        const bEarlier = bDiff < 0 ? task.baseline.end : task.baseline.start;
+        const bLater = bDiff < 0 ? task.baseline.start : task.baseline.end;
+        bx = diffDays(chartStart, bEarlier) * viewport.dayWidth;
+        bColEnd = (diffDays(chartStart, bLater) + 1) * viewport.dayWidth;
+      }
+      const bWidth = Math.max(bColEnd - bx, bHasTime ? 6 : 12);
+      const bVariance =
+        (hasExplicitTime || bHasTime) && validMins && Number.isFinite(bEndMin)
+          ? Math.round(((endMin - bEndMin) / MINUTES_PER_DAY) * 100) / 100
+          : diffDays(task.baseline.end, task.end);
       // Milestone y is the diamond center; bars use their top edge.
       const visualBottom = isMilestone ? centerY + height / 2 : y + height;
       const rowBottom = (rowIndex + 1) * viewport.rowHeight;
@@ -368,7 +529,7 @@ export function layout(
         height: BASELINE_HEIGHT,
         start: task.baseline.start,
         end: task.baseline.end,
-        varianceDays: diffDays(task.baseline.end, task.end)
+        varianceDays: bVariance
       };
     }
 
@@ -382,6 +543,8 @@ export function layout(
       category: cat,
       displayLabel,
       durationDays: Math.max(durationDays, 0),
+      durationMinutes,
+      durationLabel,
       isMilestone,
       isCritical,
       scheduleMetrics,
@@ -454,13 +617,13 @@ export function layout(
   // Compute Header Ticks
   const spansMultipleYears = bounds.spansMultipleYears;
 
-  // Collect all task start and end boundary dates across the project
+  // Collect all task start and end boundary calendar dates across the project
   const taskBoundaryDates = new Set<string>();
   tasks.forEach((t) => {
-    if (t.start) taskBoundaryDates.add(t.start);
-    if (t.end) taskBoundaryDates.add(t.end);
-    if (t.baseline?.start) taskBoundaryDates.add(t.baseline.start);
-    if (t.baseline?.end) taskBoundaryDates.add(t.baseline.end);
+    if (t.start) taskBoundaryDates.add(getDatePart(t.start));
+    if (t.end) taskBoundaryDates.add(getDatePart(t.end));
+    if (t.baseline?.start) taskBoundaryDates.add(getDatePart(t.baseline.start));
+    if (t.baseline?.end) taskBoundaryDates.add(getDatePart(t.baseline.end));
   });
 
   const years: HeaderYear[] = [];
@@ -480,11 +643,13 @@ export function layout(
   let currentWeekNum = -1;
   let currentWeekStartX = 0;
 
+  const headerStartMs = parseISODate(chartStart).getTime();
   for (let i = 0; i < totalDays; i++) {
-    const dStr = addDays(chartStart, i);
-    const dObj = parseISODate(dStr);
+    // Bounds are already validated. Walk UTC days without repeatedly parsing the same dates.
+    const dObj = new Date(headerStartMs + i * 86400000);
+    const dStr = formatISODate(dObj);
     const dayX = i * viewport.dayWidth;
-    const isWeekendDay = isWeekend(dStr);
+    const isWeekendDay = dObj.getUTCDay() === 0 || dObj.getUTCDay() === 6;
     const isTodayDay = dStr === todayStr;
     const isTaskBoundary = taskBoundaryDates.has(dStr);
 
@@ -585,12 +750,25 @@ export function layout(
   }
 
   const computedHeaderHeight = resolveHeaderHeight(spansMultipleYears, viewportOptions.headerHeight);
+  const subTicks =
+    scale === "hour" || scale === "minute"
+      ? buildSubTicks(
+          scale,
+          viewport.dayWidth,
+          chartStart,
+          totalDays,
+          timeFormat,
+          viewportOptions.visibleXRange,
+          firstRelevantX ?? (todayX ?? 0)
+        )
+      : undefined;
 
   const header: GridHeader = {
     years,
     months,
     weeks,
     days,
+    subTicks,
     spansMultipleYears,
     todayX,
     totalWidth: canvasWidth,
@@ -598,7 +776,8 @@ export function layout(
     startDate: chartStart,
     endDate: chartEnd,
     totalDays,
-    scale
+    scale,
+    timeFormat
   };
 
   return {

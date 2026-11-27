@@ -7,13 +7,20 @@
  * Drawing happens in CSS pixels and is scaled to the backing store (`devicePixelRatio`).
  */
 
-import type { JanttData, Task, DependencyType, HorizontalVirtualWindow, VerticalVirtualWindow } from "@jantt/core";
+import type { JanttData, Task, DependencyType, HorizontalVirtualWindow, VerticalVirtualWindow, TimeFormat } from "@jantt/core";
 import {
   calculateCriticalPath,
   computeVerticalVirtualWindow,
   computeHorizontalVirtualWindow,
+  formatTimeOfDay,
+  getSubDayTickStepMinutes,
   getTaskDependencyRelations,
-  isValidISODate
+  hasTimeComponent,
+  isValidISODate,
+  MINUTES_PER_DAY,
+  toEpochDay,
+  toEpochMinutes,
+  toTaskEndEpochMinutes
 } from "@jantt/core";
 import { SpatialGanttGrid, type HitTestResult } from "./spatial-grid.js";
 
@@ -33,6 +40,7 @@ export interface CanvasRendererOptions {
   dayWidth?: number;
   headerHeight?: number;
   showCriticalPath?: boolean;
+  timeFormat?: TimeFormat;
   /** Base color preset; `colors` overrides individual entries ("custom" uses the dark preset as base). */
   theme?: "swiss-dark" | "swiss-light" | "custom";
   colors?: Partial<CanvasColorConfig>;
@@ -97,6 +105,7 @@ export class CanvasTimelineRenderer {
   private dayWidth: number;
   private headerHeight: number;
   private showCriticalPath: boolean;
+  private timeFormat: TimeFormat;
   private theme: string;
   private colorOverrides: Partial<CanvasColorConfig>;
   private colors: CanvasColorConfig;
@@ -109,9 +118,10 @@ export class CanvasTimelineRenderer {
   private indexedTasks: Task[] | undefined;
   private indexedTaskCount = 0;
   private rows: Task[] = [];
-  private startDays = new Float64Array(0); // day offset from timelineStart; NaN when undated
-  private spanDays = new Float64Array(0); // inclusive duration in days (>= 1)
+  private startDays = new Float64Array(0); // day offset from timelineStart (fractional for sub-day tasks); NaN when undated
+  private spanDays = new Float64Array(0); // duration in days (fractional for sub-day tasks)
   private milestones = new Uint8Array(0);
+  private timedStarts = new Uint8Array(0); // 1 when milestone/task has explicit time component
   private edges: DependencyEdge[] = [];
   private timelineStartDay = DEFAULT_START_DAY; // days since the Unix epoch
   private criticalIds: Set<string> | null = null;
@@ -128,6 +138,7 @@ export class CanvasTimelineRenderer {
     this.dayWidth = options.dayWidth || 40;
     this.headerHeight = options.headerHeight || 48;
     this.showCriticalPath = options.showCriticalPath ?? true;
+    this.timeFormat = options.timeFormat === "24h" ? "24h" : "12h";
     this.theme = options.theme || "swiss-dark";
     this.colorOverrides = { ...(options.colors || {}) };
     this.colors = this.resolveColors();
@@ -154,6 +165,7 @@ export class CanvasTimelineRenderer {
     if (options.dayWidth !== undefined && options.dayWidth > 0) this.dayWidth = options.dayWidth;
     if (options.headerHeight !== undefined && options.headerHeight >= 0) this.headerHeight = options.headerHeight;
     if (options.showCriticalPath !== undefined) this.showCriticalPath = options.showCriticalPath;
+    if (options.timeFormat !== undefined) this.timeFormat = options.timeFormat === "24h" ? "24h" : "12h";
     if (options.theme !== undefined) this.theme = options.theme;
     if (options.colors) this.colorOverrides = { ...this.colorOverrides, ...options.colors };
     if (options.theme !== undefined || options.colors) {
@@ -180,22 +192,35 @@ export class CanvasTimelineRenderer {
     const startDays = new Float64Array(count);
     const spanDays = new Float64Array(count);
     const milestones = new Uint8Array(count);
+    const timedStarts = new Uint8Array(count);
 
     let minDay = dayNumber(this.plan.meta?.start);
     let maxDay = dayNumber(this.plan.meta?.end);
     for (let i = 0; i < count; i++) {
-      const start = dayNumber(rows[i].start);
-      const end = dayNumber(rows[i].end);
-      if (Number.isNaN(start) || Number.isNaN(end)) {
+      const task = rows[i];
+      const startDayInt = dayNumber(task.start);
+      const endDayInt = dayNumber(task.end);
+      if (Number.isNaN(startDayInt) || Number.isNaN(endDayInt)) {
         startDays[i] = NaN;
         continue;
       }
-      startDays[i] = start;
-      spanDays[i] = Math.max(1, end - start + 1);
+      const isMilestone = task.milestone === true;
+      const startTimed = hasTimeComponent(task.start);
+      const hasSubDay = startTimed || (!isMilestone && hasTimeComponent(task.end));
+      timedStarts[i] = startTimed ? 1 : 0;
+      if (hasSubDay) {
+        const sMin = toEpochMinutes(task.start);
+        const eMin = isMilestone ? sMin : toTaskEndEpochMinutes(task.end);
+        startDays[i] = sMin / MINUTES_PER_DAY;
+        spanDays[i] = isMilestone ? 0 : Math.max(0, eMin - sMin) / MINUTES_PER_DAY;
+      } else {
+        startDays[i] = startDayInt;
+        spanDays[i] = Math.max(1, endDayInt - startDayInt + 1);
+      }
       // Only flagged tasks are diamonds; a single-day task is a one-day bar (MS Project / P6 semantics).
-      milestones[i] = rows[i].milestone === true ? 1 : 0;
-      if (!(start >= minDay)) minDay = start;
-      if (!(end <= maxDay)) maxDay = end;
+      milestones[i] = isMilestone ? 1 : 0;
+      if (!(startDayInt >= minDay)) minDay = startDayInt;
+      if (!(endDayInt <= maxDay)) maxDay = endDayInt;
     }
 
     if (Number.isNaN(minDay)) minDay = Number.isNaN(maxDay) ? DEFAULT_START_DAY : Math.min(maxDay, DEFAULT_START_DAY);
@@ -230,6 +255,7 @@ export class CanvasTimelineRenderer {
     this.startDays = startDays;
     this.spanDays = spanDays;
     this.milestones = milestones;
+    this.timedStarts = timedStarts;
     this.edges = edges;
     this.criticalIds = null;
     this.minimapLayer = null;
@@ -356,15 +382,31 @@ export class CanvasTimelineRenderer {
       }
     }
 
-    // Vertical day grid lines
+    // Vertical grid lines (day columns or adaptive sub-day ticks when zoomed to hour/minute)
     ctx.strokeStyle = colors.gridLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
 
-    for (let d = horiz.startDayOffset; d <= horiz.endDayOffset; d++) {
-      const x = d * dayWidth;
-      ctx.moveTo(x, top);
-      ctx.lineTo(x, bottom);
+    if (dayWidth >= 180) {
+      const subScale = dayWidth >= 1440 ? "minute" : "hour";
+      const stepMin = getSubDayTickStepMinutes(subScale, dayWidth);
+      const pxPerMin = dayWidth / MINUTES_PER_DAY;
+      const firstStep = Math.max(0, Math.floor((horiz.startDayOffset * MINUTES_PER_DAY) / stepMin));
+      const lastStep = Math.min(
+        Math.ceil(((horiz.endDayOffset + 1) * MINUTES_PER_DAY) / stepMin),
+        firstStep + 400
+      );
+      for (let s = firstStep; s <= lastStep; s++) {
+        const x = s * stepMin * pxPerMin;
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+      }
+    } else {
+      for (let d = horiz.startDayOffset; d <= horiz.endDayOffset; d++) {
+        const x = d * dayWidth;
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+      }
     }
     ctx.stroke();
 
@@ -416,7 +458,7 @@ export class CanvasTimelineRenderer {
 
       const barX = startDay * dayWidth;
       const barY = i * rowHeight + BAR_Y_OFFSET;
-      const barW = durationDays * dayWidth;
+      const barW = Math.max(durationDays * dayWidth, this.timedStarts[i] || hasTimeComponent(t.end) ? 4 : 0);
       const textY = barY + BAR_HEIGHT / 2;
       const label = String(t.label || t.name || t.id);
       const isSelected = highlighted?.has(t.id);
@@ -428,7 +470,7 @@ export class CanvasTimelineRenderer {
       if (milestones[i]) {
         // Draw Milestone Diamond
         const size = BAR_HEIGHT * 0.8;
-        const cx = barX + dayWidth / 2;
+        const cx = this.timedStarts[i] ? barX : barX + dayWidth / 2;
 
         ctx.save();
         ctx.translate(cx, textY);
@@ -505,7 +547,7 @@ export class CanvasTimelineRenderer {
   private anchorX(row: number, atEnd: boolean, halfDiamond: number): number {
     const x = this.startDays[row] * this.dayWidth;
     if (this.milestones[row]) {
-      const cx = x + this.dayWidth / 2;
+      const cx = this.timedStarts[row] ? x : x + this.dayWidth / 2;
       return atEnd ? cx + halfDiamond : cx - halfDiamond;
     }
     return atEnd ? x + this.spanDays[row] * this.dayWidth : x;
@@ -630,6 +672,75 @@ export class CanvasTimelineRenderer {
     ctx.fillStyle = colors.text;
     ctx.strokeStyle = colors.border;
     ctx.beginPath();
+
+    if (dayWidth >= 180) {
+      const isMinuteScale = dayWidth >= 1440;
+      const subScale = isMinuteScale ? "minute" : "hour";
+      const stepMin = getSubDayTickStepMinutes(subScale, dayWidth);
+      const pxPerMin = dayWidth / MINUTES_PER_DAY;
+      const firstVisMin = Math.max(0, Math.floor(scrollX / pxPerMin));
+      const lastVisMin = Math.min(this.totalDays * MINUTES_PER_DAY, Math.ceil((scrollX + width) / pxPerMin));
+
+      if (isMinuteScale) {
+        const hourW = dayWidth / 24;
+        const firstHour = Math.max(0, Math.floor(firstVisMin / 60));
+        const lastHour = Math.min(this.totalDays * 24 - 1, Math.ceil(lastVisMin / 60), firstHour + 80);
+        for (let hIdx = firstHour; hIdx <= lastHour; hIdx++) {
+          const day = this.timelineStartDay + Math.floor(hIdx / 24);
+          const hour24 = hIdx % 24;
+          const x = hIdx * hourW;
+          const nextX = x + hourW;
+          const dObj = new Date(day * DAY_MS);
+          const text = `${MONTH_LABELS[dObj.getUTCMonth()]} ${dObj.getUTCDate()} · ${formatTimeOfDay(hour24, 0, this.timeFormat, true)}`;
+          const pinnedX = x < scrollX ? Math.min(scrollX + 6, nextX - 96) : x + 6;
+          ctx.fillText(text, pinnedX, tierY / 2 + 1);
+          if (x >= scrollX) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, tierY);
+          }
+        }
+      } else {
+        for (let d = horiz.startDayOffset; d <= horiz.endDayOffset; d++) {
+          const day = this.timelineStartDay + d;
+          const dObj = new Date(day * DAY_MS);
+          const x = d * dayWidth;
+          const nextX = x + dayWidth;
+          const text = `${MONTH_LABELS[dObj.getUTCMonth()]} ${dObj.getUTCDate()}, ${dObj.getUTCFullYear()}`;
+          const pinnedX = x < scrollX ? Math.min(scrollX + 6, nextX - 104) : x + 6;
+          ctx.fillText(text, pinnedX, tierY / 2 + 1);
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, tierY);
+        }
+      }
+      ctx.stroke();
+
+      ctx.font = DAY_FONT;
+      ctx.textAlign = "center";
+      ctx.fillStyle = colors.textMuted;
+      const tickY = tierY + (headerHeight - tierY) / 2;
+      const firstTick = Math.max(0, Math.floor(firstVisMin / stepMin));
+      const lastTick = Math.min(
+        Math.ceil((this.totalDays * MINUTES_PER_DAY) / stepMin) - 1,
+        Math.ceil(lastVisMin / stepMin),
+        firstTick + 300
+      );
+      for (let s = firstTick; s <= lastTick; s++) {
+        const mStart = s * stepMin;
+        const dayMin = mStart % MINUTES_PER_DAY;
+        const hour24 = Math.floor(dayMin / 60);
+        const minOfHour = dayMin % 60;
+        const slotW = stepMin * pxPerMin;
+        const label =
+          subScale === "hour"
+            ? formatTimeOfDay(hour24, 0, this.timeFormat, true)
+            : slotW >= 54
+              ? formatTimeOfDay(hour24, minOfHour, this.timeFormat, minOfHour === 0)
+              : `:${String(minOfHour).padStart(2, "0")}`;
+        ctx.fillText(label, mStart * pxPerMin + slotW / 2, tickY);
+      }
+      ctx.restore();
+      return;
+    }
 
     const first = new Date((this.timelineStartDay + firstVisible) * DAY_MS);
     let year = first.getUTCFullYear();

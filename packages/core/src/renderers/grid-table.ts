@@ -10,6 +10,7 @@ export interface GridTableProps {
   headerHeight: number;
   rowHeight: number;
   gridContainer: HTMLElement;
+  getGridContainer?: () => HTMLElement | null;
   controller: InteractionController;
   showCritical?: boolean;
   people?: Person[];
@@ -114,7 +115,7 @@ export function renderGridTable(props: GridTableProps): {
 
     const meta = document.createElement("div");
     meta.className = "jantt-col-meta";
-    meta.textContent = `${Number(item.durationDays) || 0}d`;
+    meta.textContent = item.durationLabel || `${Number(item.durationDays) || 0}d`;
 
     const progress = document.createElement("div");
     progress.className = "jantt-col-progress-pill";
@@ -138,12 +139,12 @@ export function renderGridTable(props: GridTableProps): {
     const escapedTaskId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(item.task.id) : item.task.id.replace(/"/g, '\\"');
     row.addEventListener("mouseenter", () => {
       row.classList.add("is-row-highlighted");
-      const matchingGridRow = props.gridContainer.querySelector(`[data-grid-row-id="${escapedTaskId}"]`);
+      const matchingGridRow = (props.getGridContainer?.() ?? props.gridContainer).querySelector(`[data-grid-row-id="${escapedTaskId}"]`);
       matchingGridRow?.classList.add("is-row-highlighted");
     });
     row.addEventListener("mouseleave", () => {
       row.classList.remove("is-row-highlighted");
-      const matchingGridRow = props.gridContainer.querySelector(`[data-grid-row-id="${escapedTaskId}"]`);
+      const matchingGridRow = (props.getGridContainer?.() ?? props.gridContainer).querySelector(`[data-grid-row-id="${escapedTaskId}"]`);
       matchingGridRow?.classList.remove("is-row-highlighted");
     });
 

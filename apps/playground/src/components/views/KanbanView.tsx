@@ -23,7 +23,12 @@ import {
   resolveTaskAssignee,
   syncTaskProgressAndStatus,
   sanitizeCssColor,
-  isTaskDone
+  isTaskDone,
+  hasTimeComponent,
+  formatHumanDate,
+  getDatePart,
+  formatTimeOfDay,
+  getTimePart
 } from "@jantt/core";
 import type {
   KanbanSortRule,
@@ -85,7 +90,23 @@ export function tintColor(color: string, percent: number): string {
 const shortDateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
 const boardSearch = new SearchQueryFilterStage();
 
-export function formatShortRange(start: string, end: string): string {
+export function formatShortRange(start: string, end: string, timeFormat: "12h" | "24h" = "12h"): string {
+  if (hasTimeComponent(start) || hasTimeComponent(end)) {
+    const startPart = formatHumanDate(start, true, timeFormat).replace(/,\s*\d{4}/, "");
+    const endPart = formatHumanDate(end, true, timeFormat).replace(/,\s*\d{4}/, "");
+    if (start === end) return startPart;
+    const sameDay = getDatePart(start) === getDatePart(end);
+    if (sameDay && hasTimeComponent(start) && hasTimeComponent(end)) {
+      const endOnly = formatTimeOfDay(
+        Number(getTimePart(end).slice(0, 2)),
+        Number(getTimePart(end).slice(3, 5)),
+        timeFormat,
+        false
+      );
+      return `${startPart}–${endOnly}`;
+    }
+    return `${startPart} - ${endPart}`;
+  }
   const parse = (value: string) => {
     const date = new Date(`${value}T00:00:00Z`);
     return Number.isNaN(date.getTime()) || !/^\d{4}-\d{2}-\d{2}$/.test(value) || date.toISOString().slice(0, 10) !== value
@@ -174,6 +195,7 @@ interface KanbanViewProps {
   selectedPersonFilter?: string;
   openTaskDetailSidebar: (task: Task) => void;
   selectedMobileTaskId?: string | null;
+  timeFormat?: "12h" | "24h";
   /** Must be the guarded plan commit (viewer / pending-login checks + undo snapshot). */
   handleChartCommit: (data: JanttData) => void;
   isViewer?: boolean;
@@ -206,6 +228,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   selectedPersonFilter = "all",
   openTaskDetailSidebar,
   selectedMobileTaskId = null,
+  timeFormat = "12h",
   handleChartCommit,
   isViewer = false,
   onPromptFork
@@ -476,7 +499,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 const title = t.label || t.name || t.id;
                 const teamColor = sanitizeCssColor(assigneeInfo.team?.color, "var(--jantt-accent)");
-                const shortRange = formatShortRange(t.start, t.end);
+                const shortRange = formatShortRange(t.start, t.end, timeFormat);
                 const editableTitle = <EditableBoardTitle title={title} readOnly={isViewer} mobile={isMobile}
                   onSave={label => {
                     if (isViewer) return;

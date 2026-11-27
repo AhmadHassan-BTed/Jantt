@@ -1,5 +1,19 @@
 import { JanttData, Task, JanttOptions, TaskLayout } from "./types";
-import { addDays, diffDays } from "./date-math";
+import {
+  addDays,
+  addMinutes,
+  diffDays,
+  diffMinutes,
+  formatDurationLabel,
+  formatHumanDate,
+  fromEpochDay,
+  fromEpochMinutes,
+  hasTimeComponent,
+  MINUTES_PER_DAY,
+  toEpochMinutes,
+  toTaskEndEpochMinutes
+} from "./date-math";
+import { getDragStepMinutes } from "./utils";
 import { resolveSchedule } from "./resolver";
 import { DEFAULT_GAP_DAYS } from "./constants";
 import { TaskScheduleCoordinator } from "./rendering/task-schedule-coordinator";
@@ -494,28 +508,61 @@ export class InteractionController {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
 
-    const step = (e.key === "ArrowLeft" ? -1 : 1) * (e.altKey ? this.defaultGapDays : 1);
+    const stepMinutes = getDragStepMinutes(this.dayWidth);
+    const dir = e.key === "ArrowLeft" ? -1 : 1;
     let next: Task | null = null;
-    if (e.shiftKey) {
-      // Shrink / grow the end date, never below the duration the resize gesture allows.
-      if (step > 0) {
-        const end = addDays(current.end, 1);
-        next = { ...current, end };
-        if (current.milestone && diffDays(current.start, end) > 0) next.milestone = false;
-      } else if (diffDays(current.start, current.end) > (current.milestone ? 0 : 1)) {
-        next = { ...current, end: addDays(current.end, -1) };
+
+    if (stepMinutes === MINUTES_PER_DAY) {
+      const step = dir * (e.altKey ? this.defaultGapDays : 1);
+      if (e.shiftKey) {
+        // Shrink / grow the end date, never below the duration the resize gesture allows.
+        if (step > 0) {
+          const end = addDays(current.end, 1);
+          next = { ...current, end };
+          if (current.milestone && diffDays(current.start, end) > 0) next.milestone = false;
+        } else if (diffDays(current.start, current.end) > (current.milestone ? 0 : 1)) {
+          next = { ...current, end: addDays(current.end, -1) };
+        }
+      } else {
+        next = { ...current, start: addDays(current.start, step), end: addDays(current.end, step) };
+        if (!this.autoCascade) {
+          const byId = new Map(this.data.tasks.map((t) => [t.id, t] as [string, Task]));
+          const allowed = constrainedStart(next, (id) => byId.get(id), this.ctx.resolve, byId);
+          const shortfall = diffDays(next.start, allowed);
+          if (shortfall > 0) {
+            next = { ...next, start: allowed, end: addDays(next.end, shortfall) };
+          }
+        }
+        if (next.start === current.start) next = null;
       }
     } else {
-      next = { ...current, start: addDays(current.start, step), end: addDays(current.end, step) };
-      if (!this.autoCascade) {
-        const byId = new Map(this.data.tasks.map((t) => [t.id, t] as [string, Task]));
-        const allowed = constrainedStart(next, (id) => byId.get(id), this.ctx.resolve, byId);
-        const shortfall = diffDays(next.start, allowed);
-        if (shortfall > 0) {
-          next = { ...next, start: allowed, end: addDays(next.end, shortfall) };
+      const deltaMinutes = dir * stepMinutes * (e.altKey ? 4 : 1);
+      if (e.shiftKey) {
+        const startMin = toEpochMinutes(current.start);
+        const endMin = current.milestone ? startMin : toTaskEndEpochMinutes(current.end);
+        const minDur = current.milestone ? 0 : stepMinutes;
+        const candEndMin = endMin + dir * stepMinutes;
+        if (candEndMin - startMin >= minDur && candEndMin !== endMin) {
+          const keepPlain =
+            !hasTimeComponent(current.start) && !hasTimeComponent(current.end) && candEndMin % MINUTES_PER_DAY === 0;
+          const end = keepPlain ? fromEpochDay(candEndMin / MINUTES_PER_DAY - 1) : fromEpochMinutes(candEndMin, true);
+          next = { ...current, end };
+          if (current.milestone && candEndMin > startMin) next.milestone = false;
         }
+      } else {
+        const newStart = addMinutes(current.start, deltaMinutes);
+        const durMin = current.milestone ? 0 : Math.max(0, toTaskEndEpochMinutes(current.end) - toEpochMinutes(current.start));
+        next = { ...current, start: newStart, end: current.milestone ? newStart : addMinutes(newStart, durMin) };
+        if (!this.autoCascade) {
+          const byId = new Map(this.data.tasks.map((t) => [t.id, t] as [string, Task]));
+          const allowed = constrainedStart(next, (id) => byId.get(id), this.ctx.resolve, byId);
+          const shortfallMin = diffMinutes(next.start, allowed);
+          if (shortfallMin > 0) {
+            next = { ...next, start: allowed, end: addMinutes(next.end, shortfallMin) };
+          }
+        }
+        if (next.start === current.start) next = null;
       }
-      if (next.start === current.start) next = null;
     }
     if (!next) return;
 
@@ -681,9 +728,29 @@ export class InteractionController {
         }
         const original = state.resizeStart || state.mode === "move" ? state.origStart : state.origEnd;
         const current = state.resizeStart || state.mode === "move" ? task.start : task.end;
-        const days = original ? diffDays(original, current) : 0;
-        state.dragHint.textContent = `${days > 0 ? "+" : ""}${days}d · ${task.start} – ${task.end}`;
-        state.dragHint.style.left = `${Math.max(4, Math.min(window.innerWidth - 205, e.clientX + 12))}px`;
+        const timeFormat = this.options.viewport?.timeFormat === "24h" ? "24h" : "12h";
+        const useSubDayHint =
+          getDragStepMinutes(this.dayWidth) < MINUTES_PER_DAY ||
+          hasTimeComponent(original) ||
+          hasTimeComponent(current);
+        if (useSubDayHint) {
+          const origMin = original
+            ? state.mode === "resize" && !state.resizeStart
+              ? toTaskEndEpochMinutes(original)
+              : toEpochMinutes(original)
+            : 0;
+          const currMin =
+            state.mode === "resize" && !state.resizeStart
+              ? toTaskEndEpochMinutes(current)
+              : toEpochMinutes(current);
+          const mins = Number.isFinite(origMin) && Number.isFinite(currMin) ? Math.round(currMin - origMin) : 0;
+          const deltaLabel = mins === 0 ? "0m" : `${mins > 0 ? "+" : "-"}${formatDurationLabel(Math.abs(mins), "compact")}`;
+          state.dragHint.textContent = `${deltaLabel} · ${formatHumanDate(task.start, true, timeFormat)} – ${formatHumanDate(task.end, true, timeFormat)}`;
+        } else {
+          const days = original ? diffDays(original, current) : 0;
+          state.dragHint.textContent = `${days > 0 ? "+" : ""}${days}d · ${task.start} – ${task.end}`;
+        }
+        state.dragHint.style.left = `${Math.max(4, Math.min(window.innerWidth - 245, e.clientX + 12))}px`;
         state.dragHint.style.top = `${Math.max(4, e.clientY - 36)}px`;
       }
     }

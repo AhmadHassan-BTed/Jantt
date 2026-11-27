@@ -143,4 +143,61 @@ describe("NotesView", () => {
     expect(committed.meta?.tombstones?.n1?.entityType).toBe("note");
     confirmSpy.mockRestore();
   });
+
+  it("filters notes by task from notesIntent and creates linked timestamped notes for that task", () => {
+    const commit = vi.fn();
+    const consumeIntent = vi.fn();
+    const plan = basePlan({
+      tasks: [
+        { id: "T1", label: "Design", category: "x", start: "2026-01-01", end: "2026-01-05" },
+        { id: "T2", label: "Build", category: "x", start: "2026-01-06", end: "2026-01-10" }
+      ],
+      notes: [
+        { id: "n1", title: "General Kickoff", content: "Project wide", task_ids: [], createdAt: "2026-11-27T10:00", updatedAt: "2026-11-27T10:00" },
+        { id: "n2", title: "Design Spec", content: "Fonts & colors", task_ids: ["T1"], createdAt: "2026-11-27T14:30", updatedAt: "2026-11-27T14:30" }
+      ]
+    });
+
+    render(
+      <NotesView
+        parsedData={plan}
+        handleChartCommit={commit}
+        timeFormat="24h"
+        notesIntent={{ taskId: "T1", noteId: "n2", mode: "manage", nonce: 1 }}
+        onConsumeNotesIntent={consumeIntent}
+      />
+    );
+
+    expect(consumeIntent).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".notes-task-banner-label")?.textContent).toBe("Design");
+    const listTitles = Array.from(container.querySelectorAll(".note-item-title")).map((el) => el.textContent);
+    expect(listTitles).toEqual(["Design Spec"]);
+    expect(container.querySelector(".note-timestamps-bar")?.textContent).toContain("14:30");
+
+    // Clicking Stamp Time inserts a formatted inline timestamp and saves it
+    const stampBtn = container.querySelector<HTMLButtonElement>(".note-stamp-btn")!;
+    act(() => {
+      stampBtn.click();
+      vi.advanceTimersByTime(400);
+    });
+    expect(editorEl()?.textContent).toMatch(/\[\w+ \d+, \d{4}, \d{2}:\d{2}\]/);
+    expect(commit).toHaveBeenCalledTimes(1);
+    const afterStamp = commit.mock.calls[0][0] as JanttData;
+    expect(afterStamp.notes?.find((n) => n.id === "n2")?.content).toMatch(/\[\w+ \d+, \d{4}, \d{2}:\d{2}\]/);
+
+    // Creating a new note while scoped to task T1 links task_ids: ["T1"] and sets timestamp
+    act(() => {
+      container.querySelector<HTMLButtonElement>(".notes-new-btn")!.click();
+    });
+    const lastPlan = commit.mock.calls[commit.mock.calls.length - 1][0] as JanttData;
+    const created = lastPlan.notes?.[0];
+    expect(created?.task_ids).toEqual(["T1"]);
+    expect(created?.timestamp).toBeTruthy();
+
+    // Clearing the task filter restores all notes
+    act(() => {
+      container.querySelector<HTMLButtonElement>(".notes-task-clear-btn")!.click();
+    });
+    expect(container.querySelectorAll(".note-list-item")).toHaveLength(2);
+  });
 });

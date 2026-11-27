@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JanttData } from "@jantt/core";
-import type { RoomMember, UserProfile } from "./dtos";
+import type { FullRoomPayload, RoomMember, UserProfile } from "./dtos";
 
 /**
  * In-memory stand-in for the Realtime Database client SDK: multi-path updates, transactions,
@@ -279,6 +279,55 @@ describe("renameRoom", () => {
 });
 
 describe("saveRoomDataAtomic", () => {
+  it("round-trips complete cloud plans, including linked notes, timestamps and custom fields", async () => {
+    const data: JanttData = {
+      ...plan({
+        start: "2026-01-05T09:15", end: "2026-01-09T16:45", progress: 0.5,
+        baseline: { start: "2026-01-04", end: "2026-01-08" },
+        fields: { "review.status": "ready", "reference/link": "https://example.com/spec" }
+      }),
+      notes: [{
+        id: "n1", title: "Design notes", content: "## Decisions\nKeep the task linked.", task_ids: ["t1"],
+        createdAt: NOW, updatedAt: NOW, timestamp: "2026-01-05T09:15:00.000Z",
+        color: "#22c55e", pinned: true, tags: ["review"],
+        fields: { "meeting.time": "09:15", "external/id": "meeting-1" }
+      }],
+      documents: [{ id: "doc1", label: "Specification", url: "https://example.com/spec", task_ids: ["t1"] }],
+      people: [{ id: "p1", name: "Alice", username: "@alice" }],
+      teams: [{ id: "team1", name: "Design", member_ids: ["p1"] }],
+      categories: { dev: { label: "Development", color: "#22c55e" } },
+      viewport: { timeFormat: "24h", dayWidth: 480 },
+      custom: { "release/version": "1.0", enabled: false, count: 0 }
+    };
+    const created = await createRoom(alice, "Full plan", data);
+    const roomId = created.meta.roomId;
+    expect((await getRoom(roomId))?.data).toEqual(data);
+    const received: FullRoomPayload[] = [];
+    const stop = listenToRoom(roomId, room => { if (room) received.push(room); });
+    try {
+      const edited: JanttData = { ...data, notes: [{ ...data.notes![0],
+        content: "Updated design decisions", timestamp: "2026-01-06T14:30:00.000Z",
+        updatedAt: "2026-01-06T15:00:00.000Z", task_ids: ["t1", "t2"]
+      }], tasks: [...data.tasks, { id: "t2", label: "Review", category: "dev", start: "2026-01-10", end: "2026-01-11" }] };
+      await saveRoomDataAtomic(roomId, edited, alice, data);
+      expect((await getRoom(roomId))?.data).toEqual(edited);
+      expect(received[received.length - 1]?.data).toEqual(edited);
+      expect(fake.getAt(`rooms/${roomId}/meta/noteCount`)).toBe(1);
+    } finally { stop(); }
+  });
+
+  it("merges concurrent note edits without losing task links or the explicit timestamp", async () => {
+    const base: JanttData = { ...plan(), notes: [{ id: "n1", title: "Note", content: "Original",
+      task_ids: ["t1"], createdAt: NOW, updatedAt: NOW, timestamp: NOW }] };
+    const timestamp = "2026-01-06T14:30:00.000Z";
+    seedRoom({ ...base, notes: [{ ...base.notes![0], content: "Teammate's content" }] });
+    const local: JanttData = { ...base, notes: [{ ...base.notes![0], timestamp, title: "My title" }] };
+    const saved = await saveRoomDataAtomic(ROOM, local, bob, base);
+    expect(saved.data.notes?.[0]).toMatchObject({ id: "n1", title: "My title", content: "Teammate's content",
+      task_ids: ["t1"], createdAt: NOW, timestamp });
+    expect((await getRoom(ROOM))?.data.notes).toEqual(saved.data.notes);
+  });
+
   it("keeps edits to fields the display hash ignores", async () => {
     seedRoom();
     const edited = plan({ milestone: true, priority: "high" });

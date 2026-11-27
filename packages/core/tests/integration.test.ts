@@ -8,6 +8,7 @@ import { createTaskSidebar } from "../src/sidebar";
 import { createTooltipController } from "../src/renderers/tooltip";
 import { renderTimelineGrid } from "../src/renderers/timeline-grid";
 import { renderJantt } from "../src/renderer";
+import { dayWidthToSlider, sliderToDayWidth } from "../src/utils";
 import { JanttData, Task } from "../src/types";
 import basicJson from "../../../examples/basic.json";
 import academicJson from "../../../examples/academic-roadmap.json";
@@ -751,12 +752,14 @@ describe("Stress & Boundary Tests", () => {
       expect(slider).not.toBeNull();
       expect(parseFloat(slider!.value)).toBeGreaterThan(0);
 
-      // Slide to 8px (Month scale range: 5 <= dayWidth < 12)
-      slider!.value = "8";
+      // Slide to ~8px (Month scale range: 5 <= dayWidth < 12)
+      const monthSliderPos = Math.round(dayWidthToSlider(8));
+      const expectedMonthDw = sliderToDayWidth(monthSliderPos);
+      slider!.value = String(monthSliderPos);
       slider!.dispatchEvent(new Event("input"));
 
-      expect(chart.getDayWidth?.()).toBe(8);
-      expect(reportedDayWidth).toBe(8);
+      expect(chart.getDayWidth?.()).toBe(expectedMonthDw);
+      expect(reportedDayWidth).toBe(expectedMonthDw);
       expect(reportedScale).toBe("month");
 
       // Verify active preset button automatically switched to "month"
@@ -765,18 +768,32 @@ describe("Stress & Boundary Tests", () => {
       );
       expect(monthBtn?.classList.contains("is-active")).toBe(true);
 
-      // Slide to 50px (Day scale range: >= 28px)
-      slider!.value = "50";
+      // Slide to ~50px (Day scale range: 28 <= dayWidth < 180)
+      const daySliderPos = Math.round(dayWidthToSlider(50));
+      const expectedDayDw = sliderToDayWidth(daySliderPos);
+      slider!.value = String(daySliderPos);
       slider!.dispatchEvent(new Event("input"));
 
-      expect(chart.getDayWidth?.()).toBe(50);
+      expect(chart.getDayWidth?.()).toBe(expectedDayDw);
       expect(reportedScale).toBe("day");
 
+      // Slide into Hour (~480px) and Minute (~2880px) sub-day zoom scales
+      const hourSliderPos = Math.round(dayWidthToSlider(480));
+      slider!.value = String(hourSliderPos);
+      slider!.dispatchEvent(new Event("input"));
+      expect(reportedScale).toBe("hour");
+
+      const minuteSliderPos = Math.round(dayWidthToSlider(2880));
+      slider!.value = String(minuteSliderPos);
+      slider!.dispatchEvent(new Event("input"));
+      expect(reportedScale).toBe("minute");
+
       // Verify zoom in / out stepper buttons
+      const beforeZoomOut = chart.getDayWidth?.() ?? 0;
       const zoomOutBtn = container.querySelector<HTMLButtonElement>(".jantt-zoom-btn.is-zoom-out");
       expect(zoomOutBtn).not.toBeNull();
       zoomOutBtn!.click();
-      expect(chart.getDayWidth?.()).toBeLessThan(50);
+      expect(chart.getDayWidth?.()).toBeLessThan(beforeZoomOut);
 
       chart.destroy();
       document.body.removeChild(container);

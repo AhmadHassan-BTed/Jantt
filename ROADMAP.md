@@ -83,6 +83,9 @@ To be the world's most capable, lightweight Gantt chart engine - designed specif
   - Lazy-load secondary views and the cloud (Firebase) features so local-only users download less.
 - [ ] **Release Automation**:
   - Single-source package versioning and changelog generation for all `@jantt/*` packages.
+- [ ] **Premium Local-to-Cloud Live Plan Bridge (Paid API)**:
+  - Connect a deployed/live cloud plan (including Firebase/cloud-hosted rooms and live edits) directly to local environments, local files/tooling, or external workflows via a paid owner-provided API.
+  - Keep local workspaces and deployed cloud plans linked cleanly with authenticated API access for premium users.
 
 ---
 

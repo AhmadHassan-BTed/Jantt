@@ -1,3 +1,44 @@
+.note-editor-pane {
+  --note-divider: color-mix(in srgb, var(--jantt-text) 14%, var(--jantt-bg));
+  --note-paper: color-mix(in srgb, var(--jantt-text) 3%, var(--jantt-bg));
+}
+.note-editor-pane .note-editor-topbar {
+  border-bottom-color: var(--note-divider);
+}
+.note-editor-pane .note-editor-sheet {
+  align-self: flex-start;
+  box-sizing: border-box;
+  padding: 24px;
+  border: 1px solid var(--note-divider);
+  border-radius: 12px;
+  background: var(--note-paper);
+}
+.note-editor-pane .note-title-input {
+  box-sizing: border-box;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--note-divider);
+}
+.note-editor-pane :is(.note-timestamps-bar, .note-attached-tasks-bar) {
+  border-color: var(--note-divider);
+}
+.note-editor-pane :is(.note-contenteditable-surface, .note-preview-body) {
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--note-divider);
+  border-radius: 8px;
+  background: var(--jantt-bg);
+}
+.note-editor-pane :is(.note-title-input, .note-contenteditable-surface):focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--jantt-accent) 55%, var(--note-divider));
+}
+.note-editor-pane .note-ts-input {
+  border-color: var(--note-divider);
+  background: var(--jantt-bg);
+}
+.is-mobile-device .note-editor-pane .note-editor-sheet { padding: 14px; border-radius: 10px; }
+.is-mobile-device .note-editor-pane :is(.note-contenteditable-surface, .note-preview-body) { padding: 12px; }
+
 .note-editor-pane .note-mention-dropdown {
   width: min(280px, calc(100vw - 16px));
   min-width: 0;
@@ -13,8 +54,11 @@
 .is-mobile-device .note-editor-topbar { padding: 4px 8px; gap: 2px; }
 .is-mobile-device .note-topbar-left { min-width: 0; gap: 4px; }
 .is-mobile-device .note-topbar-actions { gap: 0; }
-.is-mobile-device .note-editor-topbar :is(.note-action-btn, .note-back-btn) {
-  width: auto; min-width: 44px; min-height: 44px; height: auto; padding: 4px; border-color: transparent;
+.is-mobile-device .note-editor-topbar :is(.note-action-btn, .note-back-btn, .note-stamp-btn) {
+  width: auto; min-width: 44px; min-height: 44px; height: auto; padding: 4px 8px; border-color: transparent;
+}
+.is-mobile-device :is(.notes-task-clear-btn, .note-ts-chip.is-editable, .note-ts-action-btn) {
+  min-height: 36px;
 }
 .is-mobile-device .note-editor-doc-scroll { min-height: 0; padding: 16px 14px 24px; overscroll-behavior: contain; }
 .is-mobile-device .note-editor-sheet { min-width: 0; gap: 12px; }
@@ -35,7 +79,8 @@
 .is-mobile-device .note-picker-swatch { width: 44px; height: 44px; }
 .is-mobile-device .note-picker-swatch.is-selected { transform: none; outline: 2px solid var(--jantt-text); outline-offset: -4px; }
 @media (max-width: 374px) {
-  .is-mobile-device .note-back-btn span { display: none; }
+  .is-mobile-device .note-back-btn span,
+  .is-mobile-device .note-stamp-btn span { display: none; }
   .is-mobile-device .save-tag.is-viewer { max-width: 74px; }
 }
 

@@ -1,5 +1,18 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { calculateCriticalPath, diffDays, getTodayISODate, getTodayProgressFraction, type JanttData, type Task, type ThemeDefinition } from "@jantt/core";
+import {
+  calculateCriticalPath,
+  DAY_WIDTH_MAX,
+  DAY_WIDTH_MIN,
+  diffDays,
+  formatHumanDate,
+  formatZoomReadout,
+  getTodayISODate,
+  getTodayProgressFraction,
+  type JanttData,
+  type Task,
+  type ThemeDefinition,
+  type TimeFormat
+} from "@jantt/core";
 import { CanvasTimelineRenderer, type CanvasColorConfig, type ViewportState } from "@jantt/render-canvas";
 import {
   Zap,
@@ -48,6 +61,7 @@ export interface CanvasViewProps {
   onInspectTask?: (id: string | null) => void;
   onTaskClick?: (task: Task) => void;
   activeTheme?: ThemeDefinition;
+  timeFormat?: TimeFormat;
   /** Read-only room viewers get no mutating controls. */
   isViewer?: boolean;
   /**
@@ -61,10 +75,9 @@ export interface CanvasViewProps {
 
 const ROW_HEIGHT = 34;
 const HEADER_HEIGHT = 44;
-const MIN_DAY_WIDTH = 1.2;
-const MAX_DAY_WIDTH = 140;
+const MIN_DAY_WIDTH = DAY_WIDTH_MIN;
+const MAX_DAY_WIDTH = DAY_WIDTH_MAX;
 const DEFAULT_DAY_WIDTH = 36;
-const ZOOM_STEP = 6;
 const MINIMAP_WIDTH = 220;
 const MINIMAP_HEIGHT = 110;
 const DRAG_THRESHOLD_PX = 3;
@@ -128,6 +141,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   onInspectTask,
   onTaskClick,
   activeTheme,
+  timeFormat = "12h",
   isViewer = false,
   onOpenScratchPlan,
   scrollToTodayTrigger
@@ -335,6 +349,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         rowHeight: ROW_HEIGHT,
         headerHeight: HEADER_HEIGHT,
         showCriticalPath: showCritical,
+        timeFormat,
         colors
       });
     } else {
@@ -346,7 +361,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
 
   // Visual option changes
   useEffect(() => {
-    rendererRef.current?.updateOptions({ showCriticalPath: showCritical, colors });
+    rendererRef.current?.updateOptions({ showCriticalPath: showCritical, timeFormat, colors });
     scheduleRender();
   }, [showCritical, colors, scheduleRender]);
 
@@ -578,11 +593,11 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           return true;
         case "+":
         case "=":
-          zoomTo(viewRef.current.dayWidth + ZOOM_STEP);
+          zoomTo(viewRef.current.dayWidth * 1.25);
           return true;
         case "-":
         case "_":
-          zoomTo(viewRef.current.dayWidth - ZOOM_STEP);
+          zoomTo(viewRef.current.dayWidth / 1.25);
           return true;
         case "0":
           resetView();
@@ -755,7 +770,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             type="button"
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
-            onClick={() => zoomTo(viewRef.current.dayWidth + ZOOM_STEP)}
+            onClick={() => zoomTo(viewRef.current.dayWidth * 1.25)}
             title="Zoom In (Scale Day Width)"
           >
             <ZoomIn size={12} style={{ color: "#38BDF8" }} />
@@ -765,12 +780,23 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             type="button"
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
-            onClick={() => zoomTo(viewRef.current.dayWidth - ZOOM_STEP)}
+            onClick={() => zoomTo(viewRef.current.dayWidth / 1.25)}
             title="Zoom Out"
           >
             <ZoomOut size={12} style={{ color: "#818CF8" }} />
             <span>Zoom Out</span>
           </button>
+          <span
+            style={{
+              fontSize: "11px",
+              fontFamily: "monospace",
+              color: "var(--jantt-text-muted, #94A3B8)",
+              padding: "0 4px"
+            }}
+            title="Current zoom density"
+          >
+            {formatZoomReadout(viewRef.current.dayWidth)}
+          </span>
           <button
             type="button"
             className="btn-nav"
@@ -908,7 +934,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
               {hoveredTask.task.label || hoveredTask.task.name || hoveredTask.task.id}
             </div>
             <div style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>
-              Dates: {hoveredTask.task.start} &rarr; {hoveredTask.task.end}
+              Dates: {formatHumanDate(hoveredTask.task.start, true, timeFormat)} &rarr; {formatHumanDate(hoveredTask.task.end, true, timeFormat)}
             </div>
             <div style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>
               Progress: {Math.round(clamp(Number(hoveredTask.task.progress) || 0, 0, 1) * 100)}%

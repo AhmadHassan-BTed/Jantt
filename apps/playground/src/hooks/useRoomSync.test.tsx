@@ -186,6 +186,26 @@ afterEach(async () => {
 });
 
 describe("useRoomSync", () => {
+  it.each(["content", "task_ids", "timestamp"] as const)("uploads a note-only %s change with the full cloud plan", async field => {
+    const data: JanttData = { ...plan([{}, { id: "t2" }]), notes: [{ id: "n1", title: "Meeting",
+      content: "Original", task_ids: ["t1"], createdAt: "2026-01-01T00:00:00.000Z",
+      timestamp: "2026-01-05T09:00:00.000Z" }] };
+    await mount([roomProject(data)], PROJECT_ID, alice);
+    await emitRoom(roomPayload(data));
+    const value = field === "task_ids" ? ["t2"] : field === "timestamp" ? "2026-01-06T14:30:00.000Z" : "Edited content";
+    const edited: JanttData = { ...data, notes: [{ ...data.notes![0], [field]: value,
+      updatedAt: "2026-01-06T15:00:00.000Z" }] };
+    await act(async () => latest.setParsed(edited));
+    await settle(1500);
+    expect(mocks.saveRoomDataAtomic).toHaveBeenCalledTimes(1);
+    const [roomId, sent, user, base] = mocks.saveRoomDataAtomic.mock.calls[0];
+    expect(roomId).toBe(ROOM_ID);
+    expect(sent).toEqual(edited);
+    expect(user).toBe(alice);
+    expect(base).toEqual(data);
+    expect(latest.sync.syncStatus).toBe("in-sync");
+  });
+
   it("opens a ?room= link on load without writing to the room's roster", async () => {
     const data = plan([{ label: "Remote" }]);
     mocks.getRoom.mockResolvedValue(roomPayload(data, null));

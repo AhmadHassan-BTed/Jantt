@@ -31,6 +31,9 @@ import {
 import {
   getTodayISODate,
   calculateCriticalPath,
+  dayWidthToSlider,
+  sliderToDayWidth,
+  formatZoomReadout,
   type CriticalPathOptions,
   type TimeScale,
   DAY_WIDTH_MIN,
@@ -119,7 +122,7 @@ export const ViewNavBar: React.FC<ViewNavBarProps> = ({
           )}
           {activeView === "gantt" && (
             <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
-              {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
+              {(["minute", "hour", "day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -475,7 +478,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                       viewport.setCurrentDayWidth(undefined);
                       viewport.setCurrentScale(event.target.value as TimeScale);
                     }}>
-                    {(["day", "week", "month", "quarter", "year"] as const).map(scale =>
+                    {(["minute", "hour", "day", "week", "month", "quarter", "year"] as const).map(scale =>
                       <option key={scale} value={scale}>{scale[0].toUpperCase() + scale.slice(1)}</option>)}
                   </select>
                 )}
@@ -492,7 +495,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                     <Filter size={16} /><span className="phone-toolbar-label">Filter</span>
                     {totalActiveFiltersCount > 0 && <span className="mobile-toolbar-badge">{totalActiveFiltersCount}</span>}
                   </button>
-                  {activeView === "gantt" && viewport && (
+                  {viewport && (
                     <button
                       ref={settingsTriggerRef}
                       type="button"
@@ -638,7 +641,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
           )}
           {activeView === "gantt" && (
             <div className="toolbar-scale-group" role="group" aria-label="Timeline scale presets">
-              {(["day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
+              {(["minute", "hour", "day", "week", "month", "quarter", "year"] as TimeScale[]).map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -915,8 +918,8 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
           )}
         </div>
 
-        {/* Settings Popover (Gantt View) */}
-        {activeView === "gantt" && viewport && (
+        {/* Settings Popover */}
+        {viewport && (
           <div className="toolbar-popover-container">
             {!isMobile && (
             <button
@@ -957,184 +960,214 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                   </button>
                 </div>
 
-                {/* Section 1: Timeline Zoom & Row Sizing */}
+                {/* Section 1: Time Clock (applies across timeline, tasks, and details) */}
                 <div className="toolbar-popover-section">
                   <div className="toolbar-popover-label">
-                    <span>Timeline Zoom &amp; Row Height</span>
+                    <span>Time Display</span>
                   </div>
-
-                  {/* Day Width Slider */}
                   <div className="toolbar-setting-row">
-                    <span className="toolbar-setting-label">Day Width</span>
-                    <div className="toolbar-slider-wrap">
+                    <span className="toolbar-setting-label">Time Clock</span>
+                    <div className="toolbar-segmented-control" role="group" aria-label="Time display format">
+                      <Segment active={viewport.timeFormat === "12h"}
+                        onClick={() => viewport.setTimeFormat("12h")}
+                        title="Use 12-hour clock with AM and PM"
+                      >
+                        12h AM/PM
+                      </Segment>
+                      <Segment active={viewport.timeFormat === "24h"}
+                        onClick={() => viewport.setTimeFormat("24h")}
+                        title="Use 24-hour clock"
+                      >
+                        24h
+                      </Segment>
+                    </div>
+                  </div>
+                </div>
+
+                {activeView === "gantt" && (
+                  <>
+                    <div className="toolbar-popover-divider" />
+
+                    {/* Section 2: Timeline Zoom & Row Sizing (Gantt view) */}
+                    <div className="toolbar-popover-section">
+                      <div className="toolbar-popover-label">
+                        <span>Timeline Zoom &amp; Row Height</span>
+                      </div>
+
+                      {/* Day Width Slider */}
+                      <div className="toolbar-setting-row">
+                        <span className="toolbar-setting-label">Day Width</span>
+                        <div className="toolbar-slider-wrap">
+                          <button
+                            type="button"
+                            className="toolbar-nudge-btn"
+                            onClick={() =>
+                              viewport.setCurrentDayWidth(
+                                Math.max(DAY_WIDTH_MIN, Math.round(((viewport.currentDayWidth || 26) / 1.25) * 10) / 10)
+                              )
+                            }
+                            title="Zoom out (-)"
+                          >
+                            −
+                          </button>
+                          <input
+                            type="range"
+                            className="toolbar-range-slider"
+                            min={0}
+                            max={1000}
+                            step={1}
+                            value={dayWidthToSlider(viewport.currentDayWidth || 26)}
+                            onChange={(e) => viewport.setCurrentDayWidth(sliderToDayWidth(parseFloat(e.target.value)))}
+                            aria-label="Timeline zoom density"
+                          />
+                          <button
+                            type="button"
+                            className="toolbar-nudge-btn"
+                            onClick={() =>
+                              viewport.setCurrentDayWidth(
+                                Math.min(DAY_WIDTH_MAX, Math.round(((viewport.currentDayWidth || 26) * 1.25) * 10) / 10)
+                              )
+                            }
+                            title="Zoom in (+)"
+                          >
+                            +
+                          </button>
+                          <span className="toolbar-slider-readout">
+                            {formatZoomReadout(viewport.currentDayWidth || 26)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Row Height Slider */}
+                      <div className="toolbar-setting-row">
+                        <span className="toolbar-setting-label">Row Height</span>
+                        <div className="toolbar-slider-wrap">
+                          <input
+                            type="range"
+                            className="toolbar-range-slider"
+                            min={MIN_ROW_HEIGHT}
+                            max={MAX_ROW_HEIGHT}
+                            step={2}
+                            value={viewport.rowHeight}
+                            disabled={viewport.rowHeightMode === "fit"}
+                            onChange={(e) => viewport.setRowHeight(parseInt(e.target.value, 10))}
+                            aria-label="Task row height pixels"
+                          />
+                          <span className="toolbar-slider-readout">
+                            {viewport.rowHeightMode === "fit" ? "Fit" : `${viewport.rowHeight}px`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Row Density Presets */}
+                      <div className="toolbar-segmented-control" role="group" aria-label="Row density presets">
+                        <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 32}
+                          onClick={() => {
+                            viewport.setRowHeightMode("custom");
+                            viewport.setRowHeight(32);
+                          }}
+                          title="Compact task rows (32px)"
+                        >
+                          Compact
+                        </Segment>
+                        <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 46}
+                          onClick={() => {
+                            viewport.setRowHeightMode("custom");
+                            viewport.setRowHeight(46);
+                          }}
+                          title="Default task rows (46px)"
+                        >
+                          Default
+                        </Segment>
+                        <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 64}
+                          onClick={() => {
+                            viewport.setRowHeightMode("custom");
+                            viewport.setRowHeight(64);
+                          }}
+                          title="Spacious task rows (64px)"
+                        >
+                          Spacious
+                        </Segment>
+                        <Segment active={viewport.rowHeightMode === "fit"}
+                          onClick={() => viewport.setRowHeightMode("fit")}
+                          title="Fit mode: dynamically scale row heights so all tasks fit"
+                        >
+                          Fit
+                        </Segment>
+                      </div>
+                    </div>
+
+                    <div className="toolbar-popover-divider" />
+
+                    {/* Section 3: Dependencies & Routing */}
+                    <div className="toolbar-popover-section">
+                      <div className="toolbar-popover-label">
+                        <span>Dependencies &amp; Connectors</span>
+                      </div>
+                      <div className="toolbar-setting-row">
+                        <span className="toolbar-setting-label">Line Routing</span>
+                        <div className="toolbar-segmented-control" role="group" aria-label="Connector routing style">
+                          <Segment active={viewport.linkRouting === "orthogonal"}
+                            onClick={() => viewport.setLinkRouting("orthogonal")}
+                          >
+                            90° Turn
+                          </Segment>
+                          <Segment active={viewport.linkRouting === "curved"}
+                            onClick={() => viewport.setLinkRouting("curved")}
+                          >
+                            Curved
+                          </Segment>
+                          <Segment active={viewport.linkRouting === "direct"}
+                            onClick={() => viewport.setLinkRouting("direct")}
+                          >
+                            Direct
+                          </Segment>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="toolbar-popover-divider" />
+
+                    {/* Section 4: Scheduling Engine */}
+                    <div className="toolbar-popover-section">
+                      <div className="toolbar-popover-label">
+                        <span>Scheduling Engine</span>
+                      </div>
+
+                      {/* Auto-Cascade Toggle */}
                       <button
-                        type="button"
-                        className="toolbar-nudge-btn"
-                        onClick={() =>
-                          viewport.setCurrentDayWidth(
-                            Math.max(DAY_WIDTH_MIN, Math.round(((viewport.currentDayWidth || 26) / 1.25) * 10) / 10)
-                          )
-                        }
-                        title="Zoom out (−)"
+                        type="button" role="switch" aria-checked={viewport.autoCascade}
+                        aria-label="Toggle Auto-Cascade" disabled={readOnly}
+                        className="toolbar-switch-row"
+                        onClick={() => {
+                          if (!readOnly) viewport.setAutoCascade((prev: boolean) => !prev);
+                        }}
+                        title="Toggle auto-cascading dependencies"
                       >
-                        −
+                        <span className="toolbar-switch-info">
+                          <span className="toolbar-switch-title">Auto-Cascade Tasks</span>
+                          <span className="toolbar-switch-desc">Downstream tasks shift automatically when predecessor moves</span>
+                        </span>
+                        <span className={`toolbar-toggle-switch ${viewport.autoCascade ? "is-active" : ""}`} aria-hidden="true"><span className="toolbar-toggle-thumb" /></span>
                       </button>
-                      <input
-                        type="range"
-                        className="toolbar-range-slider"
-                        min={DAY_WIDTH_MIN}
-                        max={DAY_WIDTH_MAX}
-                        step={0.1}
-                        value={viewport.currentDayWidth || 26}
-                        onChange={(e) => viewport.setCurrentDayWidth(parseFloat(e.target.value))}
-                        aria-label="Timeline zoom pixels per day"
-                      />
+
+                      {/* Baselines Toggle */}
                       <button
-                        type="button"
-                        className="toolbar-nudge-btn"
-                        onClick={() =>
-                          viewport.setCurrentDayWidth(
-                            Math.min(DAY_WIDTH_MAX, Math.round(((viewport.currentDayWidth || 26) * 1.25) * 10) / 10)
-                          )
-                        }
-                        title="Zoom in (+)"
+                        type="button" role="switch" aria-checked={viewport.showBaselines}
+                        aria-label="Toggle Baselines"
+                        className="toolbar-switch-row"
+                        onClick={() => viewport.setShowBaselines((prev: boolean) => !prev)}
+                        title="Toggle baseline comparison bars"
                       >
-                        +
+                        <span className="toolbar-switch-info">
+                          <span className="toolbar-switch-title">Show Baselines</span>
+                          <span className="toolbar-switch-desc">Display original planned schedule bars beneath active tasks</span>
+                        </span>
+                        <span className={`toolbar-toggle-switch ${viewport.showBaselines ? "is-active" : ""}`} aria-hidden="true"><span className="toolbar-toggle-thumb" /></span>
                       </button>
-                      <span className="toolbar-slider-readout">
-                        {Math.round(viewport.currentDayWidth || 26)}px
-                      </span>
                     </div>
-                  </div>
-
-                  {/* Row Height Slider */}
-                  <div className="toolbar-setting-row">
-                    <span className="toolbar-setting-label">Row Height</span>
-                    <div className="toolbar-slider-wrap">
-                      <input
-                        type="range"
-                        className="toolbar-range-slider"
-                        min={MIN_ROW_HEIGHT}
-                        max={MAX_ROW_HEIGHT}
-                        step={2}
-                        value={viewport.rowHeight}
-                        disabled={viewport.rowHeightMode === "fit"}
-                        onChange={(e) => viewport.setRowHeight(parseInt(e.target.value, 10))}
-                        aria-label="Task row height pixels"
-                      />
-                      <span className="toolbar-slider-readout">
-                        {viewport.rowHeightMode === "fit" ? "Fit" : `${viewport.rowHeight}px`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Row Density Presets */}
-                  <div className="toolbar-segmented-control" role="group" aria-label="Row density presets">
-                    <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 32}
-                      onClick={() => {
-                        viewport.setRowHeightMode("custom");
-                        viewport.setRowHeight(32);
-                      }}
-                      title="Compact task rows (32px)"
-                    >
-                      Compact
-                    </Segment>
-                    <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 46}
-                      onClick={() => {
-                        viewport.setRowHeightMode("custom");
-                        viewport.setRowHeight(46);
-                      }}
-                      title="Default task rows (46px)"
-                    >
-                      Default
-                    </Segment>
-                    <Segment active={viewport.rowHeightMode === "custom" && viewport.rowHeight === 64}
-                      onClick={() => {
-                        viewport.setRowHeightMode("custom");
-                        viewport.setRowHeight(64);
-                      }}
-                      title="Spacious task rows (64px)"
-                    >
-                      Spacious
-                    </Segment>
-                    <Segment active={viewport.rowHeightMode === "fit"}
-                      onClick={() => viewport.setRowHeightMode("fit")}
-                      title="Fit mode: dynamically scale row heights so all tasks fit"
-                    >
-                      Fit
-                    </Segment>
-                  </div>
-                </div>
-
-                <div className="toolbar-popover-divider" />
-
-                {/* Section 2: Dependencies & Routing */}
-                <div className="toolbar-popover-section">
-                  <div className="toolbar-popover-label">
-                    <span>Dependencies &amp; Connectors</span>
-                  </div>
-                  <div className="toolbar-setting-row">
-                    <span className="toolbar-setting-label">Line Routing</span>
-                    <div className="toolbar-segmented-control" role="group" aria-label="Connector routing style">
-                      <Segment active={viewport.linkRouting === "orthogonal"}
-                        onClick={() => viewport.setLinkRouting("orthogonal")}
-                      >
-                        90° Turn
-                      </Segment>
-                      <Segment active={viewport.linkRouting === "curved"}
-                        onClick={() => viewport.setLinkRouting("curved")}
-                      >
-                        Curved
-                      </Segment>
-                      <Segment active={viewport.linkRouting === "direct"}
-                        onClick={() => viewport.setLinkRouting("direct")}
-                      >
-                        Direct
-                      </Segment>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="toolbar-popover-divider" />
-
-                {/* Section 3: Scheduling Engine */}
-                <div className="toolbar-popover-section">
-                  <div className="toolbar-popover-label">
-                    <span>Scheduling Engine</span>
-                  </div>
-
-                  {/* Auto-Cascade Toggle */}
-                  <button
-                    type="button" role="switch" aria-checked={viewport.autoCascade}
-                    aria-label="Toggle Auto-Cascade" disabled={readOnly}
-                    className="toolbar-switch-row"
-                    onClick={() => {
-                      if (!readOnly) viewport.setAutoCascade((prev: boolean) => !prev);
-                    }}
-                    title="Toggle auto-cascading dependencies"
-                  >
-                    <span className="toolbar-switch-info">
-                      <span className="toolbar-switch-title">Auto-Cascade Tasks</span>
-                      <span className="toolbar-switch-desc">Downstream tasks shift automatically when predecessor moves</span>
-                    </span>
-                    <span className={`toolbar-toggle-switch ${viewport.autoCascade ? "is-active" : ""}`} aria-hidden="true"><span className="toolbar-toggle-thumb" /></span>
-                  </button>
-
-                  {/* Baselines Toggle */}
-                  <button
-                    type="button" role="switch" aria-checked={viewport.showBaselines}
-                    aria-label="Toggle Baselines"
-                    className="toolbar-switch-row"
-                    onClick={() => viewport.setShowBaselines((prev: boolean) => !prev)}
-                    title="Toggle baseline comparison bars"
-                  >
-                    <span className="toolbar-switch-info">
-                      <span className="toolbar-switch-title">Show Baselines</span>
-                      <span className="toolbar-switch-desc">Display original planned schedule bars beneath active tasks</span>
-                    </span>
-                    <span className={`toolbar-toggle-switch ${viewport.showBaselines ? "is-active" : ""}`} aria-hidden="true"><span className="toolbar-toggle-thumb" /></span>
-                  </button>
-                </div>
+                  </>
+                )}
 
                 {/* Section 4: Data & Persistence */}
                 {(onOpenAutoSave || onImportJson || onExportJson || onExportCsv) && (

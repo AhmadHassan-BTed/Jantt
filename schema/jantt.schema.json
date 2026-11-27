@@ -8,9 +8,8 @@
   "definitions": {
     "isoDate": {
       "type": "string",
-      "format": "date",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-      "description": "Calendar date in ISO format YYYY-MM-DD."
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(?:T([01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,9})?)?(?:Z|[+-](?:[01]\\d|2[0-3]):?[0-5]\\d)?)?$",
+      "description": "Calendar date YYYY-MM-DD or timestamp YYYY-MM-DDTHH:mm (optional seconds/offset)."
     },
     "dependencyType": {
       "type": "string",
@@ -34,6 +33,12 @@
           "minimum": -3650,
           "maximum": 3650,
           "description": "Alias for lag (takes precedence when both are set)."
+        },
+        "lagMinutes": {
+          "type": "integer",
+          "minimum": -5256000,
+          "maximum": 5256000,
+          "description": "Sub-day lag in minutes (negative = lead). Takes precedence over lagDays/lag when set."
         }
       },
       "additionalProperties": true
@@ -43,7 +48,7 @@
         {
           "type": "string",
           "minLength": 1,
-          "description": "Task ID, or typed shorthand '<id>:<FS|SS|FF|SF>[+/-<n>d]' (e.g. 'design:SS+2d', 'build:FF-1d'), or '<id>+<n>d' for an FS lag."
+          "description": "Task ID, or typed shorthand '<id>:<FS|SS|FF|SF>[+/-<n><d|h|m>]' (e.g. 'design:SS+2d', 'api:FS+30m', 'build:FF-1d'), or '<id>+<n><d|h|m>' for an FS lag."
         },
         { "$ref": "#/definitions/dependencyObject" }
       ]
@@ -179,7 +184,7 @@
         },
         "scale": {
           "type": "string",
-          "enum": ["day", "week", "month", "quarter", "year"],
+          "enum": ["minute", "hour", "day", "week", "month", "quarter", "year"],
           "description": "Default timeline zoom level."
         },
         "linkRouting": {
@@ -277,7 +282,8 @@
           "tags": { "type": "array", "items": { "type": "string" } },
           "task_ids": { "type": "array", "items": { "type": "string" }, "description": "IDs of attached tasks." },
           "createdAt": { "type": "string", "description": "ISO 8601 timestamp." },
-          "updatedAt": { "type": "string", "description": "ISO 8601 timestamp." }
+          "updatedAt": { "type": "string", "description": "ISO 8601 timestamp." },
+          "timestamp": { "type": "string", "description": "Optional explicit ISO 8601 date/time stamp for this note entry." }
         },
         "additionalProperties": true
       }

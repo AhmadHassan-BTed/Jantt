@@ -21,6 +21,8 @@ export interface DependencyRelation {
   type: DependencyType;
   /** Lag in whole days (negative = lead). 0 when the link declares no lag. */
   lagDays: number;
+  /** Sub-day lag in minutes (set only when specified in hours/minutes or via `lagMinutes`). */
+  lagMinutes?: number;
   /**
    * True when the link states its lag explicitly (`A:FS+0`, `{ lag: 0 }`), which then replaces the
    * task/project gap. Links without a lag use the gap for FS and 0 for SS/FF/SF.
@@ -33,6 +35,7 @@ export interface DependencyObject {
   type?: DependencyType;
   lag?: number;
   lagDays?: number;
+  lagMinutes?: number;
 }
 
 export type DependencyItem = string | DependencyObject;
@@ -47,13 +50,14 @@ export interface TaskIdLookup {
 
 /** Largest accepted lead/lag, in days (about ten years). Larger values are clamped. */
 export const MAX_DEPENDENCY_LAG_DAYS = 3650;
+export const MAX_DEPENDENCY_LAG_MINUTES = MAX_DEPENDENCY_LAG_DAYS * 1440;
 
 const DEPENDENCY_TYPES: ReadonlySet<string> = new Set(["FS", "SS", "FF", "SF"]);
 
-// "task-1:SS", "Phase 1 : FF-2d", "t1:FS+3days" (the id may contain anything up to the last ':')
-const TYPED_PATTERN = /^(.+?)\s*:\s*(FS|SS|FF|SF)(?:\s*([+-]\d+)\s*(?:d|days?)?)?$/i;
-// "task-1+2d", "task-1-3days" (a unit suffix is required so "task-1" stays a plain id)
-const OFFSET_DAYS_PATTERN = /^([a-zA-Z0-9_\-.]+?)([+-]\d+)(?:d|days?)$/i;
+// "task-1:SS", "Phase 1 : FF-2d", "t1:FS+30m", "t1:SS+2h" (the id may contain anything up to the last ':')
+const TYPED_PATTERN = /^(.+?)\s*:\s*(FS|SS|FF|SF)(?:\s*([+-]\d+)\s*(d|days?|h|hrs?|hours?|m|mins?|minutes?)?)?$/i;
+// "task-1+2d", "task-1-3days", "task-1+30m", "task-1+2h" (a unit suffix is required so "task-1" stays a plain id)
+const OFFSET_DAYS_PATTERN = /^([a-zA-Z0-9_\-.]+?)([+-]\d+)(d|days?|h|hrs?|hours?|m|mins?|minutes?)$/i;
 // "task-1+4"
 const PLUS_PATTERN = /^([a-zA-Z0-9_\-.]+?)\+(\d+)$/;
 
@@ -64,8 +68,46 @@ export interface DependencyInspection {
   issue?: string;
 }
 
-function makeRelation(id: string, type: DependencyType, lag: number | undefined): DependencyRelation {
+function makeRelation(
+  id: string,
+  type: DependencyType,
+  lag: number | undefined,
+  lagMinutes?: number
+): DependencyRelation {
+  if (lagMinutes !== undefined) {
+    return {
+      id,
+      type,
+      lagDays: lag ?? Math.trunc(lagMinutes / 1440),
+      lagMinutes,
+      explicitLag: true
+    };
+  }
   return lag === undefined ? { id, type, lagDays: 0 } : { id, type, lagDays: lag, explicitLag: true };
+}
+
+function unitMultiplierMinutes(unitRaw?: string): number {
+  const unit = (unitRaw || "d").toLowerCase();
+  if (unit.startsWith("m")) return 1;
+  if (unit.startsWith("h")) return 60;
+  return 1440;
+}
+
+function sanitizeMinuteLag(rawMinutes: number): { lagDays: number; lagMinutes: number; issue?: string } {
+  if (!Number.isFinite(rawMinutes)) {
+    return { lagDays: 0, lagMinutes: 0, issue: `Lag '${rawMinutes}' is not a finite number and was ignored.` };
+  }
+  const rounded = Math.round(rawMinutes);
+  if (Math.abs(rounded) > MAX_DEPENDENCY_LAG_MINUTES) {
+    const clamped = Math.sign(rounded) * MAX_DEPENDENCY_LAG_MINUTES;
+    return {
+      lagDays: Math.sign(rounded) * MAX_DEPENDENCY_LAG_DAYS,
+      lagMinutes: clamped,
+      issue: `Lag of ${rawMinutes} minutes exceeds the supported range of ±${MAX_DEPENDENCY_LAG_DAYS} days.`
+    };
+  }
+  const safeMin = rounded === 0 ? 0 : rounded;
+  return { lagDays: Math.trunc(safeMin / 1440), lagMinutes: safeMin };
 }
 
 /** Rounds and clamps a lag; returns undefined (lag ignored) for non-finite input. */
@@ -100,12 +142,22 @@ export function inspectDependencyItem(item: unknown, knownIds?: TaskIdLookup): D
     if (typed) {
       const type = typed[2].toUpperCase() as DependencyType;
       if (!typed[3]) return { relation: makeRelation(typed[1], type, undefined) };
+      const mult = unitMultiplierMinutes(typed[4]);
+      if (mult < 1440) {
+        const sanitized = sanitizeMinuteLag(parseInt(typed[3], 10) * mult);
+        return { relation: makeRelation(typed[1], type, sanitized.lagDays, sanitized.lagMinutes), issue: sanitized.issue };
+      }
       const { lag, issue } = sanitizeLag(parseInt(typed[3], 10));
       return { relation: makeRelation(typed[1], type, lag), issue };
     }
 
     const offset = trimmed.match(OFFSET_DAYS_PATTERN) || trimmed.match(PLUS_PATTERN);
     if (offset) {
+      const mult = unitMultiplierMinutes(offset[3]);
+      if (mult < 1440) {
+        const sanitized = sanitizeMinuteLag(parseInt(offset[2], 10) * mult);
+        return { relation: makeRelation(offset[1], "FS", sanitized.lagDays, sanitized.lagMinutes), issue: sanitized.issue };
+      }
       const { lag, issue } = sanitizeLag(parseInt(offset[2], 10));
       return { relation: makeRelation(offset[1], "FS", lag), issue };
     }
@@ -113,7 +165,7 @@ export function inspectDependencyItem(item: unknown, knownIds?: TaskIdLookup): D
     if (trimmed.includes(":")) {
       return {
         relation: makeRelation(trimmed, "FS", undefined),
-        issue: `Dependency '${trimmed}' does not use a recognised type; expected '<id>:FS', ':SS', ':FF' or ':SF' with an optional lag such as '+2d'.`
+        issue: `Dependency '${trimmed}' does not use a recognised type; expected '<id>:FS', ':SS', ':FF' or ':SF' with an optional lag such as '+2d', '+2h', or '+30m'.`
       };
     }
     return { relation: makeRelation(trimmed, "FS", undefined) };
@@ -136,17 +188,29 @@ export function inspectDependencyItem(item: unknown, knownIds?: TaskIdLookup): D
     }
 
     let lag: number | undefined;
-    const rawLag = obj.lagDays !== undefined && obj.lagDays !== null ? obj.lagDays : obj.lag;
-    if (rawLag !== undefined && rawLag !== null) {
-      if (typeof rawLag === "number") {
-        const sanitized = sanitizeLag(rawLag);
-        lag = sanitized.lag;
+    let lagMinutes: number | undefined;
+    if (obj.lagMinutes !== undefined && obj.lagMinutes !== null) {
+      if (typeof obj.lagMinutes === "number" && Number.isFinite(obj.lagMinutes)) {
+        const sanitized = sanitizeMinuteLag(obj.lagMinutes);
+        lag = sanitized.lagDays;
+        lagMinutes = sanitized.lagMinutes;
         if (sanitized.issue) issues.push(sanitized.issue);
       } else {
-        issues.push(`Lag on link to '${id}' must be a number of days; '${String(rawLag)}' was ignored.`);
+        issues.push(`lagMinutes on link to '${id}' must be a number of minutes; '${String(obj.lagMinutes)}' was ignored.`);
+      }
+    } else {
+      const rawLag = obj.lagDays !== undefined && obj.lagDays !== null ? obj.lagDays : obj.lag;
+      if (rawLag !== undefined && rawLag !== null) {
+        if (typeof rawLag === "number") {
+          const sanitized = sanitizeLag(rawLag);
+          lag = sanitized.lag;
+          if (sanitized.issue) issues.push(sanitized.issue);
+        } else {
+          issues.push(`Lag on link to '${id}' must be a number of days; '${String(rawLag)}' was ignored.`);
+        }
       }
     }
-    return { relation: makeRelation(id, type, lag), issue: issues.length ? issues.join(" ") : undefined };
+    return { relation: makeRelation(id, type, lag, lagMinutes), issue: issues.length ? issues.join(" ") : undefined };
   }
 
   return {
@@ -208,6 +272,15 @@ export function resolveRelationLag(rel: DependencyRelation, gapDays: number): nu
   return rel.type === "FS" ? gapDays : 0;
 }
 
+/**
+ * Effective lag of a link expressed in integer minutes.
+ * Preserves explicit sub-day lags (`lagMinutes`), falling back to whole-day lag/gap * 1440.
+ */
+export function resolveRelationLagMinutes(rel: DependencyRelation, gapDays: number): number {
+  if (rel.lagMinutes !== undefined) return rel.lagMinutes;
+  return resolveRelationLag(rel, gapDays) * 1440;
+}
+
 /** True for SS/SF links, which are measured from the predecessor's start instead of its finish. */
 export function isStartAnchoredRelation(type: DependencyType): boolean {
   return type === "SS" || type === "SF";
@@ -231,6 +304,20 @@ export function relationEarliestStartDay(
 ): number {
   const anchor = isStartAnchoredRelation(type) ? predStartDay : predFinishDay;
   return anchor + lagDays - (isFinishConstrainedRelation(type) ? successorDurationDays : 0);
+}
+
+/**
+ * Minute-precision counterpart of {@link relationEarliestStartDay}.
+ */
+export function relationEarliestStartMinute(
+  type: DependencyType,
+  predStartMin: number,
+  predFinishMin: number,
+  successorDurationMin: number,
+  lagMinutes: number
+): number {
+  const anchor = isStartAnchoredRelation(type) ? predStartMin : predFinishMin;
+  return anchor + lagMinutes - (isFinishConstrainedRelation(type) ? successorDurationMin : 0);
 }
 
 /**

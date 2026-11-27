@@ -14,6 +14,7 @@
         "isFollowingCreator": { ".validate": "newData.isBoolean()" },
         "missingReposCount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
         "lastVerifiedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "timeFormat": { ".validate": "newData.val() === '12h' || newData.val() === '24h'" },
         "createdAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
         "updatedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
         "$other": { ".validate": false }

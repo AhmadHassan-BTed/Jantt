@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { addDays, isValidISODate, resolveSchedule, type JanttData, type Task } from "@jantt/core";
+import {
+  addDays,
+  getDatePart,
+  getTimePart,
+  isValidISODate,
+  resolveSchedule,
+  toEpochMinutes,
+  type JanttData,
+  type Task
+} from "@jantt/core";
 import type { EffectivePerson } from "../../types";
 import { isAutoCascadeEnabled } from "../../utils";
 import { triggerHaptic } from "../../services/platform";
@@ -44,11 +53,14 @@ export function ChecklistActionDialog({ selection, plan, people, onCommit, onDel
     if (action === "assignee" && single) return people.find(person => person.id === first.assignee || person.name === first.assignee)?.id || first.assignee || "";
     return "";
   });
-  const [start, setStart] = useState(first?.start || "");
-  const [end, setEnd] = useState(first?.end || "");
+  const [startDate, setStartDate] = useState(() => (first?.start && isValidISODate(first.start) ? getDatePart(first.start) : first?.start || ""));
+  const [startTime, setStartTime] = useState(() => (first?.start ? getTimePart(first.start) : ""));
+  const [endDate, setEndDate] = useState(() => (first?.end && isValidISODate(first.end) ? getDatePart(first.end) : first?.end || ""));
+  const [endTime, setEndTime] = useState(() => (first?.end ? getTimePart(first.end) : ""));
   const [error, setError] = useState("");
   const affectsDates = action === "shift" || action === "dates";
   const locked = affectsDates && tasks.some(task => task.locked);
+  const combine = (d: string, t: string) => (d && t ? `${d}T${t}` : d);
   const apply = (event: React.FormEvent) => {
     event.preventDefault();
     if (!first || locked) return;
@@ -57,16 +69,18 @@ export function ChecklistActionDialog({ selection, plan, people, onCommit, onDel
     if (action === "status") next = applyTaskStatus(plan.tasks, ids, value);
     else {
       let invalid = false;
+      const nextStartVal = combine(startDate, startTime);
+      const nextEndVal = combine(endDate, endTime);
       next = plan.tasks.map(task => {
         if (task._deleted || !ids.has(task.id)) return task;
         if (action === "category") return { ...task, category: value };
         if (action === "assignee") return { ...task, assignee: value || undefined };
-        const from = action === "shift" ? addDays(task.start, Number(value)) : start === original?.start ? task.start : start;
-        const to = task.milestone ? from : action === "shift" ? addDays(task.end, Number(value)) : end === original?.end ? task.end : end;
-        if (!isValidISODate(from) || !isValidISODate(to) || from > to) invalid = true;
+        const from = action === "shift" ? addDays(task.start, Number(value)) : nextStartVal === original?.start ? task.start : nextStartVal;
+        const to = task.milestone ? from : action === "shift" ? addDays(task.end, Number(value)) : nextEndVal === original?.end ? task.end : nextEndVal;
+        if (!isValidISODate(from) || !isValidISODate(to) || toEpochMinutes(from) > toEpochMinutes(to)) invalid = true;
         return { ...task, start: from, end: to };
       });
-      if (invalid) { setError("Choose a valid date range with the finish on or after the start."); return; }
+      if (invalid) { setError("Choose a valid date and time range with the finish on or after the start."); return; }
       if ((affectsDates || action === "assignee") && isAutoCascadeEnabled()) {
         next = resolveSchedule(next, { defaultGapDays: plan.meta?.defaultGapDays, calendar: plan.meta?.calendar,
           useWorkingDays: plan.meta?.useWorkingDays, people: plan.people, calendars: plan.calendars });
@@ -95,8 +109,18 @@ export function ChecklistActionDialog({ selection, plan, people, onCommit, onDel
       {action === "shift" && <label>Calendar days<input type="number" step="1" required value={value} onChange={event => setValue(event.target.value)} />
         <small>Use a negative number to move tasks earlier.</small></label>}
       {action === "dates" && <>
-        <label>{first?.milestone ? "Milestone date" : "Start date"}<input type="date" required value={start} onChange={event => setStart(event.target.value)} /></label>
-        {!first?.milestone && <label>Finish date<input type="date" required min={start} value={end} onChange={event => setEnd(event.target.value)} /></label>}
+        <label>{first?.milestone ? "Milestone date" : "Start date"}
+          <div style={{ display: "flex", gap: 6 }}>
+            <input type="date" required value={startDate} onChange={event => setStartDate(event.target.value)} style={{ flex: 1 }} />
+            <input type="time" step="60" aria-label="Start time" value={startTime} onChange={event => setStartTime(event.target.value)} style={{ width: 120 }} />
+          </div>
+        </label>
+        {!first?.milestone && <label>Finish date
+          <div style={{ display: "flex", gap: 6 }}>
+            <input type="date" required min={startDate} value={endDate} onChange={event => setEndDate(event.target.value)} style={{ flex: 1 }} />
+            <input type="time" step="60" aria-label="Finish time" value={endTime} onChange={event => setEndTime(event.target.value)} style={{ width: 120 }} />
+          </div>
+        </label>}
       </>}
       {action === "delete" && <p>Delete {tasks.length} selected {single ? "task" : "tasks"} and remove dependency links to {single ? "it" : "them"}?</p>}
       {locked && <p role="status">Unlock selected tasks before changing their dates.</p>}

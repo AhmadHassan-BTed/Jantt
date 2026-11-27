@@ -1,5 +1,6 @@
-import { Task, ViewportOptions, TimeScale, LinkRoutingStyle, RowHeightMode } from "./types";
+import { Task, ViewportOptions, TimeScale, TimeFormat, LinkRoutingStyle, RowHeightMode } from "./types";
 import { DAY_WIDTH_MIN, DAY_WIDTH_MAX, DEFAULT_GAP_DAYS, SCALE_DAY_WIDTHS } from "./constants";
+import { MINUTES_PER_DAY } from "./date-math";
 
 /**
  * Escapes HTML characters to prevent XSS. Safe for element text and quoted attribute values.
@@ -67,9 +68,49 @@ export function clampDayWidth(width: number, fallback: number = SCALE_DAY_WIDTHS
   return Math.max(DAY_WIDTH_MIN, Math.min(DAY_WIDTH_MAX, Math.round(safe * 10) / 10));
 }
 
+/**
+ * Returns the interactive drag/resize/keyboard snap increment in minutes for a given `dayWidth`.
+ * Day..year scales stay on 1440-minute (whole day) steps so existing date-only ergonomics remain unchanged.
+ */
+export function getDragStepMinutes(dayWidth: number): number {
+  if (dayWidth >= 11520) return 1;
+  if (dayWidth >= 2880) return 5;
+  if (dayWidth >= 1440) return 15;
+  if (dayWidth >= 540) return 30;
+  if (dayWidth >= 180) return 60;
+  return MINUTES_PER_DAY;
+}
+
+const SLIDER_LOG_RATIO = Math.log(DAY_WIDTH_MAX / DAY_WIDTH_MIN);
+
+/** Converts `dayWidth` into a normalized [0..1000] logarithmic zoom slider position. */
+export function dayWidthToSlider(dayWidth: number): number {
+  const clamped = clampDayWidth(dayWidth);
+  return Math.round((Math.log(clamped / DAY_WIDTH_MIN) / SLIDER_LOG_RATIO) * 1000);
+}
+
+/** Converts a [0..1000] logarithmic zoom slider position back to a clamped `dayWidth`. */
+export function sliderToDayWidth(sliderVal: number): number {
+  const t = Math.max(0, Math.min(1, (Number.isFinite(sliderVal) ? sliderVal : 0) / 1000));
+  return clampDayWidth(DAY_WIDTH_MIN * Math.exp(t * SLIDER_LOG_RATIO));
+}
+
+/** Formats a compact human readout for the current zoom density (`2px/d`, `20px/h`, `2px/m`). */
+export function formatZoomReadout(dayWidth: number): string {
+  if (dayWidth >= 1440) {
+    const pxMin = dayWidth / MINUTES_PER_DAY;
+    return `${pxMin >= 10 ? Math.round(pxMin) : Math.round(pxMin * 10) / 10}px/m`;
+  }
+  if (dayWidth >= 180) {
+    return `${Math.round(dayWidth / 24)}px/h`;
+  }
+  return `${dayWidth < 10 ? Math.round(dayWidth * 10) / 10 : Math.round(dayWidth)}px/d`;
+}
+
 export interface ViewportSnapshotState {
   scale: TimeScale;
   dayWidth: number;
+  timeFormat?: TimeFormat;
   linkRouting: LinkRoutingStyle;
   rowHeight: number;
   rowHeightMode: RowHeightMode;
@@ -90,6 +131,7 @@ export function buildViewportSnapshot(state: ViewportSnapshotState): ViewportOpt
   return {
     scale: state.scale,
     dayWidth: state.dayWidth,
+    ...(state.timeFormat ? { timeFormat: state.timeFormat } : {}),
     linkRouting: state.linkRouting,
     rowHeight: state.rowHeight,
     rowHeightMode: state.rowHeightMode,

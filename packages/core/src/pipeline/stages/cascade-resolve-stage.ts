@@ -1,11 +1,21 @@
 import { Task, WorkingCalendar } from "../../types";
-import { toEpochDay, fromEpochDay } from "../../date-math";
+import {
+  toEpochDay,
+  fromEpochDay,
+  toEpochMinutes,
+  toTaskEndEpochMinutes,
+  fromEpochMinutes,
+  hasTimeComponent,
+  getTimePart
+} from "../../date-math";
 import { getEffectiveGap } from "../../utils";
 import {
   DependencyType,
   buildDependencyGraph,
   resolveRelationLag,
+  resolveRelationLagMinutes,
   relationEarliestStartDay,
+  relationEarliestStartMinute,
   isStartAnchoredRelation,
   isFinishConstrainedRelation
 } from "../../dependencies";
@@ -67,6 +77,8 @@ export class CascadeResolveStage implements IPipelineStage<Task[], Task[]> {
     const working = new Map<string, Task>();
     const startDay = new Map<string, number>();
     const finishDay = new Map<string, number>();
+    const startMin = new Map<string, number>();
+    const finishMin = new Map<string, number>();
     graph.nodes.forEach((t, id) => {
       const copy = cloneTask(t);
       working.set(id, copy);
@@ -75,6 +87,11 @@ export class CascadeResolveStage implements IPipelineStage<Task[], Task[]> {
       startDay.set(id, s);
       // An inverted range (end < start) has zero duration, as in the CPM and after SanitizeStage
       finishDay.set(id, copy.milestone || e < s ? s : e);
+
+      const sm = toEpochMinutes(copy.start);
+      const em = toTaskEndEpochMinutes(copy.end);
+      startMin.set(id, sm);
+      finishMin.set(id, copy.milestone || em < sm ? sm : em);
     });
 
     const defaultGapDays = context.defaultGapDays;
@@ -88,7 +105,9 @@ export class CascadeResolveStage implements IPipelineStage<Task[], Task[]> {
       const t = working.get(id)!;
       const s = startDay.get(id)!;
       const f = finishDay.get(id)!;
-      if (Number.isNaN(s) || Number.isNaN(f)) {
+      const sm = startMin.get(id)!;
+      const fm = finishMin.get(id)!;
+      if (Number.isNaN(s) || Number.isNaN(f) || Number.isNaN(sm) || Number.isNaN(fm)) {
         invalidIds.add(id);
         continue;
       }
@@ -98,6 +117,48 @@ export class CascadeResolveStage implements IPipelineStage<Task[], Task[]> {
         globalUseWorking || t.calendar || t.calendarId
           ? resolveTaskCalendar(t, { people: context.people, calendars: context.calendars, defaultCalendar: context.calendar })
           : null;
+
+      const taskHasTime = hasTimeComponent(t.start) || (!t.milestone && hasTimeComponent(t.end));
+      const anySubDayLink =
+        !calendar &&
+        (taskHasTime ||
+          relations.some((rel) => {
+            const pred = working.get(rel.id);
+            return (
+              rel.lagMinutes !== undefined ||
+              (pred ? hasTimeComponent(pred.start) || (!pred.milestone && hasTimeComponent(pred.end)) : false)
+            );
+          }));
+
+      if (anySubDayLink) {
+        let minStartM = -Infinity;
+        const durationMin = Math.max(fm - sm, 0);
+        for (const rel of relations) {
+          const psM = startMin.get(rel.id)!;
+          const pfM = finishMin.get(rel.id)!;
+          if (Number.isNaN(psM) || Number.isNaN(pfM)) {
+            invalidIds.add(rel.id);
+            continue;
+          }
+          const lagM = resolveRelationLagMinutes(rel, gap);
+          const candidateM = relationEarliestStartMinute(rel.type, psM, pfM, durationMin, lagM);
+          if (candidateM > minStartM) minStartM = candidateM;
+        }
+        if (!(minStartM > sm)) continue;
+        if (t.locked) {
+          diagnostics?.push(
+            `Locked task "${id}" starts ${t.start} but its dependencies require ${fromEpochMinutes(minStartM, true)} or later (DEP_TIMING_CONFLICT).`
+          );
+          continue;
+        }
+        t.start = fromEpochMinutes(minStartM, true);
+        t.end = t.milestone ? t.start : fromEpochMinutes(minStartM + durationMin, true);
+        startMin.set(id, minStartM);
+        finishMin.set(id, t.milestone ? minStartM : toTaskEndEpochMinutes(t.end));
+        startDay.set(id, toEpochDay(t.start));
+        finishDay.set(id, t.milestone ? toEpochDay(t.start) : toEpochDay(t.end));
+        continue;
+      }
 
       let minStart = -Infinity;
       let minStartIso = "";
@@ -136,16 +197,23 @@ export class CascadeResolveStage implements IPipelineStage<Task[], Task[]> {
         continue;
       }
 
-      t.start = minStartIso || fromEpochDay(minStart);
+      const startTimeSuffix = getTimePart(t.start);
+      const endTimeSuffix = getTimePart(t.end);
+      const shiftedStartDate = minStartIso || fromEpochDay(minStart);
+      t.start = startTimeSuffix ? `${shiftedStartDate}T${startTimeSuffix}` : shiftedStartDate;
       if (t.milestone) {
         t.end = t.start;
       } else if (calendar) {
-        t.end = addWorkingDays(t.start, workingDuration, calendar);
+        const shiftedEndDate = addWorkingDays(t.start, workingDuration, calendar);
+        t.end = endTimeSuffix ? `${shiftedEndDate}T${endTimeSuffix}` : shiftedEndDate;
       } else {
-        t.end = fromEpochDay(minStart + durationDays);
+        const shiftedEndDate = fromEpochDay(minStart + durationDays);
+        t.end = endTimeSuffix ? `${shiftedEndDate}T${endTimeSuffix}` : shiftedEndDate;
       }
       startDay.set(id, minStart);
       finishDay.set(id, t.milestone ? minStart : toEpochDay(t.end));
+      startMin.set(id, toEpochMinutes(t.start));
+      finishMin.set(id, t.milestone ? toEpochMinutes(t.start) : toTaskEndEpochMinutes(t.end));
     }
 
     if (invalidIds.size > 0) {

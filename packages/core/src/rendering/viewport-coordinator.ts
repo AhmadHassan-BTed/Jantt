@@ -1,7 +1,7 @@
-import { Task, TimeScale, LinkRoutingStyle, RowHeightMode, JanttData, JanttOptions, ViewportOptions } from "../types";
+import { Task, TimeScale, TimeFormat, LinkRoutingStyle, RowHeightMode, JanttData, JanttOptions, ViewportOptions } from "../types";
 import { diffDays, isTaskOnDate } from "../date-math";
 import { buildViewportSnapshot, getTaskDisplayName } from "../utils";
-import { computeChartBounds, resolveHeaderHeight } from "../layout";
+import { ChartBounds, computeChartBounds, resolveHeaderHeight } from "../layout";
 import {
   TOOLBAR_HEIGHT,
   ADD_ROW_HEIGHT,
@@ -12,6 +12,7 @@ import {
 export interface ViewportCoordinationState {
   currentScale: TimeScale;
   currentDayWidth: number;
+  timeFormat: TimeFormat;
   currentRouting: LinkRoutingStyle;
   rowHeightMode: RowHeightMode;
   customRowHeight: number;
@@ -85,7 +86,8 @@ export class ViewportCoordinator {
     layoutOptions: ViewportOptions,
     rowHeightMode: RowHeightMode,
     customRowHeight: number,
-    readOnly?: boolean
+    readOnly?: boolean,
+    precomputedBounds?: ChartBounds
   ): number {
     if (rowHeightMode !== "fit") {
       return customRowHeight;
@@ -97,7 +99,7 @@ export class ViewportCoordinator {
     const horizontalScrollbarH = body ? Math.max(0, body.offsetHeight - body.clientHeight) : 0;
     const innerH = root.clientHeight || container.clientHeight;
 
-    const bounds = computeChartBounds(layoutData, layoutOptions);
+    const bounds = precomputedBounds ?? computeChartBounds(layoutData, layoutOptions);
     const headerH = resolveHeaderHeight(bounds.spansMultipleYears, layoutOptions.headerHeight);
     const availH = innerH - toolbarH - horizontalScrollbarH - headerH;
     const count = Math.max(layoutData.tasks.length, 1);
@@ -162,6 +164,7 @@ export class ViewportCoordinator {
       buildViewportSnapshot({
         scale: state.currentScale,
         dayWidth: state.currentDayWidth,
+        timeFormat: state.timeFormat,
         linkRouting: state.currentRouting,
         rowHeight: effectiveRowHeight,
         rowHeightMode: state.rowHeightMode,

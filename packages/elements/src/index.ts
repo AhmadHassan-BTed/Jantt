@@ -17,7 +17,7 @@ import {
   validate
 } from "@jantt/core";
 
-const TIME_SCALES: readonly string[] = ["day", "week", "month", "quarter", "year"];
+const TIME_SCALES: readonly string[] = ["minute", "hour", "day", "week", "month", "quarter", "year"];
 
 /** Validation errors quoted in the jantt-error message for a rejected `data-src` plan. */
 const MAX_REPORTED_ERRORS = 3;

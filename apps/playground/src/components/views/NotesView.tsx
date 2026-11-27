@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import type { JanttData, NoteItem, Task, Team } from "@jantt/core";
-import type { EffectivePerson } from "../../types";
+import type { JanttData, NoteItem, Task, Team, TimeFormat } from "@jantt/core";
+import type { EffectivePerson, NotesNavigationIntent } from "../../types";
 import { commandBus } from "../../services/bus";
 import { storageService } from "../../services/storage";
 import { STORAGE_KEYS } from "../../constants";
@@ -18,7 +18,7 @@ import {
 /** Idle time before typed changes are committed to the plan (and synced). */
 const NOTE_SAVE_DEBOUNCE_MS = 350;
 
-type NoteDraftField = "title" | "content" | "color" | "pinned" | "task_ids";
+type NoteDraftField = "title" | "content" | "color" | "pinned" | "task_ids" | "timestamp";
 type NotePatch = Partial<Pick<NoteItem, NoteDraftField>>;
 
 interface NotesViewProps {
@@ -31,6 +31,9 @@ interface NotesViewProps {
   onPromptFork?: () => void;
   activeProjectId?: string;
   registerNoteBack?: (close: (() => void) | null) => void;
+  timeFormat?: TimeFormat;
+  notesIntent?: NotesNavigationIntent | null;
+  onConsumeNotesIntent?: () => void;
 }
 
 export const NotesView: React.FC<NotesViewProps> = ({
@@ -41,7 +44,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
   isViewer = false,
   onPromptFork,
   registerNoteBack,
-  activeProjectId = "default"
+  activeProjectId = "default",
+  timeFormat = "12h",
+  notesIntent,
+  onConsumeNotesIntent
 }) => {
   const notes: NoteItem[] = useMemo(
     () => (Array.isArray(parsedData.notes) ? parsedData.notes : []).filter((n) => n && typeof n.id === "string" && !n._deleted),
@@ -94,12 +100,20 @@ export const NotesView: React.FC<NotesViewProps> = ({
     const saved = storageService.getItem<{ selectedColor?: string }>(STORAGE_KEYS.NOTES_VIEW_STATE);
     return typeof saved?.selectedColor === "string" && saved.selectedColor ? saved.selectedColor : "all";
   });
+  const [selectedTaskFilterId, setSelectedTaskFilterId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedTaskFilterId && !liveTaskIds.has(selectedTaskFilterId)) {
+      setSelectedTaskFilterId(null);
+    }
+  }, [selectedTaskFilterId, liveTaskIds]);
 
   // Local state for the active note being edited
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editColor, setEditColor] = useState(DEFAULT_NOTE_COLOR);
   const [editPinned, setEditPinned] = useState(false);
+  const [editTimestamp, setEditTimestamp] = useState("");
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(() => {
     const saved = storageService.getItem<{ isPreviewMode?: boolean }>(STORAGE_KEYS.NOTES_VIEW_STATE);
     return Boolean(saved?.isPreviewMode);
@@ -136,8 +150,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
   commitRef.current = handleChartCommit;
   const viewerRef = useRef({ isViewer, onPromptFork });
   viewerRef.current = { isViewer, onPromptFork };
-  const latestEditRef = useRef({ editTitle, editContent, editColor, editPinned, isPreviewMode });
-  latestEditRef.current = { editTitle, editContent, editColor, editPinned, isPreviewMode };
+  const latestEditRef = useRef({ editTitle, editContent, editColor, editPinned, editTimestamp, isPreviewMode });
+  latestEditRef.current = { editTitle, editContent, editColor, editPinned, editTimestamp, isPreviewMode };
   const mentionSourcesRef = useRef({ effectivePeople, allTasks });
   mentionSourcesRef.current = { effectivePeople, allTasks };
 
@@ -171,7 +185,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
     // resurrect it past its tombstone or write it into another project.
     if (!currentNotes.some((n) => n && n.id === noteId)) return;
     const now = new Date().toISOString();
-    const updatedNotes = currentNotes.map((n) => (n && n.id === noteId ? { ...n, ...updates, updatedAt: now } : n));
+    const updatedNotes = currentNotes.map((n) => {
+      if (!n || n.id !== noteId) return n;
+      const next: NoteItem = { ...n, ...updates, updatedAt: now };
+      if ("timestamp" in updates && !updates.timestamp) {
+        delete next.timestamp;
+      }
+      return next;
+    });
     commitPlan({ ...data, notes: updatedNotes });
   }, [commitPlan]);
 
@@ -222,6 +243,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
     if (!("color" in pending) && remoteColor !== local.editColor) setEditColor(remoteColor);
     const remotePinned = Boolean(activeNote.pinned);
     if (!("pinned" in pending) && remotePinned !== local.editPinned) setEditPinned(remotePinned);
+    const remoteTimestamp = toText(activeNote.timestamp);
+    if (!("timestamp" in pending) && remoteTimestamp !== local.editTimestamp) setEditTimestamp(remoteTimestamp);
 
     const remoteContent = toText(activeNote.content);
     if (!("content" in pending) && remoteContent !== local.editContent) {
@@ -244,6 +267,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setEditContent(content);
     setEditColor(toText(activeNote.color) || DEFAULT_NOTE_COLOR);
     setEditPinned(Boolean(activeNote.pinned));
+    setEditTimestamp(toText(activeNote.timestamp));
     setSaveStatus(pendingRef.current ? "saving" : "saved");
     // Keep latestEditRef coherent for effects running before the next render.
     latestEditRef.current = { ...latestEditRef.current, editContent: content };
@@ -283,24 +307,62 @@ export const NotesView: React.FC<NotesViewProps> = ({
     return () => registerNoteBack(null);
   }, [activeNoteKey, handleBackToGallery, registerNoteBack]);
 
-  // Create a fresh note
+  // Honor navigation intents dispatched from a task's sidebar ("Add Note" or "Manage Notes")
+  const consumeIntentRef = useRef(onConsumeNotesIntent);
+  consumeIntentRef.current = onConsumeNotesIntent;
+  useEffect(() => {
+    if (!notesIntent) return;
+    flushPendingSave();
+    setSelectedTaskFilterId(notesIntent.taskId || null);
+    setSearchQuery("");
+    setSelectedColor("all");
+    if (notesIntent.mode === "add" && notesIntent.noteId) {
+      isNewlyCreatedRef.current = true;
+      setActiveNoteId(notesIntent.noteId);
+    } else if (notesIntent.noteId) {
+      setActiveNoteId(notesIntent.noteId);
+    } else if (notesIntent.taskId) {
+      const firstMatch = notes.find(
+        (n) => Array.isArray(n.task_ids) && n.task_ids.includes(notesIntent.taskId)
+      );
+      setActiveNoteId(firstMatch ? firstMatch.id : null);
+    }
+    consumeIntentRef.current?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesIntent?.nonce]);
+
+  const handleSelectTaskFilter = useCallback((taskId: string | null) => {
+    flushPendingSave();
+    setSelectedTaskFilterId(taskId);
+    if (taskId && activeNoteId) {
+      const current = notes.find((n) => n.id === activeNoteId);
+      if (current && !(Array.isArray(current.task_ids) && current.task_ids.includes(taskId))) {
+        const firstMatch = notes.find((n) => Array.isArray(n.task_ids) && n.task_ids.includes(taskId));
+        setActiveNoteId(firstMatch ? firstMatch.id : null);
+      }
+    }
+  }, [flushPendingSave, activeNoteId, notes, setActiveNoteId]);
+
+  // Create a fresh note (auto-linked to the active task filter when scoped)
   const handleCreateNote = () => {
     if (isViewer) {
       onPromptFork?.();
       return;
     }
     flushPendingSave();
+    const scopedTask = selectedTaskFilterId ? allTasks.find((t) => t.id === selectedTaskFilterId) : undefined;
     const newId = `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const now = new Date().toISOString();
     const newNote: NoteItem = {
       id: newId,
-      title: "New Project Note",
+      title: scopedTask ? `${toText(scopedTask.label || scopedTask.name || scopedTask.id)} Note` : "New Project Note",
       content: "",
       color: DEFAULT_NOTE_COLOR,
       pinned: false,
-      task_ids: [],
+      task_ids: selectedTaskFilterId ? [selectedTaskFilterId] : [],
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      timestamp: now
     };
 
     isNewlyCreatedRef.current = true;
@@ -396,6 +458,12 @@ export const NotesView: React.FC<NotesViewProps> = ({
     scheduleSave(activeNoteId, { pinned: newPinned });
   };
 
+  const handleTimestampChange = (newTimestamp: string) => {
+    if (!activeNoteId) return;
+    setEditTimestamp(newTimestamp);
+    commitNoteChanges(activeNoteId, { timestamp: newTimestamp });
+  };
+
   return (
     <div className={`notes-view-container ${activeNote ? "has-active-note" : ""}`}>
       {/* 1. Left Sidebar with notes list & search */}
@@ -411,6 +479,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
         onSelectColor={setSelectedColor}
         isViewer={isViewer}
         liveTaskIds={liveTaskIds}
+        timeFormat={timeFormat}
+        allTasks={allTasks}
+        selectedTaskFilterId={selectedTaskFilterId}
+        onSelectTaskFilter={handleSelectTaskFilter}
       />
 
       {/* 2. Main Editor Surface */}
@@ -423,6 +495,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
           setEditColor={handleColorChange}
           editPinned={editPinned}
           setEditPinned={handlePinnedToggle}
+          editTimestamp={editTimestamp}
+          setEditTimestamp={handleTimestampChange}
+          timeFormat={timeFormat}
           editContent={editContent}
           saveStatus={saveStatus}
           isPreviewMode={isPreviewMode}
@@ -446,14 +521,16 @@ export const NotesView: React.FC<NotesViewProps> = ({
           <p className="note-editor-empty-sub">
             {isViewer
               ? "This shared room is read-only. Select a note to read it, or make a local copy to edit."
-              : "Capture project meeting summaries, team action items, and link roadmap tasks directly in your notes."}
+              : selectedTaskFilterId
+                ? "Add timestamped progress logs, checklists, or specs linked to this task."
+                : "Capture project meeting summaries, team action items, and link roadmap tasks directly in your notes."}
           </p>
           <button
             type="button"
             className="notes-empty-create-btn"
             onClick={isViewer ? onPromptFork : handleCreateNote}
           >
-            {isViewer ? "Make a Local Copy" : "Create New Note"}
+            {isViewer ? "Make a Local Copy" : selectedTaskFilterId ? "Create Task Note" : "Create New Note"}
           </button>
         </div>
       )}

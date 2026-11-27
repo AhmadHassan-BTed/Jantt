@@ -119,7 +119,8 @@ import {
   searchUsersByUsername,
   signInWithGitHub,
   signOutUser,
-  storeGitHubToken
+  storeGitHubToken,
+  updateUserTimeFormat
 } from "./authService";
 
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -344,5 +345,14 @@ describe("signOutUser", () => {
     await signOutUser();
     expect(order).toEqual(["presence", "signOut"]);
     expect(getStoredGitHubToken("u1")).toBeNull();
+  });
+});
+
+describe("updateUserTimeFormat", () => {
+  it("persists the user's 12h or 24h preference on users/{uid}", async () => {
+    await updateUserTimeFormat("u1", "24h");
+    expect(db.state.updates[0]["users/u1/timeFormat"]).toBe("24h");
+    await updateUserTimeFormat("u1", "12h");
+    expect(db.state.updates[1]["users/u1/timeFormat"]).toBe("12h");
   });
 });

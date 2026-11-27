@@ -1,11 +1,21 @@
 import { JanttData, Task, ValidationError, ValidationResult } from "./types";
-import { isStrictISODate, toEpochDay, fromEpochDay } from "./date-math";
+import {
+  isStrictISODate,
+  toEpochDay,
+  fromEpochDay,
+  toEpochMinutes,
+  toTaskEndEpochMinutes,
+  fromEpochMinutes,
+  hasTimeComponent
+} from "./date-math";
 import {
   buildDependencyGraph,
   getDependsOnItems,
   inspectDependencyItem,
   resolveRelationLag,
-  relationEarliestStartDay
+  resolveRelationLagMinutes,
+  relationEarliestStartDay,
+  relationEarliestStartMinute
 } from "./dependencies";
 import { CALENDAR_PRESETS, normalizeWorkingDays, isSupportedRegion } from "./calendar";
 import { getEffectiveGap, sanitizeCssColor } from "./utils";
@@ -442,18 +452,28 @@ export function validate(json: unknown): ValidationResult {
       });
     }
 
-    // Date range validation
+    // Date/time range validation
     if (hasValidStart && hasValidEnd) {
+      const startMin = toEpochMinutes(task.start);
+      const endMin = toEpochMinutes(task.end);
+      const diffMins = endMin - startMin;
       const days = toEpochDay(task.end) - toEpochDay(task.start);
-      if (days < 0) {
+      if (diffMins < 0) {
+        const reason =
+          days < 0
+            ? "end date cannot be earlier than start date"
+            : "end time cannot be earlier than start time";
         errors.push({
           path: `${path}.end`,
           taskId,
           code: "INVALID_DATE_RANGE",
-          message: `Task '${taskId || `index ${index}`}' has start: '${task.start}' and end: '${task.end}' (end date cannot be earlier than start date).`,
-          suggestion: `Ensure 'end' is on or after 'start' (duration is currently ${days} days).`
+          message: `Task '${taskId || `index ${index}`}' has start: '${task.start}' and end: '${task.end}' (${reason}).`,
+          suggestion:
+            days < 0
+              ? `Ensure 'end' is on or after 'start' (duration is currently ${days} days).`
+              : `Ensure 'end' time is at or after 'start' time (${diffMins} min).`
         });
-      } else if (days > 0 && task.milestone === true) {
+      } else if (diffMins > 0 && task.milestone === true) {
         warnings.push({
           path: `${path}.end`,
           taskId,
@@ -544,7 +564,7 @@ export function validate(json: unknown): ValidationResult {
           message: `Task '${taskId || `index ${index}`}' has invalid baseline dates (start: '${task.baseline.start}', end: '${task.baseline.end}').`,
           suggestion: "Ensure baseline 'start' and 'end' are valid 'YYYY-MM-DD' calendar date strings."
         });
-      } else if (toEpochDay(task.baseline.end) < toEpochDay(task.baseline.start)) {
+      } else if (toEpochMinutes(task.baseline.end) < toEpochMinutes(task.baseline.start)) {
         errors.push({
           path: `${path}.baseline.end`,
           taskId,
@@ -628,25 +648,57 @@ export function validate(json: unknown): ValidationResult {
     if (task.locked !== true && !strictMode) return;
     const start = toEpochDay(task.start);
     const finish = task.milestone ? start : toEpochDay(task.end);
-    if (Number.isNaN(start) || Number.isNaN(finish)) return;
+    const startMin = toEpochMinutes(task.start);
+    const finishMin = task.milestone ? startMin : toTaskEndEpochMinutes(task.end);
+    if (Number.isNaN(start) || Number.isNaN(finish) || Number.isNaN(startMin) || Number.isNaN(finishMin)) return;
     const gap = getEffectiveGap(task, gapDefault);
     for (const rel of graph.predecessors.get(id)!) {
       if (graph.isCyclicEdge(rel.id, id)) continue;
       const pred = graph.nodes.get(rel.id)!;
       const ps = toEpochDay(pred.start);
       const pf = pred.milestone ? ps : toEpochDay(pred.end);
-      if (Number.isNaN(ps) || Number.isNaN(pf)) continue;
-      const min = relationEarliestStartDay(rel.type, ps, pf, Math.max(finish - start, 0), resolveRelationLag(rel, gap));
-      if (start < min) {
-        warnings.push({
-          path: `tasks[${idToIndex.get(id) ?? -1}].start`,
-          taskId: id,
-          code: "DEP_TIMING_CONFLICT",
-          message: `${task.locked === true ? "Locked task" : "Task"} '${id}' starts ${task.start}, but its ${rel.type} link to '${rel.id}' requires ${fromEpochDay(min)} or later.`,
-          suggestion: task.locked === true
-            ? `Move '${id}', unlock it so the cascade can reschedule it, or reduce the link lag/gap.`
-            : `Move '${id}' to ${fromEpochDay(min)} or enable auto-cascade.`
-        });
+      const psMin = toEpochMinutes(pred.start);
+      const pfMin = pred.milestone ? psMin : toTaskEndEpochMinutes(pred.end);
+      if (Number.isNaN(ps) || Number.isNaN(pf) || Number.isNaN(psMin) || Number.isNaN(pfMin)) continue;
+      const useMinutes =
+        rel.lagMinutes !== undefined ||
+        hasTimeComponent(task.start) ||
+        (!task.milestone && hasTimeComponent(task.end)) ||
+        hasTimeComponent(pred.start) ||
+        (!pred.milestone && hasTimeComponent(pred.end));
+      if (useMinutes) {
+        const minM = relationEarliestStartMinute(
+          rel.type,
+          psMin,
+          pfMin,
+          Math.max(finishMin - startMin, 0),
+          resolveRelationLagMinutes(rel, gap)
+        );
+        if (startMin < minM) {
+          const requiredIso = fromEpochMinutes(minM, true);
+          warnings.push({
+            path: `tasks[${idToIndex.get(id) ?? -1}].start`,
+            taskId: id,
+            code: "DEP_TIMING_CONFLICT",
+            message: `${task.locked === true ? "Locked task" : "Task"} '${id}' starts ${task.start}, but its ${rel.type} link to '${rel.id}' requires ${requiredIso} or later.`,
+            suggestion: task.locked === true
+              ? `Move '${id}', unlock it so the cascade can reschedule it, or reduce the link lag/gap.`
+              : `Move '${id}' to ${requiredIso} or enable auto-cascade.`
+          });
+        }
+      } else {
+        const min = relationEarliestStartDay(rel.type, ps, pf, Math.max(finish - start, 0), resolveRelationLag(rel, gap));
+        if (start < min) {
+          warnings.push({
+            path: `tasks[${idToIndex.get(id) ?? -1}].start`,
+            taskId: id,
+            code: "DEP_TIMING_CONFLICT",
+            message: `${task.locked === true ? "Locked task" : "Task"} '${id}' starts ${task.start}, but its ${rel.type} link to '${rel.id}' requires ${fromEpochDay(min)} or later.`,
+            suggestion: task.locked === true
+              ? `Move '${id}', unlock it so the cascade can reschedule it, or reduce the link lag/gap.`
+              : `Move '${id}' to ${fromEpochDay(min)} or enable auto-cascade.`
+          });
+        }
       }
     }
   });
@@ -712,7 +764,7 @@ export function validate(json: unknown): ValidationResult {
             suggestion: "Provide tags like [\"ADR\", \"Spec\"]."
           });
         }
-        for (const key of ["createdAt", "updatedAt"] as const) {
+        for (const key of ["createdAt", "updatedAt", "timestamp"] as const) {
           if (isPresent(note[key]) && !isStrictISODate(note[key])) {
             warnings.push({
               path: `notes[${nIdx}].${key}`,

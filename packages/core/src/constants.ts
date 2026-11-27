@@ -1,7 +1,7 @@
 import { Category, TimeScale } from "./types";
 
 export const DAY_WIDTH_MIN = 1.2;
-export const DAY_WIDTH_MAX = 80;
+export const DAY_WIDTH_MAX = 36000;
 
 export const DEFAULT_ROW_HEIGHT = 46;
 export const MIN_ROW_HEIGHT = 26;
@@ -26,6 +26,8 @@ export const DEFAULT_CATEGORY: Category = {
 };
 
 export const SCALE_DAY_WIDTHS: Record<TimeScale, number> = {
+  minute: 2880,
+  hour: 480,
   day: 52,
   week: 24,
   month: 10,
