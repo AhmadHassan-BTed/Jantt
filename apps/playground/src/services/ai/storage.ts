@@ -23,6 +23,7 @@ export const VALID_PROVIDERS: readonly ProviderId[] = [
   "openrouter",
   "mistral",
   "xai",
+  "opendesign-go",
   "ollama",
   "openai-compatible"
 ];

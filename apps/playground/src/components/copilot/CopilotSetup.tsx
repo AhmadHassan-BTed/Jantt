@@ -353,6 +353,8 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                 ? "API key from Mistral..."
                 : selectedProvider === "xai"
                 ? "xai-..."
+                : selectedProvider === "opendesign-go"
+                ? "sk-..."
                 : selectedProvider === "ollama"
                 ? "No key required for local Ollama"
                 : "API Key (if required)"
@@ -399,6 +401,11 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
             {selectedProvider === "xai" && (
               <a href="https://console.x.ai/" target="_blank" rel="noreferrer">
                 Get xAI API Key <ExternalLink size={10} />
+              </a>
+            )}
+            {selectedProvider === "opendesign-go" && (
+              <a href="https://go.open-design.ai/" target="_blank" rel="noreferrer">
+                Get OpenDesign Go API Key <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "ollama" && (

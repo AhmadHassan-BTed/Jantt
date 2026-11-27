@@ -63,13 +63,13 @@ Stop wrestling with spreadsheet rows or begging chatbots for fragile SVG/React c
 2. **Review the Visual Diff Preview:** Jantt validates the AI's structured output against its strict schema and displays an exact **added / updated / removed diff preview** before touching your schedule. Zero surprise overwrites.
 3. **Apply in One Click:** Accept the change with full **Undo / Redo** support. Dependencies automatically cascade, working days recalculate, and all 6 views update immediately.
 
-### Bring Your Own Key (10 Providers) or Run 100% Free & Local
+### Bring Your Own Key (11 Providers) or Run 100% Free & Local
 Your API keys stay strictly in your browser's `localStorage` and connect directly to your provider: never through a Jantt proxy. **Live dynamic model discovery** (`/models` and Ollama `/api/tags`) automatically fetches the latest models from your account with instant search and context-window tags.
 
 | Provider Category | Supported Providers |
 | :--- | :--- |
 | **Generous Free Tiers** | **Google Gemini** (Google AI Studio), **Groq**, **OpenRouter** |
-| **Frontier Cloud Models** | **OpenAI**, **Anthropic Claude**, **DeepSeek**, **Mistral**, **xAI Grok** |
+| **Frontier Cloud Models** | **OpenAI**, **Anthropic Claude**, **DeepSeek**, **Mistral**, **xAI Grok**, **[OpenDesign Go](https://go.open-design.ai/)** |
 | **100% Free & Offline Local** | **Ollama** (Llama, Qwen, DeepSeek, Gemma running privately on your own machine) |
 | **Custom Endpoints** | Any **OpenAI-compatible** gateway, corporate endpoint, or local server (LM Studio, vLLM) |
 
@@ -184,7 +184,7 @@ Jantt features **7 handcrafted Swiss Modernism themes** (grouped cleanly into Da
 | :--- | :---: | :---: | :---: | :---: |
 | **Price** | **Free Forever (MIT)** | Free / Subscription | \$15–\$49+ / user / month | Free / Subscription |
 | **No Code Required** | **Yes (Drag & AI)** | Manual formulas | Yes | Requires code / DSL |
-| **Built-In AI Gantt Generator** | **Yes (10 BYOK + Free Ollama + Diff Preview)** | Limited add-ons | Paid AI add-on | Static / brittle layout |
+| **Built-In AI Gantt Generator** | **Yes (11 BYOK + Free Ollama + Diff Preview)** | Limited add-ons | Paid AI add-on | Static / brittle layout |
 | **Free Cloud Collaboration** | **Yes (Live Rooms + Roles)** | Yes | Paywalled seats / limits | No |
 | **No Sign-Up Needed to Start** | **Yes (Instant Local Mode)** | Account required | Account required | Account required |
 | **Auto-Cascading Dependencies** | **Yes (FS / SS / FF / SF)** | Breaks easily | Often paid tier | No |

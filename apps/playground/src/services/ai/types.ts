@@ -9,6 +9,7 @@ export type ProviderId =
   | "openrouter"
   | "mistral"
   | "xai"
+  | "opendesign-go"
   | "ollama"
   | "openai-compatible";
 
