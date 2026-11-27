@@ -36,6 +36,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
 
+      - name: Test Android customization scripts
+        run: node --test apps/android-twa/scripts/apply-customizations.test.mjs
+
       - name: Install Dependencies
         run: npm ci
 
@@ -92,3 +95,4 @@ jobs:
             exit 1
           fi
           echo "All CI jobs passed (validate=${{ needs.validate.result }}, python=${{ needs.python.result }})."
+

@@ -39,6 +39,17 @@
 
 ---
 
+## Install on Android or as a PWA
+
+- **Web:** [Open Jantt](https://ahmadhassan-bted.github.io/Jantt/) without installing anything.
+- **Android APK:** Download `app-release-signed.apk` from [GitHub Releases](https://github.com/AhmadHassan-BTed/Jantt/releases/latest).
+- **Google Play early testing:** Join [Jantt Testers](https://groups.google.com/g/jantt-testers), then [opt in to testing](https://play.google.com/apps/testing/org.fractal.jantt) with the same Google account. Access depends on the current testing rollout.
+- **Desktop and mobile PWA:** Open the web app and use your browser's install or add-to-home-screen option when available.
+
+The Android app uses a Trusted Web Activity (TWA) to open the same Jantt workspace. Web feature updates arrive through the deployed site; changes to the Android wrapper require a new Android build. The [Android release guide](./apps/android-twa/PLAY_STORE_GUIDE.md) explains how to regenerate the wrapper and apply the [versioned Android customizations](./apps/android-twa/customizations/). Signing keys and credentials stay outside Git.
+
+---
+
 ## Simple on the Surface. Rocket Engine Underneath.
 
 Most timeline tools force an unfair trade-off: spreadsheets break the moment one date slips, commercial Gantt suites lock basic features behind \$15–\$49/user/month paywalls, and asking ChatGPT to code an HTML/Mermaid chart gives you a static, broken picture you cannot drag or update.
@@ -825,3 +836,4 @@ If Jantt saves you hours of fighting spreadsheets or expensive project managemen
 ## License
 
 Licensed under the **MIT License**: see [`LICENSE`](./LICENSE) for details.
+
