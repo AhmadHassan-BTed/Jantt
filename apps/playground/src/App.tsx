@@ -44,7 +44,14 @@ import { useCopilot } from "./hooks/useCopilot";
 import { useAppPlatform } from "./hooks/useAppPlatform";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useAndroidBackNavigation, type BackNavigationOverlay } from "./hooks/useAndroidBackNavigation";
-import { registerLaunchQueueHandler, syncThemeColorMeta } from "./services/platform";
+import {
+  APP_PROMO_TTL_MS,
+  isPromoSuppressed,
+  markPromoSeen,
+  registerLaunchQueueHandler,
+  syncThemeColorMeta
+} from "./services/platform";
+import { STORAGE_KEYS } from "./constants";
 import { exportMsProjectXml, exportPrimaveraXer, exportExecutiveReportHtml } from "@jantt/interop";
 import { OPEN_JSON_EDITOR_EVENT } from "./components/common/EmptyChartState";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
@@ -64,6 +71,10 @@ import {
   EditorLoginModal,
   CommandPalette,
   ShortcutsModal,
+  AppDistributionBanner,
+  AndroidTestingModal,
+  WebAccessModal,
+  RateAppModal,
   ConfirmDialog,
   CopilotDrawer,
   type ConfirmDialogProps
@@ -126,6 +137,34 @@ export function App() {
   const [capture, setCapture] = useState<{ milestone: boolean; status?: string } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
+  const [showAndroidTestingModal, setShowAndroidTestingModal] = useState(false);
+  const [showWebAccessModal, setShowWebAccessModal] = useState(false);
+  const [showRateAppModal, setShowRateAppModal] = useState(false);
+  const [isAppBannerDismissed, setIsAppBannerDismissed] = useState(
+    () => isPromoSuppressed(STORAGE_KEYS.APP_BANNER_DISMISSED_AT, APP_PROMO_TTL_MS)
+  );
+  const isAppContext = platform.isTwa || platform.isStandalone;
+
+  // Browser-only entry popup for Android early testing (never auto-opens on phone or inside the installed app).
+  useEffect(() => {
+    if (mobile.isMobile || isAppContext) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("room") || params.has("share") || window.location.hash.includes("share=")) return;
+    if (isPromoSuppressed(STORAGE_KEYS.APP_BETA_POPUP_SEEN_AT, APP_PROMO_TTL_MS)) return;
+    markPromoSeen(STORAGE_KEYS.APP_BETA_POPUP_SEEN_AT, APP_PROMO_TTL_MS);
+    setShowAndroidTestingModal(true);
+  }, [mobile.isMobile, isAppContext]);
+
+  const handleCloseAndroidTestingModal = useCallback(() => {
+    markPromoSeen(STORAGE_KEYS.APP_BETA_POPUP_SEEN_AT, APP_PROMO_TTL_MS);
+    setShowAndroidTestingModal(false);
+  }, []);
+
+  const handleDismissAppBanner = useCallback(() => {
+    markPromoSeen(STORAGE_KEYS.APP_BANNER_DISMISSED_AT, APP_PROMO_TTL_MS);
+    setIsAppBannerDismissed(true);
+  }, []);
 
   // Firebase Authentication & Cloud User Identity
   const auth = useAuth();
@@ -818,6 +857,9 @@ export function App() {
   const closeAllDialogs = () => {
     setShowCommandPalette(false);
     setShowShortcutsModal(false);
+    setShowAndroidTestingModal(false);
+    setShowWebAccessModal(false);
+    setShowRateAppModal(false);
     setShowPromptModal(false);
     setShowCopilot(false);
     setIsMobileMenuOpen(false);
@@ -1079,6 +1121,9 @@ export function App() {
     showEditorLoginModal ||
     showCommandPalette ||
     showShortcutsModal ||
+    showAndroidTestingModal ||
+    showWebAccessModal ||
+    showRateAppModal ||
     showShareRoomModal ||
     pendingConfirm !== null ||
     project.showAddPlanModal ||
@@ -1123,6 +1168,9 @@ export function App() {
     { id: "verification", isOpen: auth.showVerificationModal, close: () => auth.setShowVerificationModal(false) },
     { id: "command-palette", isOpen: showCommandPalette, close: () => setShowCommandPalette(false) },
     { id: "shortcuts", isOpen: showShortcutsModal, close: () => setShowShortcutsModal(false) },
+    { id: "android-testing", isOpen: showAndroidTestingModal, close: handleCloseAndroidTestingModal },
+    { id: "web-access", isOpen: showWebAccessModal, close: () => setShowWebAccessModal(false) },
+    { id: "rate-app", isOpen: showRateAppModal, close: () => setShowRateAppModal(false) },
     { id: "confirm", isOpen: pendingConfirm !== null, close: () => setPendingConfirm(null) },
     { id: `modal-${topModalId}`, isOpen: Boolean(topModalId), close: closeTopModal }
   ];
@@ -1203,8 +1251,12 @@ export function App() {
           canInstall={platform.canInstall}
           isIosSafari={platform.isIosSafari}
           isStandalone={platform.isStandalone}
+          isTwa={platform.isTwa}
           onInstall={platform.promptInstall}
           onApplyUpdate={applySavedUpdate}
+          onOpenAndroidTesting={() => setShowAndroidTestingModal(true)}
+          onOpenWebAccess={() => setShowWebAccessModal(true)}
+          onOpenRateApp={() => setShowRateAppModal(true)}
           appModeLabel={platform.isTwa ? "Android App" : platform.isStandalone ? "Standalone App" : "Web"}
         />
       ) : (
@@ -1260,7 +1312,21 @@ export function App() {
           onDeleteRoom={isRoomOwner && auth.userProfile ? handleDeleteActiveRoom : undefined}
           canInstall={platform.canInstall}
           isStandalone={platform.isStandalone}
+          isTwa={platform.isTwa}
           onInstall={platform.promptInstall}
+          onOpenAndroidTesting={() => setShowAndroidTestingModal(true)}
+          onOpenWebAccess={() => setShowWebAccessModal(true)}
+        />
+      )}
+
+      {!isAppBannerDismissed && !mobile.isImmersiveLandscape && (
+        <AppDistributionBanner
+          isAppContext={isAppContext}
+          isMobile={mobile.isMobile}
+          onOpenAndroidTesting={() => setShowAndroidTestingModal(true)}
+          onOpenWebAccess={() => setShowWebAccessModal(true)}
+          onOpenRateApp={() => setShowRateAppModal(true)}
+          onDismiss={handleDismissAppBanner}
         />
       )}
 
@@ -1471,6 +1537,21 @@ export function App() {
       <ShortcutsModal
         show={showShortcutsModal}
         onClose={() => setShowShortcutsModal(false)}
+      />
+
+      <AndroidTestingModal
+        show={showAndroidTestingModal}
+        onClose={handleCloseAndroidTestingModal}
+      />
+
+      <WebAccessModal
+        show={showWebAccessModal}
+        onClose={() => setShowWebAccessModal(false)}
+      />
+
+      <RateAppModal
+        show={showRateAppModal}
+        onClose={() => setShowRateAppModal(false)}
       />
 
       {pendingConfirm && <ConfirmDialog {...pendingConfirm} onCancel={() => setPendingConfirm(null)} />}

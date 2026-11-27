@@ -64,8 +64,12 @@ interface MobileNavbarProps {
   canInstall: boolean;
   isIosSafari: boolean;
   isStandalone: boolean;
+  isTwa?: boolean;
   onInstall: () => void;
   onApplyUpdate: () => void;
+  onOpenAndroidTesting?: () => void;
+  onOpenWebAccess?: () => void;
+  onOpenRateApp?: () => void;
   appModeLabel: string;
   notesCount?: number;
 }
@@ -113,8 +117,12 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
   canInstall,
   isIosSafari,
   isStandalone,
+  isTwa = false,
   onInstall,
   onApplyUpdate,
+  onOpenAndroidTesting,
+  onOpenWebAccess,
+  onOpenRateApp,
   appModeLabel,
   notesCount = 0
 }) => {
@@ -155,9 +163,13 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
       canInstall={canInstall}
       isIosSafari={isIosSafari}
       isStandalone={isStandalone}
+      isTwa={isTwa}
       onInstall={onInstall}
       updateAvailable={updateAvailable}
       onApplyUpdate={onApplyUpdate}
+      onOpenAndroidTesting={onOpenAndroidTesting}
+      onOpenWebAccess={onOpenWebAccess}
+      onOpenRateApp={onOpenRateApp}
       appModeLabel={appModeLabel}
     />
   );
@@ -174,11 +186,11 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
           </button>
           <nav className="mobile-landscape-tabs" aria-label="View navigation">
             {([
-              { id: "gantt", label: "Timeline", icon: <Layers size={14} /> },
-              { id: "kanban", label: "Board", icon: <Kanban size={14} /> },
-              { id: "tasks", label: "Tasks", icon: <CheckSquare size={14} /> },
-              { id: "summary", label: "Health", icon: <Activity size={14} /> },
-              { id: "notes", label: "Notes", icon: <StickyNote size={14} /> }
+              { id: "gantt", label: "Timeline", icon: <Layers size={14} style={{ color: "#38BDF8" }} /> },
+              { id: "kanban", label: "Board", icon: <Kanban size={14} style={{ color: "#F59E0B" }} /> },
+              { id: "tasks", label: "Tasks", icon: <CheckSquare size={14} style={{ color: "#10B981" }} /> },
+              { id: "summary", label: "Health", icon: <Activity size={14} style={{ color: "#F43F5E" }} /> },
+              { id: "notes", label: "Notes", icon: <StickyNote size={14} style={{ color: "#06B6D4" }} /> }
             ] as const).map((tab) => {
               const active = activeView === tab.id || (tab.id === "gantt" && activeView === "canvas");
               return <button key={tab.id} type="button" className={`mobile-landscape-tab ${active ? "is-active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => { triggerHaptic("light"); setActiveView(tab.id); }}>
@@ -187,8 +199,8 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
             })}
           </nav>
           <div className="mobile-landscape-actions">
-            <button type="button" className="mobile-nav-icon-btn" onClick={() => onToggleCopilot?.()} aria-label="Open AI Copilot"><Sparkles size={16} /></button>
-            <button type="button" className="mobile-nav-icon-btn" onClick={onOpenShare} aria-label="Share plan"><Share2 size={16} /></button>
+            <button type="button" className="mobile-nav-icon-btn" onClick={() => onToggleCopilot?.()} aria-label="Open AI Copilot"><Sparkles size={16} style={{ color: "#A855F7" }} /></button>
+            <button type="button" className="mobile-nav-icon-btn" onClick={onOpenShare} aria-label="Share plan"><Share2 size={16} style={{ color: "#A855F7" }} /></button>
             <button type="button" className="mobile-nav-icon-btn is-menu-trigger" onClick={() => onMenuOpenChange(true)} aria-label="Open tools and settings menu" aria-haspopup="dialog" aria-expanded={isMenuOpen}><Menu size={16} />{updateAvailable && <span className="mobile-update-dot" />}</button>
           </div>
         </header>
@@ -245,7 +257,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({
 
         <div className="mobile-nav-right">
           <button type="button" className="mobile-nav-icon-btn" onClick={onSearch}
-            aria-label="Find tasks and commands" title="Find tasks and commands"><Search size={19} /></button>
+            aria-label="Find tasks and commands" title="Find tasks and commands"><Search size={19} style={{ color: "#38BDF8" }} /></button>
 
           <button
             type="button"

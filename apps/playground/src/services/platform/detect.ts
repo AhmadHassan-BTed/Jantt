@@ -7,19 +7,33 @@ const STANDALONE_DISPLAY_MODES = ["standalone", "fullscreen", "minimal-ui", "win
 export type SessionStore = Pick<Storage, "getItem" | "setItem">;
 
 /**
- * Trusted Web Activity detection. The first page sees an `android-app://` referrer; later in-app
- * navigations do not, so the result is kept for the browser session.
+ * Trusted Web Activity detection. The first page sees an `android-app://` referrer or `?source=twa`
+ * query parameter from `twa-manifest.json`; later in-app navigations may not, so the result is kept
+ * for the browser session.
  */
-export function detectIsTwa(referrer: string, sessionStorage: SessionStore | null | undefined): boolean {
-  if (!sessionStorage) return referrer.startsWith("android-app://");
+export function detectIsTwa(
+  referrer: string,
+  sessionStorage: SessionStore | null | undefined,
+  search = ""
+): boolean {
+  const hasTwaQuery = (() => {
+    if (!search) return false;
+    try {
+      return new URLSearchParams(search).get("source")?.toLowerCase() === "twa";
+    } catch {
+      return false;
+    }
+  })();
+  const matchedNow = referrer.startsWith("android-app://") || hasTwaQuery;
+  if (!sessionStorage) return matchedNow;
   try {
-    if (referrer.startsWith("android-app://")) {
+    if (matchedNow) {
       sessionStorage.setItem(TWA_SESSION_KEY, "1");
       return true;
     }
     return sessionStorage.getItem(TWA_SESSION_KEY) === "1";
   } catch {
-    return referrer.startsWith("android-app://");
+    return matchedNow;
   }
 }
 
@@ -32,7 +46,7 @@ export function detectIsStandalone(win: Window): boolean {
     if (isDisplayModeStandalone) return true;
   }
   if ((win.navigator as Navigator & { standalone?: boolean }).standalone === true) return true;
-  return detectIsTwa(win.document?.referrer || "", win.sessionStorage);
+  return detectIsTwa(win.document?.referrer || "", win.sessionStorage, win.location?.search || "");
 }
 
 /** iOS/iPadOS Safari, where install instructions must be shown instead of a native prompt. */

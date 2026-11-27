@@ -72,6 +72,9 @@ To be the world's most capable, lightweight Gantt chart engine - designed specif
 - [ ] **Hierarchical Grouping & Subtasks**:
   - Parent summary tasks spanning across subtasks with accordion collapse/expand.
   - Category and Assignee lane grouping.
+- [ ] **Per-Task Timetable & Time-Slot Integration**:
+  - Attach a granular daily/weekly timetable or scheduled time-block breakdown directly inside each task (e.g., recurring sessions, study/work slots, shift windows, or hourly agendas within a task's date span).
+  - View and edit task timetables from the task detail view and surface scheduled slots alongside timeline bars without cluttering the top-level Gantt JSON.
 - [ ] **Custom Column Configuration in JSON**:
   - Declarative column definitions stored in the plan, building on the existing `viewport.columns` option.
 - [ ] **Angular Wrapper**:

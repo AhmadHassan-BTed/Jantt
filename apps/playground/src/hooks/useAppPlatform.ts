@@ -28,7 +28,7 @@ export function useAppPlatform(isMobile: boolean): UseAppPlatformReturn {
   const [isTwa] = useState(
     () =>
       typeof window !== "undefined" &&
-      detectIsTwa(window.document.referrer, window.sessionStorage)
+      detectIsTwa(window.document.referrer, window.sessionStorage, window.location.search)
   );
   const [isStandalone, setIsStandalone] = useState(
     () => typeof window !== "undefined" && detectIsStandalone(window)

@@ -27,8 +27,12 @@ import {
   Download,
   Share,
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  Globe,
+  Star,
+  MessageCircle
 } from "lucide-react";
+import { APP_DISTRIBUTION_LINKS } from "../../constants";
 import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile } from "../../firebase/types";
 import type { ActiveView } from "../../types";
@@ -79,20 +83,24 @@ interface MobileActionMenuSheetProps {
   canInstall: boolean;
   isIosSafari: boolean;
   isStandalone: boolean;
+  isTwa?: boolean;
   onInstall: () => void;
   updateAvailable: boolean;
   onApplyUpdate: () => void;
+  onOpenAndroidTesting?: () => void;
+  onOpenWebAccess?: () => void;
+  onOpenRateApp?: () => void;
   /** Human-readable runtime: "Standalone App", "Android App" or "Web". */
   appModeLabel: string;
 }
 
 const VIEW_TILES: Array<{ id: ActiveView; label: string; icon: React.ReactNode }> = [
-  { id: "gantt", label: "Gantt", icon: <Layers size={16} /> },
-  { id: "canvas", label: "Canvas", icon: <Zap size={16} /> },
-  { id: "kanban", label: "Kanban", icon: <Kanban size={16} /> },
-  { id: "tasks", label: "Tasks", icon: <CheckSquare size={16} /> },
-  { id: "summary", label: "Health", icon: <Activity size={16} /> },
-  { id: "notes", label: "Notes", icon: <StickyNote size={16} /> }
+  { id: "gantt", label: "Gantt", icon: <Layers size={16} style={{ color: "#38BDF8" }} /> },
+  { id: "canvas", label: "Canvas", icon: <Zap size={16} style={{ color: "#A855F7" }} /> },
+  { id: "kanban", label: "Kanban", icon: <Kanban size={16} style={{ color: "#F59E0B" }} /> },
+  { id: "tasks", label: "Tasks", icon: <CheckSquare size={16} style={{ color: "#10B981" }} /> },
+  { id: "summary", label: "Health", icon: <Activity size={16} style={{ color: "#F43F5E" }} /> },
+  { id: "notes", label: "Notes", icon: <StickyNote size={16} style={{ color: "#06B6D4" }} /> }
 ];
 
 const FOCUSABLE_SELECTOR =
@@ -133,9 +141,13 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
   canInstall,
   isIosSafari,
   isStandalone,
+  isTwa = false,
   onInstall,
   updateAvailable,
   onApplyUpdate,
+  onOpenAndroidTesting,
+  onOpenWebAccess,
+  onOpenRateApp,
   appModeLabel
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -238,16 +250,16 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
           )}
 
           <div className="mobile-menu-grid mobile-menu-shortcuts" role="group" aria-label="Plan actions">
-            <button type="button" className="mobile-menu-tile" onClick={act(onShare)}><Share2 size={17} /><span>Share</span></button>
+            <button type="button" className="mobile-menu-tile" onClick={act(onShare)}><Share2 size={17} style={{ color: "#A855F7" }} /><span>Share</span></button>
             {onToggleCopilot && <button type="button" className="mobile-menu-tile" onClick={act(onToggleCopilot)}>
-              <Sparkles size={17} /><span>Copilot</span></button>}
+              <Sparkles size={17} style={{ color: "#A855F7" }} /><span>Copilot</span></button>}
             <button type="button" className="mobile-menu-tile" disabled={!onUndo} onClick={act(onUndo)}>
-              <Undo2 size={17} /><span>Undo</span></button>
+              <Undo2 size={17} style={{ color: "#38BDF8" }} /><span>Undo</span></button>
             <button type="button" className="mobile-menu-tile" disabled={!onRedo} onClick={act(onRedo)}>
-              <Redo2 size={17} /><span>Redo</span></button>
+              <Redo2 size={17} style={{ color: "#38BDF8" }} /><span>Redo</span></button>
           </div>
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><Layers size={18} />Views and renderer<ChevronDown size={16} /></summary>
+            <summary><Layers size={18} style={{ color: "#38BDF8" }} />Views and renderer<ChevronDown size={16} /></summary>
             <div className="mobile-menu-grid is-three-col" role="group" aria-label="Switch view">
               {VIEW_TILES.map((tile) => (
                 <button
@@ -266,37 +278,37 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
 
           {/* Core Plan & JSON State */}
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><FolderKanban size={18} />Plans and files<ChevronDown size={16} /></summary>
+            <summary><FolderKanban size={18} style={{ color: "#38BDF8" }} />Plans and files<ChevronDown size={16} /></summary>
             <div className="mobile-menu-grid">
               <button type="button" className="mobile-menu-tile" onClick={act(onCreateNewPlan)}>
-                <FolderPlus size={16} aria-hidden="true" />
+                <FolderPlus size={16} style={{ color: "#22C55E" }} aria-hidden="true" />
                 <span>New Plan</span>
               </button>
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPlanManager)}>
-                <FolderKanban size={16} aria-hidden="true" />
+                <FolderKanban size={16} style={{ color: "#38BDF8" }} aria-hidden="true" />
                 <span>Manage Plans</span>
               </button>
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPeopleModal)}>
-                <Users size={16} aria-hidden="true" />
+                <Users size={16} style={{ color: "#F59E0B" }} aria-hidden="true" />
                 <span>People &amp; Teams</span>
               </button>
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenJsonEditor)}>
-                <FileJson size={16} aria-hidden="true" />
+                <FileJson size={16} style={{ color: "#F59E0B" }} aria-hidden="true" />
                 <span>JSON Editor</span>
               </button>
 
               {onImportFile && (
                 <button type="button" className="mobile-menu-tile" onClick={act(onImportFile)}>
-                  <Upload size={16} aria-hidden="true" />
+                  <Upload size={16} style={{ color: "#38BDF8" }} aria-hidden="true" />
                   <span>Import File</span>
                 </button>
               )}
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPromptModal)}>
-                <FileJson size={16} aria-hidden="true" />
+                <FileJson size={16} style={{ color: "#A855F7" }} aria-hidden="true" />
                 <span>Prompt AI</span>
               </button>
             </div>
@@ -304,7 +316,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
 
           {/* User Account Section */}
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><Cloud size={18} />Account and cloud<ChevronDown size={16} /></summary>
+            <summary><Cloud size={18} style={{ color: "#38BDF8" }} />Account and cloud<ChevronDown size={16} /></summary>
             {currentUser ? (
               <div className="mobile-menu-user-row">
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
@@ -391,7 +403,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
 
           {/* AutoSave & History */}
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><History size={18} />Saving and history<ChevronDown size={16} /></summary>
+            <summary><History size={18} style={{ color: "#818CF8" }} />Saving and history<ChevronDown size={16} /></summary>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <button type="button" className="mobile-menu-list-row" onClick={act(onOpenAutoSave)}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -410,7 +422,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
               {onOpenVersionHistory && (
                 <button type="button" className="mobile-menu-list-row" onClick={act(onOpenVersionHistory)}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <History size={14} aria-hidden="true" />
+                    <History size={14} style={{ color: "#818CF8" }} aria-hidden="true" />
                     <span>Version history</span>
                   </div>
                   {snapshotsCount > 0 && <span className="mobile-menu-badge">{snapshotsCount} snapshots</span>}
@@ -420,7 +432,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
           </details>
 
           <div className="mobile-theme-row">
-            <label htmlFor="mobile-theme-select"><Palette size={18} />Theme</label>
+            <label htmlFor="mobile-theme-select"><Palette size={18} style={{ color: "#A855F7" }} />Theme</label>
             <select
               id="mobile-theme-select"
               className="select-input mobile-theme-select"
@@ -466,6 +478,62 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
               )}
             </div>
           )}
+
+          <div className="mobile-menu-section">
+            <span className="mobile-menu-section-label">
+              {isTwa || isStandalone ? "App & Open-Source Support" : "Android App & Support"}
+            </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {isTwa || isStandalone ? (
+                <>
+                  {onOpenWebAccess && (
+                    <button type="button" className="mobile-menu-list-row" onClick={act(onOpenWebAccess)}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Globe size={14} style={{ color: "#38BDF8" }} aria-hidden="true" />
+                        <span>Access Web Version on Laptop</span>
+                      </div>
+                      <span className="mobile-menu-badge">Laptop</span>
+                    </button>
+                  )}
+                  {onOpenRateApp && (
+                    <button type="button" className="mobile-menu-list-row" onClick={act(onOpenRateApp)}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Star size={14} style={{ color: "#F59E0B" }} aria-hidden="true" />
+                        <span>Rate Jantt App</span>
+                      </div>
+                      <span className="mobile-menu-badge">5★</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                onOpenAndroidTesting && (
+                  <button type="button" className="mobile-menu-list-row" onClick={act(onOpenAndroidTesting)}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Smartphone size={14} style={{ color: "#22C55E" }} aria-hidden="true" />
+                      <span>Get Android App (Early Testing)</span>
+                    </div>
+                    <span className="mobile-menu-badge">Free</span>
+                  </button>
+                )
+              )}
+              <a
+                className="mobile-menu-list-row"
+                style={{ textDecoration: "none" }}
+                href={`${APP_DISTRIBUTION_LINKS.WHATSAPP_URL}?text=${encodeURIComponent(
+                  "Hi Ahmad, I'm using Jantt (free & open-source) and wanted to share feedback:"
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onClose}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <MessageCircle size={14} style={{ color: "#22C55E" }} aria-hidden="true" />
+                  <span>Message Me (Free Support)</span>
+                </div>
+                <span className="mobile-menu-badge">WhatsApp</span>
+              </a>
+            </div>
+          </div>
 
           <div className="mobile-sheet-footer">
             <span className="mobile-sheet-mode">

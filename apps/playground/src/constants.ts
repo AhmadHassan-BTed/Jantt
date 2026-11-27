@@ -57,6 +57,8 @@ export const STORAGE_KEYS = {
   PEER_ID: "jantt_peer_id",
   DATE_FILTER_DETAILS: "jantt_date_filter_details",
   DISMISS_ORIENTATION_BANNER: "jantt_dismiss_orientation_banner",
+  APP_BETA_POPUP_SEEN_AT: "jantt_app_beta_popup_seen_at",
+  APP_BANNER_DISMISSED_AT: "jantt_app_banner_dismissed_at",
   GH_ACCESS_TOKEN: "jantt_gh_access_token",
   AUTH_REDIRECT_PENDING: "jantt_auth_redirect_pending",
   COPILOT_PROVIDER: "jantt_copilot_provider",
@@ -89,3 +91,14 @@ export const AUTOSAVE_OPTIONS: { id: AutoSaveInterval; label: string; desc: stri
 ];
 
 export const PERSON_COLORS = ["#4FAE93", "#38BDF8", "#F59E0B", "#A78BFA", "#F43F5E", "#10B981", "#FB923C", "#60A5FA"];
+
+/** Links used by context-aware Android early-testing, Web access, and open-source support UI. */
+export const APP_DISTRIBUTION_LINKS = {
+  WEB_APP_URL: "https://ahmadhassan-bted.github.io/Jantt/",
+  ANDROID_TESTER_GROUP_URL: "https://groups.google.com/g/jantt-testers",
+  ANDROID_PLAY_TESTING_URL: "https://play.google.com/apps/testing/org.fractal.jantt",
+  ANDROID_PLAY_STORE_URL: "https://play.google.com/store/apps/details?id=org.fractal.jantt",
+  WHATSAPP_URL: "https://wa.me/923225522383",
+  GITHUB_ISSUES_URL: "https://github.com/AhmadHassan-BTed/Jantt/issues/new/choose",
+  GITHUB_REPO_URL: "https://github.com/AhmadHassan-BTed/Jantt"
+} as const;

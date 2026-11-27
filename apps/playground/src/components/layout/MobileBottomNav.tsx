@@ -16,11 +16,11 @@ const PRIMARY_TABS: Array<{
   ariaLabel: string;
   icon: React.ReactNode;
 }> = [
-  { id: "gantt", label: "Timeline", ariaLabel: "Timeline", icon: <Layers size={20} /> },
-  { id: "kanban", label: "Board", ariaLabel: "Board", icon: <Kanban size={20} /> },
-  { id: "tasks", label: "Tasks", ariaLabel: "Tasks", icon: <CheckSquare size={20} /> },
-  { id: "summary", label: "Health", ariaLabel: "Project health", icon: <Activity size={20} /> },
-  { id: "notes", label: "Notes", ariaLabel: "Notes", icon: <StickyNote size={20} /> }
+  { id: "gantt", label: "Timeline", ariaLabel: "Timeline", icon: <Layers size={20} style={{ color: "#38BDF8" }} /> },
+  { id: "kanban", label: "Board", ariaLabel: "Board", icon: <Kanban size={20} style={{ color: "#F59E0B" }} /> },
+  { id: "tasks", label: "Tasks", ariaLabel: "Tasks", icon: <CheckSquare size={20} style={{ color: "#10B981" }} /> },
+  { id: "summary", label: "Health", ariaLabel: "Project health", icon: <Activity size={20} style={{ color: "#F43F5E" }} /> },
+  { id: "notes", label: "Notes", ariaLabel: "Notes", icon: <StickyNote size={20} style={{ color: "#06B6D4" }} /> }
 ];
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({

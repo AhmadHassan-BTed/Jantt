@@ -11,7 +11,10 @@ import {
   syncThemeColorMeta,
   shouldBypassServiceWorker,
   isImmutableAssetPath,
-  triggerHaptic
+  triggerHaptic,
+  APP_PROMO_TTL_MS,
+  isPromoSuppressed,
+  markPromoSeen
 } from "./index";
 
 const playgroundRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
@@ -37,6 +40,30 @@ describe("platform detection", () => {
     expect(detectIsTwa("android-app://io.github.ahmadhassan_bted.jantt", store)).toBe(true);
     expect(detectIsTwa("https://ahmadhassan-bted.github.io/Jantt/", store)).toBe(true);
     expect(storage.get("jantt_twa_android_session")).toBe("1");
+
+    const queryStorage = new Map<string, string>();
+    const queryStore = {
+      getItem: (key: string) => queryStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        queryStorage.set(key, value);
+      }
+    };
+    expect(detectIsTwa("", queryStore, "?source=twa")).toBe(true);
+    expect(detectIsTwa("", queryStore, "")).toBe(true);
+    expect(queryStorage.get("jantt_twa_android_session")).toBe("1");
+  });
+
+  it("persists promo suppression for 30 days and expires afterward", () => {
+    const key = "jantt_test_promo_key";
+    localStorage.removeItem(key);
+    document.cookie = `${key}=; path=/; max-age=0`;
+    const t0 = 1_700_000_000_000;
+    expect(isPromoSuppressed(key, APP_PROMO_TTL_MS, t0)).toBe(false);
+    markPromoSeen(key, APP_PROMO_TTL_MS, t0);
+    expect(isPromoSuppressed(key, APP_PROMO_TTL_MS, t0 + 1000)).toBe(true);
+    expect(isPromoSuppressed(key, APP_PROMO_TTL_MS, t0 + APP_PROMO_TTL_MS + 1000)).toBe(false);
+    localStorage.removeItem(key);
+    document.cookie = `${key}=; path=/; max-age=0`;
   });
 
   it("detects iOS Safari but not Chrome on iOS", () => {

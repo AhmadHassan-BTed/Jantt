@@ -465,7 +465,7 @@ export const ViewToolbar: React.FC<ViewToolbarProps> = ({
                     title="Jump to today"
                     aria-label="Jump to today"
                   >
-                    <Crosshair size={16} aria-hidden="true" />
+                    <Crosshair size={16} style={{ color: "#EF4444" }} aria-hidden="true" />
                     <span className="mobile-today-label">Today</span>
                   </button>
                 )}

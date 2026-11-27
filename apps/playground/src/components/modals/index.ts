@@ -9,4 +9,5 @@ export * from "./ReadOnlyForkModal";
 export * from "./EditorLoginModal";
 export type { MonteCarloModalProps } from "./MonteCarloModal";
 export * from "./ShortcutsModal";
+export * from "./AppDistributionModals";
 export * from "./ModalHost";

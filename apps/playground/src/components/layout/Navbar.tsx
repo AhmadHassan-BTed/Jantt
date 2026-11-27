@@ -25,7 +25,9 @@ import {
   Loader2,
   Palette,
   PanelLeft,
-  Download
+  Download,
+  Smartphone,
+  Globe
 } from "lucide-react";
 import { themeManager } from "@jantt/core";
 import type { User as FirebaseUser } from "firebase/auth";
@@ -526,7 +528,10 @@ interface NavbarProps {
   /** Chromium install prompt availability; the button disappears once installed. */
   canInstall?: boolean;
   isStandalone?: boolean;
+  isTwa?: boolean;
   onInstall?: () => void;
+  onOpenAndroidTesting?: () => void;
+  onOpenWebAccess?: () => void;
 
   /* Plans */
   activeProjectId: string;
@@ -591,7 +596,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenShortcuts,
   canInstall = false,
   isStandalone = false,
+  isTwa = false,
   onInstall,
+  onOpenAndroidTesting,
+  onOpenWebAccess,
   activeProjectId,
   activePlanName,
   customProjects,
@@ -829,6 +837,34 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Download size={13} style={{ color: "#22C55E" }} aria-hidden="true" />
               <span className="nav-label">Install App</span>
             </button>
+          )}
+
+          {isStandalone || isTwa ? (
+            onOpenWebAccess && (
+              <button
+                type="button"
+                className="btn-nav nav-icon-btn nav-app-context-btn"
+                onClick={onOpenWebAccess}
+                title="Open or share the Jantt Web Version"
+                aria-label="Open Jantt Web Version"
+              >
+                <Globe size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
+                <span className="nav-label">Web</span>
+              </button>
+            )
+          ) : (
+            onOpenAndroidTesting && (
+              <button
+                type="button"
+                className="btn-nav nav-icon-btn nav-app-context-btn"
+                onClick={onOpenAndroidTesting}
+                title="Support releasing the free Jantt Android app (Early Testing)"
+                aria-label="Get Jantt Android App (Early Testing)"
+              >
+                <Smartphone size={13} style={{ color: "#22C55E" }} aria-hidden="true" />
+                <span className="nav-label">Android</span>
+              </button>
+            )
           )}
 
           <button
