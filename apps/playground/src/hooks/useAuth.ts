@@ -24,6 +24,7 @@ import {
   starAllMissingRepositories
 } from "../firebase/githubVerificationService";
 import type { UserProfile, VerificationStatus } from "../firebase/types";
+import { tGlobal } from "../i18n";
 
 /** Stop reporting "loading" when the profile cannot be fetched (e.g. offline at startup). */
 const PROFILE_LOAD_TIMEOUT_MS = 10000;
@@ -150,7 +151,7 @@ export function useAuth(): UseAuthReturn {
         } else if (!auth.currentUser) {
           // The redirect was abandoned, or the browser dropped the auth state (third-party
           // storage blocking). Say so instead of failing silently.
-          setAuthError("GitHub sign-in did not complete. Allow pop-ups for this site, then try again.");
+          setAuthError(tGlobal("auth.redirectIncomplete"));
         }
       })
       .catch(reportAuthError)
@@ -196,7 +197,7 @@ export function useAuth(): UseAuthReturn {
         if (auth.currentUser?.uid !== uid) return;
         console.warn("[useAuth] Could not load the profile:", error);
         setProfileStatus("error");
-        setAuthError("Couldn't load your Jantt profile. Check your connection, then try again.");
+        setAuthError(tGlobal("auth.profileLoadFailed"));
         setIsLoadingAuth(false);
       }
     );
@@ -294,7 +295,7 @@ export function useAuth(): UseAuthReturn {
       await signOutUser();
     } catch (err) {
       console.warn("[useAuth] Sign-out failed:", err);
-      setAuthError("Sign-out failed. Please try again.");
+      setAuthError(tGlobal("auth.signOutFailed"));
       return;
     }
     setGithubToken(null);
@@ -307,7 +308,7 @@ export function useAuth(): UseAuthReturn {
   const completeUsernameOnboarding = useCallback(
     async (rawUsername: string) => {
       if (!currentUser) {
-        throw new Error("Must be logged in to claim a username.");
+        throw new Error(tGlobal("auth.mustBeLoggedIn"));
       }
       const profile = await claimUsername(currentUser, rawUsername);
       setUserProfile(profile);

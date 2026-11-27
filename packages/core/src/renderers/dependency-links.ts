@@ -1,4 +1,5 @@
-import { DependencyLine } from "../types";
+import { DependencyLine, TimelineLabels } from "../types";
+import { formatTimelineLabel, resolveTimelineLabels } from "../timeline-labels";
 
 export interface DependencyLinksProps {
   dependencies: DependencyLine[];
@@ -12,6 +13,8 @@ export interface DependencyLinksProps {
   onLinkDelete?: (fromTaskId: string, toTaskId: string) => void;
   /** Display names used in link tooltips/accessible names (falls back to task IDs). */
   taskLabels?: Map<string, string>;
+  /** Localized link text; omitted fields fall back to English. */
+  labels?: Partial<TimelineLabels>;
 }
 
 export interface DependencyLinksResult {
@@ -28,21 +31,21 @@ let linkInstanceCounter = 0;
  * Shows a small "Remove link" confirmation chip at the click point inside `host` (the canvas).
  * It is dismissed by Escape, any pointer press outside it, or the next re-render of the canvas.
  */
-function showRemoveLinkChip(host: HTMLElement, e: MouseEvent, description: string, onConfirm: () => void): void {
+function showRemoveLinkChip(host: HTMLElement, e: MouseEvent, description: string, onConfirm: () => void, removeDependencyLabel: string, removeLinkLabel: string): void {
   host.querySelector(".jantt-link-remove-chip")?.remove();
 
   const rect = host.getBoundingClientRect();
   const chip = document.createElement("button");
   chip.type = "button";
   chip.className = "jantt-link-remove-chip";
-  chip.title = `Remove dependency: ${description}`;
-  chip.setAttribute("aria-label", `Remove dependency: ${description}`);
+  chip.title = formatTimelineLabel(removeDependencyLabel, { description });
+  chip.setAttribute("aria-label", formatTimelineLabel(removeDependencyLabel, { description }));
   chip.innerHTML = `
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
-    <span>Remove link</span>
+    <span>${removeLinkLabel}</span>
   `;
   chip.style.left = `${e.clientX - rect.left}px`;
   chip.style.top = `${e.clientY - rect.top}px`;
@@ -101,6 +104,7 @@ function createArrowMarker(id: string, fill: string): SVGMarkerElement {
  * Critical links are appended last so they paint above regular links (SVG has no z-index).
  */
 export function renderDependencyLinks(props: DependencyLinksProps): DependencyLinksResult {
+  const labels = resolveTimelineLabels(props.labels);
   const instanceId = ++linkInstanceCounter;
   const arrowId = `jantt-arrow-${instanceId}`;
   const arrowActiveId = `jantt-arrow-active-${instanceId}`;
@@ -163,7 +167,7 @@ export function renderDependencyLinks(props: DependencyLinksProps): DependencyLi
     hitPath.setAttribute("data-from", dep.fromTaskId);
     hitPath.setAttribute("data-to", dep.toTaskId);
     const title = document.createElementNS(SVG_NS, "title");
-    title.textContent = `Dependency: ${description} (click to remove)`;
+    title.textContent = formatTimelineLabel(labels.dependencyTitle, { description });
     hitPath.appendChild(title);
 
     hitPath.addEventListener("pointerdown", (e) => {
@@ -174,7 +178,7 @@ export function renderDependencyLinks(props: DependencyLinksProps): DependencyLi
       e.stopPropagation();
       const host = svg.parentElement;
       if (!host) return;
-      showRemoveLinkChip(host, e, description, () => props.onLinkDelete?.(dep.fromTaskId, dep.toTaskId));
+      showRemoveLinkChip(host, e, description, () => props.onLinkDelete?.(dep.fromTaskId, dep.toTaskId), labels.removeDependency, labels.removeLink);
     });
     hitPath.addEventListener("mouseenter", () => {
       path.classList.add("is-active");

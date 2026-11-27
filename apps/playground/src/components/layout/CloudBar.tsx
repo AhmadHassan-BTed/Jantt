@@ -23,6 +23,7 @@ import {
 import type { RoomPresence } from "../../firebase/types";
 import type { RoomSyncStatus } from "../../hooks/useRoomSync";
 import { buildRoomViewerUrl, getTrustedAvatarUrl } from "../../room-storage";
+import { useI18n } from "../../i18n/I18nProvider";
 
 export interface CloudBarProps {
   activeRoomId?: string | null;
@@ -159,6 +160,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
   onRestoreConflicts,
   onDismissConflicts
 }) => {
+  const { t, locale } = useI18n();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [confirmLeave, setConfirmLeave] = useState(false);
 
@@ -196,15 +198,12 @@ export const CloudBar: React.FC<CloudBarProps> = ({
   if (!activeRoomId) {
     const needsSignIn = isSignedIn === false;
     return (
-      <section className="cloud-panel" aria-label="Cloud collaboration" style={panelStyle}>
+      <section className="cloud-panel" aria-label={t("bar.cloudCollab")} style={panelStyle}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
           <Cloud size={18} aria-hidden="true" style={{ color: "var(--jantt-accent, #38BDF8)", flexShrink: 0, marginTop: "1px" }} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700 }}>This plan is local</div>
-            <div style={mutedStyle}>
-              It is saved only in this browser. Start a cloud room to work on it live with teammates: anyone with the
-              link can view it, and you choose who can edit.
-            </div>
+            <div style={{ fontWeight: 700 }}>{t("bar.thisPlanLocal")}</div>
+            <div style={mutedStyle}>{t("bar.localBody")}</div>
           </div>
         </div>
 
@@ -212,7 +211,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
           onSignIn && (
             <button type="button" className="btn btn-primary" style={actionButtonStyle} onClick={run(onSignIn)}>
               <LogIn size={15} aria-hidden="true" />
-              <span>Sign in with GitHub to start a room</span>
+              <span>{t("bar.signInToStart")}</span>
             </button>
           )
         ) : (
@@ -230,7 +229,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
               ) : (
                 <Radio size={15} aria-hidden="true" />
               )}
-              <span>{isProcessing ? "Starting room…" : "Start a cloud room from this plan"}</span>
+              <span>{isProcessing ? t("bar.startingRoom") : t("bar.startRoom")}</span>
             </button>
           )
         )}
@@ -238,14 +237,14 @@ export const CloudBar: React.FC<CloudBarProps> = ({
         {onOpenRoomModal && (
           <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenRoomModal)}>
             <LogIn size={15} aria-hidden="true" />
-            <span>Join a room with a link or ID…</span>
+            <span>{t("bar.joinRoom")}</span>
           </button>
         )}
 
         {onOpenUserHub && (
           <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenUserHub)}>
             <FolderKanban size={15} aria-hidden="true" />
-            <span>My rooms</span>
+            <span>{t("bar.myRooms")}</span>
           </button>
         )}
       </section>
@@ -258,14 +257,14 @@ export const CloudBar: React.FC<CloudBarProps> = ({
   const showRetry = Boolean(onRetrySync) && (syncStatus === "error" || syncStatus === "offline");
   const lastSyncLabel =
     lastSyncTime && (syncStatus === "in-sync" || syncStatus === "merged")
-      ? lastSyncTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      ? lastSyncTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
       : null;
   const visibleUsers = onlineUsers.slice(0, 6);
   const canSaveRoom = Boolean(onSaveRoomToMyRooms) && isSignedIn !== false && isRoomMember === false && !isRoomOwner;
   const canLeave = Boolean(onLeaveRoom) && isRoomMember === true && !isRoomOwner;
 
   return (
-    <section className="cloud-panel" aria-label={`Cloud room ${activeRoomTitle || activeRoomId}`} style={panelStyle}>
+    <section className="cloud-panel" aria-label={t("bar.cloudRoomAria", { name: activeRoomTitle || activeRoomId })} style={panelStyle}>
       {/* Identity & role */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
         <span
@@ -288,7 +287,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
             {activeRoomTitle || activeRoomId}
           </div>
           <div style={{ ...mutedStyle, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-            <span>Cloud room</span>
+            <span>{t("bar.cloudRoom")}</span>
             <code style={{ fontSize: "11px", color: "var(--jantt-text-muted, #94A3B8)" }}>#{activeRoomId}</code>
           </div>
         </div>
@@ -307,7 +306,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
           }}
         >
           {canEdit ? <Edit3 size={11} aria-hidden="true" /> : <Eye size={11} aria-hidden="true" />}
-          {isRoomOwner ? "Owner" : canEdit ? "Editor" : "View only"}
+          {isRoomOwner ? t("bar.owner") : canEdit ? t("bar.editor") : t("bar.viewOnly")}
         </span>
       </div>
 
@@ -315,7 +314,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         <div role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flex: 1 }}>
           <span style={{ color: tone.color, display: "inline-flex", flexShrink: 0 }}>{tone.icon}</span>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{syncMessage || "Connected"}</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{syncMessage || t("bar.connected")}</span>
           {lastSyncLabel && <span style={{ ...mutedStyle, flexShrink: 0 }}>· {lastSyncLabel}</span>}
         </div>
         {showRetry && (
@@ -326,7 +325,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
             onClick={onRetrySync}
           >
             <RefreshCw size={12} aria-hidden="true" />
-            <span>Retry</span>
+            <span>{t("bar.retry")}</span>
           </button>
         )}
       </div>
@@ -335,15 +334,15 @@ export const CloudBar: React.FC<CloudBarProps> = ({
       {syncConflicts.length > 0 && (
         <div
           role="group"
-          aria-label="Your edits replaced by teammates' changes"
+          aria-label={t("bar.conflictsAria")}
           style={{ ...sectionStyle, borderColor: "rgba(245, 158, 11, 0.45)" }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
             <AlertTriangle size={15} aria-hidden="true" style={{ color: "#F59E0B", flexShrink: 0, marginTop: "1px" }} />
             <div style={{ fontWeight: 600 }}>
               {syncConflicts.length === 1
-                ? "1 of your edits was replaced by a teammate's newer change"
-                : `${syncConflicts.length} of your edits were replaced by teammates' newer changes`}
+                ? t("bar.conflictOne")
+                : t("bar.conflictMany", { count: syncConflicts.length })}
             </div>
           </div>
           <ul style={{ ...mutedStyle, margin: 0, paddingLeft: "18px", overflowWrap: "anywhere" }}>
@@ -352,18 +351,20 @@ export const CloudBar: React.FC<CloudBarProps> = ({
             ))}
           </ul>
           {syncConflicts.length > MAX_LISTED_CONFLICTS && (
-            <div style={mutedStyle}>and {syncConflicts.length - MAX_LISTED_CONFLICTS} more</div>
+            <div style={mutedStyle}>
+              {t("bar.andMore", { count: syncConflicts.length - MAX_LISTED_CONFLICTS })}
+            </div>
           )}
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
             {canEdit && onRestoreConflicts && (
               <button type="button" className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "12px" }} onClick={onRestoreConflicts}>
                 <RotateCcw size={12} aria-hidden="true" />
-                <span>Restore my edits</span>
+                <span>{t("bar.restoreMine")}</span>
               </button>
             )}
             {onDismissConflicts && (
               <button type="button" className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "12px" }} onClick={onDismissConflicts}>
-                <span>Keep teammates' versions</span>
+                <span>{t("bar.keepTheirs")}</span>
               </button>
             )}
           </div>
@@ -373,30 +374,28 @@ export const CloudBar: React.FC<CloudBarProps> = ({
       {/* What this user can do */}
       {isPendingLoginEditor ? (
         <div style={sectionStyle}>
-          <div style={mutedStyle}>You are an editor of this room. Sign in to edit it live.</div>
+          <div style={mutedStyle}>{t("bar.editorSignInHint")}</div>
           {onOpenEditorLogin && (
             <button type="button" className="btn btn-primary" style={actionButtonStyle} onClick={run(onOpenEditorLogin)}>
               <LogIn size={15} aria-hidden="true" />
-              <span>Sign in to edit</span>
+              <span>{t("bar.signInToEdit")}</span>
             </button>
           )}
         </div>
       ) : (
         !canEdit && (
           <div style={sectionStyle}>
-            <div style={mutedStyle}>
-              View only. You see teammates' changes live; ask the owner for edit access, or edit a copy.
-            </div>
+            <div style={mutedStyle}>{t("bar.viewOnlyHint")}</div>
             {onPromptFork && (
               <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onPromptFork)}>
                 <GitFork size={15} aria-hidden="true" />
-                <span>Make a local copy</span>
+                <span>{t("bar.makeLocalCopy")}</span>
               </button>
             )}
             {canSaveRoom && (
               <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={onSaveRoomToMyRooms}>
                 <BookmarkPlus size={15} aria-hidden="true" />
-                <span>Save to my rooms</span>
+                <span>{t("bar.saveToMyRooms")}</span>
               </button>
             )}
           </div>
@@ -412,7 +411,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
               return (
                 <span
                   key={user.uid || idx}
-                  title={user.displayName || user.username || "Collaborator"}
+                  title={user.displayName || user.username || t("bar.collaborator")}
                   style={{
                     width: "22px",
                     height: "22px",
@@ -443,10 +442,13 @@ export const CloudBar: React.FC<CloudBarProps> = ({
         )}
         <span style={mutedStyle}>
           {onlineUsers.length === 0
-            ? "No one is online in this room right now"
-            : `${onlineUsers.length} online now${
-                onlineUsers.length > visibleUsers.length ? ` (+${onlineUsers.length - visibleUsers.length} more)` : ""
-              }`}
+            ? t("bar.noOneOnline")
+            : onlineUsers.length > visibleUsers.length
+              ? t("bar.onlineNowMore", {
+                  count: onlineUsers.length,
+                  more: onlineUsers.length - visibleUsers.length
+                })
+              : t("bar.onlineNow", { count: onlineUsers.length })}
         </span>
       </div>
 
@@ -460,19 +462,19 @@ export const CloudBar: React.FC<CloudBarProps> = ({
             onClick={run(() => onOpenShareRoom(activeRoomId))}
           >
             <Users size={15} aria-hidden="true" />
-            <span>{isRoomOwner ? "Invite people & manage access" : "Share & see members"}</span>
+            <span>{isRoomOwner ? t("bar.inviteManage") : t("bar.shareMembers")}</span>
           </button>
         )}
 
         <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={handleCopyLink}>
           {copyState === "copied" ? <Check size={15} aria-hidden="true" style={{ color: "#22C55E" }} /> : <Copy size={15} aria-hidden="true" />}
-          <span>{copyState === "copied" ? "Link copied" : "Copy room link (view access)"}</span>
+          <span>{copyState === "copied" ? t("bar.linkCopied") : t("bar.copyRoomLink")}</span>
         </button>
         {copyState === "failed" && (
           <input
             readOnly
             value={roomLink}
-            aria-label="Room link"
+            aria-label={t("bar.roomLink")}
             onFocus={(e) => e.currentTarget.select()}
             autoFocus
             style={{
@@ -492,7 +494,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
         {onOpenUserHub && (
           <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenUserHub)}>
             <FolderKanban size={15} aria-hidden="true" />
-            <span>My rooms</span>
+            <span>{t("bar.myRooms")}</span>
           </button>
         )}
 
@@ -512,7 +514,7 @@ export const CloudBar: React.FC<CloudBarProps> = ({
             }}
           >
             <LogOut size={15} aria-hidden="true" />
-            <span>{confirmLeave ? "Click again to leave this room" : "Leave room"}</span>
+            <span>{confirmLeave ? t("bar.clickAgainLeave") : t("bar.leaveRoom")}</span>
           </button>
         )}
       </div>

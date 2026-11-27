@@ -1,5 +1,6 @@
 import { JanttMeta, TimeScale, LinkRoutingStyle, RowHeightMode } from "../types";
 import { escapeHtml } from "../utils";
+import { formatTimelineLabel } from "../timeline-labels";
 import {
   DAY_WIDTH_MIN,
   DAY_WIDTH_MAX,
@@ -7,7 +8,83 @@ import {
   MAX_ROW_HEIGHT
 } from "../constants";
 
+const TOOLBAR_LABELS = {
+  cascadeReadOnly: "View only: the scheduling rule cannot be changed",
+  cascadeTitle: "Click to toggle auto-cascading dependencies",
+  addTaskTitle: "Add a new task to this schedule",
+  addTask: "Add Task",
+  projectTitle: "Project Schedule",
+  taskCount: "{count} tasks",
+  scales: "Timeline Scale Presets (Day / Week / Month / Quarter / Year)",
+  day: "day",
+  week: "week",
+  month: "month",
+  quarter: "quarter",
+  year: "year",
+  scaleTitle: "Switch to {scale} scale view",
+  density: "Task Row Density (Compact / Default / Spacious / Fit)",
+  compactTitle: "Compact rows (32px)",
+  compact: "Compact",
+  defaultTitle: "Default rows (46px)",
+  default: "Default",
+  spaciousTitle: "Spacious rows (64px)",
+  spacious: "Spacious",
+  fitTitle: "Fit mode: dynamically scale row heights so all tasks fit without scrolling",
+  fit: "Fit",
+  dateFilterTitle: "Filtered to {date} - click to clear filter",
+  clearDate: "Clear date filter",
+  clearFilter: "Clear filter",
+  criticalTitle: "Highlight the critical chain of dependent tasks controlling project duration",
+  critical: "Critical Path ({count})",
+  searchPlaceholder: "Search tasks...",
+  search: "Search tasks",
+  settingsTitle: "Chart Settings (Link routing, auto-cascade engine, baselines)",
+  settings: "Chart Settings",
+  settingsShort: "Settings",
+  data: "Data & Persistence",
+  autosaveTitle: "Configure auto-save cadence and browser storage",
+  autosave: "Auto-Save & Storage Settings",
+  importTitle: "Upload and load a Jantt JSON file",
+  import: "Import JSON",
+  exportJsonTitle: "Download project schedule as JSON",
+  exportJson: "Export JSON",
+  exportCsvTitle: "Download tasks as spreadsheet CSV",
+  exportCsv: "Export CSV",
+  closeSettings: "Close settings",
+  zoomSizing: "Timeline Zoom & Row Sizing",
+  dayWidth: "Day Width",
+  zoomOutTitle: "Zoom out (\u2212)",
+  zoomOut: "Zoom out",
+  zoomInTitle: "Zoom in (+)",
+  zoomIn: "Zoom in",
+  zoomSlider: "Timeline zoom (pixels per day)",
+  rowHeight: "Row Height",
+  rowHeightSlider: "Task row height (pixels)",
+  connectors: "Dependencies & Connectors",
+  routing: "Line Routing",
+  orthogonal: "90\u00b0 Turn",
+  curved: "Curved",
+  direct: "Direct",
+  engine: "Scheduling Engine",
+  cascade: "Auto-Cascade Tasks",
+  cascadeHint: "Downstream tasks shift automatically when predecessor moves",
+  cascadeSwitch: "Toggle Auto-Cascade",
+  baselinesTitle: "Click to toggle baseline comparison bars",
+  baselines: "Show Baselines",
+  baselinesHint: "Display original planned schedule bars beneath active tasks",
+  baselinesSwitch: "Toggle Baselines",
+  rowHeightTitle: "Drag to adjust task row height ({height}px)"
+};
+
+export type ToolbarTranslation = (key: keyof typeof TOOLBAR_LABELS) => string | undefined;
+
+function text(props: ToolbarProps, key: keyof typeof TOOLBAR_LABELS, values?: Record<string, string | number>): string {
+  const label = props.translate?.(key) ?? TOOLBAR_LABELS[key];
+  return values ? formatTimelineLabel(label, values) : label;
+}
+
 export interface ToolbarProps {
+  translate?: ToolbarTranslation;
   meta?: JanttMeta;
   taskCount: number;
   currentScale: TimeScale;
@@ -58,8 +135,8 @@ function syncCascadeSwitch(scope: ParentNode, props: ToolbarProps): void {
   btn.setAttribute("aria-disabled", String(locked));
   row.classList.toggle("is-disabled", locked);
   row.title = locked
-    ? "View only: the scheduling rule cannot be changed"
-    : "Click to toggle auto-cascading dependencies";
+    ? text(props, "cascadeReadOnly")
+    : text(props, "cascadeTitle");
 }
 
 /** Identifies which Data & Persistence actions are available, to rebuild that section on change. */
@@ -73,13 +150,13 @@ function createAddTaskButton(propsRef: ToolbarPropsRef): HTMLButtonElement {
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "jantt-add-task-btn";
-  addBtn.title = "Add a new task to this schedule";
+  addBtn.title = text(propsRef.current, "addTaskTitle");
   addBtn.innerHTML = `
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
       <line x1="12" y1="5" x2="12" y2="19"></line>
       <line x1="5" y1="12" x2="19" y2="12"></line>
     </svg>
-    <span>Add Task</span>
+    <span>${escapeHtml(text(propsRef.current, "addTask"))}</span>
   `;
   addBtn.addEventListener("click", () => propsRef.current.onAddTask?.());
   return addBtn;
@@ -107,9 +184,9 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
 
   const titleBlock = document.createElement("div");
   titleBlock.className = "jantt-title-block";
-  const title = escapeHtml(props.meta?.title || "Project Schedule");
+  const title = escapeHtml(props.meta?.title || text(props, "projectTitle"));
   titleBlock.innerHTML = `
-    <span class="jantt-badge">${props.taskCount} tasks</span>
+    <span class="jantt-badge">${escapeHtml(text(props, "taskCount", { count: props.taskCount }))}</span>
     <span class="jantt-title" style="display: none;">${title}</span>
   `;
   leftZone.appendChild(titleBlock);
@@ -130,14 +207,15 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   // 2a. Timeline Scale Presets Group
   const scaleGroup = document.createElement("div");
   scaleGroup.className = "jantt-scale-group jantt-time-scale-group";
-  scaleGroup.title = "Timeline Scale Presets (Day / Week / Month / Quarter / Year)";
+  scaleGroup.title = text(props, "scales");
 
   (["day", "week", "month", "quarter", "year"] as TimeScale[]).forEach((s) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `jantt-scale-btn ${s === props.currentScale ? "is-active" : ""}`;
-    btn.textContent = s;
-    btn.title = `Switch to ${s} scale view`;
+    btn.dataset.scale = s;
+    btn.textContent = text(props, s);
+    btn.title = text(props, "scaleTitle", { scale: btn.textContent });
     btn.setAttribute("aria-pressed", String(s === props.currentScale));
     btn.addEventListener("click", () => propsRef.current.onScaleChange(s));
     scaleGroup.appendChild(btn);
@@ -147,12 +225,12 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   // 2b. Row Density Presets Group
   const densityGroup = document.createElement("div");
   densityGroup.className = "jantt-scale-group jantt-density-group";
-  densityGroup.title = "Task Row Density (Compact / Default / Spacious / Fit)";
+  densityGroup.title = text(props, "density");
   densityGroup.innerHTML = `
-    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 32 ? "is-active" : ""}" data-val="32" title="Compact rows (32px)">Compact</button>
-    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 46 ? "is-active" : ""}" data-val="46" title="Default rows (46px)">Default</button>
-    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 64 ? "is-active" : ""}" data-val="64" title="Spacious rows (64px)">Spacious</button>
-    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "fit" ? "is-active" : ""}" data-mode="fit" title="Fit mode: dynamically scale row heights so all tasks fit without scrolling">Fit</button>
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 32 ? "is-active" : ""}" data-val="32" title="${escapeHtml(text(props, "compactTitle"))}">${escapeHtml(text(props, "compact"))}</button>
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 46 ? "is-active" : ""}" data-val="46" title="${escapeHtml(text(props, "defaultTitle"))}">${escapeHtml(text(props, "default"))}</button>
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "custom" && props.rowHeight === 64 ? "is-active" : ""}" data-val="64" title="${escapeHtml(text(props, "spaciousTitle"))}">${escapeHtml(text(props, "spacious"))}</button>
+    <button type="button" class="jantt-scale-btn ${props.rowHeightMode === "fit" ? "is-active" : ""}" data-mode="fit" title="${escapeHtml(text(props, "fitTitle"))}">${escapeHtml(text(props, "fit"))}</button>
   `;
 
   densityGroup.querySelectorAll<HTMLButtonElement>(".jantt-scale-btn").forEach((btn) => {
@@ -173,7 +251,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   if (props.selectedDate && props.showDateFilterBadge !== false) {
     const dateFilterBadge = document.createElement("div");
     dateFilterBadge.className = "jantt-date-filter-badge";
-    dateFilterBadge.title = `Filtered to ${props.selectedDate} - click to clear filter`;
+    dateFilterBadge.title = text(props, "dateFilterTitle", { date: props.selectedDate });
     dateFilterBadge.innerHTML = `
       <span class="jantt-date-filter-icon">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -184,7 +262,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         </svg>
       </span>
       <span class="jantt-date-filter-text">${escapeHtml(props.selectedDate)}</span>
-      <button type="button" class="jantt-date-filter-clear" aria-label="Clear date filter" title="Clear filter">
+      <button type="button" class="jantt-date-filter-clear" aria-label="${escapeHtml(text(props, "clearDate"))}" title="${escapeHtml(text(props, "clearFilter"))}">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -207,13 +285,13 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   const critBtn = document.createElement("button");
   critBtn.type = "button";
   critBtn.className = `jantt-critical-btn ${props.showCritical ? "is-active" : ""}`;
-  critBtn.title = "Highlight the critical chain of dependent tasks controlling project duration";
+  critBtn.title = text(props, "criticalTitle");
   critBtn.setAttribute("aria-pressed", String(props.showCritical));
   critBtn.innerHTML = `
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
     </svg>
-    <span>Critical Path (${props.criticalCount})</span>
+    <span>${escapeHtml(text(props, "critical", { count: props.criticalCount }))}</span>
   `;
   critBtn.addEventListener("click", () => propsRef.current.onCriticalToggle());
   rightZone.appendChild(critBtn);
@@ -228,7 +306,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
       </svg>
     </span>
-    <input type="text" class="jantt-search-input" placeholder="Search tasks..." aria-label="Search tasks" value="${escapeHtml(props.searchQuery)}" />
+    <input type="text" class="jantt-search-input" placeholder="${escapeHtml(text(props, "searchPlaceholder"))}" aria-label="${escapeHtml(text(props, "search"))}" value="${escapeHtml(props.searchQuery)}" />
   `;
   const sInput = searchBox.querySelector<HTMLInputElement>(".jantt-search-input")!;
   sInput.addEventListener("input", (e) => {
@@ -244,8 +322,8 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";
   settingsBtn.className = "jantt-settings-btn";
-  settingsBtn.title = "Chart Settings (Link routing, auto-cascade engine, baselines)";
-  settingsBtn.setAttribute("aria-label", "Chart Settings");
+  settingsBtn.title = text(props, "settingsTitle");
+  settingsBtn.setAttribute("aria-label", text(props, "settings"));
   settingsBtn.setAttribute("aria-haspopup", "dialog");
   settingsBtn.setAttribute("aria-controls", popoverId);
   settingsBtn.setAttribute("aria-expanded", "false");
@@ -254,7 +332,7 @@ export function renderToolbar(props: ToolbarProps): HTMLElement {
       <circle cx="12" cy="12" r="3"></circle>
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
     </svg>
-    <span>Settings</span>
+    <span>${escapeHtml(text(props, "settingsShort"))}</span>
   `;
   settingsWrap.appendChild(settingsBtn);
 
@@ -359,9 +437,9 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
 
   // 1. Left Zone
   const titleSpan = toolbar.querySelector<HTMLSpanElement>(".jantt-title");
-  if (titleSpan) titleSpan.textContent = nextProps.meta?.title || "Project Schedule";
+  if (titleSpan) titleSpan.textContent = nextProps.meta?.title || text(nextProps, "projectTitle");
   const badgeSpan = toolbar.querySelector<HTMLSpanElement>(".jantt-badge");
-  if (badgeSpan) badgeSpan.textContent = `${nextProps.taskCount} tasks`;
+  if (badgeSpan) badgeSpan.textContent = text(nextProps, "taskCount", { count: nextProps.taskCount });
 
   // 2. Center Zone
   // 2a. Zoom Slider & Presets
@@ -373,7 +451,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   if (zoomLabel) zoomLabel.textContent = `${Math.round(nextProps.dayWidth)}px`;
 
   toolbar.querySelectorAll<HTMLButtonElement>(".jantt-time-scale-group .jantt-scale-btn, .jantt-zoom-strip .jantt-scale-btn").forEach((btn) => {
-    const isActive = btn.textContent === nextProps.currentScale;
+    const isActive = (btn.dataset.scale ?? btn.textContent) === nextProps.currentScale;
     btn.classList.toggle("is-active", isActive);
     btn.setAttribute("aria-pressed", String(isActive));
   });
@@ -390,7 +468,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
   }
   const rhLabel = toolbar.querySelector<HTMLSpanElement>(".jantt-rowheight-label");
   if (rhLabel) {
-    rhLabel.textContent = nextProps.rowHeightMode === "fit" ? "Fit" : `${nextProps.rowHeight}px`;
+    rhLabel.textContent = nextProps.rowHeightMode === "fit" ? text(nextProps, "fit") : `${nextProps.rowHeight}px`;
   }
 
   toolbar.querySelectorAll<HTMLButtonElement>(".jantt-density-group .jantt-scale-btn, .jantt-rowheight-strip .jantt-scale-btn").forEach((btn) => {
@@ -406,7 +484,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
     critBtn.classList.toggle("is-active", nextProps.showCritical);
     critBtn.setAttribute("aria-pressed", String(nextProps.showCritical));
     const span = critBtn.querySelector("span");
-    if (span) span.textContent = `Critical Path (${nextProps.criticalCount})`;
+    if (span) span.textContent = text(nextProps, "critical", { count: nextProps.criticalCount });
   }
 
   // 2d. Date Filter Badge
@@ -417,7 +495,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
     if (!dateFilterBadge && centerZone) {
       dateFilterBadge = document.createElement("div");
       dateFilterBadge.className = "jantt-date-filter-badge";
-      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} - click to clear filter`;
+      dateFilterBadge.title = text(nextProps, "dateFilterTitle", { date: nextProps.selectedDate! });
       dateFilterBadge.innerHTML = `
         <span class="jantt-date-filter-icon">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -428,7 +506,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
           </svg>
         </span>
         <span class="jantt-date-filter-text">${escapeHtml(nextProps.selectedDate!)}</span>
-        <button type="button" class="jantt-date-filter-clear" aria-label="Clear date filter" title="Clear filter">
+        <button type="button" class="jantt-date-filter-clear" aria-label="${escapeHtml(text(nextProps, "clearDate"))}" title="${escapeHtml(text(nextProps, "clearFilter"))}">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -438,7 +516,7 @@ export function updateToolbar(toolbar: HTMLElement, nextProps: ToolbarProps): vo
       dateFilterBadge.addEventListener("click", () => propsRef?.current.onClearDateFilter?.());
       centerZone.appendChild(dateFilterBadge);
     } else if (dateFilterBadge) {
-      dateFilterBadge.title = `Filtered to ${nextProps.selectedDate} - click to clear filter`;
+      dateFilterBadge.title = text(nextProps, "dateFilterTitle", { date: nextProps.selectedDate! });
       const txt = dateFilterBadge.querySelector<HTMLSpanElement>(".jantt-date-filter-text");
       if (txt) txt.textContent = nextProps.selectedDate!;
     }
@@ -508,47 +586,47 @@ function renderDataSection(propsRef: ToolbarPropsRef, onClose: () => void): HTML
   section.innerHTML = `
     <div class="jantt-settings-divider"></div>
     <div class="jantt-settings-section">
-      <div class="jantt-settings-section-title">Data &amp; Persistence</div>
+      <div class="jantt-settings-section-title">${escapeHtml(text(props, "data"))}</div>
       ${props.onOpenAutoSave ? `
-        <button type="button" class="jantt-settings-action-btn" data-action="open-autosave" title="Configure auto-save cadence and browser storage">
+        <button type="button" class="jantt-settings-action-btn" data-action="open-autosave" title="${escapeHtml(text(props, "autosaveTitle"))}">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
             <polyline points="17 21 17 13 7 13 7 21"></polyline>
             <polyline points="7 3 7 8 15 8"></polyline>
           </svg>
-          <span>Auto-Save &amp; Storage Settings</span>
+          <span>${escapeHtml(text(props, "autosave"))}</span>
         </button>
       ` : ""}
       <div class="jantt-settings-action-grid">
         ${props.onImportJson ? `
-          <button type="button" class="jantt-settings-action-btn" data-action="import-json" title="Upload and load a Jantt JSON file">
+          <button type="button" class="jantt-settings-action-btn" data-action="import-json" title="${escapeHtml(text(props, "importTitle"))}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            <span>Import JSON</span>
+            <span>${escapeHtml(text(props, "import"))}</span>
           </button>
         ` : ""}
         ${props.onExportJson ? `
-          <button type="button" class="jantt-settings-action-btn" data-action="export-json" title="Download project schedule as JSON">
+          <button type="button" class="jantt-settings-action-btn" data-action="export-json" title="${escapeHtml(text(props, "exportJsonTitle"))}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            <span>Export JSON</span>
+            <span>${escapeHtml(text(props, "exportJson"))}</span>
           </button>
         ` : ""}
         ${props.onExportCsv ? `
-          <button type="button" class="jantt-settings-action-btn" data-action="export-csv" title="Download tasks as spreadsheet CSV">
+          <button type="button" class="jantt-settings-action-btn" data-action="export-csv" title="${escapeHtml(text(props, "exportCsvTitle"))}">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
               <line x1="16" y1="13" x2="8" y2="13"></line>
               <line x1="16" y1="17" x2="8" y2="17"></line>
             </svg>
-            <span>Export CSV</span>
+            <span>${escapeHtml(text(props, "exportCsv"))}</span>
           </button>
         ` : ""}
       </div>
@@ -581,7 +659,7 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
   const panel = document.createElement("div");
   panel.className = "jantt-settings-popover";
   panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", "Chart Settings");
+  panel.setAttribute("aria-label", text(propsRef.current, "settings"));
   panel.tabIndex = -1;
 
   const props = propsRef.current;
@@ -593,9 +671,9 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
           <circle cx="12" cy="12" r="3"></circle>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
-        <span>Chart Settings</span>
+        <span>${escapeHtml(text(props, "settings"))}</span>
       </div>
-      <button type="button" class="jantt-settings-close-btn" aria-label="Close settings">
+      <button type="button" class="jantt-settings-close-btn" aria-label="${escapeHtml(text(props, "closeSettings"))}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -605,17 +683,17 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
 
     <!-- Section 0: Timeline Zoom & Row Sizing -->
     <div class="jantt-settings-section">
-      <div class="jantt-settings-section-title">Timeline Zoom &amp; Row Sizing</div>
+      <div class="jantt-settings-section-title">${escapeHtml(text(props, "zoomSizing"))}</div>
       <div class="jantt-settings-row">
-        <label class="jantt-settings-label">Day Width</label>
+        <label class="jantt-settings-label">${escapeHtml(text(props, "dayWidth"))}</label>
         <div class="jantt-settings-slider-wrap">
-          <button type="button" class="jantt-zoom-btn is-zoom-out" aria-label="Zoom out" title="Zoom out (−)">
+          <button type="button" class="jantt-zoom-btn is-zoom-out" aria-label="${escapeHtml(text(props, "zoomOut"))}" title="${escapeHtml(text(props, "zoomOutTitle"))}">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" aria-label="Timeline zoom (pixels per day)" />
-          <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="Zoom in" title="Zoom in (+)">
+          <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" aria-label="${escapeHtml(text(props, "zoomSlider"))}" />
+          <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="${escapeHtml(text(props, "zoomIn"))}" title="${escapeHtml(text(props, "zoomInTitle"))}">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -625,10 +703,10 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
         </div>
       </div>
       <div class="jantt-settings-row">
-        <label class="jantt-settings-label">Row Height</label>
+        <label class="jantt-settings-label">${escapeHtml(text(props, "rowHeight"))}</label>
         <div class="jantt-settings-slider-wrap">
-          <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="Drag to adjust task row height (${props.rowHeight}px)" aria-label="Task row height (pixels)" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
-          <span class="jantt-rowheight-label">${props.rowHeightMode === "fit" ? "Fit" : `${props.rowHeight}px`}</span>
+          <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="${escapeHtml(text(props, "rowHeightTitle", { height: props.rowHeight }))}" aria-label="${escapeHtml(text(props, "rowHeightSlider"))}" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
+          <span class="jantt-rowheight-label">${props.rowHeightMode === "fit" ? escapeHtml(text(props, "fit")) : `${props.rowHeight}px`}</span>
         </div>
       </div>
     </div>
@@ -637,13 +715,13 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
 
     <!-- Section 1: Dependencies & Routing -->
     <div class="jantt-settings-section">
-      <div class="jantt-settings-section-title">Dependencies &amp; Connectors</div>
+      <div class="jantt-settings-section-title">${escapeHtml(text(props, "connectors"))}</div>
       <div class="jantt-settings-row">
-        <label class="jantt-settings-label">Line Routing</label>
+        <label class="jantt-settings-label">${escapeHtml(text(props, "routing"))}</label>
         <div class="jantt-scale-group jantt-routing-group">
-          <button type="button" class="jantt-scale-btn ${props.currentRouting === "orthogonal" ? "is-active" : ""}" data-routing="orthogonal">90° Turn</button>
-          <button type="button" class="jantt-scale-btn ${props.currentRouting === "curved" ? "is-active" : ""}" data-routing="curved">Curved</button>
-          <button type="button" class="jantt-scale-btn ${props.currentRouting === "direct" ? "is-active" : ""}" data-routing="direct">Direct</button>
+          <button type="button" class="jantt-scale-btn ${props.currentRouting === "orthogonal" ? "is-active" : ""}" data-routing="orthogonal">${escapeHtml(text(props, "orthogonal"))}</button>
+          <button type="button" class="jantt-scale-btn ${props.currentRouting === "curved" ? "is-active" : ""}" data-routing="curved">${escapeHtml(text(props, "curved"))}</button>
+          <button type="button" class="jantt-scale-btn ${props.currentRouting === "direct" ? "is-active" : ""}" data-routing="direct">${escapeHtml(text(props, "direct"))}</button>
         </div>
       </div>
     </div>
@@ -652,26 +730,26 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
 
     <!-- Section 2: Engine & Rules -->
     <div class="jantt-settings-section">
-      <div class="jantt-settings-section-title">Scheduling Engine</div>
+      <div class="jantt-settings-section-title">${escapeHtml(text(props, "engine"))}</div>
 
       <!-- Auto-Cascade Toggle -->
-      <div class="jantt-settings-switch-row" data-action="toggle-cascade" title="Click to toggle auto-cascading dependencies">
+      <div class="jantt-settings-switch-row" data-action="toggle-cascade" title="${escapeHtml(text(props, "cascadeTitle"))}">
         <div class="jantt-settings-switch-info">
-          <span class="jantt-settings-switch-label">Auto-Cascade Tasks</span>
-          <span class="jantt-settings-switch-sub">Downstream tasks shift automatically when predecessor moves</span>
+          <span class="jantt-settings-switch-label">${escapeHtml(text(props, "cascade"))}</span>
+          <span class="jantt-settings-switch-sub">${escapeHtml(text(props, "cascadeHint"))}</span>
         </div>
-        <button type="button" class="jantt-toggle-switch ${props.autoCascade ? "is-active" : ""}" role="switch" aria-checked="${props.autoCascade}" data-switch="auto-cascade" aria-label="Toggle Auto-Cascade">
+        <button type="button" class="jantt-toggle-switch ${props.autoCascade ? "is-active" : ""}" role="switch" aria-checked="${props.autoCascade}" data-switch="auto-cascade" aria-label="${escapeHtml(text(props, "cascadeSwitch"))}">
           <span class="jantt-toggle-thumb"></span>
         </button>
       </div>
 
       <!-- Baselines Toggle -->
-      <div class="jantt-settings-switch-row" data-action="toggle-baselines" title="Click to toggle baseline comparison bars">
+      <div class="jantt-settings-switch-row" data-action="toggle-baselines" title="${escapeHtml(text(props, "baselinesTitle"))}">
         <div class="jantt-settings-switch-info">
-          <span class="jantt-settings-switch-label">Show Baselines</span>
-          <span class="jantt-settings-switch-sub">Display original planned schedule bars beneath active tasks</span>
+          <span class="jantt-settings-switch-label">${escapeHtml(text(props, "baselines"))}</span>
+          <span class="jantt-settings-switch-sub">${escapeHtml(text(props, "baselinesHint"))}</span>
         </div>
-        <button type="button" class="jantt-toggle-switch ${props.showBaselines ? "is-active" : ""}" role="switch" aria-checked="${Boolean(props.showBaselines)}" data-switch="baselines" aria-label="Toggle Baselines">
+        <button type="button" class="jantt-toggle-switch ${props.showBaselines ? "is-active" : ""}" role="switch" aria-checked="${Boolean(props.showBaselines)}" data-switch="baselines" aria-label="${escapeHtml(text(props, "baselinesSwitch"))}">
           <span class="jantt-toggle-thumb"></span>
         </button>
       </div>

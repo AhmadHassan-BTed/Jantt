@@ -3,6 +3,7 @@ import { Sparkles, X, Settings, Trash2, ArrowLeft, BookOpen } from "lucide-react
 import type { UseCopilotReturn } from "../../hooks/useCopilot";
 import { useSheetSwipeDismiss } from "../../hooks/useSheetSwipeDismiss";
 import { triggerHaptic } from "../../services/platform";
+import { useI18n } from "../../i18n/I18nProvider";
 import { CopilotMessages } from "./CopilotMessages";
 import { CopilotInput } from "./CopilotInput";
 import { CopilotSetup } from "./CopilotSetup";
@@ -23,6 +24,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
   isMobile,
   onOpenPromptModal
 }) => {
+  const { t } = useI18n();
   const [showSettings, setShowSettings] = useState(false);
   const drawer = React.useRef<HTMLElement>(null);
   React.useEffect(() => {
@@ -78,7 +80,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
         ref={drawer}
         tabIndex={-1}
         role="dialog"
-        aria-label="Jantt AI Copilot"
+        aria-label={t("copilot.title")}
         aria-modal={isMobile || undefined}
       >
         {isMobile && (
@@ -92,15 +94,15 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
               type="button"
               className="copilot-icon-btn"
               onClick={() => setShowSettings(false)}
-              title="Back to conversation"
-              aria-label="Back to conversation"
+              title={t("copilot.backToConversation")}
+              aria-label={t("copilot.backToConversation")}
             >
               <ArrowLeft size={15} />
             </button>
           ) : (
             <div className="copilot-header-brand">
               <Sparkles size={16} className="copilot-sparkle-icon" />
-              <h2>Jantt AI Copilot</h2>
+              <h2>{t("copilot.title")}</h2>
             </div>
           )}
 
@@ -112,8 +114,8 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
                      type="button"
                      className="copilot-icon-btn"
                      onClick={onOpenPromptModal}
-                     title="Prompt reference & JSON schema specification"
-                     aria-label="Prompt reference"
+                     title={t("copilot.promptReferenceTitle")}
+                     aria-label={t("copilot.promptReference")}
                    >
                      <BookOpen size={14} />
                    </button>
@@ -123,8 +125,8 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
                   type="button"
                   className="copilot-icon-btn"
                   onClick={copilot.clearHistory}
-                  title="Clear conversation"
-                  aria-label="Clear conversation"
+                  title={t("copilot.clearConversation")}
+                  aria-label={t("copilot.clearConversation")}
                   disabled={copilot.messages.length === 0}
                 >
                   <Trash2 size={14} />
@@ -133,8 +135,8 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
                   type="button"
                   className="copilot-icon-btn"
                   onClick={() => setShowSettings(true)}
-                  title="Copilot Settings"
-                  aria-label="Copilot Settings"
+                  title={t("copilot.settings")}
+                  aria-label={t("copilot.settings")}
                 >
                   <Settings size={14} />
                 </button>
@@ -144,8 +146,8 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
               type="button"
               className="copilot-icon-btn is-close"
               onClick={onClose}
-              title="Close Copilot (Esc)"
-              aria-label="Close Copilot"
+              title={t("copilot.closeTitle")}
+              aria-label={t("copilot.close")}
             >
               <X size={15} />
             </button>

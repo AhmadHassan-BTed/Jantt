@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../i18n/I18nProvider";
 
 export type JanttLogoVariant = "gradient" | "duotone" | "monochrome" | "outline" | "solid";
 
@@ -28,6 +29,7 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
   className = "",
   style = {}
 }) => {
+  const { t } = useI18n();
   const isOutline = variant === "outline";
   const isMono = variant === "monochrome";
   const isDuo = variant === "duotone";
@@ -107,7 +109,7 @@ export const JanttIcon: React.FC<JanttIconProps> = ({
       className={`jantt-logo-svg jantt-logo-${variant} ${className}`}
       style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }}
       role="img"
-      aria-label="Jantt Logo"
+      aria-label={t("common.logoAria")}
     >
       {!isMono && !isSolid && (
         <defs>

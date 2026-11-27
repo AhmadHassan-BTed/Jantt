@@ -11,12 +11,14 @@ import {
   Activity
 } from "lucide-react";
 import type { EVMAnalysis, CriticalPathResult, JanttData } from "@jantt/core";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { Locale, MessageKey } from "../../i18n";
 
 const DEFAULT_CURRENCY = "USD";
 const formatterCache = new Map<string, Intl.NumberFormat>();
 
-function getMoneyFormatter(currency: string, signed: boolean): Intl.NumberFormat {
-  const key = `${currency}|${signed}`;
+function getMoneyFormatter(currency: string, signed: boolean, locale?: Locale): Intl.NumberFormat {
+  const key = `${locale}|${currency}|${signed}`;
   let formatter = formatterCache.get(key);
   if (!formatter) {
     const options: Intl.NumberFormatOptions = {
@@ -27,9 +29,9 @@ function getMoneyFormatter(currency: string, signed: boolean): Intl.NumberFormat
       ...(signed ? { signDisplay: "exceptZero" as const } : {})
     };
     try {
-      formatter = new Intl.NumberFormat(undefined, options);
+      formatter = new Intl.NumberFormat(locale, options);
     } catch {
-      formatter = new Intl.NumberFormat(undefined, { ...options, currency: DEFAULT_CURRENCY });
+      formatter = new Intl.NumberFormat(locale, { ...options, currency: DEFAULT_CURRENCY });
     }
     formatterCache.set(key, formatter);
   }
@@ -46,15 +48,15 @@ export function getPlanCurrency(data?: Pick<JanttData, "meta"> | null): string {
  * Locale-aware money formatting in the plan currency ("-$1,234", "+€50" when `signed`).
  * Non-finite input (e.g. a cost imported as text) renders as "—" instead of "$NaN".
  */
-export function formatMoney(value: number, currency: string = DEFAULT_CURRENCY, signed = false): string {
+export function formatMoney(value: number, currency: string = DEFAULT_CURRENCY, signed = false, locale?: Locale): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return getMoneyFormatter(currency, signed).format(Math.round(value) || 0);
+  return getMoneyFormatter(currency, signed, locale).format(Math.round(value) || 0);
 }
 
-const PV_BASIS_LABELS: Record<EVMAnalysis["pvBasis"], string> = {
-  baseline: "Planned value follows the task baselines.",
-  mixed: "Planned value follows baselines where set, current dates elsewhere.",
-  current: "Planned value follows current dates (no baseline set)."
+const PV_BASIS_LABELS: Record<EVMAnalysis["pvBasis"], MessageKey> = {
+  baseline: "health.evm.pvBasisBaseline",
+  mixed: "health.evm.pvBasisMixed",
+  current: "health.evm.pvBasisCurrent"
 };
 
 const MUTED = "var(--jantt-text-muted)";
@@ -66,6 +68,7 @@ interface EvmKpiCardsProps {
 }
 
 export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = DEFAULT_CURRENCY }) => {
+  const { t, locale } = useI18n();
   const [showAdvancedEvm, setShowAdvancedEvm] = useState<boolean>(() => {
     const saved = storageService.getItem<{ showAdvancedEvm?: boolean }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
     return Boolean(saved?.showAdvancedEvm);
@@ -96,17 +99,17 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
     storageService.setItem(STORAGE_KEYS.SUMMARY_VIEW_STATE, { ...prev, showAdvancedEvm });
   }, [showAdvancedEvm]);
 
-  const money = (val: number) => formatMoney(val, currency);
-  const signedMoney = (val: number) => formatMoney(val, currency, true);
+  const money = (val: number) => formatMoney(val, currency, false, locale);
+  const signedMoney = (val: number) => formatMoney(val, currency, true, locale);
 
   const hasCostData = evm.costDataAvailable;
   const isActualCostKnown = evm.costCoverage > 0 || evm.ac > 0;
   const isCostMeasured = hasCostData && evm.costCoverage > 0;
   const coveragePercent = Math.round(evm.costCoverage * 100);
-  const costUnavailableText = hasCostData ? "n/a: no actual costs" : "No cost data";
+  const costUnavailableText = hasCostData ? t("health.evm.costUnavailableNa") : t("health.evm.noCostData");
   const costUnavailableHint = hasCostData
-    ? "No budgeted task reports an actualCost, so cost performance cannot be measured."
-    : "No task has an estimatedCost. Add budgets to measure cost performance.";
+    ? t("health.evm.costUnavailableHint1")
+    : t("health.evm.costUnavailableHint2");
 
   const spiColor = evm.spi >= 1.0 ? "var(--jantt-status-good)" : evm.spi >= 0.9 ? "var(--jantt-status-warn)" : "var(--jantt-status-bad)";
   const cpiColor = !isCostMeasured ? MUTED : evm.cpi >= 1.0 ? "var(--jantt-status-good)" : evm.cpi >= 0.9 ? "var(--jantt-status-warn)" : "var(--jantt-status-bad)";
@@ -116,7 +119,7 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
     ? costUnavailableText
     : Number.isFinite(evm.tcpi)
     ? String(evm.tcpi)
-    : "Unachievable within BAC";
+    : t("health.evm.unachievable");
 
   const advancedPanelId = "evm-advanced-panel";
 
@@ -125,7 +128,7 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
       {/* Header with expand/collapse all toggle */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
         <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          Performance Metrics &amp; EVM
+          {t("health.evm.title")}
         </span>
         <button
           type="button"
@@ -141,12 +144,12 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
             cursor: "pointer"
           }}
         >
-          {expandedKeys.size >= 3 ? "Collapse All" : "Expand All"}
+          {expandedKeys.size >= 3 ? t("health.evm.collapseAll") : t("health.evm.expandAll")}
         </button>
       </div>
 
       {/* KPI Accordion List - Compact, space-saving list where each row opens */}
-      <div className="kpi-accordion-list" role="region" aria-label="Project Performance Metrics">
+      <div className="kpi-accordion-list" role="region" aria-label={t("health.evm.metricsAria")}>
         {/* Row 1: Budget & Spend */}
         <div className={`kpi-accordion-item ${expandedKeys.has("budget") ? "is-expanded" : ""}`}>
           <button
@@ -160,14 +163,14 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                 <DollarSign size={16} />
               </div>
               <div className="kpi-accordion-title-wrap">
-                <span className="kpi-accordion-title">Budget &amp; Spend</span>
+                <span className="kpi-accordion-title">{t("health.shared.budgetSpend")}</span>
                 <span className="kpi-accordion-subtitle">
-                  {isActualCostKnown ? `Spent: ${money(evm.ac)} (${spentPercent}%)` : "No actual costs reported"}
+                  {isActualCostKnown ? t("health.shared.spentWithPct", { amount: money(evm.ac), percent: spentPercent }) : t("health.shared.noActualCosts")}
                 </span>
               </div>
             </div>
             <div className="kpi-accordion-trailing">
-              <span className="kpi-accordion-value">{evm.bac > 0 ? money(evm.bac) : "No budget set"}</span>
+              <span className="kpi-accordion-value">{evm.bac > 0 ? money(evm.bac) : t("health.shared.noBudgetSet")}</span>
               <span
                 className="kpi-accordion-badge"
                 style={{
@@ -175,7 +178,7 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                   color: isOverBudget ? "var(--jantt-status-bad)" : "var(--jantt-status-good)"
                 }}
               >
-                {isOverBudget ? "Over Budget" : "On Track"}
+                {isOverBudget ? t("health.shared.overBudget") : t("health.shared.onTrack")}
               </span>
               <ChevronDown size={14} className="kpi-accordion-chevron" />
             </div>
@@ -183,10 +186,10 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           {expandedKeys.has("budget") && (
             <div className="kpi-accordion-body">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                <div><strong>Planned Value (PV):</strong> {hasCostData ? money(evm.pv) : "n/a"}</div>
-                <div><strong>Earned Value (EV):</strong> {hasCostData ? money(evm.ev) : "n/a"}</div>
-                <div><strong>Actual Cost (AC):</strong> {isActualCostKnown ? money(evm.ac) : "n/a"}</div>
-                <div><strong>Cost Variance (CV):</strong> {isCostMeasured ? signedMoney(evm.cv) : "n/a"}</div>
+                <div><strong>{t("health.evm.pvBold")}</strong> {hasCostData ? money(evm.pv) : "n/a"}</div>
+                <div><strong>{t("health.evm.evBold")}</strong> {hasCostData ? money(evm.ev) : "n/a"}</div>
+                <div><strong>{t("health.evm.acBold")}</strong> {isActualCostKnown ? money(evm.ac) : "n/a"}</div>
+                <div><strong>{t("health.evm.cvBold")}</strong> {isCostMeasured ? signedMoney(evm.cv) : "n/a"}</div>
               </div>
               {evm.bac > 0 && (
                 <div style={{ marginTop: "4px" }}>
@@ -200,8 +203,8 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                     />
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "4px" }}>
-                    <span>{spentPercent}% spent of total BAC ({money(evm.bac)})</span>
-                    <span>{isOverBudget ? `Over by ${money(evm.ac - evm.bac)}` : `${money(evm.bac - evm.ac)} remaining`}</span>
+                    <span>{t("health.evm.spentOfBac", { percent: spentPercent, amount: money(evm.bac) })}</span>
+                    <span>{isOverBudget ? t("health.shared.overBy", { amount: money(evm.ac - evm.bac) }) : t("health.evm.remaining", { amount: money(evm.bac - evm.ac) })}</span>
                   </div>
                 </div>
               )}
@@ -222,14 +225,14 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                 <TrendingUp size={16} />
               </div>
               <div className="kpi-accordion-title-wrap">
-                <span className="kpi-accordion-title">Progress &amp; Schedule Pace</span>
+                <span className="kpi-accordion-title">{t("health.evm.progressPace")}</span>
                 <span className="kpi-accordion-subtitle">
-                  {evm.daysRemaining}d to finish · {evm.taskCountCompleted}/{evm.taskCountTotal} tasks done
+                  {t("health.evm.daysToFinish", { days: evm.daysRemaining, done: evm.taskCountCompleted, total: evm.taskCountTotal })}
                 </span>
               </div>
             </div>
             <div className="kpi-accordion-trailing">
-              <span className="kpi-accordion-value">{evm.projectProgressPercent}% (SPI {evm.spi})</span>
+              <span className="kpi-accordion-value">{t("health.evm.progressWithSpi", { percent: evm.projectProgressPercent, spi: evm.spi })}</span>
               <span
                 className="kpi-accordion-badge"
                 style={{
@@ -245,13 +248,13 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           {expandedKeys.has("schedule") && (
             <div className="kpi-accordion-body">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                <div><strong>Schedule Index (SPI):</strong> {evm.spi} (Target: &ge; 1.00)</div>
-                <div><strong>Schedule Variance (SV):</strong> {hasCostData ? signedMoney(evm.sv) : "n/a"}</div>
-                <div><strong>Tasks Completed:</strong> {evm.taskCountCompleted} of {evm.taskCountTotal}</div>
-                <div><strong>Pace Status:</strong> {evm.projectPaceLabel}</div>
+                <div><strong>{t("health.evm.spiBold")}</strong> {evm.spi} {t("health.evm.spiTarget")}</div>
+                <div><strong>{t("health.evm.svBold")}</strong> {hasCostData ? signedMoney(evm.sv) : "n/a"}</div>
+                <div><strong>{t("health.evm.tasksCompletedBold")}</strong> {t("health.evm.completedOf", { done: evm.taskCountCompleted, total: evm.taskCountTotal })}</div>
+                <div><strong>{t("health.evm.paceStatusBold")}</strong> {evm.projectPaceLabel}</div>
               </div>
               <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                {PV_BASIS_LABELS[evm.pvBasis]} {!hasCostData && "Without budgets, SPI and progress are duration-weighted."}
+                {t(PV_BASIS_LABELS[evm.pvBasis])} {!hasCostData && t("health.evm.durationWeightedNote")}
               </div>
             </div>
           )}
@@ -270,14 +273,14 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                 <Activity size={16} />
               </div>
               <div className="kpi-accordion-title-wrap">
-                <span className="kpi-accordion-title">Cost Performance Index (CPI)</span>
+                <span className="kpi-accordion-title">{t("health.evm.cpiTitle")}</span>
                 <span className="kpi-accordion-subtitle">
-                  {isCostMeasured ? `${coveragePercent}% budget coverage` : costUnavailableText}
+                  {isCostMeasured ? t("health.evm.budgetCoverage", { percent: coveragePercent }) : costUnavailableText}
                 </span>
               </div>
             </div>
             <div className="kpi-accordion-trailing">
-              <span className="kpi-accordion-value">CPI: {isCostMeasured ? evm.cpi : "n/a"}</span>
+              <span className="kpi-accordion-value">{t("health.evm.cpiValue", { value: isCostMeasured ? evm.cpi : "n/a" })}</span>
               <span
                 className="kpi-accordion-badge"
                 style={{
@@ -285,7 +288,7 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                   color: isCostMeasured && evm.cpi >= 1.0 ? "var(--jantt-status-good)" : "var(--jantt-status-warn)"
                 }}
               >
-                {isCostMeasured ? (evm.cpi >= 1.0 ? "Efficient" : "Underperforming") : "No Cost Data"}
+                {isCostMeasured ? (evm.cpi >= 1.0 ? t("health.evm.efficient") : t("health.evm.underperforming")) : t("health.evm.noCostDataBadge")}
               </span>
               <ChevronDown size={14} className="kpi-accordion-chevron" />
             </div>
@@ -293,13 +296,13 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           {expandedKeys.has("cost") && (
             <div className="kpi-accordion-body">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                <div><strong>Cost Index (CPI):</strong> {isCostMeasured ? evm.cpi : "n/a"}</div>
-                <div><strong>Cost Variance (CV):</strong> {isCostMeasured ? signedMoney(evm.cv) : "n/a"}</div>
-                <div><strong>TCPI (BAC):</strong> {tcpiText}</div>
-                <div><strong>Critical Ratio (CR):</strong> {isCostMeasured ? evm.criticalRatio : "n/a"}</div>
+                <div><strong>{t("health.evm.cpiBold")}</strong> {isCostMeasured ? evm.cpi : "n/a"}</div>
+                <div><strong>{t("health.evm.cvBold")}</strong> {isCostMeasured ? signedMoney(evm.cv) : "n/a"}</div>
+                <div><strong>{t("health.evm.tcpiBold")}</strong> {tcpiText}</div>
+                <div><strong>{t("health.evm.crBold")}</strong> {isCostMeasured ? evm.criticalRatio : "n/a"}</div>
               </div>
               <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                {isCostMeasured ? "CPI measures the value of work completed against the actual money spent. A CPI >= 1.0 means the project is running efficiently." : costUnavailableHint}
+                {isCostMeasured ? t("health.evm.cpiExplain") : costUnavailableHint}
               </div>
             </div>
           )}
@@ -318,15 +321,15 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                 <Clock size={16} />
               </div>
               <div className="kpi-accordion-title-wrap">
-                <span className="kpi-accordion-title">Critical Path &amp; Slack</span>
+                <span className="kpi-accordion-title">{t("health.evm.criticalPathTitle")}</span>
                 <span className="kpi-accordion-subtitle">
-                  {cpm.nearCriticalTaskIds.size} near-critical tasks (&le;3d buffer)
+                  {t("health.evm.nearCritical", { count: cpm.nearCriticalTaskIds.size })}
                 </span>
               </div>
             </div>
             <div className="kpi-accordion-trailing">
               <span className="kpi-accordion-value" style={{ color: "var(--jantt-status-bad)" }}>
-                {cpm.criticalTaskIds.size} Critical
+                {t("health.evm.criticalCount", { count: cpm.criticalTaskIds.size })}
               </span>
               <span
                 className="kpi-accordion-badge"
@@ -335,7 +338,9 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                   color: cpm.projectTotalFloat < 0 ? "var(--jantt-status-bad)" : "var(--jantt-status-good)"
                 }}
               >
-                {cpm.projectTotalFloat < 0 ? `${Math.abs(cpm.projectTotalFloat)}d past target` : `${cpm.projectTotalFloat}d buffer`}
+                {cpm.projectTotalFloat < 0
+                  ? t("health.shared.floatPastTarget", { days: Math.abs(cpm.projectTotalFloat) })
+                  : t("health.shared.floatBuffer", { days: cpm.projectTotalFloat })}
               </span>
               <ChevronDown size={14} className="kpi-accordion-chevron" />
             </div>
@@ -343,13 +348,13 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           {expandedKeys.has("critical") && (
             <div className="kpi-accordion-body">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                <div><strong>Critical Tasks:</strong> {cpm.criticalTaskIds.size}</div>
-                <div><strong>Near-Critical Tasks:</strong> {cpm.nearCriticalTaskIds.size}</div>
-                <div><strong>Project Total Float:</strong> {cpm.projectTotalFloat} days</div>
-                <div><strong>Forecast Finish:</strong> {cpm.projectEarlyFinish || "-"}</div>
+                <div><strong>{t("health.evm.criticalTasksBold")}</strong> {cpm.criticalTaskIds.size}</div>
+                <div><strong>{t("health.evm.nearCriticalTasksBold")}</strong> {cpm.nearCriticalTaskIds.size}</div>
+                <div><strong>{t("health.evm.projectTotalFloatBold")}</strong> {t("health.shared.daysCount", { count: cpm.projectTotalFloat })}</div>
+                <div><strong>{t("health.evm.forecastFinishBold")}</strong> {cpm.projectEarlyFinish || "-"}</div>
               </div>
               <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                Any delay to a critical task directly pushes out the project completion date. Focus delivery on the critical chain to protect the finish date.
+                {t("health.evm.criticalExplain")}
               </div>
             </div>
           )}
@@ -368,14 +373,14 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                 <Zap size={16} />
               </div>
               <div className="kpi-accordion-title-wrap">
-                <span className="kpi-accordion-title">Health Score &amp; Blockers</span>
+                <span className="kpi-accordion-title">{t("health.evm.healthTitle")}</span>
                 <span className="kpi-accordion-subtitle">
-                  {evm.taskCountBlocked > 0 ? `${evm.taskCountBlocked} task(s) blocked` : "Zero task blockers"}
+                  {evm.taskCountBlocked > 0 ? t("health.evm.tasksBlocked", { count: evm.taskCountBlocked }) : t("health.evm.zeroBlockers")}
                 </span>
               </div>
             </div>
             <div className="kpi-accordion-trailing">
-              <span className="kpi-accordion-value">{evm.healthScore}/100</span>
+              <span className="kpi-accordion-value">{t("health.evm.healthScore", { score: evm.healthScore })}</span>
               <span
                 className="kpi-accordion-badge"
                 style={{
@@ -391,13 +396,13 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           {expandedKeys.has("health") && (
             <div className="kpi-accordion-body">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                <div><strong>Health Score:</strong> {evm.healthScore} / 100</div>
-                <div><strong>Overall Status:</strong> {evm.overallHealth}</div>
-                <div><strong>Blocked Tasks:</strong> {evm.taskCountBlocked}</div>
-                <div><strong>Measured On:</strong> {evm.statusDate}</div>
+                <div><strong>{t("health.evm.healthScoreBold")}</strong> {t("health.evm.healthScoreValue", { score: evm.healthScore })}</div>
+                <div><strong>{t("health.evm.overallStatusBold")}</strong> {evm.overallHealth}</div>
+                <div><strong>{t("health.evm.blockedTasksBold")}</strong> {evm.taskCountBlocked}</div>
+                <div><strong>{t("health.evm.measuredOnBold")}</strong> {evm.statusDate}</div>
               </div>
               <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                Score begins at 100 and drops when SPI or CPI decrease below 1.0 or when open tasks are blocked by unfinished predecessor dependencies.
+                {t("health.evm.healthExplain")}
               </div>
             </div>
           )}
@@ -429,7 +434,7 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           }}
         >
           <Sliders size={12} />
-          <span>{showAdvancedEvm ? "Hide Detailed EVM Table" : "Show Detailed EVM Table"}</span>
+          <span>{showAdvancedEvm ? t("health.evm.hideAdvanced") : t("health.evm.showAdvanced")}</span>
         </button>
       </div>
 
@@ -450,12 +455,12 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
             <div>
               <h4 style={{ fontSize: "13px", fontWeight: 700, margin: 0, color: "var(--jantt-text)" }}>
-                Earned Value Full Analysis
+                {t("health.evm.fullAnalysis")}
               </h4>
               <p style={{ fontSize: "11px", color: "var(--jantt-text-muted)", margin: "2px 0 0 0" }}>
-                Cost and schedule performance indices with a completion forecast, measured on {evm.statusDate}.{" "}
-                {PV_BASIS_LABELS[evm.pvBasis]}
-                {!hasCostData && " Without budgets, SPI and progress are duration-weighted."}
+                {t("health.evm.fullAnalysisDesc", { date: evm.statusDate })}{" "}
+                {t(PV_BASIS_LABELS[evm.pvBasis])}
+                {!hasCostData && <> {t("health.evm.durationWeightedNote")}</>}
               </p>
             </div>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -470,7 +475,7 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                   border: `1px solid color-mix(in srgb, ${spiColor} 25%, transparent)`
                 }}
               >
-                SPI: {evm.spi} ({hasCostData ? `SV ${signedMoney(evm.sv)}` : "duration-weighted"})
+                {t("health.evm.spiChip", { spi: evm.spi, detail: hasCostData ? t("health.evm.svValue", { amount: signedMoney(evm.sv) }) : t("health.evm.durationWeighted") })}
               </span>
               <span
                 style={{
@@ -484,11 +489,12 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                 }}
               >
                 {isCostMeasured ? (
-                  <span title={coveragePercent < 100 ? `Measured on the tasks that report an actualCost (${coveragePercent}% of the budget)` : undefined}>
-                    CPI: {evm.cpi} (CV {signedMoney(evm.cv)}){coveragePercent < 100 && ` · based on ${coveragePercent}% of budget`}
+                  <span title={coveragePercent < 100 ? t("health.evm.coverageTitle", { percent: coveragePercent }) : undefined}>
+                    {t("health.evm.cpiChip", { cpi: evm.cpi, cv: signedMoney(evm.cv) })}
+                    {coveragePercent < 100 && <>{" "}{t("health.evm.basedOnBudget", { percent: coveragePercent })}</>}
                   </span>
                 ) : (
-                  <span title={costUnavailableHint}>CPI: {costUnavailableText}</span>
+                  <span title={costUnavailableHint}>{t("health.evm.cpiUnavailableChip", { text: costUnavailableText })}</span>
                 )}
               </span>
             </div>
@@ -497,31 +503,31 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
           {/* EVM Metric Cards Grid */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
             <div style={{ padding: "10px", borderRadius: "6px", background: "var(--jantt-bg)", border: "1px solid var(--jantt-border)" }}>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Planned Value (PV)</div>
-              <div style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px" }}>{hasCostData ? money(evm.pv) : "No cost data"}</div>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>Scheduled work budget</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>{t("health.evm.cardPv")}</div>
+              <div style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px" }}>{hasCostData ? money(evm.pv) : t("health.evm.noCostData")}</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>{t("health.evm.cardPvSub")}</div>
             </div>
 
             <div style={{ padding: "10px", borderRadius: "6px", background: "var(--jantt-bg)", border: "1px solid var(--jantt-border)" }}>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Earned Value (EV)</div>
-              <div style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px", color: hasCostData ? spiColor : MUTED }}>{hasCostData ? money(evm.ev) : "No cost data"}</div>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>Value of completed work</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>{t("health.evm.cardEv")}</div>
+              <div style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px", color: hasCostData ? spiColor : MUTED }}>{hasCostData ? money(evm.ev) : t("health.evm.noCostData")}</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>{t("health.evm.cardEvSub")}</div>
             </div>
 
             <div style={{ padding: "10px", borderRadius: "6px", background: "var(--jantt-bg)", border: "1px solid var(--jantt-border)" }}>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Actual Cost (AC)</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>{t("health.evm.cardAc")}</div>
               <div style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px", color: isOverBudget ? "var(--jantt-status-bad)" : "inherit" }}>{isActualCostKnown ? money(evm.ac) : "n/a"}</div>
               <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
                 {!isActualCostKnown
-                  ? "No task reports actual cost"
+                  ? t("health.evm.noActualReported")
                   : isCostMeasured && coveragePercent < 100
-                  ? `Reported on ${coveragePercent}% of budget`
-                  : "Actual money spent"}
+                  ? t("health.evm.reportedOnBudget", { percent: coveragePercent })
+                  : t("health.evm.cardAcSub")}
               </div>
             </div>
 
             <div style={{ padding: "10px", borderRadius: "6px", background: "var(--jantt-bg)", border: "1px solid var(--jantt-border)" }}>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Estimate at Finish (EAC)</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>{t("health.evm.cardEac")}</div>
               <div
                 style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px", color: isCostMeasured && evm.vac < 0 ? "var(--jantt-status-bad)" : "inherit" }}
                 title={isCostMeasured ? undefined : costUnavailableHint}
@@ -529,27 +535,27 @@ export const EvmKpiCards: React.FC<EvmKpiCardsProps> = ({ evm, cpm, currency = D
                 {isCostMeasured ? money(evm.eac) : costUnavailableText}
               </div>
               <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                {isCostMeasured ? `VAC: ${signedMoney(evm.vac)}` : "VAC: n/a"}
+                {isCostMeasured ? t("health.evm.vacValue", { amount: signedMoney(evm.vac) }) : t("health.evm.vacNa")}
               </div>
             </div>
 
             <div style={{ padding: "10px", borderRadius: "6px", background: "var(--jantt-bg)", border: "1px solid var(--jantt-border)" }}>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>To-Complete Index (TCPI)</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>{t("health.evm.cardTcpi")}</div>
               <div
                 style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px", color: isCostMeasured && !Number.isFinite(evm.tcpi) ? "var(--jantt-status-bad)" : "inherit" }}
                 title={isCostMeasured ? undefined : costUnavailableHint}
               >
                 {tcpiText}
               </div>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>Efficiency needed to stay on budget</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>{t("health.evm.tcpiSub")}</div>
             </div>
 
             <div style={{ padding: "10px", borderRadius: "6px", background: "var(--jantt-bg)", border: "1px solid var(--jantt-border)" }}>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Critical Ratio (CR)</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", textTransform: "uppercase", fontWeight: 600 }}>{t("health.evm.cardCr")}</div>
               <div style={{ fontSize: "14px", fontWeight: 700, fontFamily: "var(--jantt-font-mono)", marginTop: "4px" }} title={isCostMeasured ? undefined : costUnavailableHint}>
                 {isCostMeasured ? evm.criticalRatio : costUnavailableText}
               </div>
-              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>SPI x CPI composite</div>
+              <div style={{ fontSize: "10px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>{t("health.evm.crSub")}</div>
             </div>
           </div>
         </div>

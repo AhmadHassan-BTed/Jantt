@@ -12,7 +12,8 @@ import {
   JanttLayoutResult,
   TimeScale,
   LinkRoutingStyle,
-  CriticalPathResult
+  CriticalPathResult,
+  TimelineLabels
 } from "./types";
 import {
   addDays,
@@ -28,6 +29,7 @@ import {
 import { calculateCriticalPath } from "./resolver";
 import { getTaskDependencyRelations } from "./dependencies";
 import { clampDayWidth, getTaskDisplayName, sanitizeCssColor } from "./utils";
+import { DEFAULT_TIMELINE_LABELS, formatTimelineLabel, resolveTimelineLabels } from "./timeline-labels";
 import {
   DEFAULT_CATEGORY,
   DEFAULT_GAP_DAYS,
@@ -198,8 +200,10 @@ const DEFAULT_VIEWPORT: Required<Omit<ViewportOptions, "columns" | "currentTime"
  */
 export function layout(
   data: JanttData,
-  viewportOptions: ViewportOptions = {}
+  viewportOptions: ViewportOptions = {},
+  labelOverrides?: Partial<TimelineLabels>
 ): JanttLayoutResult {
+  const labels = resolveTimelineLabels(labelOverrides);
   const tasks = (data.tasks || []).filter((t) => !t._deleted);
   const categories = data.categories || {};
 
@@ -495,11 +499,10 @@ export function layout(
 
     const dayNumber = dObj.getUTCDate();
     const dayOfWeek = dObj.getUTCDay();
-    const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
     days.push({
       label: String(dayNumber).padStart(2, "0"),
-      dayName: dayNames[dayOfWeek],
+      dayName: labels.daysShort[dayOfWeek] ?? DEFAULT_TIMELINE_LABELS.daysShort[dayOfWeek],
       dateStr: dStr,
       dayOfMonth: dayNumber,
       dayOfWeek,
@@ -536,19 +539,18 @@ export function layout(
       }
       currentMonthKey = monthKey;
       currentMonthStartX = dayX;
-      const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-      ];
-      const mName = monthNames[dObj.getUTCMonth()];
-      currentMonthLabel = spansMultipleYears ? mName : `${mName} ${yNum}`;
+      const mName = labels.monthsLong[dObj.getUTCMonth()] ?? DEFAULT_TIMELINE_LABELS.monthsLong[dObj.getUTCMonth()];
+      currentMonthLabel = spansMultipleYears
+        ? mName
+        : formatTimelineLabel(labels.monthYear, { month: mName, year: yNum });
     }
 
     // Week tier tracking
     if (dayOfWeek === 1 || i === 0) {
       if (currentWeekNum !== -1) {
         weeks.push({
-          label: `Wk ${currentWeekNum}`,
+          label: formatTimelineLabel(labels.week, { week: currentWeekNum }),
+          week: currentWeekNum,
           x: currentWeekStartX,
           width: dayX - currentWeekStartX
         });
@@ -578,7 +580,8 @@ export function layout(
 
   if (currentWeekNum !== -1) {
     weeks.push({
-      label: `Wk ${currentWeekNum}`,
+      label: formatTimelineLabel(labels.week, { week: currentWeekNum }),
+      week: currentWeekNum,
       x: currentWeekStartX,
       width: Math.max(gridTotalWidth - currentWeekStartX, 0)
     });

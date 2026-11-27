@@ -13,7 +13,9 @@ import {
   computeVerticalVirtualWindow,
   computeHorizontalVirtualWindow,
   getTaskDependencyRelations,
-  isValidISODate
+  isValidISODate,
+  getTimelineLocaleOptions,
+  formatTimelineLabel
 } from "@jantt/core";
 import { SpatialGanttGrid, type HitTestResult } from "./spatial-grid.js";
 
@@ -29,6 +31,8 @@ export interface CanvasColorConfig {
 }
 
 export interface CanvasRendererOptions {
+  /** Built-in language for the timeline header. */
+  locale?: string;
   rowHeight?: number;
   dayWidth?: number;
   headerHeight?: number;
@@ -36,6 +40,12 @@ export interface CanvasRendererOptions {
   /** Base color preset; `colors` overrides individual entries ("custom" uses the dark preset as base). */
   theme?: "swiss-dark" | "swiss-light" | "custom";
   colors?: Partial<CanvasColorConfig>;
+  /** Month tier labels, January first. Defaults to English short names. */
+  monthLabels?: string[];
+  /** Quarter tier labels, Q1 first. Defaults to "Q1".."Q4". */
+  quarterLabels?: string[];
+  /** Month + year template, e.g. "{month} {year}" or "{year}年{month}". */
+  monthYearTemplate?: string;
 }
 
 export interface ViewportState {
@@ -76,6 +86,7 @@ const DAY_MS = 86400000;
 const DEFAULT_START_DAY = Date.UTC(2026, 0, 1) / DAY_MS;
 const DEFAULT_END_DAY = Date.UTC(2026, 11, 31) / DAY_MS;
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const QUARTER_LABELS = ["Q1", "Q2", "Q3", "Q4"];
 const LABEL_FONT = "12px sans-serif";
 const GROUP_FONT = "bold 12px sans-serif";
 const MONTH_FONT = "600 11px sans-serif";
@@ -98,6 +109,10 @@ export class CanvasTimelineRenderer {
   private headerHeight: number;
   private showCriticalPath: boolean;
   private theme: string;
+  private headerOverrides: Pick<CanvasRendererOptions, "locale" | "monthLabels" | "quarterLabels" | "monthYearTemplate"> = {};
+  private monthLabels: string[] = MONTH_LABELS;
+  private quarterLabels: string[] = QUARTER_LABELS;
+  private monthYearTemplate = "{month} {year}";
   private colorOverrides: Partial<CanvasColorConfig>;
   private colors: CanvasColorConfig;
   private spatialGrid: SpatialGanttGrid;
@@ -130,6 +145,7 @@ export class CanvasTimelineRenderer {
     this.showCriticalPath = options.showCriticalPath ?? true;
     this.theme = options.theme || "swiss-dark";
     this.colorOverrides = { ...(options.colors || {}) };
+    this.updateHeaderLabels(options);
     this.colors = this.resolveColors();
 
     this.indexPlan();
@@ -155,12 +171,29 @@ export class CanvasTimelineRenderer {
     if (options.headerHeight !== undefined && options.headerHeight >= 0) this.headerHeight = options.headerHeight;
     if (options.showCriticalPath !== undefined) this.showCriticalPath = options.showCriticalPath;
     if (options.theme !== undefined) this.theme = options.theme;
+    this.updateHeaderLabels(options);
     if (options.colors) this.colorOverrides = { ...this.colorOverrides, ...options.colors };
     if (options.theme !== undefined || options.colors) {
       this.colors = this.resolveColors();
       this.labelColorCache.clear(); // unparseable bar colors fall back to the theme text color
     }
     this.spatialGrid.update(this.rows, this.timelineStart, this.rowHeight, this.dayWidth);
+  }
+
+  private updateHeaderLabels(options: CanvasRendererOptions) {
+    const overrides = this.headerOverrides;
+    if ("locale" in options) overrides.locale = options.locale;
+    if (options.monthLabels?.length === 12) overrides.monthLabels = options.monthLabels;
+    if (options.quarterLabels?.length === 4) overrides.quarterLabels = options.quarterLabels;
+    if (options.monthYearTemplate) overrides.monthYearTemplate = options.monthYearTemplate;
+
+    const labels = getTimelineLocaleOptions(overrides.locale).labels;
+    const quarterTemplate = labels?.quarter;
+    this.monthLabels = overrides.monthLabels ?? labels?.monthsShort ?? MONTH_LABELS;
+    this.quarterLabels = overrides.quarterLabels ?? (quarterTemplate
+      ? [1, 2, 3, 4].map(quarter => formatTimelineLabel(quarterTemplate, { quarter }))
+      : QUARTER_LABELS);
+    this.monthYearTemplate = overrides.monthYearTemplate ?? labels?.monthYear ?? "{month} {year}";
   }
 
   private resolveColors(): CanvasColorConfig {
@@ -650,7 +683,12 @@ export class CanvasTimelineRenderer {
           ctx.fillText(String(year), Math.min(Math.max(scrollX, x) + 6, end - 32), tierY / 2 + 1);
           lastYear = year;
         }
-        ctx.fillText(`Q${month / 3 + 1}`, Math.min(Math.max(x, scrollX) + 6, next - 20), tierY * 1.5);
+        const text = this.quarterLabels[month / 3] ?? QUARTER_LABELS[month / 3];
+        const textWidth = ctx.measureText(text).width;
+        if (next - x >= textWidth + 12) {
+          const textX = Math.min(Math.max(x, scrollX) + 6, next - textWidth - 6);
+          ctx.fillText(text, textX, tierY * 1.5);
+        }
         ctx.moveTo(x, month === 0 ? 0 : tierY);
         ctx.lineTo(x, headerHeight);
         month += 3;
@@ -665,7 +703,8 @@ export class CanvasTimelineRenderer {
       if (monthStart > lastVisible) break;
       const nextMonthX = (Date.UTC(year, month + 1, 1) / DAY_MS - this.timelineStartDay) * dayWidth;
       const monthX = monthStart * dayWidth;
-      const text = `${MONTH_LABELS[month]} ${year}`;
+      const monthName = this.monthLabels[month] ?? MONTH_LABELS[month];
+      const text = this.monthYearTemplate.replace("{month}", monthName).replace("{year}", String(year));
       const textWidth = ctx.measureText(text).width;
       const pinned = monthX < scrollX;
       if (pinned || nextMonthX - monthX >= textWidth + 12) {

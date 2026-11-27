@@ -491,6 +491,22 @@ undoManager.undo();
 
 ---
 
+## Chart language in integrations
+
+Pass `en` or `zh-CN` to use the same language as your host application. English is the default. Language settings apply to the chart interface and leave the plan data as supplied.
+
+| Integration | Set the chart language |
+| --- | --- |
+| React | `<Jantt data={plan} locale={appLocale} />` |
+| Vue | `<Jantt :data="plan" :locale="appLocale" />` |
+| Svelte | `<div use:janttAction={{ data: plan, options: { locale: appLocale } }} />` |
+| Web Component | `<jantt-timeline locale="zh-CN"></jantt-timeline>` or `element.locale = appLocale` |
+| Standalone script | `Jantt.mount("#chart", plan, { locale: "zh-CN" })` |
+| Core DOM renderer | `renderJantt(element, plan, { locale: "zh-CN" })` |
+| Canvas renderer | `new CanvasTimelineRenderer(plan, { locale: "zh-CN" })` |
+| Python, Jupyter, Streamlit | `jantt.to_html(plan, locale="zh-CN")`, `jantt.show(plan, locale="zh-CN")`, or `jantt.streamlit(plan, locale="zh-CN")` |
+| CLI viewer | `jantt open ./plan.json --locale zh-CN` |
+
 ## AI Prompting & JSON Schema Reference
 
 Prefer generating plans externally with ChatGPT, Claude, Gemini, Cursor, or an autonomous pipeline? Hand any model the formal schema contract ([`schema/jantt.schema.json`](./schema/jantt.schema.json) · [JSON Cheatsheet](./docs/JANTT_JSON_CHEATSHEET.md)):

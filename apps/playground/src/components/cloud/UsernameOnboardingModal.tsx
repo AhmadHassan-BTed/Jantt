@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useId } from "react";
 import { UserCheck, Check, AlertCircle, Loader2, Sparkles, LogOut } from "lucide-react";
 import { checkUsernameAvailable, normalizeUsername, signOutUser } from "../../firebase";
+import { useI18n } from "../../i18n/I18nProvider";
 import type { User as FirebaseUser } from "firebase/auth";
 
 const FOCUSABLE_SELECTOR =
@@ -26,6 +27,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
   onClaimUsername,
   onSignOut
 }) => {
+  const { t } = useI18n();
   const [usernameInput, setUsernameInput] = useState("");
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
@@ -73,7 +75,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
       } catch {
         if (requestId !== checkIdRef.current) return;
         setIsAvailable(false);
-        setErrorMessage("Couldn't check availability. Please try again.");
+        setErrorMessage(t("verify.checkFailed"));
       } finally {
         if (requestId === checkIdRef.current) setIsChecking(false);
       }
@@ -125,7 +127,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
       await onClaimUsername(usernameInput);
     } catch (err: any) {
       setIsAvailable(false);
-      setErrorMessage(err?.message || "Could not claim username. Please try again.");
+      setErrorMessage(err?.message || t("verify.claimFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -136,7 +138,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
     try {
       await (onSignOut ? onSignOut() : signOutUser());
     } catch {
-      setErrorMessage("Sign-out failed. Please try again.");
+      setErrorMessage(t("verify.signOutFailed"));
     } finally {
       setIsSigningOut(false);
     }
@@ -173,10 +175,10 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
         </div>
 
         <h3 id={titleId} style={{ margin: "0 0 6px 0", fontSize: "1.3rem", fontWeight: 700, color: "var(--jantt-text)" }}>
-          Choose Your Unique Username
+          {t("verify.chooseUsername")}
         </h3>
         <p id={descriptionId} style={{ margin: "0 0 20px 0", fontSize: "0.86rem", color: "var(--jantt-muted)", lineHeight: 1.4 }}>
-          Welcome to Jantt Cloud! Teammates will use your handle to invite you to collaboration rooms and share project plans.
+          {t("verify.welcome")}
         </p>
 
         {currentUser.photoURL && (
@@ -204,7 +206,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
                 marginBottom: "6px"
               }}
             >
-              Username
+              {t("verify.username")}
             </label>
             <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
               <span
@@ -229,7 +231,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
                 autoCapitalize="none"
                 spellCheck={false}
                 maxLength={MAX_INPUT_LENGTH}
-                placeholder="username"
+                placeholder={t("verify.usernamePlaceholder")}
                 value={usernameInput}
                 aria-invalid={isAvailable === false}
                 aria-describedby={statusId}
@@ -264,10 +266,10 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
             aria-live="polite"
             style={{ minHeight: "22px", marginBottom: "16px", textAlign: "left", fontSize: "0.8rem" }}
           >
-            {isChecking && <span style={{ color: "var(--jantt-muted)" }}>Checking availability...</span>}
+            {isChecking && <span style={{ color: "var(--jantt-muted)" }}>{t("verify.checking")}</span>}
             {!isChecking && isAvailable === true && (
               <span style={{ color: "#34D399", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
-                <Check size={14} aria-hidden="true" /> @{handle} is available!
+                <Check size={14} aria-hidden="true" /> {t("verify.available", { handle })}
               </span>
             )}
             {!isChecking && isAvailable === false && errorMessage && (
@@ -294,11 +296,11 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={16} className="spin-icon" aria-hidden="true" /> Claiming Handle...
+                <Loader2 size={16} className="spin-icon" aria-hidden="true" /> {t("verify.claiming")}
               </>
             ) : (
               <>
-                <UserCheck size={16} aria-hidden="true" /> Claim @{handle || "handle"} & Start
+                <UserCheck size={16} aria-hidden="true" /> {t("verify.claim", { handle: handle || t("verify.handlePlaceholder") })}
               </>
             )}
           </button>
@@ -320,7 +322,7 @@ export const UsernameOnboardingModal: React.FC<UsernameOnboardingModalProps> = (
             gap: "6px"
           }}
         >
-          <LogOut size={14} aria-hidden="true" /> {isSigningOut ? "Signing out..." : "Sign out and keep working locally"}
+          <LogOut size={14} aria-hidden="true" /> {isSigningOut ? t("verify.signingOut") : t("verify.signOutLocally")}
         </button>
       </div>
     </div>

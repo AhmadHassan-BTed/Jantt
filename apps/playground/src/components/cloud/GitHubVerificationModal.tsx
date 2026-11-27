@@ -14,13 +14,13 @@ import {
   Check
 } from "lucide-react";
 import { ALL_TARGET_REPOS, type VerificationStatus, type RepoItem } from "../../firebase";
+import { useI18n } from "../../i18n/I18nProvider";
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 /** GitHub allows 60 unauthenticated / 5,000 token requests per hour; one check costs a few. */
 const POLL_INTERVAL_MS = 45000;
 const RECHECK_DELAY_MS = 1500;
-const POPUP_BLOCKED_NOTICE = "Your browser blocked the new tab. Use the GitHub links in this list instead.";
 
 /** Checks report failures through `verificationStatus.error`; a rejection is unexpected. */
 function warnVerifyFailure(err: unknown): void {
@@ -60,6 +60,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
   onContinue,
   githubUsername
 }) => {
+  const { t } = useI18n();
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [justOpenedRepo, setJustOpenedRepo] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -145,7 +146,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
 
   const scheduleRecheck = (then?: () => void) => {
     const id = window.setTimeout(() => {
-      timersRef.current = timersRef.current.filter((t) => t !== id);
+      timersRef.current = timersRef.current.filter((timer) => timer !== id);
       then?.();
       onVerifyRef.current().catch(warnVerifyFailure);
     }, RECHECK_DELAY_MS);
@@ -155,7 +156,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
   const handleManualFollowCreator = async () => {
     const opened = await onFollowCreator();
     setActionNotice(
-      opened ? "Opened @AhmadHassan-BTed on GitHub. Click Follow there, then come back here." : POPUP_BLOCKED_NOTICE
+      opened ? t("verify.openedCreator") : t("verify.popupBlocked")
     );
     if (opened) scheduleRecheck();
   };
@@ -166,8 +167,8 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
       : window.open("https://github.com/Fractal-Compute-Orchestrations", "_blank", "noopener,noreferrer") !== null;
     setActionNotice(
       opened
-        ? "Opened Fractal-Compute-Orchestrations on GitHub. Click Follow there, then come back here."
-        : POPUP_BLOCKED_NOTICE
+        ? t("verify.openedOrg")
+        : t("verify.popupBlocked")
     );
     if (opened) scheduleRecheck();
   };
@@ -175,11 +176,11 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
   const handleManualStarRepo = async (repo: RepoItem) => {
     const opened = await onStarRepo(repo.fullName);
     if (!opened) {
-      setActionNotice(POPUP_BLOCKED_NOTICE);
+      setActionNotice(t("verify.popupBlocked"));
       return;
     }
     setJustOpenedRepo(repo.fullName);
-    setActionNotice(`Opened ${repo.name || repo.fullName} on GitHub. Click Star there, then come back here.`);
+    setActionNotice(t("verify.openedRepo", { repo: repo.name || repo.fullName }));
     scheduleRecheck(() => setJustOpenedRepo(null));
   };
 
@@ -188,14 +189,14 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
     if (!next) return;
     const { success } = await onStarAll();
     if (!success) {
-      setActionNotice(POPUP_BLOCKED_NOTICE);
+      setActionNotice(t("verify.popupBlocked"));
       return;
     }
     const remaining = missingRepos.length - 1;
     setActionNotice(
-      `Opened ${next.name || next.fullName} on GitHub. Star it, then come back${
-        remaining > 0 ? ` and open the next one (${remaining} left)` : ""
-      }.`
+      remaining > 0
+        ? t("verify.openedNextRepoRemaining", { repo: next.name || next.fullName, count: remaining })
+        : t("verify.openedNextRepo", { repo: next.name || next.fullName })
     );
     scheduleRecheck();
   };
@@ -264,20 +265,20 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             </div>
             <div>
               <h2 id={titleId} style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: "#f8fafc" }}>
-                {isVerified ? "Cloud Collaboration Unlocked" : "Support Creator & Unlock Cloud"}
+                {isVerified ? t("verify.unlockedTitle") : t("verify.title")}
               </h2>
               <p id={descriptionId} style={{ margin: "2px 0 0 0", fontSize: "0.82rem", color: "#94a3b8" }}>
                 {githubUsername
-                  ? `Checking GitHub account @${githubUsername}`
-                  : "Star repositories & follow creator directly on GitHub"}
+                  ? t("verify.checkingAccount", { username: githubUsername })
+                  : t("verify.subtitle")}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={close}
-            aria-label="Close"
-            title="Close"
+            aria-label={t("common.close")}
+            title={t("common.close")}
             style={{
               background: "transparent",
               border: "none",
@@ -308,7 +309,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             }}
           >
             <Info size={15} style={{ flexShrink: 0, marginTop: "1px" }} aria-hidden="true" />
-            <span>Couldn&apos;t check your GitHub status: {verificationError}</span>
+            <span>{t("verify.statusError", { error: verificationError })}</span>
           </div>
         )}
 
@@ -329,10 +330,10 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             <CheckCircle2 size={22} color="#22c55e" style={{ flexShrink: 0, marginTop: "2px" }} />
             <div>
               <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "#22c55e", marginBottom: "4px" }}>
-                Verification Complete!
+                {t("verify.completeTitle")}
               </div>
               <p style={{ margin: 0, fontSize: "0.82rem", color: "#cbd5e1", lineHeight: 1.45 }}>
-                Thank you for supporting Jantt and the open-source suite! Your account is verified and cloud rooms are fully enabled.
+                {t("verify.completeBody")}
               </p>
             </div>
           </div>
@@ -349,10 +350,10 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px", color: "#38bdf8", fontWeight: 600, fontSize: "0.86rem" }}>
               <Info size={16} />
-              <span>Manual GitHub Star &amp; Follow Flow</span>
+              <span>{t("verify.manualTitle")}</span>
             </div>
             <p style={{ margin: 0, fontSize: "0.81rem", color: "#cbd5e1", lineHeight: 1.45 }}>
-              To ensure 100% compliance with GitHub&apos;s policies and protect your account, all starring and following is done <strong>manually by you on GitHub</strong>. Click the buttons below to open each page, click Star / Follow on GitHub, and return here. This page updates automatically!
+              {t("verify.manualBodyBefore")}<strong>{t("verify.manualBodyStrong")}</strong>{t("verify.manualBodyAfter")}
             </p>
           </div>
         )}
@@ -376,11 +377,15 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               marginBottom: "8px"
             }}
           >
-            <span style={{ color: "#cbd5e1" }}>Verification Progress</span>
+            <span style={{ color: "#cbd5e1" }}>{t("verify.progress")}</span>
             <span style={{ color: isVerified ? "#22c55e" : "#38bdf8" }}>
               {isVerified
-                ? "100% Verified (Cloud Access Granted)"
-                : `${isUserFollowed ? "Creator Followed" : "Follow Pending"} • ${starredCount}/${totalRepos} Repos Starred`}
+                ? t("verify.progressVerified")
+                : t("verify.progressLine", {
+                    follow: isUserFollowed ? t("verify.progressFollowed") : t("verify.progressFollowPending"),
+                    starred: starredCount,
+                    total: totalRepos
+                  })}
             </span>
           </div>
           <div
@@ -431,7 +436,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             <button
               type="button"
               onClick={() => setActionNotice(null)}
-              aria-label="Dismiss notice"
+              aria-label={t("verify.dismissNotice")}
               style={{
                 background: "transparent",
                 border: "none",
@@ -467,7 +472,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               )}
               <div>
                 <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f8fafc" }}>
-                  Follow Creator:{" "}
+                  {t("verify.followCreator")}{" "}
                   <a
                     href="https://github.com/AhmadHassan-BTed"
                     target="_blank"
@@ -478,7 +483,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                   </a>
                 </div>
                 <div style={{ fontSize: "0.74rem", color: "#94a3b8" }}>
-                  {isUserFollowed ? "You are following the creator" : "Required for cloud access"}
+                  {isUserFollowed ? t("verify.followingCreator") : t("verify.requiredForCloud")}
                 </div>
               </div>
             </div>
@@ -498,7 +503,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 }}
               >
                 <Check size={12} />
-                Following
+                {t("verify.following")}
               </span>
             ) : (
               <button
@@ -519,7 +524,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 }}
               >
                 <Heart size={12} />
-                <span>Follow on GitHub ↗</span>
+                <span>{t("verify.followOnGithub")}</span>
               </button>
             )}
           </div>
@@ -544,7 +549,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               )}
               <div>
                 <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f8fafc" }}>
-                  Follow Organization:{" "}
+                  {t("verify.followOrg")}{" "}
                   <a
                     href="https://github.com/Fractal-Compute-Orchestrations"
                     target="_blank"
@@ -555,7 +560,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                   </a>
                 </div>
                 <div style={{ fontSize: "0.74rem", color: "#94a3b8" }}>
-                  {isOrgFollowed ? "Organization followed" : "Recommended developer ecosystem"}
+                  {isOrgFollowed ? t("verify.orgFollowed") : t("verify.orgRecommended")}
                 </div>
               </div>
             </div>
@@ -575,7 +580,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 }}
               >
                 <Check size={12} />
-                Followed
+                {t("verify.followed")}
               </span>
             ) : (
               <button
@@ -596,7 +601,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 }}
               >
                 <Building2 size={12} />
-                <span>Follow Org on GitHub ↗</span>
+                <span>{t("verify.followOrgOnGithub")}</span>
               </button>
             )}
           </div>
@@ -621,7 +626,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Star size={16} color={missingRepos.length === 0 ? "#22c55e" : "#f59e0b"} />
                 <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f8fafc" }}>
-                  Repositories ({starredCount}/{totalRepos} Starred)
+                  {t("verify.repositories", { starred: starredCount, total: totalRepos })}
                 </span>
               </div>
 
@@ -643,10 +648,10 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                     gap: "5px",
                     boxShadow: "0 2px 8px rgba(2, 132, 199, 0.3)"
                   }}
-                  title="Opens the next unstarred repository on GitHub (browsers allow one new tab per click)"
+                  title={t("verify.openNextTitle")}
                 >
                   <ExternalLink size={12} aria-hidden="true" />
-                  <span>Open next unstarred ({missingRepos.length} left) ↗</span>
+                  <span>{t("verify.openNext", { count: missingRepos.length })}</span>
                 </button>
               )}
             </div>
@@ -654,7 +659,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             {/* List of Repositories */}
             {verificationError ? (
               <div style={{ fontSize: "0.8rem", color: "#94a3b8", padding: "6px 2px" }}>
-                Repository status is unavailable until the check succeeds. Use &quot;Recheck Status&quot; in a moment.
+                {t("verify.reposUnavailable")}
               </div>
             ) : missingRepos.length === 0 ? (
               <div
@@ -672,7 +677,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 }}
               >
                 <CheckCircle2 size={16} />
-                <span>All repositories are starred on GitHub!</span>
+                <span>{t("verify.allStarred")}</span>
               </div>
             ) : (
               <div
@@ -739,7 +744,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                       }}
                     >
                       <Star size={10} />
-                      <span>{justOpenedRepo === repo.fullName ? "Opened ↗" : "Star on GitHub ↗"}</span>
+                      <span>{justOpenedRepo === repo.fullName ? t("verify.opened") : t("verify.starOnGithub")}</span>
                     </button>
                   </div>
                 ))}
@@ -769,7 +774,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
             }}
           >
             <RefreshCw size={13} className={isVerifying ? "spin-sync-icon" : ""} />
-            <span>{isVerifying ? "Verifying..." : "Recheck Status"}</span>
+            <span>{isVerifying ? t("verify.verifying") : t("verify.recheck")}</span>
           </button>
 
           {isVerified ? (
@@ -788,7 +793,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 boxShadow: "0 2px 10px rgba(34, 197, 94, 0.4)"
               }}
             >
-              {onContinue ? "Continue" : "Done"}
+              {onContinue ? t("verify.continue") : t("common.done")}
             </button>
           ) : (
             <button
@@ -803,7 +808,7 @@ export const GitHubVerificationModal: React.FC<GitHubVerificationModalProps> = (
                 cursor: "pointer"
               }}
             >
-              Not now
+              {t("verify.notNow")}
             </button>
           )}
         </div>

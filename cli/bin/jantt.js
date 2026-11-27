@@ -18,6 +18,7 @@ import {
   runMonteCarloSimulation,
   isValidISODate,
   escapeHtml,
+  normalizeTimelineLocale,
   DEFAULT_GAP_DAYS
 } from "@jantt/core";
 
@@ -90,10 +91,11 @@ const MAX_PRINTED_WARNINGS = 20;
 
 const COMMANDS = {
   open: {
-    usage: "jantt open <file.json> [--port 3456] [--host 127.0.0.1] [--no-open]",
+    usage: "jantt open <file.json> [--port 3456] [--host 127.0.0.1] [--locale en|zh-CN] [--no-open]",
     options: {
       port: { type: "string", short: "p" },
       host: { type: "string" },
+      locale: { type: "string" },
       "no-open": { type: "boolean" }
     },
     run: openCommand
@@ -634,6 +636,8 @@ function openCommand(filePath, flags) {
 
   const port = numberFlag(flags.port ?? (process.env.PORT || undefined), "port", { fallback: 3456, min: 0, max: 65535, integer: true });
   const host = flags.host || "127.0.0.1";
+  const locale = normalizeTimelineLocale(flags.locale);
+  const messages = VIEWER_MESSAGES[locale];
   const planPath = fs.realpathSync(resolvedPath); // write through symlinks instead of replacing them
   const fileName = path.basename(resolvedPath);
   const assets = loadViewerAssets();
@@ -660,7 +664,7 @@ function openCommand(filePath, flags) {
       pageText = readUtf8(planPath);
       plan = JSON.parse(pageText);
     } catch (err) {
-      sendHtml(res, 500, errorPage(`${fileName} cannot be loaded right now: ${err.message}. Fix the file and reload this page.`));
+      sendHtml(res, 500, errorPage(locale, messages, `${fileName}: ${err.message}`));
       return;
     }
     const nonce = crypto.randomBytes(16).toString("base64");
@@ -671,7 +675,7 @@ function openCommand(filePath, flags) {
     sendHtml(
       res,
       200,
-      renderViewerPage({ fileName, nonce, hasCss: Boolean(assets.css), boot: { token, version: contentVersion(pageText), plan } })
+      renderViewerPage({ fileName, nonce, hasCss: Boolean(assets.css), boot: { token, version: contentVersion(pageText), plan, locale, messages } })
     );
   }
 
@@ -1000,11 +1004,60 @@ function toScriptJson(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function errorPage(message) {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><title>Jantt - error</title></head>
+function errorPage(locale, messages, message) {
+  return `<!DOCTYPE html><html lang="${locale}"><head><meta charset="UTF-8" /><title>${messages.errorTitle}</title></head>
 <body style="font-family: system-ui, sans-serif; padding: 24px; background: #060911; color: #F1F5F9;">
-<h1 style="font-size: 18px;">Jantt could not load the plan</h1><p>${escapeHtml(message)}</p></body></html>`;
+<h1 style="font-size: 18px;">${messages.loadPlan}</h1><p>${escapeHtml(message)}. ${messages.fixFile}</p></body></html>`;
 }
+
+const VIEWER_MESSAGES = {
+  "en": {
+    errorTitle: "Jantt - error",
+    loadPlan: "Jantt could not load the plan",
+    fixFile: "Fix the file and reload this page.",
+    loadDisk: "Load disk version",
+    keepChanges: "Keep my changes",
+    synced: "Synced with disk",
+    conflict: "The file changed on disk. Load the disk version, or keep your changes?",
+    saving: "Saving...",
+    expired: "Session expired (was the jantt CLI restarted?). Reload this page.",
+    saveFailed: "Save failed: ",
+    retry: " Your next edit will retry.",
+    unreachable: "Save failed: the jantt CLI is not reachable. Your next edit will retry.",
+    saved: "Saved to disk",
+    savedIssues: "Saved to disk ({count} validation issue(s))",
+    loadFailed: "Viewer failed to load",
+    bundle: "The Jantt engine bundle did not load. Reinstall @jantt/cli or rebuild @jantt/standalone, then restart 'jantt open'.",
+    renderFailed: "Viewer failed to render",
+    renderPlan: "Could not render this plan: ",
+    reloaded: "Reloaded changes from disk",
+    disconnected: "Disconnected from the jantt CLI. Reload this page to reconnect.",
+    reconnecting: "Reconnecting to the jantt CLI..."
+  },
+  "zh-CN": {
+    errorTitle: "Jantt - 错误",
+    loadPlan: "Jantt 无法加载此计划",
+    fixFile: "请修复文件并重新加载页面。",
+    loadDisk: "载入磁盘版本",
+    keepChanges: "保留我的更改",
+    synced: "已与磁盘同步",
+    conflict: "磁盘文件已更改。要载入磁盘版本，还是保留你的更改？",
+    saving: "正在保存…",
+    expired: "会话已过期。请重新加载页面。",
+    saveFailed: "保存失败：",
+    retry: "。下次编辑时会重试。",
+    unreachable: "保存失败，无法连接 Jantt CLI。下次编辑时会重试。",
+    saved: "已保存到磁盘",
+    savedIssues: "已保存到磁盘（有 {count} 项校验问题）",
+    loadFailed: "查看器加载失败",
+    bundle: "Jantt 引擎未能加载。请重新安装 @jantt/cli 或重新构建 @jantt/standalone，然后重新运行 jantt open。",
+    renderFailed: "查看器渲染失败",
+    renderPlan: "无法渲染此计划：",
+    reloaded: "已重新载入磁盘上的更改",
+    disconnected: "已与 Jantt CLI 断开连接。请重新加载页面以重新连接。",
+    reconnecting: "正在重新连接 Jantt CLI…"
+  }
+};
 
 // Browser-side controller: serialized saves with conflict detection, plus live reload of disk edits.
 const VIEWER_BOOT_JS = `
@@ -1030,7 +1083,7 @@ const VIEWER_BOOT_JS = `
   function showConflict(diskVersion) {
     conflictVersion = diskVersion;
     conflictEl.hidden = false;
-    setStatus("The file changed on disk. Load the disk version, or keep your changes?", "error");
+    setStatus(boot.messages.conflict, "error");
   }
 
   function queueSave(plan) {
@@ -1044,7 +1097,7 @@ const VIEWER_BOOT_JS = `
     while (pending && conflictVersion === null) {
       var plan = pending;
       pending = null;
-      setStatus("Saving...", "busy");
+      setStatus(boot.messages.saving, "busy");
       try {
         var res = await fetch("/api/save", {
           method: "POST",
@@ -1059,18 +1112,18 @@ const VIEWER_BOOT_JS = `
         }
         pending = pending || plan;
         if (res.status === 409) showConflict(body.version);
-        else if (res.status === 403) setStatus("Session expired (was the jantt CLI restarted?). Reload this page.", "error");
-        else setStatus("Save failed: " + (body.error || "HTTP " + res.status) + " Your next edit will retry.", "error");
+        else if (res.status === 403) setStatus(boot.messages.expired, "error");
+        else setStatus(boot.messages.saveFailed + (body.error || "HTTP " + res.status) + boot.messages.retry, "error");
       } catch (err) {
         pending = pending || plan;
-        setStatus("Save failed: the jantt CLI is not reachable. Your next edit will retry.", "error");
+        setStatus(boot.messages.unreachable, "error");
       }
       saving = false;
       return;
     }
     saving = false;
     if (conflictVersion === null) {
-      setStatus(lastIssues ? "Saved to disk (" + lastIssues + " validation issue(s))" : "Saved to disk", lastIssues ? "busy" : "ok");
+      setStatus(lastIssues ? boot.messages.savedIssues.replace("{count}", lastIssues) : boot.messages.saved, lastIssues ? "busy" : "ok");
     }
   }
 
@@ -1095,15 +1148,15 @@ const VIEWER_BOOT_JS = `
 
   var api = window.Jantt && (window.Jantt.default || window.Jantt);
   if (!api || typeof api.mount !== "function") {
-    setStatus("Viewer failed to load", "error");
-    mountEl.textContent = "The Jantt engine bundle did not load. Reinstall @jantt/cli or rebuild @jantt/standalone, then restart 'jantt open'.";
+    setStatus(boot.messages.loadFailed, "error");
+    mountEl.textContent = boot.messages.bundle;
     return;
   }
   try {
-    chart = api.mount(mountEl, boot.plan, { onCommit: queueSave });
+    chart = api.mount(mountEl, boot.plan, { locale: boot.locale, onCommit: queueSave });
   } catch (err) {
-    setStatus("Viewer failed to render", "error");
-    mountEl.textContent = "Could not render this plan: " + (err && err.message ? err.message : err);
+    setStatus(boot.messages.renderFailed, "error");
+    mountEl.textContent = boot.messages.renderPlan + (err && err.message ? err.message : err);
     return;
   }
 
@@ -1121,22 +1174,22 @@ const VIEWER_BOOT_JS = `
     }
     version = msg.version;
     chart.update(msg.plan);
-    setStatus("Reloaded changes from disk", "ok");
+    setStatus(boot.messages.reloaded, "ok");
   };
   events.onerror = function () {
     if (saving || pending || conflictVersion !== null) return;
-    if (events.readyState === EventSource.CLOSED) setStatus("Disconnected from the jantt CLI. Reload this page to reconnect.", "error");
-    else setStatus("Reconnecting to the jantt CLI...", "busy");
+    if (events.readyState === EventSource.CLOSED) setStatus(boot.messages.disconnected, "error");
+    else setStatus(boot.messages.reconnecting, "busy");
   };
   events.onopen = function () {
-    if (!saving && !pending && conflictVersion === null) setStatus("Synced with disk", "ok");
+    if (!saving && !pending && conflictVersion === null) setStatus(boot.messages.synced, "ok");
   };
 })();
 `;
 
 function renderViewerPage({ fileName, nonce, hasCss, boot }) {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${boot.locale}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -1222,10 +1275,10 @@ function renderViewerPage({ fileName, nonce, hasCss, boot }) {
     </div>
     <div class="status-badge" role="status" aria-live="polite">
       <span class="save-indicator" id="save-indicator"></span>
-      <span id="save-status">Synced with disk</span>
+      <span id="save-status">${boot.messages.synced}</span>
       <span class="conflict-actions" id="conflict-actions" hidden>
-        <button type="button" id="reload-btn">Load disk version</button>
-        <button type="button" id="overwrite-btn">Keep my changes</button>
+        <button type="button" id="reload-btn">${boot.messages.loadDisk}</button>
+        <button type="button" id="overwrite-btn">${boot.messages.keepChanges}</button>
       </span>
     </div>
   </div>
@@ -1254,7 +1307,7 @@ ${bold("Usage:")}
   jantt --help                           Show this help menu
 
 ${bold("Options:")}
-  open          --port <n> (default 3456; 0 picks a free port), --host <addr> (default 127.0.0.1), --no-open
+  open          --port <n> (default 3456; 0 picks a free port), --host <addr> (default 127.0.0.1), --locale <language>, --no-open
   validate      --json
   audit         --target <YYYY-MM-DD> (enables negative-float checks; defaults to meta.targetDate), --json
   monte-carlo   --runs <100-50000> (default 2000), --variance <0-2> (default 0.25), --seed <n>, --json

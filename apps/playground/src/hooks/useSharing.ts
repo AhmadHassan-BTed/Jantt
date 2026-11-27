@@ -3,6 +3,7 @@ import type { JanttData } from "@jantt/core";
 import type { SavedProject, ActiveView } from "../types";
 import { DEFAULT_TEMPLATE } from "../constants";
 import { encodeDataToBase64Url } from "../utils";
+import { tGlobal } from "../i18n";
 import { buildRoomViewerUrl } from "../room-storage";
 
 interface UseSharingOptions {
@@ -41,7 +42,7 @@ async function copyText(text: string): Promise<void> {
   document.body.appendChild(ta);
   try {
     ta.select();
-    if (!document.execCommand("copy")) throw new Error("Copy command was rejected");
+    if (!document.execCommand("copy")) throw new Error(tGlobal("hooks.sharing.copyRejected"));
   } finally {
     document.body.removeChild(ta);
   }
@@ -137,11 +138,11 @@ export function useSharing({
     try {
       await copyText(url);
       setCopiedShareLink(true);
-      showToast("Shareable link copied to clipboard!");
+      showToast(tGlobal("hooks.sharing.linkCopied"));
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = window.setTimeout(() => setCopiedShareLink(false), 2500);
     } catch {
-      showToast("Couldn't copy the link. Select it and copy it manually.", true);
+      showToast(tGlobal("hooks.sharing.copyFailed"), true);
     }
   }, [shareUrl, buildShareUrl, showToast]);
 
@@ -151,14 +152,14 @@ export function useSharing({
     try {
       await navigator.share({
         title: currentProjectName,
-        text: `Check out this project plan: ${currentProjectName}`,
+        text: tGlobal("hooks.sharing.shareText", { name: currentProjectName }),
         url
       });
-      showToast("Shared successfully!");
+      showToast(tGlobal("hooks.sharing.shared"));
     } catch (err) {
       // Closing the share sheet rejects with AbortError: not a failure.
       if (err instanceof Error && err.name === "AbortError") return;
-      showToast("Couldn't open the share sheet. Copy the link instead.", true);
+      showToast(tGlobal("hooks.sharing.shareSheetFailed"), true);
     }
   }, [shareUrl, buildShareUrl, currentProjectName, showToast]);
 
@@ -168,7 +169,7 @@ export function useSharing({
   const handleWhatsAppShare = useCallback(() => {
     const url = shareUrl || buildShareUrl();
     if (!url) return;
-    const msg = `Check out this project plan: ${currentProjectName}\n\n${url}`;
+    const msg = `${tGlobal("hooks.sharing.shareText", { name: currentProjectName })}\n\n${url}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer");
   }, [shareUrl, buildShareUrl, currentProjectName]);
 

@@ -1,3 +1,4 @@
+import { DEFAULT_TIMELINE_LABELS, formatTimelineLabel } from "../timeline-labels";
 import { JanttData, Task } from "../types";
 import { getTodayISODate, addDays } from "../date-math";
 import { filterDependsOn, TaskIdLookup } from "../dependencies";
@@ -82,7 +83,11 @@ export class TaskScheduleCoordinator {
   /**
    * Adds a new sequential task to the schedule and resolves dependency dates.
    */
-  public static createTask(currentData: JanttData, run?: ScheduleRunOptions): { nextData: JanttData; newTask: Task } {
+  public static createTask(
+    currentData: JanttData,
+    run?: ScheduleRunOptions,
+    labelTemplate = DEFAULT_TIMELINE_LABELS.newTaskLabel
+  ): { nextData: JanttData; newTask: Task } {
     const defaultGap = currentData.meta?.defaultGapDays ?? DEFAULT_GAP_DAYS;
     const today = getTodayISODate();
     let lastEnd = today;
@@ -95,7 +100,7 @@ export class TaskScheduleCoordinator {
     const newTask: Task = {
       id: generateTaskId(new Set(currentData.tasks.map((t) => t.id))),
       wbs: nextTopLevelWbs(currentData.tasks),
-      label: `New Task ${nextIdx}`,
+      label: formatTimelineLabel(labelTemplate, { number: nextIdx }),
       category: defaultCat,
       start: lastEnd,
       end: addDays(lastEnd, 7),

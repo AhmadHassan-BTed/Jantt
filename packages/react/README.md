@@ -110,6 +110,8 @@ critical-path, baseline and auto-cascade toggles, row height and the header date
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `data` | `JanttData` | Required | Declarative JSON schedule document. |
+| `locale` | `string` | `"en"` | Built-in timeline, toolbar, and task-details language. Supports `en` and Simplified Chinese (`zh-CN`). Other values use English. |
+| `labels` | `Partial<TimelineLabels>` | `undefined` | Custom timeline labels that override the selected language's defaults. |
 | `viewport` | `ViewportOptions` | `undefined` | Scale, `dayWidth`, `linkRouting`, `rowHeight`, `rowHeightMode`, `showCriticalPath`, `showBaselines`, `labelWidth`, `showToday`, `showWeekends`, `columns`, ... Without `scale`, the chart uses `meta.scale`, then `"day"`. Applied when a value changes (see above). |
 | `readOnly` | `boolean` | `false` | Locks task bars and prevents user mutations. |
 | `autoCascade` | `boolean` | `meta.autoCascade`, then `true` | Shift dependent tasks while dragging a predecessor. |
@@ -138,6 +140,10 @@ critical-path, baseline and auto-cascade toggles, row height and the header date
 | `onClearDateFilter` | `() => void` | `undefined` | The date filter badge was cleared. |
 | `onOpenAutoSave` / `onImportJson` / `onExportJson` / `onExportCsv` | `() => void` | `undefined` | Toolbar menu actions; the related menu entries appear when provided. |
 | `onError` | `(error: Error) => void` | `undefined` | Render, update and interaction errors. Without it, errors are logged to the console; a failed render never unmounts your app and is retried when the props change. |
+
+---
+
+Pass your app's reactive language to the chart with `<Jantt data={plan} locale={appLocale} />`. Zoom and plan state are preserved when the language changes. An open task drawer uses the new language when reopened.
 
 ---
 

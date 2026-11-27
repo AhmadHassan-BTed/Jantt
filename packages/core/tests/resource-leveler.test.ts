@@ -108,6 +108,7 @@ describe("Autonomous Resource Leveling Heuristic Engine", () => {
       expect(result.adjustments).toHaveLength(1);
       const adj = result.adjustments[0];
       expect(adj.taskId).toBe("t2");
+      expect(adj.reasonDetail).toMatchObject({ kind: "overallocation", date: "2026-11-03" });
       expect(adj.delayDays).toBeGreaterThan(0);
 
       // t1 should remain unchanged
@@ -297,6 +298,7 @@ describe("Autonomous Resource Leveling Heuristic Engine", () => {
       expect(byId.get("Y")!.start).toBe("2026-01-07"); // unrelated chain untouched
       expect(result.adjustments.map((a) => a.taskId)).toEqual(["B", "C"]);
       expect(result.adjustments[1].reason).toMatch(/cascade/i);
+      expect(result.adjustments[1].reasonDetail).toEqual({ kind: "cascade", deferredTaskId: "B" });
     });
 
     it("skips unresolvable conflicts and keeps leveling the rest", () => {

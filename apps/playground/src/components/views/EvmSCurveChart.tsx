@@ -3,6 +3,7 @@ import type { JanttData, EVMAnalysis, Task } from "@jantt/core";
 import { diffDays, addDays, getTodayISODate, isValidISODate } from "@jantt/core";
 import { TrendingUp } from "lucide-react";
 import { formatMoney } from "./EvmKpiCards";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface EvmSCurveChartProps {
   parsedData: JanttData;
@@ -90,6 +91,7 @@ export function computePlannedValueSeries(tasks: Task[]): SCurveSeries | null {
 const COLORS = { pv: "#38BDF8", ev: "#10B981", ac: "#F59E0B" };
 
 export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm, currency }) => {
+  const { t, locale } = useI18n();
   const [hoveredPoint, setHoveredPoint] = useState<SCurvePoint | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(640);
@@ -103,7 +105,7 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
     return () => resize.disconnect();
   }, [Boolean(series?.bac)]);
   const statusDate = isValidISODate(evm.statusDate) ? evm.statusDate : getTodayISODate();
-  const money = (val: number) => formatMoney(val, currency);
+  const money = (val: number) => formatMoney(val, currency, false, locale);
 
   const cardStyle: React.CSSProperties = {
     borderRadius: "8px",
@@ -117,7 +119,7 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
       <TrendingUp size={16} style={{ color: COLORS.pv }} />
       <h4 style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "var(--jantt-text, #F8FAFC)" }}>
-        Earned Value S-Curve
+        {t("health.scurve.title")}
       </h4>
     </div>
   );
@@ -130,7 +132,7 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
       <div style={cardStyle}>
         {heading}
         <p style={{ margin: "10px 0 0", fontSize: "12px", color: "var(--jantt-text-muted)" }}>
-          Add an <code>estimatedCost</code> to tasks to see planned value, earned value and actual cost over time.
+          {t("health.scurve.addCostBefore")} <code>estimatedCost</code> {t("health.scurve.addCostAfter")}
         </p>
       </div>
     );
@@ -168,28 +170,34 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
         <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "11px", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <span style={{ width: "12px", height: "3px", background: COLORS.pv, borderRadius: "2px" }} />
-            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Planned Value (PV)</span>
+            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>{t("health.scurve.legendPv")}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <span style={{ width: "8px", height: "8px", background: COLORS.ev, borderRadius: "50%" }} />
-            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Earned Value (EV) {money(ev)}</span>
+            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>{t("health.scurve.legendEv", { amount: money(ev) })}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <span style={{ width: "8px", height: "8px", background: COLORS.ac, borderRadius: "50%" }} />
-            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>Actual Cost (AC) {hasActualCost ? money(ac) : "n/a"}</span>
+            <span style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>{t("health.scurve.legendAc", { amount: hasActualCost ? money(ac) : "n/a" })}</span>
           </div>
         </div>
       </div>
       <p style={{ margin: "0 0 10px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-        The line is the planned budget over time. EV and AC are measured on {statusDate}; past progress is not
-        recorded, so they are shown at that date only.
+        {t("health.scurve.description", { date: statusDate })}
       </p>
 
       <div ref={chartRef} style={{ position: "relative", width: "100%" }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label={`Planned value rises to ${money(series.bac)} by ${series.maxDate}. On ${statusDate}: planned ${money(pvNow)}, earned ${money(ev)}, actual cost ${hasActualCost ? money(ac) : "not reported"}.`}
+          aria-label={t("health.scurve.aria", {
+            bac: money(series.bac),
+            maxDate: series.maxDate,
+            statusDate,
+            pv: money(pvNow),
+            ev: money(ev),
+            ac: hasActualCost ? money(ac) : t("health.scurve.actualNotReported")
+          })}
           style={{ width: "100%", height: "auto", display: "block" }}
           onPointerMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -236,11 +244,11 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
           )}
           {hasActualCost && (
             <circle cx={statusX} cy={getY(ac)} r={5} fill={COLORS.ac} stroke="#0B132B" strokeWidth={1.5}>
-              <title>{`Actual cost on ${statusDate}: ${money(ac)}`}</title>
+              <title>{t("health.scurve.actualTitle", { date: statusDate, amount: money(ac) })}</title>
             </circle>
           )}
           <circle cx={statusX} cy={getY(ev)} r={5} fill={COLORS.ev} stroke="#0B132B" strokeWidth={1.5}>
-            <title>{`Earned value on ${statusDate}: ${money(ev)}`}</title>
+            <title>{t("health.scurve.earnedTitle", { date: statusDate, amount: money(ev) })}</title>
           </circle>
 
           {/* Crosshair indicator on hover */}
@@ -257,7 +265,7 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
           </text>
           {statusInRange && width >= 420 && (
             <text x={statusX} y={height - 8} textAnchor="middle" fontSize="10" fill="var(--jantt-text-muted)" fontFamily="monospace">
-              Today
+              {t("common.today")}
             </text>
           )}
           <text x={padLeft + chartW} y={height - 8} textAnchor="end" fontSize="10" fill="var(--jantt-text-muted)" fontFamily="monospace">
@@ -265,7 +273,7 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
           </text>
         </svg>
 
-        <label className="pv-date-control">Inspect planned value
+        <label className="pv-date-control">{t("health.scurve.inspect")}
           <input type="range" min={0} max={series.points.length - 1} step={1}
             aria-valuetext={hoveredPoint ? `${hoveredPoint.date}, ${money(hoveredPoint.pv)}` : series.points[0].date}
             value={Math.max(0, series.points.findIndex(point => point.date === hoveredPoint?.date))}
@@ -290,8 +298,8 @@ export const EvmSCurveChart: React.FC<EvmSCurveChartProps> = ({ parsedData, evm,
               boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
             }}
           >
-            <span style={{ color: "#94A3B8" }}>Date: <strong>{hoveredPoint.date}</strong></span>
-            <span style={{ color: COLORS.pv }}>Planned: <strong>{money(hoveredPoint.pv)}</strong></span>
+            <span style={{ color: "#94A3B8" }}>{t("health.scurve.hoverDate")} <strong>{hoveredPoint.date}</strong></span>
+            <span style={{ color: COLORS.pv }}>{t("health.scurve.hoverPlanned")} <strong>{money(hoveredPoint.pv)}</strong></span>
           </div>
         )}
       </div>

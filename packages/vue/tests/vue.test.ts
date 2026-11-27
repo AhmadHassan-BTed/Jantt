@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createApp, nextTick, ref, h } from "vue";
 import { renderJantt } from "@jantt/core";
 import type { JanttData, JanttInstance, JanttOptions } from "@jantt/core";
-import { JanttTimeline } from "../src/index";
+import { Jantt, JanttTimeline } from "../src/index";
 
 // Wrap the real engine so tests can inspect the options it receives and count updates.
 vi.mock("@jantt/core", async (importOriginal) => {
@@ -61,6 +61,42 @@ describe("JanttTimeline Vue 3 Component", () => {
       lastOptions: () => renderJanttMock.mock.calls[renderJanttMock.mock.calls.length - 1][2] as JanttOptions
     };
   }
+
+  it("updates the chart locale from Vue props without remounting or resetting zoom", async () => {
+    expect(Jantt).toBe(JanttTimeline);
+    const { app, props, instance } = mountTimeline({ data: samplePlan, locale: "zh-CN" });
+    try {
+      const wrapper = document.querySelector<HTMLElement>(".jantt-vue-timeline-container")!;
+      expect(wrapper.lang).toBe("zh-CN");
+      expect(wrapper.querySelector(".jantt-label-header")?.textContent).toContain("任务与分类");
+      expect(wrapper.querySelector(".jantt-search-input")?.getAttribute("aria-label")).toBe("搜索任务");
+      expect(wrapper.querySelector(".jantt-settings-btn")?.getAttribute("aria-label")).toBe("图表设置");
+      wrapper.querySelector<HTMLButtonElement>('.jantt-time-scale-group [data-scale="month"]')!.click();
+      const zoom = instance.getDayWidth();
+      expect(wrapper.querySelector('.jantt-time-scale-group [data-scale="month"]')?.getAttribute("aria-pressed")).toBe("true");
+
+      wrapper.querySelector<HTMLElement>(".jantt-label-row[data-row-id='t1']")!.click();
+      expect(document.querySelector(".jantt-sidebar-backdrop")?.getAttribute("lang")).toBe("zh-CN");
+      expect(document.querySelector("#jantt-sidebar-save")?.textContent).toBe("保存更改");
+      document.querySelector<HTMLButtonElement>("#jantt-sidebar-cancel")!.click();
+
+      props.value = { ...props.value, locale: "en" };
+      await nextTick();
+      expect(wrapper.lang).toBe("en");
+      expect(wrapper.querySelector(".jantt-label-header")?.textContent).toContain("Task & Category");
+      expect(wrapper.querySelector(".jantt-search-input")?.getAttribute("aria-label")).toBe("Search tasks");
+      expect(wrapper.querySelector(".jantt-task-bar")?.textContent).toContain("Design");
+      expect(instance.getDayWidth()).toBe(zoom);
+      expect(renderJanttMock).toHaveBeenCalledTimes(1);
+
+      props.value = { ...props.value, locale: "fr-FR" };
+      await nextTick();
+      expect(wrapper.lang).toBe("en");
+      expect(instance.update).toHaveBeenCalledTimes(1);
+    } finally {
+      app.unmount();
+    }
+  });
 
   it("mounts and renders DOM container elements properly", async () => {
     let readyInstance: any = null;

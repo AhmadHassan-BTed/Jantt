@@ -21,5 +21,5 @@
       "@jantt/react": ["../../packages/react/src"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "tests"]
 }

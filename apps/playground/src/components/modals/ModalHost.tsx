@@ -15,6 +15,7 @@ import { useSheetSwipeDismiss } from "../../hooks/useSheetSwipeDismiss";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Info, X } from "lucide-react";
 import { exportSpreadsheetCsv } from "@jantt/interop";
+import { useI18n } from "../../i18n/I18nProvider";
 import { PromptModal } from "./PromptModal";
 import { AddPlanModal, type PlanDestination } from "./AddPlanModal";
 import { PeopleTeamsModal } from "./PeopleTeamsModal";
@@ -333,6 +334,7 @@ export interface ModalHeaderProps {
 }
 
 export const ModalHeader: React.FC<ModalHeaderProps> = ({ icon, title, subtitle, actions, tone = "accent" }) => {
+  const { t } = useI18n();
   const { titleId, close } = useModalContext();
   return (
     <div className="prompt-modal-header shared-dialog-header" style={{ gap: "10px 12px", flexWrap: "wrap", flexShrink: 0 }}>
@@ -374,8 +376,8 @@ export const ModalHeader: React.FC<ModalHeaderProps> = ({ icon, title, subtitle,
         type="button"
         className="prompt-modal-close-btn"
         onClick={close}
-        aria-label="Close dialog"
-        title="Close (Esc)"
+        aria-label={t("modal.closeAria")}
+        title={t("modal.closeTitle")}
       >
         <X size={18} aria-hidden="true" />
       </button>
@@ -407,12 +409,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title,
   message,
   confirmLabel,
-  cancelLabel = "Cancel",
+  cancelLabel,
   tone = "default",
   confirmPhrase,
   onConfirm,
   onCancel
 }) => {
+  const { t } = useI18n();
   const messageId = useId();
   const [typedPhrase, setTypedPhrase] = useState("");
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -446,7 +449,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           {confirmPhrase && (
             <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px" }}>
               <span style={{ color: "var(--jantt-text-muted)" }}>
-                Type <strong style={{ color: "var(--jantt-text)" }}>{confirmPhrase}</strong> to confirm:
+                {t("modal.typeToConfirmBefore")} <strong style={{ color: "var(--jantt-text)" }}>{confirmPhrase}</strong>{" "}
+                {t("modal.typeToConfirmAfter")}
               </span>
               <input
                 ref={phraseRef}
@@ -463,7 +467,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         </div>
         <div className="prompt-modal-footer" style={{ justifyContent: "flex-end", flexWrap: "wrap", flexShrink: 0 }}>
           <button ref={cancelRef} type="button" className="btn-nav" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabel ?? t("common.cancel")}
           </button>
           <button
             ref={confirmRef}
@@ -663,6 +667,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
   setShowShareRoomModal,
   shareModalRoomId
 }) => {
+  const { t } = useI18n();
   // App mounts one import input for every layout; dialogs only open its picker.
   const openImportPicker = () => project.fileInputRef.current?.click();
 
@@ -702,13 +707,19 @@ export const ModalHost: React.FC<ModalHostProps> = ({
   // Manager: same exporter, same `<name>-<date>.<ext>` name.
   const exportActivePlan = (format: "json" | "csv") => {
     if (!editor.parsedData) {
-      toast.showToast("Fix the plan JSON before exporting it.", true);
+      toast.showToast(t("modal.fixJsonBeforeExport"), true);
       return;
     }
     try {
       downloadPlanExport(project.currentProjectName, editor.parsedData, format);
     } catch (err) {
-      toast.showToast(`${format.toUpperCase()} export failed: ${err instanceof Error ? err.message : String(err)}`, true);
+      toast.showToast(
+        t("modal.exportFailed", {
+          format: format.toUpperCase(),
+          error: err instanceof Error ? err.message : String(err)
+        }),
+        true
+      );
     }
   };
 
@@ -731,7 +742,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
 
   const dialogFailed = (close: () => void) => (error: unknown) => {
     console.error("A dialog failed to open:", error);
-    toast.showToast("That dialog could not be opened. Check your connection, or reload the page to update Jantt.", true);
+    toast.showToast(t("modal.openFailed"), true);
     close();
   };
 
@@ -788,7 +799,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
           onSignOut={async () => {
             await auth.logout();
             setShowPlanManagerModal(false);
-            toast.showToast("Signed out.");
+            toast.showToast(t("modal.signedOut"));
           }}
           onImportFile={openImportPicker}
           showToast={toast.showToast}
@@ -901,7 +912,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
           currentUser={auth.currentUser}
           onClaimUsername={async (username: string) => {
             await auth.completeUsernameOnboarding(username);
-            toast.showToast(`Username @${username} claimed! Welcome to Jantt Cloud.`);
+            toast.showToast(t("modal.usernameClaimed", { username }));
           }}
           onSignOut={auth.logout}
         />
@@ -916,7 +927,7 @@ export const ModalHost: React.FC<ModalHostProps> = ({
             ownedRooms.find((r) => r.roomId === shareModalRoomId)?.title ||
             sharedRooms.find((r) => r.roomId === shareModalRoomId)?.title ||
             project.customProjects.find((p) => p.roomId === shareModalRoomId)?.name ||
-            "Project Room"
+            t("modal.projectRoom")
           }
           currentUserProfile={auth.userProfile}
           showToast={toast.showToast}

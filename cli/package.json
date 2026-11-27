@@ -28,7 +28,8 @@
   },
   "dependencies": {
     "@jantt/core": "^1.1.0",
-    "@jantt/interop": "^1.1.0"
+    "@jantt/interop": "^1.1.0",
+    "@jantt/standalone": "^1.1.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

@@ -6,6 +6,8 @@
 import type { DependencyType, DependencyItem, DependencyObject } from "./dependencies";
 import type { WorkingCalendar, CalendarPreset } from "./calendar";
 import type { ProjectBaselineSnapshot } from "./baselines";
+import type { TaskSidebarOptions } from "./sidebar";
+import type { ToolbarTranslation } from "./renderers/toolbar";
 
 export type { DependencyType, DependencyRelation, DependencyItem, DependencyObject, DependsOnValue } from "./dependencies";
 export type { DayOfWeek, CalendarPreset, RegionCode, HolidayDefinition, WorkingCalendar } from "./calendar";
@@ -476,6 +478,7 @@ export interface HeaderMonth {
 
 export interface HeaderWeek {
   label: string;
+  week?: number;
   x: number;
   width: number;
 }
@@ -525,8 +528,133 @@ export interface JanttLayoutResult {
   criticalTaskIds: Set<string>;
 }
 
+/**
+ * Text the timeline draws itself (month/week/quarter tiers, weekday initials, Today pill).
+ * Templates use `{month}`, `{year}`, `{week}` and `{quarter}` placeholders so each language can
+ * control word order. Everything is plain data: it can be serialized and diffed.
+ */
+export interface TimelineLabels {
+  /** Locale for dates within task descriptions. */
+  locale?: string;
+  /** Full month names, January first. */
+  monthsLong: string[];
+  /** Abbreviated month names, January first. */
+  monthsShort: string[];
+  /** Weekday initials, Sunday first. */
+  daysShort: string[];
+  /** Week tick template, e.g. "Wk {week}". */
+  week: string;
+  /** Quarter tick template used without a year, e.g. "Q{quarter}". */
+  quarter: string;
+  /** Month tier template when years are shown separately, e.g. "{month} {year}". */
+  monthYear: string;
+  /** Quarter tier template when years are shown separately, e.g. "{quarter} {year}". */
+  quarterYear: string;
+  /** Label on the Today marker pill. */
+  today: string;
+  /** Accessible title of the Today pill; `{date}` is the ISO date. */
+  todayTitle: string;
+  /** Accessible title of the Today pill when no date is available. */
+  todayTitleNoDate: string;
+  /** Header of the sticky task/category column. */
+  taskColumn: string;
+  /** Header of the duration column. */
+  daysColumn: string;
+  /** Header of the progress column. */
+  progressColumn: string;
+  /** Tooltip for the duration column header. */
+  durationTitle: string;
+  /** Tooltip for the progress column header. */
+  progressTitle: string;
+  /** Type pill for milestone rows. */
+  milestone: string;
+  /** Type pill for locked rows. */
+  locked: string;
+  /** Duration label template, e.g. "{days}d" or "{days}天". */
+  duration: string;
+  /** Accessible label for opening a task's details; `{task}` is its display name. */
+  openTaskDetails: string;
+  /** Title/aria label of the add-task row at the bottom of the table. */
+  addTaskTitle: string;
+  /** Visible text of the add-task row at the bottom of the table. */
+  addTask: string;
+  /** Default task name at creation; `{number}` is the sequential task number. */
+  newTaskLabel: string;
+  /** Tooltip of the label-column splitter at rest. */
+  resizeTable: string;
+  /** Accessible label of the label-column splitter. */
+  resizeTableAria: string;
+  /** Tooltip of the label-column splitter while keyboard-focused. */
+  resizeTableKeys: string;
+  /** Tooltip of the day/col resize handle. */
+  dragResizeColumn: string;
+  /** Accessible label of a date cell that filters tasks; `{date}` is the ISO date. */
+  showTasksOn: string;
+  /** Accessible label of the currently active date filter; `{date}` is the ISO date. */
+  activeDateFilter: string;
+  /** Tooltip of the task bar baseline underlay; `{start}`/`{end}` are ISO dates. */
+  baselineTitle: string;
+  /** Accessible label of a milestone marker with its date; `{task}`/`{date}`. */
+  milestoneAria: string;
+  /** Accessible label of a milestone marker; `{task}`. */
+  milestoneAriaShort: string;
+  /** Tooltip of the bar progress drag handle; `{percent}` is an integer. */
+  dragProgress: string;
+  /** Tooltip of the critical-path pill on a bar. */
+  criticalPillTitle: string;
+  /** Tooltip of the bar end resize handle. */
+  dragResizeDuration: string;
+  /** Tooltip of the bar start handle. */
+  dragChangeStart: string;
+  /** Tooltip of the bar left link port. */
+  dragCreateDependency: string;
+  /** Tooltip of the bar right link port. */
+  dragLinkPrerequisite: string;
+  /** Accessible label of the dependency remove chip; `{description}` names the link. */
+  removeDependency: string;
+  /** Visible text of the dependency remove chip. */
+  removeLink: string;
+  activeDateTitle: string;
+  boundaryDateTitle: string;
+  showDateTitle: string;
+  clearDateFilter: string;
+  weekTitle: string;
+  dependencyTitle: string;
+  taskBarDetails: string;
+  urgent: string;
+  lockTaskTitle: string;
+  unlockTaskTitle: string;
+  lockTask: string;
+  unlockTask: string;
+  dragWireLinkPrerequisite: string;
+  tooltipTimeline: string;
+  tooltipGeneral: string;
+  tooltipBaseline: string;
+  tooltipSlip: string;
+  tooltipAhead: string;
+  tooltipOnPlan: string;
+  tooltipCritical: string;
+  tooltipBehind: string;
+  tooltipBuffer: string;
+  tooltipProgress: string;
+  tooltipAssignee: string;
+  tooltipPriority: string;
+  tooltipBudget: string;
+  tooltipDependsOn: string;
+  tooltipScheduleBuffer: string;
+  tooltipOpen: string;
+  priorityLow: string;
+  priorityMedium: string;
+  priorityHigh: string;
+  priorityUrgent: string;
+}
+
 export interface JanttOptions {
+  /** Built-in interface language for the timeline, toolbar and task details. */
+  locale?: string;
   viewport?: ViewportOptions;
+  /** Timeline text overrides; omitted fields fall back to English. */
+  labels?: Partial<TimelineLabels>;
   /** When explicitly set to false, disables rendering the built-in toolbar element. Default true. */
   showToolbar?: boolean;
   theme?: Record<string, string>;
@@ -543,6 +671,10 @@ export interface JanttOptions {
   filterTasksByDate?: boolean;
   autoCascade?: boolean;
   sidebarContainer?: HTMLElement | string;
+  /** Localizes the built-in task details drawer. */
+  translateTaskSidebar?: TaskSidebarOptions["translate"];
+  /** Localizes the built-in chart toolbar. */
+  translateToolbar?: ToolbarTranslation;
   /**
    * Fired during live interactions (drag frames). The payload belongs to the caller: the engine
    * never mutates it after the call, so it can be stored or diffed as-is.

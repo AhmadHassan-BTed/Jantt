@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ResourceAllocation } from "@jantt/core";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface Props {
   conflicts: ResourceAllocation[];
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function AllocationHeatmap({ conflicts, resources }: Props) {
+  const { t } = useI18n();
   const [selectedPerson, setSelectedPerson] = useState("");
   const [day, setDay] = useState("");
   const [page, setPage] = useState(0);
@@ -29,27 +31,33 @@ export function AllocationHeatmap({ conflicts, resources }: Props) {
   const visible = days.slice(currentPage * 7, currentPage * 7 + 7);
   const selected = visible.find(item => item.date === day) || visible[0];
   const names = new Map(resources.map(resource => [resource.id, resource.name]));
-  return <section className="allocation-heatmap" aria-label="Resource overload calendar">
-    <label>Overloaded member
+  return <section className="allocation-heatmap" aria-label={t("health.heatmap.aria")}>
+    <label>{t("health.heatmap.overloadedMember")}
       <select value={person} onChange={event => { setSelectedPerson(event.target.value); setPage(0); setDay(""); }}>
         {Array.from(grouped.keys(), id => <option key={id} value={id}>{names.get(id) || id}</option>)}
       </select>
     </label>
-    <div className="allocation-days" role="group" aria-label="Overloaded dates">
+    <div className="allocation-days" role="group" aria-label={t("health.heatmap.overloadedDatesAria")}>
       {visible.map(item => {
         const percent = Math.round(item.totalUnits * 100);
         return <button type="button" key={item.date} aria-pressed={selected.date === item.date}
-          aria-label={`${item.date}, ${percent}% allocated`} className={item.totalUnits >= item.capacity * 1.5 ? "severe" : ""}
+          aria-label={t("health.heatmap.dayAria", { date: item.date, percent })} className={item.totalUnits >= item.capacity * 1.5 ? "severe" : ""}
           onClick={() => setDay(item.date)}>
           <time dateTime={item.date}>{item.date.slice(5)}</time><strong>{percent}%</strong>
         </button>;
       })}
     </div>
-    <p aria-live="polite">{names.get(person) || person} has <strong>{Math.round(selected.totalUnits * 100)}% allocated</strong> on {selected.date}, with {Math.round(selected.capacity * 100)}% capacity across {selected.tasks.length} assigned {selected.tasks.length === 1 ? "task" : "tasks"}.</p>
+    <p aria-live="polite">{t(selected.tasks.length === 1 ? "health.heatmap.summaryOne" : "health.heatmap.summaryMany", {
+      name: names.get(person) || person,
+      percent: Math.round(selected.totalUnits * 100),
+      date: selected.date,
+      capacity: Math.round(selected.capacity * 100),
+      count: selected.tasks.length
+    })}</p>
     {last > 0 && <div className="heatmap-paging">
-      <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Earlier</button>
+      <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>{t("health.heatmap.earlier")}</button>
       <span>{currentPage + 1} / {last + 1}</span>
-      <button type="button" disabled={currentPage === last} onClick={() => setPage(currentPage + 1)}>Later</button>
+      <button type="button" disabled={currentPage === last} onClick={() => setPage(currentPage + 1)}>{t("health.heatmap.later")}</button>
     </div>}
   </section>;
 }

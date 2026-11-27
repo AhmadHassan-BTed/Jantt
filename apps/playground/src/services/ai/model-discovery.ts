@@ -1,4 +1,5 @@
 import type { ModelDefinition, ProviderAccount, ProviderId } from "./types";
+import { tGlobal } from "../../i18n";
 import { PROVIDER_CATALOG, getModelsForProvider } from "./provider-registry";
 import { getCustomModels } from "./storage";
 
@@ -399,7 +400,7 @@ export async function fetchLiveModelsForAccount(
         return fallbackResult(`Could not load Gemini models (${msg}).`);
       }
       const models = parseGeminiModelsPayload(res.data);
-      if (models.length === 0) return fallbackResult("Gemini returned no chat-compatible models.");
+      if (models.length === 0) return fallbackResult(tGlobal("services.ai.discovery.geminiEmpty"));
       const now = Date.now();
       setCachedDiscoveredModels(account.id, models, now);
       return { models: mergeCustomModels(providerId, models), source: "live", fetchedAt: now };
@@ -431,7 +432,7 @@ export async function fetchLiveModelsForAccount(
         return fallbackResult(`Ollama not reachable at ${origin} (HTTP ${compatRes.status}).`);
       }
       const models = parseOpenAiStyleModelsPayload("ollama", compatRes.data);
-      if (models.length === 0) return fallbackResult("No locally pulled Ollama models found.");
+      if (models.length === 0) return fallbackResult(tGlobal("services.ai.discovery.ollamaEmpty"));
       const now = Date.now();
       setCachedDiscoveredModels(account.id, models, now);
       return { models: mergeCustomModels(providerId, models), source: "live", fetchedAt: now };
@@ -454,7 +455,7 @@ export async function fetchLiveModelsForAccount(
         return fallbackResult(`Anthropic models unavailable (${msg}).`);
       }
       const models = parseOpenAiStyleModelsPayload("anthropic", res.data);
-      if (models.length === 0) return fallbackResult("Anthropic returned no models.");
+      if (models.length === 0) return fallbackResult(tGlobal("services.ai.discovery.anthropicEmpty"));
       const now = Date.now();
       setCachedDiscoveredModels(account.id, models, now);
       return { models: mergeCustomModels(providerId, models), source: "live", fetchedAt: now };
@@ -462,7 +463,7 @@ export async function fetchLiveModelsForAccount(
 
     // OpenAI, Groq, DeepSeek, OpenRouter, Mistral, xAI, and custom OpenAI-compatible gateways
     const url = resolveDefaultModelsUrl(providerId, account.customBaseUrl, account.proxyUrl);
-    if (!url) return fallbackResult("Enter a Base URL to discover models from this endpoint.");
+    if (!url) return fallbackResult(tGlobal("services.ai.discovery.baseUrlRequired"));
 
     const isLocal = url.includes("localhost") || url.includes("127.0.0.1");
     if (!cleanKey && providerId !== "openrouter" && !isLocal) {
@@ -499,6 +500,6 @@ export async function fetchLiveModelsForAccount(
           : "Network or CORS error while fetching live models; using built-in list."
       );
     }
-    return fallbackResult(msg || "Could not load live models.");
+    return fallbackResult(msg || tGlobal("services.ai.discovery.loadFailed"));
   }
 }

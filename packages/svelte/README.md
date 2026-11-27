@@ -10,6 +10,8 @@ npm install @jantt/svelte @jantt/core
 
 ## Usage
 
+Pass `options: { locale: "zh-CN" }` to the action, or `{ locale: "zh-CN" }` to `mountJantt` as its third argument. Bind `locale` to your app's language to switch it reactively. English is the default.
+
 ### Using Svelte Action (`use:janttAction`)
 
 ```svelte

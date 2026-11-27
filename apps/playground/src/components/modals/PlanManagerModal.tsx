@@ -32,10 +32,13 @@ import type { JanttData } from "@jantt/core";
 import type { SavedProject } from "../../types";
 import { getRoom, type UserRoomPointer, type UserProfile } from "../../firebase";
 import { DEFAULT_TEMPLATE } from "../../constants";
-import { formatRelativeTime } from "../../utils";
+import { tGlobal, type MessageKey, type MessageParams } from "../../i18n";
+import { useI18n } from "../../i18n/I18nProvider";
 import { ConfirmDialog, Modal, ModalHeader, downloadPlanExport, useMediaQuery, type ConfirmDialogProps } from "./ModalHost";
 
 import "./plan-manager.css";
+
+type Translator = (key: MessageKey, params?: MessageParams) => string;
 
 export interface PlanManagerModalProps {
   show: boolean;
@@ -114,8 +117,6 @@ export interface TransferOption {
 
 export const PLAN_LIST_ORDER: PlanListId[] = ["device", "cloud", "shared"];
 
-const SHARED_LIST_RULE = "only rooms other people share with you appear there";
-
 function latestTimestamp(a?: string, b?: string): string | undefined {
   if (!a) return b;
   if (!b) return a;
@@ -140,7 +141,7 @@ export function buildPlanLists({
   sharedRooms: UserRoomPointer[];
   activeProjectId: string;
   isLoggedIn: boolean;
-}): Record<PlanListId, PlanCardItem[]> {
+}, t: Translator = tGlobal): Record<PlanListId, PlanCardItem[]> {
   const cachedRooms = new Map<string, SavedProject>();
   const device: PlanCardItem[] = [];
 
@@ -167,7 +168,7 @@ export function buildPlanLists({
     list: "device",
     taskCount: DEFAULT_TEMPLATE.data.tasks?.length ?? 0,
     data: DEFAULT_TEMPLATE.data,
-    badge: "Built-in sample",
+    badge: t("plan.badgeBuiltInSample"),
     isActive: activeProjectId === "default"
   });
 
@@ -183,7 +184,7 @@ export function buildPlanLists({
     const id = cached?.id ?? `room-${pointer.roomId}`;
     return {
       id,
-      name: pointer.title || cached?.name || `Room ${pointer.roomId}`,
+      name: pointer.title || cached?.name || t("plan.roomFallback", { id: pointer.roomId }),
       kind,
       list,
       roomId: pointer.roomId,
@@ -196,10 +197,12 @@ export function buildPlanLists({
     };
   };
 
-  const cloud = ownedRooms.map((r) => toRoomItem(r, "owned_room", "cloud", "Owner"));
+  const cloud = ownedRooms.map((r) => toRoomItem(r, "owned_room", "cloud", t("plan.roleOwner")));
   const shared = sharedRooms
     .filter((r) => !listedRoomIds.has(r.roomId))
-    .map((r) => toRoomItem(r, "shared_room", "shared", r.role === "editor" ? "Editor" : "Viewer"));
+    .map((r) =>
+      toRoomItem(r, "shared_room", "shared", r.role === "editor" ? t("plan.roleEditor") : t("plan.roleViewer"))
+    );
 
   for (const [roomId, project] of cachedRooms) {
     if (listedRoomIds.has(roomId)) continue;
@@ -212,8 +215,8 @@ export function buildPlanLists({
       taskCount: project.data?.tasks?.length ?? 0,
       updatedAt: project.updatedAt,
       data: project.data,
-      roleLabel: project.role === "collaborator" ? "Editor" : "Viewer",
-      badge: isLoggedIn ? "Opened via link" : "Saved offline",
+      roleLabel: project.role === "collaborator" ? t("plan.roleEditor") : t("plan.roleViewer"),
+      badge: isLoggedIn ? t("plan.badgeOpenedViaLink") : t("plan.badgeSavedOffline"),
       isActive: activeProjectId === project.id
     });
   }
@@ -226,7 +229,11 @@ export function buildPlanLists({
  * are not possible. Transfers never delete or leave a cloud room: rooms are only copied to the
  * device, and only a device plan can be moved (copied to the cloud, then removed locally).
  */
-export function getTransferOptions(kind: PlanItemKind, cloudBlockedReason?: string): TransferOption[] {
+export function getTransferOptions(
+  kind: PlanItemKind,
+  cloudBlockedReason?: string,
+  t: Translator = tGlobal
+): TransferOption[] {
   const toCloud = (label: string, transfer: TransferKind): TransferOption =>
     cloudBlockedReason
       ? { list: "cloud", label, disabledReason: cloudBlockedReason }
@@ -235,25 +242,25 @@ export function getTransferOptions(kind: PlanItemKind, cloudBlockedReason?: stri
   switch (kind) {
     case "template":
       return [
-        toCloud("Copy into a new cloud room", "copy_to_cloud"),
-        { list: "shared", label: "Not possible", disabledReason: SHARED_LIST_RULE }
+        toCloud(t("plan.transfer.copyIntoNewRoom"), "copy_to_cloud"),
+        { list: "shared", label: t("plan.transfer.notPossible"), disabledReason: t("plan.reason.sharedListOnly") }
       ];
     case "local":
       return [
-        toCloud("Copy to My cloud (keeps it on this device)", "copy_to_cloud"),
-        toCloud("Move to My cloud (removes it from this device)", "move_to_cloud"),
-        { list: "shared", label: "Not possible", disabledReason: SHARED_LIST_RULE }
+        toCloud(t("plan.transfer.copyToCloudKeep"), "copy_to_cloud"),
+        toCloud(t("plan.transfer.moveToCloudRemove"), "move_to_cloud"),
+        { list: "shared", label: t("plan.transfer.notPossible"), disabledReason: t("plan.reason.sharedListOnly") }
       ];
     case "owned_room":
       return [
-        { list: "device", label: "Save a copy to this device (room stays in the cloud)", kind: "copy_to_device" },
-        { list: "shared", label: "Not possible", disabledReason: "you own this room" }
+        { list: "device", label: t("plan.transfer.saveCopyRoomCloud"), kind: "copy_to_device" },
+        { list: "shared", label: t("plan.transfer.notPossible"), disabledReason: t("plan.reason.youOwnRoom") }
       ];
     case "shared_room":
     case "cached_room":
       return [
-        { list: "device", label: "Save a copy to this device (room stays shared)", kind: "copy_to_device" },
-        toCloud("Copy into a new room you own", "copy_to_cloud")
+        { list: "device", label: t("plan.transfer.saveCopyRoomShared"), kind: "copy_to_device" },
+        toCloud(t("plan.transfer.copyIntoOwnRoom"), "copy_to_cloud")
       ];
   }
 }
@@ -265,9 +272,10 @@ export type CopyTransferKind = Exclude<TransferKind, "move_to_cloud">;
 export function getDropTransfer(
   kind: PlanItemKind,
   list: PlanListId,
-  cloudBlockedReason?: string
+  cloudBlockedReason?: string,
+  t: Translator = tGlobal
 ): CopyTransferKind | null {
-  for (const option of getTransferOptions(kind, cloudBlockedReason)) {
+  for (const option of getTransferOptions(kind, cloudBlockedReason, t)) {
     if (option.list === list && option.kind && option.kind !== "move_to_cloud") return option.kind;
   }
   return null;
@@ -277,27 +285,27 @@ export function getDropTransfer(
    Presentation
    -------------------------------------------------------------------------- */
 
-const LIST_META: Record<PlanListId, { title: string; description: string; icon: React.ReactNode }> = {
+const LIST_META: Record<PlanListId, { titleKey: MessageKey; descriptionKey: MessageKey; icon: React.ReactNode }> = {
   device: {
-    title: "This device",
-    description: "Saved in this browser only",
+    titleKey: "plan.list.device",
+    descriptionKey: "plan.list.deviceDesc",
     icon: <HardDrive size={16} />
   },
   cloud: {
-    title: "My cloud",
-    description: "Rooms you own, synced live",
+    titleKey: "plan.list.cloud",
+    descriptionKey: "plan.list.cloudDesc",
     icon: <Crown size={16} />
   },
   shared: {
-    title: "Shared with me",
-    description: "Rooms others shared with you",
+    titleKey: "plan.list.shared",
+    descriptionKey: "plan.list.sharedDesc",
     icon: <Users size={16} />
   }
 };
 
-const DROP_HINTS: Record<CopyTransferKind, string> = {
-  copy_to_cloud: "Drop to copy into a new cloud room",
-  copy_to_device: "Drop to save a copy on this device"
+const DROP_HINTS: Record<CopyTransferKind, MessageKey> = {
+  copy_to_cloud: "plan.drop.copyToCloud",
+  copy_to_device: "plan.drop.copyToDevice"
 };
 
 /** Private drag type: only plan cards dragged inside this dialog are accepted as drops. */
@@ -399,71 +407,67 @@ interface MenuGroup {
 
 type CardMenuKind = "actions" | "transfer";
 
-function describeConfirm({ action, item }: ConfirmRequest): Omit<ConfirmDialogProps, "onConfirm" | "onCancel"> {
+function describeConfirm(
+  { action, item }: ConfirmRequest,
+  t: Translator
+): Omit<ConfirmDialogProps, "onConfirm" | "onCancel"> {
   const name = <strong>&ldquo;{item.name}&rdquo;</strong>;
   switch (action) {
     case "delete_local":
       return {
-        title: "Delete plan from this device?",
+        title: t("plan.confirm.deleteLocal.title"),
         tone: "danger",
-        confirmLabel: "Delete plan",
+        confirmLabel: t("plan.confirm.deleteLocal.confirm"),
         message: (
           <>
-            This permanently deletes {name} and its version history from this browser. This cannot be undone. Export
-            it first if you may need it again.
+            {t("plan.confirm.deleteLocal.before")} {name} {t("plan.confirm.deleteLocal.after")}
           </>
         )
       };
     case "remove_cached":
       return {
-        title: "Remove offline copy?",
+        title: t("plan.confirm.removeCached.title"),
         tone: "danger",
-        confirmLabel: "Remove from this device",
+        confirmLabel: t("plan.confirm.removeCached.confirm"),
         message: (
           <>
-            This removes the copy of room {name}
-            {item.roomId ? ` (#${item.roomId})` : ""} saved in this browser. The room, its members and its cloud data
-            are not affected, and you can open the room link again later. Changes made here that have not synced to
-            the room are lost.
+            {t("plan.confirm.removeCached.before")} {name}
+            {item.roomId ? ` (#${item.roomId})` : ""} {t("plan.confirm.removeCached.after")}
           </>
         )
       };
     case "move_to_cloud":
       return {
-        title: "Move to My cloud?",
-        confirmLabel: "Move to My cloud",
+        title: t("plan.confirm.moveToCloud.title"),
+        confirmLabel: t("plan.confirm.moveToCloud.confirm"),
         message: (
           <>
-            A new cloud room you own is created from {name}. Once the room is saved, the plan and its version history
-            are removed from this device. If the room cannot be created, nothing is removed.
+            {t("plan.confirm.moveToCloud.before")} {name}{t("plan.confirm.moveToCloud.after")}
           </>
         )
       };
     case "delete_room":
       return {
-        title: "Delete cloud room for everyone?",
+        title: t("plan.confirm.deleteRoom.title"),
         tone: "danger",
-        confirmLabel: "Delete room permanently",
+        confirmLabel: t("plan.confirm.deleteRoom.confirm"),
         confirmPhrase: item.name,
         message: (
           <>
-            This permanently deletes room {name} (#{item.roomId}) and all of its data. Every collaborator loses access
-            immediately. This cannot be undone. Use &ldquo;Save a copy to this device&rdquo; first if you want to keep
-            the plan.
+            {t("plan.confirm.deleteRoom.before")} {name} (#{item.roomId}) {t("plan.confirm.deleteRoom.after")}
           </>
         )
       };
     case "leave_room":
       return {
-        title: "Leave shared room?",
+        title: t("plan.confirm.leaveRoom.title"),
         tone: "danger",
-        confirmLabel: "Leave room",
+        confirmLabel: t("plan.confirm.leaveRoom.confirm"),
         message: (
           <>
-            You lose access to {name}
-            {item.ownerUsername ? ` (owned by @${item.ownerUsername})` : ""} and its copy on this device is removed.
-            You can only rejoin if you are invited again. Save a copy to this device first if you want to keep the
-            plan.
+            {t("plan.confirm.leaveRoom.before")} {name}
+            {item.ownerUsername ? ` ${t("plan.confirm.leaveRoom.ownedBy", { name: item.ownerUsername })}` : ""}{" "}
+            {t("plan.confirm.leaveRoom.after")}
           </>
         )
       };
@@ -498,6 +502,7 @@ function computeMenuPosition(menu: HTMLElement, container: HTMLElement, anchorEl
 
 export const PlanManagerModal: React.FC<PlanManagerModalProps> = (props) => {
   const { customProjects, onDeleteProject, showToast } = props;
+  const { t } = useI18n();
 
   // One plan action at a time, across reopenings too: closing the manager during a publish and
   // opening it again must not allow a second publish of the same plan.
@@ -510,11 +515,12 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = (props) => {
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   useEffect(() => {
     if (!pendingMove) return;
-    const kept = () => showToast(`The cloud room was created; "${pendingMove.name}" was also kept on this device.`, true);
+    const kept = () =>
+      showToast(t("plan.toast.keptLocal", { name: pendingMove.name }), true);
     if (customProjects.some((p) => p.roomId === pendingMove.roomId)) {
       setPendingMove(null);
       if (onDeleteProject(pendingMove.localId, { confirm: false }) === false) kept();
-      else showToast(`Moved "${pendingMove.name}" to My cloud.`);
+      else showToast(t("plan.toast.movedToCloud", { name: pendingMove.name }));
       return;
     }
     // Measured from the start, so frequent list updates (autosaves) cannot keep postponing it.
@@ -523,7 +529,7 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = (props) => {
       kept();
     }, Math.max(0, pendingMove.startedAt + PENDING_MOVE_TIMEOUT_MS - Date.now()));
     return () => window.clearTimeout(timer);
-  }, [pendingMove, customProjects, onDeleteProject, showToast]);
+  }, [pendingMove, customProjects, onDeleteProject, showToast, t]);
 
   if (!props.show) return null;
   // Mounted per open: search, menus and confirmations always start fresh.
@@ -561,15 +567,16 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
     busyRef,
     onMoveCompleted
   } = props;
+  const { t } = useI18n();
   // Handlers called after an await use the newest props, not the ones from the click's render.
   const latestRef = useRef(props);
   latestRef.current = props;
 
   const isLoggedIn = props.isLoggedIn ?? Boolean(userProfile);
   const cloudBlockedReason = !isLoggedIn
-    ? "sign in with GitHub first"
+    ? t("plan.reason.signInFirst")
     : !isCloudVerified
-    ? "verify your GitHub account first"
+    ? t("plan.reason.verifyFirst")
     : undefined;
   const isNarrow = useMediaQuery("(max-width: 960px)");
 
@@ -595,8 +602,8 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
   const [dragOverList, setDragOverList] = useState<PlanListId | null>(null);
 
   const lists = useMemo(
-    () => buildPlanLists({ customProjects, ownedRooms, sharedRooms, activeProjectId, isLoggedIn }),
-    [customProjects, ownedRooms, sharedRooms, activeProjectId, isLoggedIn]
+    () => buildPlanLists({ customProjects, ownedRooms, sharedRooms, activeProjectId, isLoggedIn }, t),
+    [customProjects, ownedRooms, sharedRooms, activeProjectId, isLoggedIn, t]
   );
   const itemsById = useMemo(() => {
     const map = new Map<string, PlanCardItem>();
@@ -624,7 +631,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
   // One action at a time across the whole manager: no duplicate rooms from double clicks or drops.
   const runExclusive = async (itemId: string, task: () => Promise<void> | void) => {
     if (busyRef.current) {
-      showToast("Another plan action is still running. Please wait a moment.", true);
+      showToast(t("plan.toast.busy"), true);
       return;
     }
     busyRef.current = true;
@@ -648,14 +655,14 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
         if (payload?.data) return payload.data;
       } catch (err) {
         if (!item.data) {
-          showToast(`Could not load "${item.name}" from the cloud: ${errorMessage(err)}`, true);
+          showToast(t("plan.toast.loadFailed", { name: item.name, error: errorMessage(err) }), true);
           return null;
         }
-        showToast(`Could not reach the cloud; using the copy of "${item.name}" saved on this device.`, true);
+        showToast(t("plan.toast.offlineCopy", { name: item.name }), true);
       }
     }
     if (item.data) return item.data;
-    showToast(`No plan data is available for "${item.name}".`, true);
+    showToast(t("plan.toast.noData", { name: item.name }), true);
     return null;
   };
 
@@ -730,7 +737,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       try {
         downloadPlanExport(item.name, data, format);
       } catch (err) {
-        showToast(`${format.toUpperCase()} export failed: ${errorMessage(err)}`, true);
+        showToast(t("plan.toast.exportFailed", { format: format.toUpperCase(), error: errorMessage(err) }), true);
       }
     });
 
@@ -847,9 +854,9 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
   };
 
   const getTransferGroups = (item: PlanCardItem): MenuGroup[] => {
-    const options = getTransferOptions(item.kind, cloudBlockedReason);
+    const options = getTransferOptions(item.kind, cloudBlockedReason, t);
     return PLAN_LIST_ORDER.filter((list) => list !== item.list).map((list) => ({
-      label: `To ${LIST_META[list].title}`,
+      label: t("plan.menu.toList", { list: t(LIST_META[list].titleKey) }),
       entries: options
         .filter((option) => option.list === list)
         .map((option, index): MenuEntry => {
@@ -872,28 +879,28 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
     const anchor = menu?.anchor ?? null;
     const editing: MenuEntry[] = [];
     if (item.kind === "local") {
-      editing.push({ key: "rename", label: "Rename", icon: <Edit2 size={13} />, onSelect: () => startRename(item, anchor) });
+      editing.push({ key: "rename", label: t("plan.action.rename"), icon: <Edit2 size={13} />, onSelect: () => startRename(item, anchor) });
     }
     if (item.kind === "local" || item.kind === "template") {
-      editing.push({ key: "duplicate", label: "Duplicate on this device", icon: <Files size={13} />, onSelect: () => onDuplicateProject(item.id) });
+      editing.push({ key: "duplicate", label: t("plan.action.duplicate"), icon: <Files size={13} />, onSelect: () => onDuplicateProject(item.id) });
     }
     const sharing: MenuEntry[] = [
-      { key: "json", label: "Export as JSON", icon: <FileJson size={13} />, onSelect: () => void exportPlan(item, "json") },
-      { key: "csv", label: "Export as CSV", icon: <FileSpreadsheet size={13} />, onSelect: () => void exportPlan(item, "csv") }
+      { key: "json", label: t("plan.action.exportJson"), icon: <FileJson size={13} />, onSelect: () => void exportPlan(item, "json") },
+      { key: "csv", label: t("plan.action.exportCsv"), icon: <FileSpreadsheet size={13} />, onSelect: () => void exportPlan(item, "csv") }
     ];
     if (item.roomId && onOpenShareRoom && (item.kind === "owned_room" || item.kind === "shared_room")) {
       const roomId = item.roomId;
-      sharing.push({ key: "share", label: "Teammates & invite links", icon: <Share2 size={13} />, onSelect: () => onOpenShareRoom(roomId) });
+      sharing.push({ key: "share", label: t("plan.action.share"), icon: <Share2 size={13} />, onSelect: () => onOpenShareRoom(roomId) });
     }
     const destructive: MenuEntry[] = [];
     if (item.kind === "local") {
-      destructive.push({ key: "delete", label: "Delete plan...", tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "delete_local", item }) });
+      destructive.push({ key: "delete", label: t("plan.action.deletePlan"), tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "delete_local", item }) });
     } else if (item.kind === "owned_room" && onDeleteCloudRoom) {
-      destructive.push({ key: "delete-room", label: "Delete room for everyone...", tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "delete_room", item }) });
+      destructive.push({ key: "delete-room", label: t("plan.action.deleteRoom"), tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "delete_room", item }) });
     } else if (item.kind === "shared_room" && onLeaveCloudRoom) {
-      destructive.push({ key: "leave", label: "Leave room...", tone: "danger", icon: <UserMinus size={13} />, onSelect: () => setConfirm({ action: "leave_room", item }) });
+      destructive.push({ key: "leave", label: t("plan.action.leaveRoom"), tone: "danger", icon: <UserMinus size={13} />, onSelect: () => setConfirm({ action: "leave_room", item }) });
     } else if (item.kind === "cached_room") {
-      destructive.push({ key: "remove", label: "Remove from this device...", tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "remove_cached", item }) });
+      destructive.push({ key: "remove", label: t("plan.action.removeDevice"), tone: "danger", icon: <Trash2 size={13} />, onSelect: () => setConfirm({ action: "remove_cached", item }) });
     }
     return [editing, sharing, destructive].filter((entries) => entries.length > 0).map((entries) => ({ entries }));
   };
@@ -930,7 +937,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
   const dropTargetProps = (list: PlanListId) => ({
     onDragOver: (event: React.DragEvent) => {
       if (!dragging || !hasDragType(event, PLAN_DRAG_MIME)) return;
-      if (dragging.list === list || !getDropTransfer(dragging.kind, list, cloudBlockedReason)) return;
+      if (dragging.list === list || !getDropTransfer(dragging.kind, list, cloudBlockedReason, t)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       if (dragOverList !== list) setDragOverList(list);
@@ -946,7 +953,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       event.preventDefault();
       clearDrag();
       if (dragged.list === list) return;
-      const kind = getDropTransfer(dragged.kind, list, cloudBlockedReason);
+      const kind = getDropTransfer(dragged.kind, list, cloudBlockedReason, t);
       const item = itemsById.get(dragged.id);
       if (kind && item) void performTransfer(item, kind);
     }
@@ -954,20 +961,37 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
 
   const renderDropHint = (list: PlanListId) => {
     if (!dragging || dragging.list === list) return null;
-    const kind = getDropTransfer(dragging.kind, list, cloudBlockedReason);
-    if (kind) return <div style={hintStyle(true)}>{DROP_HINTS[kind]}</div>;
-    const reason = getTransferOptions(dragging.kind, cloudBlockedReason).find((o) => o.list === list)?.disabledReason;
-    return <div style={hintStyle(false)}>Can&apos;t drop here{reason ? `: ${reason}` : ""}</div>;
+    const kind = getDropTransfer(dragging.kind, list, cloudBlockedReason, t);
+    if (kind) return <div style={hintStyle(true)}>{t(DROP_HINTS[kind])}</div>;
+    const reason = getTransferOptions(dragging.kind, cloudBlockedReason, t).find((o) => o.list === list)?.disabledReason;
+    return <div style={hintStyle(false)}>{t("plan.cantDrop")}{reason ? `: ${reason}` : ""}</div>;
   };
 
   /* ----- rendering ----- */
+
+  const formatUpdatedAt = (isoStr?: string): string => {
+    if (!isoStr) return t("plan.updated.never");
+    const time = new Date(isoStr).getTime();
+    if (Number.isNaN(time)) return t("plan.updated.unknown");
+    const diff = Math.floor((Date.now() - time) / 1000);
+    if (diff < 5) return t("plan.updated.justNow");
+    if (diff < 60) return t("plan.updated.secondsAgo", { count: diff });
+    if (diff < 3600) return t("plan.updated.minutesAgo", { count: Math.floor(diff / 60) });
+    if (diff < 86400) return t("plan.updated.hoursAgo", { count: Math.floor(diff / 3600) });
+    return t("plan.updated.daysAgo", { count: Math.floor(diff / 86400) });
+  };
 
   const renderCard = (item: PlanCardItem) => {
     const isBusy = busyItemId === item.id;
     const isRenaming = renamingId === item.id;
     const isActionsMenuOpen = menu?.itemId === item.id && menu.kind === "actions";
     const isTransferMenuOpen = menu?.itemId === item.id && menu.kind === "transfer";
-    const taskLabel = item.taskCount === null ? "Tasks: unknown" : `${item.taskCount} task${item.taskCount === 1 ? "" : "s"}`;
+    const taskLabel =
+      item.taskCount === null
+        ? t("plan.tasksUnknown")
+        : item.taskCount === 1
+        ? t("plan.tasksOne", { count: item.taskCount })
+        : t("plan.tasksMany", { count: item.taskCount });
 
     return (
       <div
@@ -993,7 +1017,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                 type="text"
                 autoFocus
                 className="select-input"
-                aria-label={`New name for "${item.name}"`}
+                aria-label={t("plan.renameAria", { name: item.name })}
                 enterKeyHint="done"
                 maxLength={120}
                 style={{ padding: "2px 6px", fontSize: "13px", fontWeight: 600, flex: 1, height: "26px", minWidth: 0 }}
@@ -1028,12 +1052,12 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-            {isBusy && <Loader2 size={14} className="spin-sync-icon" aria-label="Working" />}
+            {isBusy && <Loader2 size={14} className="spin-sync-icon" aria-label={t("plan.working")} />}
             {item.isActive && (
               <span
                 className="plan-current-marker"
               >
-                <Check size={12} aria-hidden="true" /> Open now
+                <Check size={12} aria-hidden="true" /> {t("plan.openNow")}
               </span>
             )}
           </div>
@@ -1042,7 +1066,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
         <div className="plan-card-meta-row">
           <span>{taskLabel}</span>
           <span aria-hidden="true">&bull;</span>
-          <span>{item.updatedAt ? formatRelativeTime(item.updatedAt) : item.kind === "template" ? "Built-in" : "Not saved yet"}</span>
+          <span>{item.updatedAt ? formatUpdatedAt(item.updatedAt) : item.kind === "template" ? t("plan.builtIn") : t("plan.notSavedYet")}</span>
           {item.roomId && (
             <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)", fontFamily: "monospace", fontSize: "10.5px" }}>
               #{item.roomId}
@@ -1059,7 +1083,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             </span>
           )}
           {item.badge && <span style={pillStyle("rgba(148, 163, 184, 0.15)", "var(--jantt-text-muted)")}>{item.badge}</span>}
-          {item.ownerUsername && <span style={{ fontSize: "11px" }}>by @{item.ownerUsername}</span>}
+          {item.ownerUsername && <span style={{ fontSize: "11px" }}>{t("plan.byOwner", { name: item.ownerUsername })}</span>}
         </div>
 
         <div className="plan-card-action-bar">
@@ -1073,7 +1097,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                 close();
               }}
             >
-              Open
+              {t("plan.open")}
             </button>
           )}
 
@@ -1081,13 +1105,13 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             type="button"
             className={`btn-nav ${isTransferMenuOpen ? "btn-nav-primary" : ""}`}
             style={{ padding: "4px 9px", fontSize: "11.5px", gap: "5px" }}
-            aria-label={`Move or copy "${item.name}" to another list`}
-            title="Move or copy this plan to another list"
+            aria-label={t("plan.moveCopyAria", { name: item.name })}
+            title={t("plan.moveCopyTitle")}
             disabled={Boolean(busyItemId)}
             {...menuTriggerProps(item, "transfer")}
           >
             <ArrowLeftRight size={12} aria-hidden="true" />
-            <span>Move / copy</span>
+            <span>{t("plan.moveCopy")}</span>
             <ChevronDown size={12} aria-hidden="true" />
           </button>
 
@@ -1095,8 +1119,8 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             type="button"
             className={`btn-nav ${isActionsMenuOpen ? "btn-nav-primary" : ""}`}
             style={{ padding: "4px 6px", fontSize: "11px", marginLeft: "auto" }}
-            aria-label={`More actions for "${item.name}"`}
-            title="More actions"
+            aria-label={t("plan.moreActionsAria", { name: item.name })}
+            title={t("plan.moreActions")}
             disabled={isBusy}
             {...menuTriggerProps(item, "actions")}
           >
@@ -1112,7 +1136,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       return (
         <div className="plan-board-empty-zone">
           <Search size={20} style={{ opacity: 0.5 }} />
-          <span>No plans here match &ldquo;{searchQuery.trim()}&rdquo;.</span>
+          <span>{t("plan.empty.noMatch", { query: searchQuery.trim() })}</span>
         </div>
       );
     }
@@ -1120,9 +1144,9 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       return (
         <div className="plan-board-empty-zone">
           <Cloud size={24} style={{ opacity: 0.5 }} />
-          <span style={{ fontWeight: 600 }}>Sign in to use cloud rooms</span>
+          <span style={{ fontWeight: 600 }}>{t("plan.empty.signInCloudTitle")}</span>
           <span style={{ fontSize: "11px", maxWidth: "240px", lineHeight: 1.4 }}>
-            Cloud rooms sync live across devices and can be shared with teammates.
+            {t("plan.empty.signInCloudBody")}
           </span>
           {onLogin && (
             <button
@@ -1134,7 +1158,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               aria-busy={isSigningIn || undefined}
             >
               {isSigningIn ? <Loader2 size={13} className="spin-sync-icon" aria-hidden="true" /> : <Github size={13} />}
-              <span>{isSigningIn ? "Signing in..." : "Sign in with GitHub"}</span>
+              <span>{isSigningIn ? t("plan.signingIn") : t("plan.signInGithub")}</span>
             </button>
           )}
         </div>
@@ -1144,9 +1168,9 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       return (
         <div className="plan-board-empty-zone">
           <Cloud size={24} style={{ opacity: 0.5 }} />
-          <span style={{ fontWeight: 500 }}>No cloud rooms yet.</span>
+          <span style={{ fontWeight: 500 }}>{t("plan.empty.cloudTitle")}</span>
           <span style={{ fontSize: "11px", maxWidth: "240px", lineHeight: 1.4 }}>
-            Use &ldquo;Move / copy to...&rdquo; on a plan, drag a plan here, or create a new room.
+            {t("plan.empty.cloudBody")}
           </span>
         </div>
       );
@@ -1155,11 +1179,9 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
       return (
         <div className="plan-board-empty-zone">
           <Users size={24} style={{ opacity: 0.5 }} />
-          <span style={{ fontWeight: 500 }}>Nothing shared with you yet.</span>
+          <span style={{ fontWeight: 500 }}>{t("plan.empty.sharedTitle")}</span>
           <span style={{ fontSize: "11px", maxWidth: "240px", lineHeight: 1.4 }}>
-            {isLoggedIn
-              ? "Rooms appear here when teammates invite you or you open a room link."
-              : "Sign in to see rooms other people share with you."}
+            {isLoggedIn ? t("plan.empty.sharedBodySignedIn") : t("plan.empty.sharedBodySignedOut")}
           </span>
         </div>
       );
@@ -1167,7 +1189,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
     return (
       <div className="plan-board-empty-zone">
         <HardDrive size={22} style={{ opacity: 0.5 }} />
-        <span>No plans on this device yet.</span>
+        <span>{t("plan.empty.deviceTitle")}</span>
       </div>
     );
   };
@@ -1193,14 +1215,14 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                 id={`plan-list-title-${list}`}
                 style={{ margin: 0, fontWeight: 700, fontSize: "13.5px", color: "var(--jantt-text)", display: "flex", alignItems: "center", gap: "6px" }}
               >
-                {meta.title}
+                {t(meta.titleKey)}
                 <span
                   style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "10px", background: "rgba(148, 163, 184, 0.15)", color: "var(--jantt-text)", fontWeight: 600 }}
                 >
                   {items.length}
                 </span>
               </h3>
-              <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>{meta.description}</div>
+              <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>{t(meta.descriptionKey)}</div>
             </div>
           </div>
           {list === "cloud" && isLoggedIn && onCreateNewRoom && (
@@ -1214,7 +1236,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               }}
             >
               <Plus size={12} />
-              <span>New room</span>
+              <span>{t("plan.newRoom")}</span>
             </button>
           )}
           {list === "shared" && onJoinRoomLink && (
@@ -1222,14 +1244,14 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               type="button"
               className="btn-nav"
               style={{ padding: "3px 8px", fontSize: "11px", gap: "4px", flexShrink: 0 }}
-              title="Open a room someone shared with you from its link or room ID"
+              title={t("plan.joinTitle")}
               onClick={() => {
                 close();
                 onJoinRoomLink();
               }}
             >
               <Link2 size={12} aria-hidden="true" />
-              <span>Join by link</span>
+              <span>{t("plan.joinByLink")}</span>
             </button>
           )}
         </div>
@@ -1239,17 +1261,17 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
         {list === "cloud" && isLoggedIn && !isCloudVerified && (
           <div style={noticeStyle}>
             <ShieldCheck size={14} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
-            <span style={{ flex: "1 1 160px" }}>Verify your GitHub account to create rooms or copy plans to the cloud.</span>
+            <span style={{ flex: "1 1 160px" }}>{t("plan.verifyNotice")}</span>
             {onRequireVerification && (
               <button type="button" className="btn-nav" style={{ fontSize: "11px", padding: "3px 8px" }} onClick={onRequireVerification}>
-                Verify
+                {t("plan.verify")}
               </button>
             )}
           </div>
         )}
         {list === "shared" && !isLoggedIn && items.length > 0 && (
           <div style={noticeStyle}>
-            <span style={{ flex: "1 1 160px" }}>These rooms are saved in this browser. Sign in to see every room shared with you.</span>
+            <span style={{ flex: "1 1 160px" }}>{t("plan.savedInBrowserNotice")}</span>
           </div>
         )}
 
@@ -1284,8 +1306,8 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               className="prompt-modal-close-btn"
               style={{ padding: "3px" }}
               onClick={() => void onSignOut()}
-              aria-label="Sign out"
-              title="Sign out"
+              aria-label={t("plan.signOut")}
+              title={t("plan.signOut")}
             >
               <LogOut size={12} />
             </button>
@@ -1301,7 +1323,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
           aria-busy={isSigningIn || undefined}
         >
           {isSigningIn ? <Loader2 size={13} className="spin-sync-icon" aria-hidden="true" /> : <Github size={13} />}
-          <span>{isSigningIn ? "Signing in..." : "Sign in"}</span>
+          <span>{isSigningIn ? t("plan.signingIn") : t("plan.signIn")}</span>
         </button>
       ) : null}
       <button
@@ -1309,10 +1331,10 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
         className="btn-nav"
         style={{ padding: "6px 11px", fontSize: "12px", gap: "6px" }}
         onClick={onImportFile}
-        title="Import a .json, MS Project .xml, Primavera .xer or .csv file onto this device"
+        title={t("plan.importTitle")}
       >
         <Upload size={13} />
-        <span>Import file</span>
+        <span>{t("plan.import")}</span>
       </button>
       <button
         type="button"
@@ -1324,23 +1346,23 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
         }}
       >
         <Plus size={14} />
-        <span>New plan</span>
+        <span>{t("plan.new")}</span>
       </button>
     </>
   );
 
-  const confirmDetails = confirm ? describeConfirm(confirm) : null;
+  const confirmDetails = confirm ? describeConfirm(confirm, t) : null;
 
   return (
     <>
       <Modal onClose={close} maxWidth={1180} tall>
         <ModalHeader
           icon={<Layers size={18} />}
-          title="Plan manager"
+          title={t("plan.title")}
           subtitle={
             isNarrow
               ? undefined
-              : "Drag a plan onto another list, or use “Move / copy to...” on its card."
+              : t("plan.subtitle")
           }
           actions={headerActions}
         />
@@ -1368,9 +1390,9 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               type="search"
               enterKeyHint="search"
               className="select-input"
-              aria-label="Filter plans"
+              aria-label={t("plan.filterAria")}
               style={{ width: "100%", paddingLeft: "32px", paddingRight: "10px", fontSize: "12px", height: "32px", boxSizing: "border-box" }}
-              placeholder="Find a plan, room or owner"
+              placeholder={t("plan.filterPlaceholder")}
               value={searchQuery}
               // Start in the filter on desktop; on phones a focused input would pop up the keyboard.
               data-autofocus={isNarrow ? undefined : true}
@@ -1389,7 +1411,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
               <button
                 type="button"
                 className="plan-filter-clear"
-                aria-label="Clear plan filter"
+                aria-label={t("plan.clearFilter")}
                 onClick={() => { setSearchQuery(""); filterRef.current?.focus(); }}
               >
                 <X size={15} />
@@ -1401,7 +1423,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
             <div
               className="plan-scope-tabs"
               role="tablist"
-              aria-label="Plan lists"
+              aria-label={t("plan.listsAria")}
               style={{ display: "flex", gap: "6px", flex: "1 1 100%", overflowX: "auto" }}
               onKeyDown={(event) => {
                 if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
@@ -1423,7 +1445,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                     type="button"
                     role="tab"
                     aria-selected={selected}
-                    aria-label={`${LIST_META[list].title}, ${filtered[list].length} plans`}
+                    aria-label={t("plan.tabAria", { list: t(LIST_META[list].titleKey), count: filtered[list].length })}
                     aria-controls={selected ? `plan-list-panel-${list}` : undefined}
                     tabIndex={selected ? 0 : -1}
                     data-autofocus={selected ? true : undefined}
@@ -1439,7 +1461,7 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
                     onClick={() => setNarrowList(list)}
                     {...dropTargetProps(list)}
                   >
-                    {list === "device" ? "Device" : list === "cloud" ? "My cloud" : "Shared"}
+                    {list === "device" ? t("plan.tab.device") : list === "cloud" ? t("plan.tab.cloud") : t("plan.tab.shared")}
                     <span className="plan-tab-count">{filtered[list].length}</span>
                   </button>
                 );
@@ -1454,7 +1476,11 @@ const PlanManagerDialog: React.FC<PlanManagerDialogProps> = (props) => {
           <div
             ref={menuRef}
             role="menu"
-            aria-label={menu.kind === "transfer" ? `Move or copy "${menuItem.name}"` : `Actions for "${menuItem.name}"`}
+            aria-label={
+              menu.kind === "transfer"
+                ? t("plan.menu.transferAria", { name: menuItem.name })
+                : t("plan.menu.actionsAria", { name: menuItem.name })
+            }
             className="card-floating-actions-menu plan-manager-menu"
             onKeyDown={handleMenuKeyDown}
             style={{

@@ -16,6 +16,7 @@ import type {
   ProviderId,
   ProviderAccount
 } from "../../services/ai/types";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface CopilotSetupProps {
   config: CopilotConfig;
@@ -39,6 +40,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
   onSaveConfig,
   onClose
 }) => {
+  const { t } = useI18n();
   // Editing state: whether creating a new account or editing existing
   const [editingAccountId, setEditingAccountId] = useState<string | null>(
     config.activeAccountId || (accounts.length > 0 ? accounts[0].id : null)
@@ -92,7 +94,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
     setSelectedProvider(pId);
     const def = providers.find((p) => p.id === pId);
     if (isCreatingNew || !accountLabel.trim()) {
-      setAccountLabel(def ? `${def.label} Account` : `${pId} Account`);
+      setAccountLabel(t("copilot.accountNameSuffix", { provider: def ? def.label : pId }));
     }
   };
 
@@ -101,7 +103,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
     setEditingAccountId(null);
     setSelectedProvider("gemini");
     const geminiDef = providers.find((p) => p.id === "gemini");
-    setAccountLabel(geminiDef ? `${geminiDef.label} Account` : "Gemini Account");
+    setAccountLabel(t("copilot.accountNameSuffix", { provider: geminiDef ? geminiDef.label : "Gemini" }));
     setApiKey("");
     setCustomBaseUrl("");
     setProxyUrl("");
@@ -131,7 +133,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
     const label = accountLabel.trim() || activeProviderDef.label;
 
     if (selectedProvider !== "ollama" && !cleanKey) {
-      setErrorMessage(`Please enter an API key for ${activeProviderDef.label}.`);
+      setErrorMessage(t("copilot.apiKeyRequired", { provider: activeProviderDef.label }));
       return;
     }
     setErrorMessage("");
@@ -185,8 +187,8 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           <KeyRound size={20} />
         </div>
         <div>
-          <h3>AI Provider Accounts</h3>
-          <p>Add N providers and API keys. Stored securely in your browser.</p>
+          <h3>{t("copilot.providerAccounts")}</h3>
+          <p>{t("copilot.providerAccountsBody")}</p>
         </div>
       </div>
 
@@ -194,16 +196,16 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
       <div className="copilot-accounts-section">
         <div className="copilot-accounts-header">
           <span className="copilot-section-title">
-            Configured Accounts ({accounts.length})
+            {t("copilot.configuredAccounts", { count: accounts.length })}
           </span>
           <button
             type="button"
             className="copilot-add-account-btn"
             onClick={handleStartAddAccount}
-            title="Add another API key or provider"
+            title={t("copilot.addAccountTitle")}
           >
             <Plus size={12} />
-            <span>Add Account</span>
+            <span>{t("copilot.addAccount")}</span>
           </button>
         </div>
 
@@ -224,12 +226,12 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                   <div className="copilot-acc-info">
                     <div className="copilot-acc-name-row">
                       <span className="copilot-acc-name">{acc.label}</span>
-                      {isActive && <span className="copilot-acc-badge-active">Active</span>}
+                      {isActive && <span className="copilot-acc-badge-active">{t("copilot.active")}</span>}
                     </div>
                     <span className="copilot-acc-meta">
                       {pDef?.label || acc.providerId}
                       {" • "}
-                      {hasKey ? "Key configured" : "Key missing"}
+                      {hasKey ? t("copilot.keyConfigured") : t("copilot.keyMissing")}
                     </span>
                   </div>
                   <div className="copilot-acc-actions" onClick={(e) => e.stopPropagation()}>
@@ -237,7 +239,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                       type="button"
                       className="copilot-acc-edit-btn"
                       onClick={() => handleSelectAccountToEdit(acc)}
-                      title="Edit this account"
+                      title={t("copilot.editAccount")}
                     >
                       <Edit2 size={12} />
                     </button>
@@ -246,7 +248,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                         type="button"
                         className="copilot-acc-delete-btn"
                         onClick={() => handleDeleteAccount(acc.id)}
-                        title="Delete this account"
+                        title={t("copilot.deleteAccount")}
                       >
                         <Trash2 size={12} />
                       </button>
@@ -261,13 +263,13 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
 
       <div className="copilot-setup-form">
         <div className="copilot-form-section-divider">
-          <span>{isCreatingNew ? "Add New Account" : `Editing: ${accountLabel || activeProviderDef.label}`}</span>
+          <span>{isCreatingNew ? t("copilot.addNewAccount") : t("copilot.editing", { label: accountLabel || activeProviderDef.label })}</span>
         </div>
 
         {/* Account Label */}
         <div className="copilot-form-group">
           <label className="copilot-form-label" htmlFor="copilot-account-label">
-            Account Nickname / Label
+            {t("copilot.accountLabel")}
           </label>
           <input
             id="copilot-account-label"
@@ -275,14 +277,14 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
             className="copilot-text-input"
             value={accountLabel}
             onChange={(e) => setAccountLabel(e.target.value)}
-            placeholder="e.g. Gemini Personal, OpenAI Work, Ollama Local"
+            placeholder={t("copilot.accountLabelPlaceholder")}
             spellCheck={false}
           />
         </div>
 
         {/* Provider Dropdown */}
         <div className="copilot-form-group" ref={dropdownRef}>
-          <label className="copilot-form-label">Provider</label>
+          <label className="copilot-form-label">{t("copilot.provider")}</label>
           <div className="copilot-dropdown-container">
             <button
               type="button"
@@ -291,7 +293,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
             >
               <div className="copilot-dropdown-trigger-content">
                 <span className="copilot-dropdown-trigger-title">{activeProviderDef.label}</span>
-                <span className="copilot-dropdown-trigger-desc">{activeProviderDef.description}</span>
+                <span className="copilot-dropdown-trigger-desc">{t(`copilot.providerDesc.${activeProviderDef.id}`)}</span>
               </div>
               <ChevronDown size={14} className={`copilot-dropdown-chevron ${isProviderDropdownOpen ? "is-open" : ""}`} />
             </button>
@@ -316,7 +318,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                         <span className="copilot-dropdown-item-label">{p.label}</span>
                         {isSelected && <Check size={13} className="copilot-check-icon" />}
                       </div>
-                      <span className="copilot-dropdown-item-desc">{p.description}</span>
+                      <span className="copilot-dropdown-item-desc">{t(`copilot.providerDesc.${p.id}`)}</span>
                     </button>
                   );
                 })}
@@ -328,7 +330,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         {/* API Key */}
         <div className="copilot-form-group">
           <label className="copilot-form-label" htmlFor="copilot-api-key">
-            {activeProviderDef.label} API Key
+            {t("copilot.apiKeyLabel", { provider: activeProviderDef.label })}
           </label>
           <input
             id="copilot-api-key"
@@ -350,12 +352,12 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
                 : selectedProvider === "openrouter"
                 ? "sk-or-..."
                 : selectedProvider === "mistral"
-                ? "API key from Mistral..."
+                ? t("copilot.apiKeyPlaceholderMistral")
                 : selectedProvider === "xai"
                 ? "xai-..."
                 : selectedProvider === "ollama"
-                ? "No key required for local Ollama"
-                : "API Key (if required)"
+                ? t("copilot.apiKeyPlaceholderOllama")
+                : t("copilot.apiKeyPlaceholderGeneric")
             }
             autoComplete="off"
             spellCheck={false}
@@ -363,49 +365,49 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
           <span className="copilot-form-hint">
             {selectedProvider === "gemini" && (
               <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">
-                Get free Gemini API Key <ExternalLink size={10} />
+                {t("copilot.getKeyGemini")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "openai" && (
               <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
-                Get OpenAI API Key <ExternalLink size={10} />
+                {t("copilot.getKeyOpenai")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "anthropic" && (
               <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
-                Get Anthropic API Key <ExternalLink size={10} />
+                {t("copilot.getKeyAnthropic")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "groq" && (
               <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">
-                Get free Groq API Key <ExternalLink size={10} />
+                {t("copilot.getKeyGroq")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "deepseek" && (
               <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">
-                Get DeepSeek API Key <ExternalLink size={10} />
+                {t("copilot.getKeyDeepseek")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "openrouter" && (
               <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">
-                Get OpenRouter API Key (supports 200+ models in-browser) <ExternalLink size={10} />
+                {t("copilot.getKeyOpenrouter")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "mistral" && (
               <a href="https://console.mistral.ai/api-keys/" target="_blank" rel="noreferrer">
-                Get Mistral API Key <ExternalLink size={10} />
+                {t("copilot.getKeyMistral")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "xai" && (
               <a href="https://console.x.ai/" target="_blank" rel="noreferrer">
-                Get xAI API Key <ExternalLink size={10} />
+                {t("copilot.getKeyXai")} <ExternalLink size={10} />
               </a>
             )}
             {selectedProvider === "ollama" && (
-              <span>Local Ollama running on your machine. Default: http://localhost:11434</span>
+              <span>{t("copilot.ollamaHint")}</span>
             )}
             {selectedProvider === "openai-compatible" && (
-              <span>Supports vLLM, LM Studio, Together, or any self-hosted OpenAI-compatible server.</span>
+              <span>{t("copilot.compatibleHint")}</span>
             )}
           </span>
           {errorMessage && (
@@ -419,7 +421,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         {(selectedProvider === "openai-compatible" || selectedProvider === "ollama" || activeProviderDef.supportsCustomBaseUrl) && (
           <div className="copilot-form-group">
             <label className="copilot-form-label" htmlFor="copilot-base-url">
-              {selectedProvider === "ollama" ? "Ollama Endpoint URL" : "Custom Endpoint Base URL"}
+              {selectedProvider === "ollama" ? t("copilot.ollamaUrl") : t("copilot.baseUrl")}
             </label>
             <input
               id="copilot-base-url"
@@ -441,7 +443,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         {selectedProvider === "anthropic" && (
           <div className="copilot-form-group">
             <label className="copilot-form-label" htmlFor="copilot-proxy-url">
-              CORS Proxy URL (Optional)
+              {t("copilot.proxyUrl")}
             </label>
             <input
               id="copilot-proxy-url"
@@ -453,7 +455,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
               spellCheck={false}
             />
             <span className="copilot-form-hint">
-              Anthropic API restricts direct browser calls. Enter your proxy URL, or use OpenRouter via OpenAI-compatible.
+              {t("copilot.proxyHint")}
             </span>
           </div>
         )}
@@ -461,7 +463,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         {/* Creativity / Temperature */}
         <div className="copilot-form-group">
           <label className="copilot-form-label" htmlFor="copilot-temperature">
-            Creativity & Temperature: {temperature}
+            {t("copilot.temperature", { value: temperature })}
           </label>
           <input
             id="copilot-temperature"
@@ -474,7 +476,7 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
             className="copilot-slider"
           />
           <span className="copilot-form-hint">
-            Lower values (0.1 - 0.3) generate strict, deterministic project schedules.
+            {t("copilot.temperatureHint")}
           </span>
         </div>
 
@@ -482,18 +484,18 @@ export const CopilotSetup: React.FC<CopilotSetupProps> = ({
         <div className="copilot-setup-footer">
           <div className="copilot-secure-note">
             <ShieldCheck size={14} />
-            <span>Keys stay on your device; available models are fetched live from your provider API</span>
+            <span>{t("copilot.secureNote")}</span>
           </div>
           <button type="button" className="copilot-save-btn" onClick={handleSave}>
             {savedSuccess ? (
               <>
                 <Check size={14} />
-                <span>Saved!</span>
+                <span>{t("copilot.saved")}</span>
               </>
             ) : (
               <>
                 <Save size={14} />
-                <span>Save Account & Settings</span>
+                <span>{t("copilot.saveAccount")}</span>
               </>
             )}
           </button>

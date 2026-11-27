@@ -94,6 +94,10 @@ renderer.setPlan({ ...plan, tasks: [...plan.tasks] });
 renderer.updateOptions({ dayWidth: 48, theme: "swiss-light", colors: { primary: "#7C3AED" } });
 ```
 
+### Language
+
+Pass `{ locale: "zh-CN" }` in the renderer options for a Simplified Chinese timeline header. Call `renderer.updateOptions({ locale: "en" })` to switch back. Explicit `monthLabels`, `quarterLabels`, and `monthYearTemplate` override the preset.
+
 ### Minimap
 
 ```typescript

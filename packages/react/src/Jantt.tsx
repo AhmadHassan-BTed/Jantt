@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { JanttData, Task, ViewportOptions, JanttOptions, renderJantt, JanttInstance } from "@jantt/core";
+import { JanttData, Task, ViewportOptions, JanttOptions, TimelineLabels, renderJantt, normalizeTimelineLocale, JanttInstance } from "@jantt/core";
 
 export interface JanttProps {
   /** Access the mounted renderer for input devices with their own gesture lifecycle. */
@@ -13,6 +13,7 @@ export interface JanttProps {
   onTaskAdd?: (newTask: Task) => void;
   /** Delegate the full detail sheet to a host that manages navigation and undo. */
   onOpenTaskDetails?: (task: Task) => void;
+  translateTaskSidebar?: JanttOptions["translateTaskSidebar"];
   onLinkSnap?: (taskId: string) => void;
   onLinkCreate?: (fromTaskId: string, toTaskId: string) => void;
   onLinkDelete?: (fromTaskId: string, toTaskId: string) => void;
@@ -36,6 +37,10 @@ export interface JanttProps {
     }
   ) => void;
   viewport?: ViewportOptions;
+  /** Built-in chart language. Defaults to English. */
+  locale?: string;
+  /** Localized timeline text (month/week/quarter tiers, Today pill); omitted fields stay English. */
+  labels?: Partial<TimelineLabels>;
   theme?: Record<string, string>;
   themeClassName?: string;
   className?: string;
@@ -148,6 +153,7 @@ export const Jantt: React.FC<JanttProps> = ({
   onTaskDelete,
   onTaskAdd,
   onOpenTaskDetails,
+  translateTaskSidebar,
   onLinkSnap,
   onLinkCreate,
   onLinkDelete,
@@ -163,6 +169,8 @@ export const Jantt: React.FC<JanttProps> = ({
   onDayWidthChange,
   renderDetail,
   viewport,
+  locale,
+  labels,
   theme,
   themeClassName,
   className,
@@ -208,6 +216,7 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskDelete,
     onTaskAdd,
     onOpenTaskDetails,
+    translateTaskSidebar,
     onLinkSnap,
     onLinkCreate,
     onLinkDelete,
@@ -230,6 +239,7 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskDelete,
     onTaskAdd,
     onOpenTaskDetails,
+    translateTaskSidebar,
     onLinkSnap,
     onLinkCreate,
     onLinkDelete,
@@ -244,6 +254,7 @@ export const Jantt: React.FC<JanttProps> = ({
     onError
   };
 
+  const chartLocale = locale === undefined ? undefined : normalizeTimelineLocale(locale);
   const serializedTheme = theme ? JSON.stringify(theme) : "";
 
   // Options that are plain configuration: re-applying an unchanged value is harmless.
@@ -259,8 +270,11 @@ export const Jantt: React.FC<JanttProps> = ({
     isMobile,
     mobileDoubleTapToOpen,
     hideLabelColumn,
+    chartLocale,
+    labels ? JSON.stringify(labels) : "",
     Boolean(renderDetail),
     Boolean(onOpenTaskDetails),
+    Boolean(translateTaskSidebar),
     Boolean(onOpenAutoSave),
     Boolean(onImportJson),
     Boolean(onExportJson),
@@ -285,6 +299,8 @@ export const Jantt: React.FC<JanttProps> = ({
     isMobile,
     mobileDoubleTapToOpen,
     hideLabelColumn,
+    locale: chartLocale,
+    labels,
     onDateClick: (dateStr: string) => callbacksRef.current.onDateClick?.(dateStr),
     onClearDateFilter: () => callbacksRef.current.onClearDateFilter?.(),
     onDayWidthChange: (w: number) => {
@@ -307,6 +323,7 @@ export const Jantt: React.FC<JanttProps> = ({
     onTaskDelete: onTaskDelete ? (id: string) => callbacksRef.current.onTaskDelete?.(id) : undefined,
     onTaskAdd: onTaskAdd ? (newTask: Task) => callbacksRef.current.onTaskAdd?.(newTask) : undefined,
     onOpenTaskDetails: onOpenTaskDetails ? task => callbacksRef.current.onOpenTaskDetails?.(task) : undefined,
+    translateTaskSidebar: translateTaskSidebar ? key => callbacksRef.current.translateTaskSidebar?.(key) : undefined,
     onLinkSnap: id => callbacksRef.current.onLinkSnap?.(id),
     onLinkCreate: onLinkCreate ? (fromId: string, toId: string) => callbacksRef.current.onLinkCreate?.(fromId, toId) : undefined,
     onLinkDelete: onLinkDelete ? (fromId: string, toId: string) => callbacksRef.current.onLinkDelete?.(fromId, toId) : undefined,
@@ -427,6 +444,7 @@ export const Jantt: React.FC<JanttProps> = ({
   return (
     <div
       ref={containerRef}
+      lang={labels?.locale ?? chartLocale}
       className={`jantt-react-wrapper ${className || ""}`.trim()}
       style={{ width: "100%", height: "100%", minHeight: 0, display: "flex", flexDirection: "column", flex: "1 1 auto", ...style }}
     />

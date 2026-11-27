@@ -18,6 +18,8 @@ import { triggerHaptic } from "../../services/platform";
 import "./phone-timeline.css";
 import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
+import { useCanvasTimelineLabels } from "../../i18n/timeline";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface PersistedCanvasState {
   showCritical: boolean;
@@ -132,6 +134,9 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   onOpenScratchPlan,
   scrollToTodayTrigger
 }) => {
+  const { t, locale, formatDate } = useI18n();
+  const canvasLabels = useCanvasTimelineLabels();
+  const { monthLabels: monthLabelsForLocale, quarterLabels, monthYearTemplate } = canvasLabels;
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -335,7 +340,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         rowHeight: ROW_HEIGHT,
         headerHeight: HEADER_HEIGHT,
         showCriticalPath: showCritical,
-        colors
+        colors,
+        monthLabels: monthLabelsForLocale,
+        quarterLabels,
+        monthYearTemplate
       });
     } else {
       rendererRef.current.setPlan(renderPlan);
@@ -346,9 +354,15 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
 
   // Visual option changes
   useEffect(() => {
-    rendererRef.current?.updateOptions({ showCriticalPath: showCritical, colors });
+    rendererRef.current?.updateOptions({
+      showCriticalPath: showCritical,
+      colors,
+      monthLabels: monthLabelsForLocale,
+      quarterLabels,
+      monthYearTemplate
+    });
     scheduleRender();
-  }, [showCritical, colors, scheduleRender]);
+  }, [showCritical, colors, monthLabelsForLocale, quarterLabels, monthYearTemplate, scheduleRender]);
 
   useEffect(() => {
     if (showMinimap) scheduleRender();
@@ -648,7 +662,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       });
     }
 
-    const title = `Canvas benchmark (${count.toLocaleString()} tasks)`;
+    const title = t("canvas.benchmarkPlan", { count: count.toLocaleString(locale) });
     onOpenScratchPlan(title, {
       meta: { title },
       categories: Object.fromEntries(
@@ -670,8 +684,8 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   }, [liveTasks]);
   const canvasLabel =
     taskCount === 0
-      ? "Canvas timeline: no tasks"
-      : `Canvas timeline of ${taskCount.toLocaleString()} tasks from ${rangeStart} to ${rangeEnd}. Arrow keys pan, plus and minus zoom, 0 resets.`;
+      ? t("canvas.ariaEmpty")
+      : t("canvas.aria", { count: taskCount.toLocaleString(locale), start: formatDate(rangeStart, { dateStyle: "medium" }), end: formatDate(rangeEnd, { dateStyle: "medium" }) });
 
   const containerWidth = containerRef.current?.clientWidth ?? 0;
   const containerHeight = containerRef.current?.clientHeight ?? 0;
@@ -726,7 +740,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             }}
           >
             <Zap size={13} style={{ color: "#A855F7" }} />
-            <span>CANVAS ENGINE</span>
+            <span>{t("canvas.engine")}</span>
           </div>
 
           <div
@@ -741,10 +755,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             }}
           >
             <Layers size={13} style={{ color: "#38BDF8" }} />
-            <span>{taskCount.toLocaleString()} tasks</span>
+            <span>{t("toolbar.taskCount", { count: taskCount.toLocaleString(locale) })}</span>
             <span>&bull;</span>
             <span style={{ fontSize: "11px", color: "var(--jantt-text-muted, #64748B)" }}>
-              Drag or scroll to pan &bull; Ctrl+scroll to zoom
+              {t("canvas.panHint")}
             </span>
           </div>
         </div>}
@@ -756,40 +770,40 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
             onClick={() => zoomTo(viewRef.current.dayWidth + ZOOM_STEP)}
-            title="Zoom In (Scale Day Width)"
+            title={t("canvas.zoomInTitle")}
           >
             <ZoomIn size={12} style={{ color: "#38BDF8" }} />
-            <span>Zoom In</span>
+            <span>{t("canvas.zoomIn")}</span>
           </button>
           <button
             type="button"
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
             onClick={() => zoomTo(viewRef.current.dayWidth - ZOOM_STEP)}
-            title="Zoom Out"
+            title={t("canvas.zoomOutTitle")}
           >
             <ZoomOut size={12} style={{ color: "#818CF8" }} />
-            <span>Zoom Out</span>
+            <span>{t("canvas.zoomOut")}</span>
           </button>
           <button
             type="button"
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
             onClick={handleJumpToToday}
-            title="Scroll timeline to the Today line"
+            title={t("canvas.todayTitle")}
           >
             <Crosshair size={12} style={{ color: "#EF4444" }} />
-            <span>Today</span>
+            <span>{t("common.today")}</span>
           </button>
           <button
             type="button"
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
             onClick={handleFitToScreen}
-            title="Fit Entire Project Horizon to Screen"
+            title={t("canvas.fitTitle")}
           >
             <Maximize2 size={12} style={{ color: "#38BDF8" }} />
-            <span>Fit Horizon</span>
+            <span>{t("canvas.fit")}</span>
           </button>
           <button
             type="button"
@@ -797,20 +811,20 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             style={{ fontSize: "11px", padding: "0 9px", height: "28px" }}
             onClick={() => setShowMinimap((prev) => !prev)}
             aria-pressed={showMinimap}
-            title="Toggle Radar Minimap Navigator"
+            title={t("canvas.radarTitle")}
           >
             <Compass size={12} style={{ color: "#A855F7" }} />
-            <span>Radar</span>
+            <span>{t("canvas.radar")}</span>
           </button>
           <button
             type="button"
             className="btn-nav"
             style={{ fontSize: "11px", padding: "4px 8px" }}
             onClick={resetView}
-            title="Reset Pan & Zoom"
+            title={t("canvas.resetTitle")}
           >
             <RotateCcw size={12} style={{ color: "#F59E0B" }} />
-            <span>Reset View</span>
+            <span>{t("canvas.reset")}</span>
           </button>
           <button
             type="button"
@@ -818,10 +832,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
             style={{ fontSize: "11px", padding: "0 9px", height: "28px" }}
             onClick={() => setShowCritical((prev) => !prev)}
             aria-pressed={showCritical}
-            title={`Highlight the critical path (${criticalTaskIds.size} task${criticalTaskIds.size === 1 ? "" : "s"} with no float)`}
+            title={t(criticalTaskIds.size === 1 ? "canvas.criticalPathTitleOne" : "canvas.criticalPathTitle", { count: criticalTaskIds.size })}
           >
             <Activity size={12} style={{ color: "#EF4444" }} />
-            <span>Critical Path</span>
+            <span>{t("canvas.criticalPath")}</span>
           </button>
 
           {BENCHMARK_ENABLED && !isViewer && onOpenScratchPlan && (
@@ -836,10 +850,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
                 borderColor: "rgba(16, 185, 129, 0.3)"
               }}
               onClick={() => handleGenerateBenchmark(10000)}
-              title="Debug: open a new local plan with 10,000 synthetic tasks to stress-test the renderer (this plan is not changed)"
+              title={t("canvas.benchmarkTitle")}
             >
               <Layers size={12} style={{ color: "#10B981" }} />
-              <span>Benchmark 10,000 Tasks</span>
+              <span>{t("canvas.benchmark")}</span>
             </button>
           )}
         </div>
@@ -908,21 +922,21 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
               {hoveredTask.task.label || hoveredTask.task.name || hoveredTask.task.id}
             </div>
             <div style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>
-              Dates: {hoveredTask.task.start} &rarr; {hoveredTask.task.end}
+              {t("canvas.tooltip.dates", { start: hoveredTask.task.start, end: hoveredTask.task.end })}
             </div>
             <div style={{ color: "var(--jantt-text-muted, #94A3B8)" }}>
-              Progress: {Math.round(clamp(Number(hoveredTask.task.progress) || 0, 0, 1) * 100)}%
+              {t("canvas.tooltip.progress", { percent: Math.round(clamp(Number(hoveredTask.task.progress) || 0, 0, 1) * 100) })}
             </div>
             {criticalTaskIds.has(hoveredTask.task.id) && (
-              <div style={{ color: "#F87171", marginTop: "2px" }}>On the critical path</div>
+              <div style={{ color: "#F87171", marginTop: "2px" }}>{t("canvas.tooltip.critical")}</div>
             )}
             {hoveredTask.task.category && (
               <div style={{ color: "#38BDF8", marginTop: "2px" }}>
-                Category: {hoveredTask.task.category}
+                {t("canvas.tooltip.category", { category: hoveredTask.task.category })}
               </div>
             )}
             <div style={{ fontSize: "10px", color: "var(--jantt-text-dim, #64748B)", marginTop: "4px" }}>
-              Click to open activity details
+              {t("canvas.tooltip.open")}
             </div>
           </div>
         )}
@@ -964,7 +978,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
               }}
             >
               <Compass size={10} style={{ color: "#38BDF8" }} />
-              <span>RADAR MINIMAP</span>
+              <span>{t("canvas.minimap")}</span>
             </div>
             <canvas
               ref={minimapCanvasRef}

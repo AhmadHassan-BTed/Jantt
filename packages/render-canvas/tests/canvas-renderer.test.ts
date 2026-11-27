@@ -49,6 +49,19 @@ function createMockContext(backingWidth?: number): any {
 
 const viewport = { scrollX: 0, scrollY: 0, width: 800, height: 600 };
 
+it("localizes Canvas headers and updates the language without changing the plan", () => {
+  const plan: JanttData = { tasks: [{ id: "t1", label: "Spec", category: "dev", start: "2026-11-01", end: "2026-11-05" }] };
+  const renderer = new CanvasTimelineRenderer(plan, { locale: "zh-CN" });
+  const chinese = createMockContext();
+  renderer.render(chinese, viewport);
+  expect(chinese.texts.map(({ text }: { text: string }) => text)).toContain("2026年11月");
+
+  renderer.updateOptions({ locale: "en" });
+  const english = createMockContext();
+  renderer.render(english, viewport);
+  expect(english.texts.map(({ text }: { text: string }) => text)).toContain("Nov 2026");
+});
+
 describe("SpatialGanttGrid", () => {
   const sampleTasks: Task[] = [
     { id: "t1", label: "Spec", category: "dev", start: "2026-11-01", end: "2026-11-05", progress: 0.5 },

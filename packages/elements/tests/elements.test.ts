@@ -71,6 +71,23 @@ describe("<jantt-timeline> Custom Element", () => {
     expect(el.controller).not.toBeNull();
   });
 
+  it("updates the language from the locale attribute and property without replacing the chart", () => {
+    const el = create({ locale: "zh-CN" });
+    el.data = samplePlan;
+    document.body.appendChild(el);
+    try {
+      expect(root(el)?.lang).toBe("zh-CN");
+      expect(el.querySelector(".jantt-label-header")?.textContent).toContain("任务与分类");
+      const instance = el.controller;
+      el.locale = "en";
+      expect(el.getAttribute("locale")).toBe("en");
+      expect(el.querySelector(".jantt-label-header")?.textContent).toContain("Task & Category");
+      expect(el.controller).toBe(instance);
+    } finally {
+      el.remove();
+    }
+  });
+
   it("cleans up controller on disconnection", () => {
     const el = create();
     document.body.appendChild(el);

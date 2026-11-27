@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface Props extends React.HTMLAttributes<HTMLDivElement> {
   title: string;
@@ -10,6 +11,7 @@ interface Props extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export function BoardCard({ title, mobile, readOnly, onOpen, onSwipe, children, ...props }: Props) {
+  const { t } = useI18n();
   const start = useRef<{ id: number; x: number; y: number; dx: number } | null>(null);
   const ignoreClickUntil = useRef(0);
   function reset(element: HTMLDivElement) {
@@ -34,7 +36,7 @@ export function BoardCard({ title, mobile, readOnly, onOpen, onSwipe, children, 
       if (!gesture.dx && Math.abs(dx) < 12) return;
       if (!gesture.dx) event.currentTarget.setPointerCapture?.(gesture.id);
       gesture.dx = dx;
-      event.currentTarget.dataset.swipe = dx < 0 ? "Complete" : "In progress";
+      event.currentTarget.dataset.swipe = dx < 0 ? t("board.complete") : t("board.inProgress");
       event.currentTarget.style.setProperty("--board-swipe", `${Math.max(-70, Math.min(70, dx * 0.6))}px`);
     }}
     onPointerUp={event => {
@@ -53,7 +55,7 @@ export function BoardCard({ title, mobile, readOnly, onOpen, onSwipe, children, 
       if (!(event.target as HTMLElement).closest("button, input, select, textarea, label")) onOpen();
     }}>
     {children}
-    <button type="button" className="board-open-task" aria-label={`Open details for ${title}`} onClick={onOpen}>
+    <button type="button" className="board-open-task" aria-label={t("board.openDetails", { title })} onClick={onOpen}>
       <ChevronRight size={17} aria-hidden="true" />
     </button>
   </div>;
@@ -62,6 +64,7 @@ export function BoardCard({ title, mobile, readOnly, onOpen, onSwipe, children, 
 export function EditableBoardTitle({ title, readOnly, mobile, onSave }: {
   title: string; readOnly: boolean; mobile: boolean; onSave: (value: string) => void;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<string | null>(null);
   const cancelled = useRef(false);
   const restoreFocus = useRef(false);
@@ -74,14 +77,14 @@ export function EditableBoardTitle({ title, readOnly, mobile, onSave }: {
   }, [draft]);
   const className = mobile ? "kanban-mobile-title" : "kanban-card-title";
   if (readOnly) return <span className={className}>{title}</span>;
-  if (draft === null) return <button ref={titleButton} className={`${className} board-edit-title`} type="button" aria-label={`Edit title of ${title}`}
+  if (draft === null) return <button ref={titleButton} className={`${className} board-edit-title`} type="button" aria-label={t("board.editTitle", { title })}
     onClick={() => { cancelled.current = false; setDraft(title); }}>{title}</button>;
   function finish() {
     const next = draft?.trim();
     if (!cancelled.current && next && next !== title) onSave(next);
     setDraft(null);
   }
-  return <input autoFocus aria-label="Task title" className="board-title-input" value={draft}
+  return <input autoFocus aria-label={t("board.taskTitle")} className="board-title-input" value={draft}
     onFocus={event => event.target.select()} onChange={event => setDraft(event.target.value)} onBlur={finish}
     onKeyDown={event => {
       if (event.nativeEvent.isComposing) return;

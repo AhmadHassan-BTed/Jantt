@@ -9,12 +9,14 @@ const encodeSpy = vi.hoisted(() => vi.fn(() => "PAYLOAD"));
 vi.mock("../utils", () => ({ encodeDataToBase64Url: encodeSpy }));
 
 import { useSharing } from "./useSharing";
+import { preloadLocale, setActiveLocale } from "../i18n";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const data = { meta: { title: "Plan" }, tasks: [] } as unknown as JanttData;
 let latest: ReturnType<typeof useSharing>;
 let root: Root | null = null;
+const showToast = vi.fn();
 
 function Harness({ project }: { project?: SavedProject }) {
   latest = useSharing({
@@ -25,7 +27,7 @@ function Harness({ project }: { project?: SavedProject }) {
     selectedThemeId: "noir",
     parsedData: data,
     jsonText: "{}",
-    showToast: () => {}
+    showToast
   });
   return null;
 }
@@ -38,14 +40,32 @@ async function mount(project?: SavedProject) {
 beforeEach(() => {
   window.history.replaceState(null, "", "/?room=room_keepme1#key=secret");
   encodeSpy.mockClear();
+  showToast.mockClear();
 });
 
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
+  setActiveLocale("en");
+  vi.unstubAllGlobals();
 });
 
 describe("useSharing", () => {
+  it("localizes native sharing text and its success or failure toast", async () => {
+    await preloadLocale("zh-CN");
+    setActiveLocale("zh-CN");
+    await mount();
+    const share = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("Share failed"));
+    vi.stubGlobal("navigator", { share });
+
+    await act(async () => latest.handleNativeShare());
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ title: "My plan", text: expect.stringMatching(/[\u4e00-\u9fff].*My plan/) }));
+    expect(showToast).toHaveBeenLastCalledWith(expect.stringMatching(/[\u4e00-\u9fff]/));
+
+    await act(async () => latest.handleNativeShare());
+    expect(showToast).toHaveBeenLastCalledWith(expect.stringMatching(/[\u4e00-\u9fff]/), true);
+  });
+
   it("does not compress the plan while the share dialog is closed", async () => {
     await mount();
     expect(latest.shareUrl).toBe("");

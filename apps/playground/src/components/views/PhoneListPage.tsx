@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../../i18n/I18nProvider";
 
 const PAGE_SIZE = 48;
 
@@ -15,6 +16,7 @@ export function usePhoneListPage(key: string, enabled: boolean) {
 }
 
 export function MoreTaskRows({ count, limit, onMore }: { count: number; limit: number; onMore: () => void }) {
+  const { t } = useI18n();
   const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const target = button.current;
@@ -30,7 +32,7 @@ export function MoreTaskRows({ count, limit, onMore }: { count: number; limit: n
   }, [count, limit, onMore]);
   if (count <= limit) return null;
   return <button ref={button} type="button" className="load-task-page" onClick={onMore}>
-    Show more tasks <span>({limit} of {count})</span>
+    {t("list.showMore")} <span>{t("list.showMoreCount", { shown: limit, total: count })}</span>
   </button>;
 }
 

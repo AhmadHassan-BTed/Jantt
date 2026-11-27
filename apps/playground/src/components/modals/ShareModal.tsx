@@ -25,6 +25,7 @@ import {
 import type { JanttData, ThemeDefinition } from "@jantt/core";
 import { exportMsProjectXml, exportPrimaveraXer, exportSpreadsheetCsv, exportExecutiveReportHtml } from "@jantt/interop";
 import type { SavedProject, ActiveView } from "../../types";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader, buildExportFilename, downloadTextFile } from "./ModalHost";
 
 /** The signed-in user's role in the active cloud room. */
@@ -146,12 +147,6 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-const ROLE_LABELS: Record<ShareRoomRole, string> = {
-  owner: "Owner",
-  editor: "Editor",
-  viewer: "Viewer"
-};
-
 const heroButtonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -210,6 +205,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
   onMakeLocalCopy,
   showToast
 }) => {
+  const { t } = useI18n();
   const [isStartingRoom, setIsStartingRoom] = useState(false);
   const [copiedTarget, setCopiedTarget] = useState<"link" | "embed" | null>(null);
   const copiedTimerRef = useRef<number | undefined>(undefined);
@@ -232,22 +228,22 @@ const ShareDialog: React.FC<ShareModalProps> = ({
   const isWebUrl = isShareableWebUrl(safeUrl);
   const isWhatsAppSafe = safeUrl.length <= WHATSAPP_SAFE_URL_LENGTH;
   const embedCode = isWebUrl ? buildEmbedSnippet(safeUrl, currentProjectName) : "";
-  const linkUnavailableTitle = "No shareable web link is available for this plan";
+  const linkUnavailableTitle = t("share.linkUnavailable");
 
   const handleCopy = async (target: "link" | "embed") => {
     if (target === "embed" && !embedCode) return;
     const ok = await copyTextToClipboard(target === "link" ? safeUrl : embedCode);
     if (!ok) {
-      notify("Could not copy to the clipboard. Select the text and copy it manually.", true);
+      notify(t("share.copyFailed"), true);
       return;
     }
     setCopiedTarget(target);
-    notify(target === "link" ? "Link copied to clipboard." : "Embed code copied to clipboard.");
+    notify(target === "link" ? t("share.linkCopied") : t("share.embedCopied"));
     window.clearTimeout(copiedTimerRef.current);
     copiedTimerRef.current = window.setTimeout(() => setCopiedTarget(null), 2000);
   };
 
-  const shareText = `Check out this project plan: ${currentProjectName}`;
+  const shareText = t("share.shareText", { name: currentProjectName });
 
   const handleWhatsAppShare = () => {
     if (!isWebUrl) return;
@@ -260,7 +256,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
     try {
       await navigator.share({ title: currentProjectName, text: shareText, url: safeUrl });
     } catch (err) {
-      if ((err as DOMException)?.name !== "AbortError") notify(`Sharing failed: ${errorMessage(err)}`, true);
+      if ((err as DOMException)?.name !== "AbortError") notify(t("share.shareFailed", { error: errorMessage(err) }), true);
     }
   };
 
@@ -285,7 +281,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
         onOpenShareRoom?.(newRoomId);
       }
     } catch (err) {
-      notify(`Could not start a cloud room: ${errorMessage(err)}`, true);
+      notify(t("share.startRoomFailed", { error: errorMessage(err) }), true);
     } finally {
       setIsStartingRoom(false);
     }
@@ -293,13 +289,13 @@ const ShareDialog: React.FC<ShareModalProps> = ({
 
   const startRoomLabel = !isLoggedIn
     ? isSigningIn
-      ? "Signing in with GitHub..."
-      : "Sign in with GitHub to start a room"
+      ? t("share.signingIn")
+      : t("share.signInToStart")
     : !isCloudVerified
-    ? "Verify GitHub to start a room"
+    ? t("share.verifyToStart")
     : isStartingRoom
-    ? "Starting cloud room..."
-    : "Start live cloud room & invite";
+    ? t("share.startingRoom")
+    : t("share.startRoom");
   // Signing in and starting the room both show progress; the start button is disabled meanwhile.
   const isStartBusy = isStartingRoom || (!isLoggedIn && isSigningIn);
   const startRoomIcon = !isLoggedIn ? (
@@ -318,35 +314,35 @@ const ShareDialog: React.FC<ShareModalProps> = ({
       if (!file) return;
       downloadTextFile(buildExportFilename(currentProjectName, file.extension), file.content, file.mime);
     } catch (err) {
-      notify(`${label} export failed: ${errorMessage(err)}`, true);
+      notify(t("share.exportFailed", { label, error: errorMessage(err) }), true);
     }
   };
 
   const handleExportMsProject = () =>
-    runExport("MS Project", () =>
+    runExport(t("share.exportMsProject"), () =>
       parsedData
         ? { content: exportMsProjectXml(parsedData, { projectName: currentProjectName }), extension: "xml", mime: "application/xml" }
         : null
     );
 
   const handleExportPrimavera = () =>
-    runExport("Primavera P6", () =>
+    runExport(t("share.exportPrimavera"), () =>
       parsedData
         ? { content: exportPrimaveraXer(parsedData, { projectName: currentProjectName }), extension: "xer", mime: "text/plain" }
         : null
     );
 
   const handleExportCsv = () =>
-    runExport("CSV", () =>
+    runExport(t("share.exportCsvLabel"), () =>
       parsedData ? { content: exportSpreadsheetCsv(parsedData), extension: "csv", mime: "text/csv;charset=utf-8" } : null
     );
 
   const handleExportExecutiveReport = () =>
-    runExport("Executive report", () =>
+    runExport(t("share.exportReportLabel"), () =>
       parsedData?.tasks
         ? {
             content: exportExecutiveReportHtml(parsedData.tasks, {
-              title: currentProjectName || "Executive Project Status & Schedule Health Report",
+              title: currentProjectName || t("share.reportDefaultTitle"),
               // Internal plan ids mean nothing to report readers; rooms have a shareable id.
               projectCode: roomId,
               theme: activeTheme?.mode === "dark" ? "dark" : "corporate",
@@ -363,14 +359,18 @@ const ShareDialog: React.FC<ShareModalProps> = ({
         : null
     );
 
-  const planBadge = isRoomActive ? "Live cloud room" : activeProjectId === "default" ? "Built-in sample" : "On this device";
+  const planBadge = isRoomActive
+    ? t("share.badgeLiveRoom")
+    : activeProjectId === "default"
+    ? t("share.badgeSample")
+    : t("share.badgeLocal");
 
   return (
     <Modal onClose={close} maxWidth={580}>
       <ModalHeader
         icon={<Share2 size={18} />}
-        title="Share plan"
-        subtitle={isRoomActive ? "Invite teammates to the live room or share a view-only link." : "Start a live room or share a read-only snapshot link."}
+        title={t("share.title")}
+        subtitle={isRoomActive ? t("share.subtitleRoom") : t("share.subtitlePlan")}
       />
 
       <div className="prompt-modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -381,7 +381,11 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               {currentProjectName}
             </div>
             <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-              {parsedData?.tasks?.length || 0} tasks &bull; View: {activeView.toUpperCase()} &bull; Theme: {activeTheme.label}
+              {t("share.overview", {
+                count: parsedData?.tasks?.length || 0,
+                view: activeView.toUpperCase(),
+                theme: activeTheme.label
+              })}
             </div>
           </div>
           <span
@@ -430,7 +434,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                   }}
                 >
                   <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-                  Cloud room
+                  {t("share.cloudRoom")}
                 </span>
                 <span style={{ fontSize: "12px", fontFamily: "var(--jantt-font-mono, monospace)", color: "var(--jantt-text-muted)" }}>
                   #{roomId}
@@ -438,7 +442,14 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               </div>
               {effectiveRole && (
                 <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                  Your role: <strong style={{ color: "var(--jantt-text)" }}>{ROLE_LABELS[effectiveRole]}</strong>
+                  {t("share.yourRole")}{" "}
+                  <strong style={{ color: "var(--jantt-text)" }}>
+                    {effectiveRole === "owner"
+                      ? t("share.roleOwner")
+                      : effectiveRole === "editor"
+                      ? t("share.roleEditor")
+                      : t("share.roleViewer")}
+                  </strong>
                 </span>
               )}
             </div>
@@ -446,7 +457,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
             {canManageRoom ? (
               <>
                 <div style={{ fontSize: "12.5px", color: "var(--jantt-text)", lineHeight: "1.4" }}>
-                  Changes sync live. Invite people by username, add whole teams, or create an invite link with the role you choose.
+                  {t("share.manageDesc")}
                 </div>
                 <button
                   type="button"
@@ -458,7 +469,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                   style={heroButtonStyle}
                 >
                   <Users size={15} />
-                  <span>{effectiveRole === "owner" ? "Manage teammates & invites" : "Teammates & invite links"}</span>
+                  <span>{effectiveRole === "owner" ? t("share.manageTeammates") : t("share.teammatesInvites")}</span>
                   <ArrowRight size={14} />
                 </button>
               </>
@@ -472,8 +483,8 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                   )}
                   <span>
                     {needsSignInToManage
-                      ? "You are signed out, so this room is view-only here. Sign in to use your edit access and invite teammates, or ask the owner for help."
-                      : "You have view-only access. Ask the room owner for edit access."}
+                      ? t("share.signedOutViewOnly")
+                      : t("share.viewOnly")}
                   </span>
                 </div>
                 {needsSignInToManage && onLogin && (
@@ -489,7 +500,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                     style={heroButtonStyle}
                   >
                     {isSigningIn ? <Loader2 size={15} className="spin-sync-icon" /> : <LogIn size={15} />}
-                    <span>{isSigningIn ? "Signing in with GitHub..." : "Sign in with GitHub to edit and invite"}</span>
+                    <span>{isSigningIn ? t("share.signingIn") : t("share.signInToEdit")}</span>
                   </button>
                 )}
                 {onMakeLocalCopy && (
@@ -503,7 +514,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                     style={heroButtonStyle}
                   >
                     <HardDrive size={15} />
-                    <span>Make an editable copy on this device</span>
+                    <span>{t("share.makeEditableCopy")}</span>
                   </button>
                 )}
               </>
@@ -539,9 +550,9 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                 <Sparkles size={18} />
               </div>
               <div>
-                <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--jantt-text)" }}>Collaborate live</div>
+                <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--jantt-text)" }}>{t("share.collaborateLive")}</div>
                 <div style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "2px" }}>
-                  Turns this plan into a cloud room you own. Invite people and edit together in real time.
+                  {t("share.collaborateLiveDesc")}
                 </div>
               </div>
             </div>
@@ -563,7 +574,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
         <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "2px 0" }}>
           <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
           <span style={{ fontSize: "10.5px", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            {isRoomActive ? "Or share a view-only link" : "Or share a read-only snapshot"}
+            {isRoomActive ? t("share.orViewLink") : t("share.orSnapshot")}
           </span>
           <div style={{ flex: 1, height: "1px", background: "var(--jantt-border-subtle, #e2e8f0)" }} />
         </div>
@@ -572,7 +583,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px", flexWrap: "wrap" }}>
             <label htmlFor="share-link-input" style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
-              {isRoomActive ? "View-only room link" : "Snapshot link"}
+              {isRoomActive ? t("share.viewOnlyLink") : t("share.snapshotLink")}
             </label>
             <div
               style={{
@@ -589,7 +600,10 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               }}
             >
               {isWhatsAppSafe ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
-              <span>{safeUrl.length} chars &bull; {isWhatsAppSafe ? "WhatsApp safe" : "Long link"}</span>
+              <span>
+                {t("share.chars", { count: safeUrl.length })} &bull;{" "}
+                {isWhatsAppSafe ? t("share.whatsappSafe") : t("share.longLink")}
+              </span>
             </div>
           </div>
 
@@ -615,7 +629,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
               {copiedTarget === "link" ? <Check size={14} /> : <Copy size={14} />}
-              <span>{copiedTarget === "link" ? "Copied!" : "Copy link"}</span>
+              <span>{copiedTarget === "link" ? t("share.copied") : t("share.copyLink")}</span>
             </button>
             {canNativeShare && (
               <button
@@ -623,10 +637,10 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                 className="btn-nav"
                 onClick={handleNativeShare}
                 style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "6px" }}
-                title="Open the device share sheet"
+                title={t("share.nativeShareTitle")}
               >
                 <Share2 size={14} />
-                <span>Share via Device</span>
+                <span>{t("share.shareViaDevice")}</span>
               </button>
             )}
           </div>
@@ -635,8 +649,8 @@ const ShareDialog: React.FC<ShareModalProps> = ({
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", gap: "8px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", flex: "1 1 220px" }}>
               {isRoomActive
-                ? "Anyone with this link can view the live room but cannot edit it. Invite teammates to give edit access."
-                : "A compressed copy of the plan as it is now; later edits are not included. No account needed to open it."}
+                ? t("share.viewLinkHintRoom")
+                : t("share.viewLinkHintSnapshot")}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <button
@@ -654,7 +668,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                 }}
                 onClick={handleWhatsAppShare}
                 disabled={!isWebUrl}
-                title={isWebUrl ? "Share this link on WhatsApp" : linkUnavailableTitle}
+                title={isWebUrl ? t("share.whatsappShareTitle") : linkUnavailableTitle}
               >
                 <MessageSquare size={13} />
                 <span>WhatsApp</span>
@@ -676,10 +690,10 @@ const ShareDialog: React.FC<ShareModalProps> = ({
             >
               <div style={{ fontWeight: 600, color: "#D97706", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
                 <AlertTriangle size={13} />
-                <span>This link may be cut off in WhatsApp</span>
+                <span>{t("share.tooLongTitle")}</span>
               </div>
               <div style={{ color: "var(--jantt-text-muted)", lineHeight: "1.4" }}>
-                The plan is large ({safeUrl.length} characters) and WhatsApp truncates links over about 2,000 characters. Send the file instead, or share a short room link.
+                {t("share.tooLongBody", { count: safeUrl.length })}
               </div>
               <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
                 <button
@@ -689,7 +703,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                   onClick={handleDownloadJson}
                 >
                   <Download size={12} />
-                  <span>Download JSON file</span>
+                  <span>{t("share.downloadJsonFile")}</span>
                 </button>
                 {!isRoomActive && (
                   <button
@@ -700,7 +714,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                     disabled={isStartBusy}
                   >
                     <Cloud size={12} />
-                    <span>{isLoggedIn && isCloudVerified ? "Start a cloud room instead" : startRoomLabel}</span>
+                    <span>{isLoggedIn && isCloudVerified ? t("share.startRoomInstead") : startRoomLabel}</span>
                   </button>
                 )}
               </div>
@@ -712,7 +726,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
         <div style={panelStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--jantt-text)" }}>
-              Embed read-only view (Notion, Confluence, wikis)
+              {t("share.embedTitle")}
             </span>
             <button
               type="button"
@@ -723,7 +737,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               title={embedCode ? undefined : linkUnavailableTitle}
             >
               {copiedTarget === "embed" ? <Check size={12} style={{ color: "#10B981" }} /> : <Copy size={12} />}
-              <span>{copiedTarget === "embed" ? "Copied!" : "Copy embed code"}</span>
+              <span>{copiedTarget === "embed" ? t("share.copied") : t("share.copyEmbed")}</span>
             </button>
           </div>
           <code
@@ -742,7 +756,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
           >
             {/* Snapshot links can be huge; the preview shows the ends, the copy button copies it all. */}
             {!embedCode
-              ? "Unavailable: this plan has no shareable web link."
+              ? t("share.embedUnavailable")
               : embedCode.length > 320
               ? `${embedCode.slice(0, 200)}...${embedCode.slice(-90)}`
               : embedCode}
@@ -754,7 +768,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <FileJson size={16} style={{ color: "var(--jantt-accent)" }} />
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>Plan source (JSON)</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>{t("share.planSource")}</span>
             </div>
             {isWebUrl && (
               <a
@@ -763,16 +777,16 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                 rel="noopener noreferrer"
                 className="btn-nav"
                 style={{ fontSize: "12px", textDecoration: "none" }}
-                title="Open the read-only link in a new tab"
+                title={t("share.openLinkTitle")}
               >
                 <ExternalLink size={13} />
-                <span>Open link</span>
+                <span>{t("share.openLink")}</span>
               </a>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", flex: "1 1 220px" }}>
-              The whole schedule is plain JSON. Inspect it in the editor or download it.
+              {t("share.planSourceDesc")}
             </span>
             <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
               <button
@@ -783,20 +797,20 @@ const ShareDialog: React.FC<ShareModalProps> = ({
                   close();
                   setIsSidebarCollapsed(false);
                 }}
-                title="Open the JSON editor"
+                title={t("share.openJsonEditor")}
               >
                 <FileJson size={12} />
-                <span>View JSON</span>
+                <span>{t("share.viewJson")}</span>
               </button>
               <button
                 type="button"
                 className="btn-nav"
                 style={{ fontSize: "11px", padding: "3px 8px" }}
                 onClick={handleDownloadJson}
-                title="Download the JSON file"
+                title={t("share.downloadJsonTitle")}
               >
                 <Download size={12} />
-                <span>Download</span>
+                <span>{t("share.download")}</span>
               </button>
             </div>
           </div>
@@ -806,10 +820,10 @@ const ShareDialog: React.FC<ShareModalProps> = ({
         <div style={panelStyle}>
           <div style={{ fontWeight: 600, fontSize: "12px", color: "var(--jantt-text, #1E293B)", display: "flex", alignItems: "center", gap: "6px" }}>
             <Building2 size={13} />
-            <span>Export to other tools</span>
+            <span>{t("share.exportTitle")}</span>
           </div>
           <div style={{ color: "var(--jantt-text-muted)", fontSize: "11px", lineHeight: "1.4" }}>
-            Exports tasks, milestones, constraints and dependency types in standard formats.
+            {t("share.exportDesc")}
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <button
@@ -818,7 +832,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               style={exportButtonStyle}
               onClick={handleExportMsProject}
               disabled={!parsedData}
-              title="Microsoft Project XML (2013 and later)"
+              title={t("share.msProjectTitle")}
             >
               <Download size={12} style={{ color: "#38BDF8" }} />
               <span>MS Project (.xml)</span>
@@ -829,7 +843,7 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               style={exportButtonStyle}
               onClick={handleExportPrimavera}
               disabled={!parsedData}
-              title="Oracle Primavera P6 XER file"
+              title={t("share.primaveraTitle")}
             >
               <Download size={12} style={{ color: "#F59E0B" }} />
               <span>Primavera P6 (.xer)</span>
@@ -840,10 +854,10 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               style={exportButtonStyle}
               onClick={handleExportCsv}
               disabled={!parsedData}
-              title="CSV spreadsheet; can be imported back into Jantt"
+              title={t("share.csvTitle")}
             >
               <Download size={12} style={{ color: "#10B981" }} />
-              <span>Spreadsheet (.csv)</span>
+              <span>{t("share.exportCsv")}</span>
             </button>
             <button
               type="button"
@@ -851,10 +865,10 @@ const ShareDialog: React.FC<ShareModalProps> = ({
               style={{ ...exportButtonStyle, background: "rgba(168, 85, 247, 0.12)", color: "#C084FC", borderColor: "rgba(168, 85, 247, 0.35)" }}
               onClick={handleExportExecutiveReport}
               disabled={!parsedData}
-              title="Status report as an HTML page; use your browser's Print to save it as PDF"
+              title={t("share.reportTitle")}
             >
               <FileText size={12} style={{ color: "#A855F7" }} />
-              <span>Executive report (HTML, printable)</span>
+              <span>{t("share.exportReport")}</span>
             </button>
           </div>
         </div>
@@ -862,11 +876,11 @@ const ShareDialog: React.FC<ShareModalProps> = ({
 
       <div className="prompt-modal-footer" style={{ flexShrink: 0 }}>
         <button type="button" className="btn-nav" onClick={close}>
-          Close
+          {t("common.close")}
         </button>
         <button type="button" className="btn-nav btn-nav-primary" onClick={() => handleCopy("link")}>
           {copiedTarget === "link" ? <Check size={14} /> : <Copy size={14} />}
-          <span>{copiedTarget === "link" ? "Link copied!" : "Copy link"}</span>
+          <span>{copiedTarget === "link" ? t("share.linkCopiedShort") : t("share.copyLink")}</span>
         </button>
       </div>
     </Modal>

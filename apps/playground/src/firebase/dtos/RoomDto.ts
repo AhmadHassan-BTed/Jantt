@@ -1,4 +1,5 @@
 import type { JanttData } from "@jantt/core";
+import { tGlobal } from "../../i18n";
 
 /**
  * Single source of truth for Cloud Room Models, DTOs, and Schema Validators.
@@ -84,22 +85,22 @@ export function isValidRole(role: string): role is RoomMemberRole {
  */
 export function validateRoomMetadata(meta: Partial<RoomMetadata>): { valid: boolean; error?: string } {
   if (meta.allowViewerForks !== undefined && typeof meta.allowViewerForks !== "boolean") {
-    return { valid: false, error: "Invalid viewer copy setting." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidViewerCopy") };
   }
   if (!meta.roomId || typeof meta.roomId !== "string" || meta.roomId.trim().length === 0) {
-    return { valid: false, error: "Missing or invalid roomId." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidRoomId") };
   }
   if (!meta.title || typeof meta.title !== "string" || meta.title.trim().length === 0) {
-    return { valid: false, error: "Missing or invalid room title." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidTitle") };
   }
   if (meta.title.length > 200) {
-    return { valid: false, error: "Room title cannot exceed 200 characters." };
+    return { valid: false, error: tGlobal("services.room.dto.titleTooLong") };
   }
   if (!meta.ownerUid || typeof meta.ownerUid !== "string") {
-    return { valid: false, error: "Missing room owner UID." };
+    return { valid: false, error: tGlobal("services.room.dto.missingOwner") };
   }
   if (typeof meta.revision !== "number" || !Number.isInteger(meta.revision) || meta.revision < 1) {
-    return { valid: false, error: "Room revision must be a positive integer." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidRevision") };
   }
   return { valid: true };
 }
@@ -109,13 +110,13 @@ export function validateRoomMetadata(meta: Partial<RoomMetadata>): { valid: bool
  */
 export function validateRoomMember(member: Partial<RoomMember>): { valid: boolean; error?: string } {
   if (!member.uid || typeof member.uid !== "string") {
-    return { valid: false, error: "Invalid member UID." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidMemberUid") };
   }
   if (!member.username || typeof member.username !== "string") {
-    return { valid: false, error: "Member must have a claimed username." };
+    return { valid: false, error: tGlobal("services.room.dto.memberNoUsername") };
   }
   if (!member.role || !isValidRole(member.role)) {
-    return { valid: false, error: "Invalid member role. Must be 'owner', 'editor', or 'viewer'." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidMemberRole") };
   }
   return { valid: true };
 }
@@ -125,19 +126,19 @@ export function validateRoomMember(member: Partial<RoomMember>): { valid: boolea
  */
 export function validateRoomTeam(team: Partial<RoomTeam>): { valid: boolean; error?: string } {
   if (!team.id || typeof team.id !== "string") {
-    return { valid: false, error: "Invalid team ID." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidTeamId") };
   }
   if (!team.name || typeof team.name !== "string" || team.name.trim().length === 0) {
-    return { valid: false, error: "Missing team name." };
+    return { valid: false, error: tGlobal("services.room.dto.missingTeamName") };
   }
   if (team.name.length > 200) {
-    return { valid: false, error: "Team name cannot exceed 200 characters." };
+    return { valid: false, error: tGlobal("services.room.dto.teamNameTooLong") };
   }
   if (team.role !== "editor" && team.role !== "viewer") {
-    return { valid: false, error: "Team role must be 'editor' or 'viewer'." };
+    return { valid: false, error: tGlobal("services.room.dto.invalidTeamRole") };
   }
   if (!Array.isArray(team.memberUids)) {
-    return { valid: false, error: "team.memberUids must be an array." };
+    return { valid: false, error: tGlobal("services.room.dto.teamUidsNotArray") };
   }
   return { valid: true };
 }

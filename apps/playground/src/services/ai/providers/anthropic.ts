@@ -1,4 +1,5 @@
 import type { ProviderAdapter, StreamCallbacks, StreamChatOptions } from "../types";
+import { tGlobal } from "../../../i18n";
 
 export class AnthropicProviderAdapter implements ProviderAdapter {
   readonly providerId = "anthropic" as const;
@@ -18,7 +19,7 @@ export class AnthropicProviderAdapter implements ProviderAdapter {
         if (!cleanKey) {
           callbacks.onError({
             code: "AUTH",
-            message: "Anthropic Claude API key is missing. Add your API key in Copilot settings."
+            message: tGlobal("services.ai.anthropic.keyMissing")
           });
           return;
         }
@@ -80,7 +81,7 @@ export class AnthropicProviderAdapter implements ProviderAdapter {
           if (response.status === 401 || response.status === 403) {
             callbacks.onError({
               code: "AUTH",
-              message: `Anthropic authentication failed: ${errorDetail || "Invalid API key."}`
+              message: tGlobal("services.ai.anthropic.authFailed", { detail: errorDetail || tGlobal("services.ai.invalidKey") })
             });
             return;
           }
@@ -88,20 +89,20 @@ export class AnthropicProviderAdapter implements ProviderAdapter {
           if (response.status === 429) {
             callbacks.onError({
               code: "RATE_LIMIT",
-              message: `Anthropic rate limit reached: ${errorDetail || "Too many requests. Please wait."}`
+              message: tGlobal("services.ai.anthropic.rateLimit", { detail: errorDetail || tGlobal("services.ai.tooManyRequests") })
             });
             return;
           }
 
           callbacks.onError({
             code: "UNKNOWN",
-            message: `Anthropic request failed (${response.status}): ${errorDetail || response.statusText}`
+            message: tGlobal("services.ai.anthropic.requestFailed", { status: response.status, detail: errorDetail || response.statusText })
           });
           return;
         }
 
         if (!response.body) {
-          callbacks.onError({ code: "NETWORK", message: "Anthropic returned an empty response body stream." });
+          callbacks.onError({ code: "NETWORK", message: tGlobal("services.ai.anthropic.emptyStream") });
           return;
         }
 
@@ -149,13 +150,13 @@ export class AnthropicProviderAdapter implements ProviderAdapter {
         if (errorMsg.includes("Failed to fetch") || errorMsg.includes("NetworkError")) {
           callbacks.onError({
             code: "CORS",
-            message: "Direct Anthropic API calls are typically blocked by browser CORS restrictions. Please use a CORS proxy URL in settings, or use an OpenRouter key instead."
+            message: tGlobal("services.ai.anthropic.corsBlocked")
           });
           return;
         }
         callbacks.onError({
           code: "UNKNOWN",
-          message: errorMsg || "An unexpected error occurred while communicating with Anthropic Claude."
+          message: errorMsg || tGlobal("services.ai.anthropic.unexpected")
         });
       }
     })();

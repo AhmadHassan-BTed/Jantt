@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { RotateCw, X } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface OrientationBannerProps {
   isMobile: boolean;
@@ -14,6 +15,7 @@ export const OrientationBanner: React.FC<OrientationBannerProps> = ({
   isPortrait,
   activeView
 }) => {
+  const { t } = useI18n();
   const [isDismissed, setIsDismissed] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem(STORAGE_KEY_DISMISSED) === "1";
@@ -40,21 +42,21 @@ export const OrientationBanner: React.FC<OrientationBannerProps> = ({
       className="mobile-orientation-banner"
       role="status"
       aria-live="polite"
-      aria-label="Screen orientation tip"
+      aria-label={t("banner.orientationTip")}
     >
       <div className="mobile-orientation-banner-content">
         <span className="mobile-orientation-icon-wrap" aria-hidden="true">
           <RotateCw size={14} className="rotate-hint-icon" />
         </span>
         <span className="mobile-orientation-text">
-          Rotate for wider timeline
+          {t("banner.rotateForTimeline")}
         </span>
       </div>
       <button
         type="button"
         className="mobile-orientation-close"
         onClick={handleDismiss}
-        aria-label="Dismiss orientation banner"
+        aria-label={t("banner.dismiss")}
       >
         <X size={13} />
       </button>

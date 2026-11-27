@@ -233,6 +233,14 @@ class TestRendering(unittest.TestCase):
         self.assertIn("api.mount", html)
         self.assertIn("height: 500px", html)
 
+    def test_chart_locale_is_forwarded_to_the_browser(self):
+        html = to_html(self.records, locale="zh-CN")
+        self.assertIn('<html lang="zh-CN">', html)
+        config = mounted_config(html)
+        self.assertEqual(config["locale"], "zh-CN")
+        self.assertIn("无法", config["renderError"])
+        self.assertEqual(mounted_config(to_html(self.records, locale="fr-FR"))["locale"], "en")
+
     def test_default_theme_is_a_real_engine_theme(self):
         self.assertIn("jantt-theme-light", to_html(self.records))
         self.assertIn("light", THEMES)

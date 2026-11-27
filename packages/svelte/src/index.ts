@@ -62,6 +62,7 @@ export function janttAction(
 
   return {
     update(newParams: JanttActionOptions) {
+      const previousOptions = current.options;
       current = newParams;
       if (destroyed || !newParams.data) return;
       if (!instance) {
@@ -69,7 +70,12 @@ export function janttAction(
         return;
       }
       try {
-        instance.update(newParams.data, newParams.options);
+        let options = newParams.options;
+        if (options?.locale !== previousOptions?.locale) {
+          options = { ...options, locale: options?.locale };
+          if (options.viewport === previousOptions?.viewport) delete options.viewport;
+        }
+        instance.update(newParams.data, options);
       } catch (err) {
         reportError(err);
       }

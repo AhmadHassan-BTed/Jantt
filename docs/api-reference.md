@@ -29,6 +29,8 @@ Mounts an interactive Gantt chart into an `HTMLElement`.
 - `container: HTMLElement`: target element.
 - `data: JanttData`: the plan, conforming to the [Jantt JSON Schema](./schema-spec.md).
 - `options?: JanttOptions`:
+  - `locale?: string`: built-in chart language, `"en"` or `"zh-CN"`. Unsupported values use English.
+    Pass a new `locale` in `instance.update(data, { locale })` to switch the chart language.
   - `viewport?: ViewportOptions`: `scale` (`"day" | "week" | "month" | "quarter" | "year"`),
     `dayWidth`, `rowHeight` (default 46), `rowHeightMode` (`"custom" | "fit"`), `linkRouting`
     (`"orthogonal" | "curved" | "direct"`), `showCriticalPath`, `showBaselines`, `showToday`,

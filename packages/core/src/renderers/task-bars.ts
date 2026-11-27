@@ -1,7 +1,8 @@
-import { TaskLayout, DependencyLine, Person, Team } from "../types";
+import { TaskLayout, DependencyLine, Person, Team, TimelineLabels } from "../types";
+import { createTimelineDateFormatter, formatTimelineLabel, resolveTimelineLabels } from "../timeline-labels";
 import { InteractionController } from "../controller";
 import { TooltipController } from "./tooltip";
-import { formatHumanDate, addDays, getTodayISODate } from "../date-math";
+import { addDays, getTodayISODate } from "../date-math";
 import { resolveTaskAssignee } from "../team-resolver";
 import { isTaskDone, sanitizeCssColor } from "../utils";
 
@@ -18,6 +19,8 @@ export interface TaskBarsProps {
   teams?: Team[];
   controller: InteractionController;
   tooltip: TooltipController;
+  /** Localized bar/milestone text; omitted fields fall back to English. */
+  labels?: Partial<TimelineLabels>;
 }
 
 const DONE_BACKGROUND = "var(--jantt-bar-done, #64748B)";
@@ -27,6 +30,8 @@ const NARROW_BAR_LABEL_THRESHOLD_PX = 104;
  * Renders task bars, milestone diamonds, baseline ghost bars, progress indicators, and link ports.
  */
 export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): void {
+  const labels = resolveTimelineLabels(props.labels);
+  const formatDate = createTimelineDateFormatter(labels.locale);
   // Pre-index dependency lines by connected task IDs for O(1) hover lookups
   const today = getTodayISODate();
   const upcoming = addDays(today, 7);
@@ -101,7 +106,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
   // bars passing under the pointer do not flash cards over the area being edited.
   const showTooltip = (e: MouseEvent, item: TaskLayout) => {
     if (e.buttons) return;
-    props.tooltip.show(item.task, item.category, e, item.scheduleMetrics);
+    props.tooltip.show(item.task, item.category, e, item.scheduleMetrics, labels);
   };
 
   props.taskLayouts.forEach((item) => {
@@ -115,7 +120,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       baseBar.style.top = `${item.baselineLayout.y}px`;
       baseBar.style.width = `${item.baselineLayout.width}px`;
       baseBar.style.height = `${item.baselineLayout.height}px`;
-      baseBar.title = `Baseline: ${item.task.baseline?.start} to ${item.task.baseline?.end}`;
+      baseBar.title = formatTimelineLabel(labels.baselineTitle, { start: item.task.baseline?.start ?? "", end: item.task.baseline?.end ?? "" });
       container.appendChild(baseBar);
     }
 
@@ -136,7 +141,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       mStone.setAttribute("data-task-id", item.task.id);
       mStone.setAttribute("tabindex", "0");
       mStone.setAttribute("role", "button");
-      mStone.setAttribute("aria-label", `Milestone: ${item.displayLabel}, Date: ${formatHumanDate(item.task.start)}`);
+      mStone.setAttribute("aria-label", formatTimelineLabel(labels.milestoneAria, { task: item.displayLabel, date: formatDate(item.task.start) }));
 
       mStone.addEventListener("focus", () => activateDeps(item.task.id));
       mStone.addEventListener("blur", deactivateDeps);
@@ -159,7 +164,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
       if (!item.task.locked && !props.readOnly) {
         const portR = document.createElement("div");
         portR.className = "jantt-link-port jantt-link-port-right";
-        portR.title = "Drag to link prerequisite";
+        portR.title = labels.dragLinkPrerequisite;
         portR.addEventListener("pointerdown", (e) => {
           props.controller.startDrag(e, item.task, "link", portR);
         });
@@ -177,7 +182,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
         mLabel.textContent = item.displayLabel;
         mLabel.setAttribute("data-task-id", item.task.id);
         mLabel.setAttribute("role", "button");
-        mLabel.setAttribute("aria-label", `Milestone: ${item.displayLabel}`);
+        mLabel.setAttribute("aria-label", formatTimelineLabel(labels.milestoneAriaShort, { task: item.displayLabel }));
         mLabel.addEventListener("pointerdown", (e) => {
           props.controller.startDrag(e, item.task, "move", mStone);
         });
@@ -205,7 +210,12 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     // outside the button, so they need an explicit name. Dates are available as a description.
     if (useOutsideBarLabel) bar.setAttribute("aria-label", item.displayLabel);
     bar.setAttribute("aria-description",
-      `Category: ${item.category.label}, Start: ${formatHumanDate(item.task.start)}, End: ${formatHumanDate(item.task.end)}, Duration: ${item.durationDays} days`);
+      formatTimelineLabel(labels.taskBarDetails, {
+        category: item.category.label,
+        start: formatDate(item.task.start),
+        end: formatDate(item.task.end),
+        days: item.durationDays
+      }));
 
     // Progress Fill
     const progressRatio = isDone ? 1.0 : (item.task.progress ?? 0);
@@ -217,7 +227,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     if (!item.task.locked && !props.readOnly) {
       const pHandle = document.createElement("div");
       pHandle.className = "jantt-progress-handle";
-      pHandle.title = `Drag progress (${Math.round(progressRatio * 100)}%)`;
+      pHandle.title = formatTimelineLabel(labels.dragProgress, { percent: Math.round(progressRatio * 100) });
       pHandle.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "progress", bar);
       });
@@ -246,14 +256,14 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     if (item.task.urgent) {
       const uPill = document.createElement("span");
       uPill.className = "jantt-bar-urgent-pill is-urgent";
-      uPill.textContent = "Urgent";
+      uPill.textContent = labels.urgent;
       badges.appendChild(uPill);
     }
 
     if (props.showCritical && item.isCritical) {
       const critPill = document.createElement("span");
       critPill.className = "jantt-critical-pill";
-      critPill.title = "Critical Path: task controls project completion date";
+      critPill.title = labels.criticalPillTitle;
       critPill.innerHTML = `
         <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
@@ -278,9 +288,9 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     if (!props.readOnly) {
       const lockBtn = document.createElement("button");
       lockBtn.className = `jantt-task-lock-btn ${item.task.locked ? "is-locked" : ""}`;
-      lockBtn.title = item.task.locked ? "Locked in place (Click to unlock)" : "Unlocked (Click to lock in place)";
+      lockBtn.title = item.task.locked ? labels.unlockTaskTitle : labels.lockTaskTitle;
       lockBtn.setAttribute("type", "button");
-      lockBtn.setAttribute("aria-label", item.task.locked ? "Unlock task" : "Lock task");
+      lockBtn.setAttribute("aria-label", item.task.locked ? labels.unlockTask : labels.lockTask);
       lockBtn.setAttribute("aria-pressed", String(Boolean(item.task.locked)));
       // The bar itself is the keyboard target; keep the nested pointer shortcut out of the tab order.
       lockBtn.tabIndex = -1;
@@ -307,7 +317,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
     if (!item.task.locked && !props.readOnly) {
       const handle = document.createElement("div");
       handle.className = "jantt-resize-handle";
-      handle.title = "Drag to resize duration";
+      handle.title = labels.dragResizeDuration;
       handle.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "resize", bar);
       });
@@ -315,7 +325,7 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
       const startHandle = document.createElement("div");
       startHandle.className = "jantt-resize-handle is-start";
-      startHandle.title = "Drag to change start date";
+      startHandle.title = labels.dragChangeStart;
       startHandle.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "resize", bar);
       });
@@ -323,13 +333,13 @@ export function renderTaskBars(props: TaskBarsProps, container: HTMLElement): vo
 
       const portL = document.createElement("div");
       portL.className = "jantt-link-port jantt-link-port-left";
-      portL.title = "Drag from task start to create a dependency";
+      portL.title = labels.dragCreateDependency;
       portL.addEventListener("pointerdown", (e) => props.controller.startDrag(e, item.task, "link", portL));
       bar.appendChild(portL);
 
       const portR = document.createElement("div");
       portR.className = "jantt-link-port jantt-link-port-right";
-      portR.title = "Drag wire to link prerequisite";
+      portR.title = labels.dragWireLinkPrerequisite;
       portR.addEventListener("pointerdown", (e) => {
         props.controller.startDrag(e, item.task, "link", portR);
       });

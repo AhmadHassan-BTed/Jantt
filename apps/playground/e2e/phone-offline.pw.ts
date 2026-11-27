@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test.use({ serviceWorkers: "allow" });
+test.use({ serviceWorkers: "allow", locale: "en-US" });
 
 test("a first visit installs the offline workspace and retains a task created offline", async ({ page, context }) => {
   await page.goto("/");
@@ -31,4 +31,17 @@ test("a first visit installs the offline workspace and retains a task created of
   await navigation.getByRole("button", { name: "Tasks", exact: true }).tap();
   const tasks = page.locator(".tasks-view-container");
   await expect(tasks.getByText(title, { exact: true })).toBeVisible();
+});
+
+test("a cold Chinese language chunk can load from the installed shell while offline", async ({ page, context }) => {
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe("activated");
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "Open tools and settings menu" }).click();
+  await page.getByLabel("Language", { exact: true }).selectOption("zh-CN");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 });

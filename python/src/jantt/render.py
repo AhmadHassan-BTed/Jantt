@@ -41,15 +41,14 @@ _MOUNT_SCRIPT = """
     var api = window.Jantt && (window.Jantt.default || window.Jantt);
     if (api && typeof api.mount === "function") {
       try {
-        api.mount(container, config.plan, { themeClassName: config.themeClassName, autoCascade: true });
+        api.mount(container, config.plan, { themeClassName: config.themeClassName, autoCascade: true, locale: config.locale });
       } catch (err) {
-        container.textContent = "Jantt could not render this plan: " + (err && err.message ? err.message : err);
+        container.textContent = config.renderError + (err && err.message ? err.message : err);
       }
     } else if (++attempts < maxAttempts) {
       setTimeout(initChart, __POLL_MS__);
     } else {
-      container.textContent = "Failed to load the Jantt engine from " + config.scriptUrl +
-        ". Check your network connection, proxy, or content security policy.";
+      container.textContent = config.loadError;
     }
   }
   if (document.readyState === "complete" || document.readyState === "interactive") {
@@ -111,13 +110,14 @@ def to_html(
     theme: str = "light",
     standalone: bool = True,
     cdn_version: Optional[str] = None,
+    locale: str = "en",
 ) -> str:
     """
     Renders an interactive HTML snippet with the complete Jantt Gantt chart engine.
 
     ``height`` is a CSS length ('600px', '80vh', '100%') or a number of pixels. ``theme`` is one of
     ``jantt.THEMES``. ``cdn_version`` pins the @jantt/standalone release loaded from unpkg and
-    defaults to this package's version.
+    defaults to this package's version. Pass ``locale="zh-CN"`` for a Simplified Chinese chart.
     """
     from . import __version__
 
@@ -134,11 +134,21 @@ def to_html(
     css_url, css_fallback_url = base + "style.css", base + "standalone.css"
     container_id = f"jantt_container_{uuid.uuid4().hex[:8]}"
 
+    requested_locale = locale.strip().lower()
+    use_chinese = requested_locale in ("zh", "zh-cn", "zh-hans") or requested_locale.startswith("zh-hans-")
+    chart_locale = "zh-CN" if use_chinese else "en"
     config = {
         "containerId": container_id,
         "plan": plan_dict,
         "themeClassName": theme_class,
         "scriptUrl": script_url,
+        "locale": chart_locale,
+        "renderError": "Jantt 无法渲染此计划：" if use_chinese else "Jantt could not render this plan: ",
+        "loadError": (
+            f"无法从 {script_url} 加载 Jantt。请检查网络连接、代理或内容安全策略。"
+            if use_chinese
+            else f"Failed to load the Jantt engine from {script_url}. Check your network connection, proxy, or content security policy."
+        ),
     }
     mount_script = (
         _MOUNT_SCRIPT.replace("__CONFIG__", _script_json(config))
@@ -147,16 +157,16 @@ def to_html(
     )
 
     html_content = f"""
-<div id="{container_id}" style="width: 100%; height: {css_height}; min-height: 400px; border-radius: 8px; overflow: hidden; background: #ffffff;"></div>
+<div id="{container_id}" lang="{chart_locale}" style="width: 100%; height: {css_height}; min-height: 400px; border-radius: 8px; overflow: hidden; background: #ffffff;"></div>
 <link rel="stylesheet" href="{html.escape(css_url)}" crossorigin="anonymous" onerror="this.onerror=null;this.href='{html.escape(css_fallback_url)}';">
 <script src="{html.escape(script_url)}" crossorigin="anonymous"></script>
 <script>{mount_script}</script>
 """
 
     if standalone:
-        title = html.escape(str((plan_dict.get("meta") or {}).get("title") or "Jantt Timeline"))
+        title = html.escape(str((plan_dict.get("meta") or {}).get("title") or ("Jantt 时间轴" if use_chinese else "Jantt Timeline")))
         return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="{chart_locale}">
 <head>
   <meta charset="utf-8">
   <title>{title}</title>
@@ -177,11 +187,12 @@ def show(
     plan_or_df: Any,
     height: Union[str, int] = "600px",
     theme: str = "light",
+    locale: str = "en",
 ) -> Any:
     """
     Displays an interactive Jantt Gantt chart in a JupyterLab / IPython notebook.
     """
-    html_snippet = to_html(plan_or_df, height=height, theme=theme, standalone=False)
+    html_snippet = to_html(plan_or_df, height=height, theme=theme, standalone=False, locale=locale)
     try:
         from IPython.display import HTML  # type: ignore
         return HTML(html_snippet)
@@ -193,6 +204,7 @@ def streamlit(
     plan_or_df: Any,
     height: int = 600,
     theme: str = "light",
+    locale: str = "en",
 ) -> Any:
     """
     Renders an interactive Jantt Gantt chart inside a Streamlit application. ``height`` is in pixels.
@@ -204,5 +216,5 @@ def streamlit(
     if isinstance(height, bool) or not isinstance(height, numbers.Integral) or height <= 0:
         raise ValueError(f"height must be a positive number of pixels, got {height!r}")
     height = int(height)  # numpy integers -> int for Streamlit
-    html_snippet = to_html(plan_or_df, height=height, theme=theme, standalone=False)
+    html_snippet = to_html(plan_or_df, height=height, theme=theme, standalone=False, locale=locale)
     return components.html(html_snippet, height=height, scrolling=True)

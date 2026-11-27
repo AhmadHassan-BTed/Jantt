@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import type { Person, Team, JanttData, Task } from "@jantt/core";
 import { getEffectivePeople, generateId, sanitizeRegistry } from "../utils";
 import { PERSON_COLORS, STORAGE_KEYS } from "../constants";
+import { tGlobal } from "../i18n";
 
 interface UsePeopleTeamsOptions {
   /** @deprecated People are derived from `parsedData`; kept for API compatibility. */
@@ -97,7 +98,7 @@ export function usePeopleTeams({
       const mentionHandle = `@${targetUser.username.replace(/^@+/, "")}`;
 
       if (people.some((p) => p.username === mentionHandle || p.id === mentionHandle)) {
-        showToast(`${mentionHandle} is already in the project.`, true);
+        showToast(tGlobal("hooks.people.alreadyInProject", { name: mentionHandle }), true);
         return;
       }
 
@@ -106,12 +107,12 @@ export function usePeopleTeams({
         name: targetUser.displayName || mentionHandle,
         username: mentionHandle,
         avatar: targetUser.photoURL,
-        role: "Collaborator",
+        role: tGlobal("hooks.people.collaborator"),
         color: PERSON_COLORS[effectivePeople.length % PERSON_COLORS.length]
       };
 
       handleChartCommit({ ...parsedData, people: [...people, realPerson] });
-      showToast(`Added ${mentionHandle} to project!`);
+      showToast(tGlobal("hooks.people.addedToProject", { name: mentionHandle }));
     },
     [parsedData, people, effectivePeople.length, handleChartCommit, showToast]
   );
@@ -131,7 +132,7 @@ export function usePeopleTeams({
       const exists = people.some((p) => p.id === cleanPerson.id);
       const updated = exists ? people.map((p) => (p.id === cleanPerson.id ? cleanPerson : p)) : [...people, cleanPerson];
       handleChartCommit({ ...parsedData, people: updated });
-      showToast(`Saved ${personToPersist.name} to project JSON!`);
+      showToast(tGlobal("hooks.people.savedPerson", { name: personToPersist.name }));
     },
     [parsedData, people, handleChartCommit, showToast]
   );
@@ -148,7 +149,7 @@ export function usePeopleTeams({
       color: p.color
     }));
     handleChartCommit({ ...parsedData, people: cleanPeople });
-    showToast(`Saved all ${cleanPeople.length} members to project JSON!`);
+    showToast(tGlobal("hooks.people.savedAllMembers", { count: cleanPeople.length }));
   }, [parsedData, effectivePeople, handleChartCommit, showToast]);
 
   const handleRemovePerson = useCallback(
@@ -167,8 +168,11 @@ export function usePeopleTeams({
       const name = "name" in person && person.name ? person.name : personId;
       showToast(
         unassigned > 0
-          ? `Removed ${name} and unassigned ${unassigned} task${unassigned === 1 ? "" : "s"}. Press Ctrl+Z to undo.`
-          : `Removed ${name}.`
+          ? tGlobal(
+              unassigned === 1 ? "hooks.people.removedUnassignedOne" : "hooks.people.removedUnassignedMany",
+              { name, count: unassigned }
+            )
+          : tGlobal("hooks.people.removed", { name })
       );
     },
     [parsedData, people, effectivePeople, handleChartCommit, showToast]

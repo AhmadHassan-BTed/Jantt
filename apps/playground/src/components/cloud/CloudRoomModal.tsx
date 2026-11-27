@@ -3,6 +3,7 @@ import { Radio, ArrowRight, Plus, Loader2, LogIn } from "lucide-react";
 import type { SavedProject, ActiveView } from "../../types";
 import type { UserProfile } from "../../firebase";
 import { parseRoomLink } from "../../room-storage";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader } from "../modals/ModalHost";
 
 type CloudRoomTab = "join" | "create";
@@ -74,6 +75,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
   onLogin,
   initialTab = "join"
 }) => {
+  const { t } = useI18n();
   const baseId = useId();
   const [activeTab, setActiveTab] = useState<CloudRoomTab>(initialTab);
   const [joinInput, setJoinInput] = useState("");
@@ -99,8 +101,8 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
   const close = () => setShowModal(false);
   const isSignedIn = Boolean(currentUserProfile);
   const tabs: { id: CloudRoomTab; label: string; icon: React.ReactNode }[] = [
-    { id: "join", label: "Join a room", icon: <ArrowRight size={14} aria-hidden="true" /> },
-    { id: "create", label: "Start a room", icon: <Plus size={14} aria-hidden="true" /> }
+    { id: "join", label: t("cloud.joinTab"), icon: <ArrowRight size={14} aria-hidden="true" /> },
+    { id: "create", label: t("cloud.createTab"), icon: <Plus size={14} aria-hidden="true" /> }
   ];
   const tabId = (tab: CloudRoomTab) => `${baseId}-tab-${tab}`;
   const panelId = (tab: CloudRoomTab) => `${baseId}-panel-${tab}`;
@@ -108,7 +110,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
-    const index = tabs.findIndex((t) => t.id === activeTab);
+    const index = tabs.findIndex((tab) => tab.id === activeTab);
     const nextIndex =
       event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     const next = tabs[nextIndex].id;
@@ -121,7 +123,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
     if (isProcessing) return;
     const roomId = parseRoomLink(joinInput);
     if (!roomId) {
-      setJoinError("Paste a room link (it contains ?room=…) or a room ID such as room_ab12cd34ef.");
+      setJoinError(t("cloud.joinInvalid"));
       return;
     }
     if (roomId === activeRoomId) {
@@ -132,7 +134,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
     if (isSuccess(await onJoinRoom(roomId))) {
       close();
     } else {
-      setJoinError("The room could not be opened. Check the link, or ask the owner to share it again.");
+      setJoinError(t("cloud.joinFailed"));
     }
   };
 
@@ -144,7 +146,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
     if (isSuccess(await onCreateRoom({ title }))) {
       close();
     } else {
-      setCreateError("The room could not be created. Please try again.");
+      setCreateError(t("cloud.createFailed"));
     }
   };
 
@@ -152,13 +154,13 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
     <Modal onClose={close} maxWidth={500}>
       <ModalHeader
         icon={<Radio size={18} />}
-        title="Cloud rooms"
-        subtitle="Open a room someone shared with you, or start one from this plan."
+        title={t("cloud.title")}
+        subtitle={t("cloud.subtitle")}
       />
 
       <div
         role="tablist"
-        aria-label="Cloud room actions"
+        aria-label={t("cloud.actionsAria")}
         style={{
           display: "flex",
           gap: "4px",
@@ -218,7 +220,7 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
             noValidate
           >
             <label htmlFor={`${baseId}-join-input`} style={labelStyle}>
-              Room link or ID
+              {t("cloud.roomLinkLabel")}
             </label>
             <input
               id={`${baseId}-join-input`}
@@ -242,17 +244,17 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
               </p>
             ) : (
               <p id={`${baseId}-join-help`} style={helpStyle}>
-                Anyone with a room link can view the plan live. To edit, the room owner adds you as an Editor
-                {isSignedIn ? "" : " (sign in with GitHub first)"}.
+                {t("cloud.joinHelp")}
+                {isSignedIn ? "" : t("cloud.joinHelpSignIn")}.
               </p>
             )}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
               <button type="button" className="btn btn-secondary" onClick={close}>
-                Cancel
+                {t("common.cancel")}
               </button>
               <button type="submit" className="btn btn-primary" disabled={!joinInput.trim() || isProcessing}>
                 {isProcessing ? <Loader2 size={15} className="spin-sync-icon" aria-hidden="true" /> : <ArrowRight size={15} aria-hidden="true" />}
-                <span>{isProcessing ? "Opening…" : "Open room"}</span>
+                <span>{isProcessing ? t("cloud.opening") : t("cloud.openRoom")}</span>
               </button>
             </div>
           </form>
@@ -261,13 +263,13 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
             {!isSignedIn ? (
               <>
                 <p style={{ ...helpStyle, marginTop: 0, fontSize: "0.85rem" }}>
-                  Cloud rooms belong to a GitHub account. Sign in to start a room from this plan and invite teammates.
+                  {t("cloud.signInBody")}
                 </p>
                 {onLogin && (
                   <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
                     <button type="button" className="btn btn-primary" onClick={onLogin} data-autofocus>
                       <LogIn size={15} aria-hidden="true" />
-                      <span>Sign in with GitHub</span>
+                      <span>{t("cloud.signIn")}</span>
                     </button>
                   </div>
                 )}
@@ -275,14 +277,14 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
             ) : (
               <form onSubmit={handleCreateSubmit} noValidate>
                 <label htmlFor={`${baseId}-title-input`} style={labelStyle}>
-                  Room name
+                  {t("cloud.roomName")}
                 </label>
                 <input
                   id={`${baseId}-title-input`}
                   type="text"
                   data-autofocus
                   maxLength={120}
-                  placeholder="e.g. Q4 Platform Migration"
+                  placeholder={t("cloud.roomNamePlaceholder")}
                   value={roomTitle}
                   onChange={(e) => {
                     setRoomTitle(e.target.value);
@@ -298,18 +300,17 @@ export const CloudRoomModal: React.FC<CloudRoomModalProps> = ({
                   </p>
                 ) : (
                   <p id={`${baseId}-title-help`} style={helpStyle}>
-                    Copies the plan you are viewing into a new room that syncs live. Anyone with its link can view it;
-                    you choose who can edit from Share.
-                    {activeRoomId ? " The current room is not changed." : " Your local plan stays as it is."}
+                    {t("cloud.createHelp")}
+                    {activeRoomId ? t("cloud.createHelpCurrentRoom") : t("cloud.createHelpLocalCopy")}
                   </p>
                 )}
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
                   <button type="button" className="btn btn-secondary" onClick={close}>
-                    Cancel
+                    {t("common.cancel")}
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={!roomTitle.trim() || isProcessing}>
                     {isProcessing ? <Loader2 size={15} className="spin-sync-icon" aria-hidden="true" /> : <Radio size={15} aria-hidden="true" />}
-                    <span>{isProcessing ? "Starting room…" : "Start room"}</span>
+                    <span>{isProcessing ? t("cloud.startingRoom") : t("cloud.startRoom")}</span>
                   </button>
                 </div>
               </form>

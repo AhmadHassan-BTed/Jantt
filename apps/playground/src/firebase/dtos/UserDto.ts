@@ -10,6 +10,7 @@
  */
 
 import { normalizeUsername } from "@jantt/core";
+import { tGlobal } from "../../i18n";
 
 export { normalizeUsername };
 
@@ -97,13 +98,13 @@ export interface VerificationStatus {
 export function validateUsername(username: string): { valid: boolean; error?: string } {
   const normalized = normalizeUsername(typeof username === "string" ? username : "");
   if (!normalized) {
-    return { valid: false, error: "Username cannot be empty." };
+    return { valid: false, error: tGlobal("services.user.usernameEmpty") };
   }
   if (normalized.length > 39) {
-    return { valid: false, error: "Username cannot exceed 39 characters." };
+    return { valid: false, error: tGlobal("services.user.usernameTooLong") };
   }
   if (!USERNAME_PATTERN.test(normalized)) {
-    return { valid: false, error: "Username may only contain letters, numbers, hyphens, and underscores." };
+    return { valid: false, error: tGlobal("services.user.usernameCharset") };
   }
   return { valid: true };
 }
@@ -113,10 +114,10 @@ export function validateUsername(username: string): { valid: boolean; error?: st
  */
 export function validateUserProfile(profile: Partial<UserProfile>): { valid: boolean; error?: string } {
   if (!profile.uid || typeof profile.uid !== "string") {
-    return { valid: false, error: "Invalid or missing user UID." };
+    return { valid: false, error: tGlobal("services.user.invalidUid") };
   }
   if (!profile.username || typeof profile.username !== "string") {
-    return { valid: false, error: "Invalid or missing username." };
+    return { valid: false, error: tGlobal("services.user.invalidUsername") };
   }
   const usernameValidation = validateUsername(profile.username);
   if (!usernameValidation.valid) {

@@ -25,7 +25,7 @@ jantt --help
 
 ## 🛠️ CLI Commands
 
-### 1. `jantt open <file.json> [--port 3456] [--host 127.0.0.1] [--no-open]`
+### 1. `jantt open <file.json> [--port 3456] [--host 127.0.0.1] [--locale en|zh-CN] [--no-open]`
 Launches a local interactive Gantt viewer in your browser.
 
 - Edits made in the browser are saved back to the JSON file (atomically, so a crash never leaves a half-written file).
@@ -36,7 +36,7 @@ Launches a local interactive Gantt viewer in your browser.
 The server listens on `127.0.0.1` only, answers only requests addressed to its own host name, and accepts saves only from the page it served (a per-session token). Pass `--host 0.0.0.0` to share the viewer on your network; anyone who can reach that address can then view and edit the file. `--port 0` picks any free port, and `--no-open` skips launching the browser.
 
 ```bash
-jantt open ./roadmap.json --port 8080
+jantt open ./roadmap.json --port 8080 --locale zh-CN
 ```
 
 ### 2. `jantt validate <file.json> [--json]`

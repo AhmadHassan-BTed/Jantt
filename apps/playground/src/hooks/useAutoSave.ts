@@ -5,6 +5,8 @@ import type { JanttData } from "@jantt/core";
 import type { AutoSaveInterval } from "../types";
 import { STORAGE_KEYS } from "../constants";
 import { storageService } from "../services/storage";
+import { tGlobal, type MessageKey } from "../i18n";
+import { useI18n } from "../i18n/I18nProvider";
 
 interface UseAutoSaveOptions {
   /** @deprecated Not used any more: saves persist the parsed plan, never half-typed JSON. */
@@ -29,8 +31,8 @@ const INTERVAL_MS: Record<Exclude<AutoSaveInterval, "off">, number> = {
   "60s": 60000
 };
 
-export const SAVE_FAILED_MESSAGE =
-  "Changes could not be saved: browser storage is full or blocked. Export your plan (JSON) to keep a copy, then free space by deleting old plans.";
+/** Resolved at use time so the message follows the active locale. */
+const SAVE_FAILED_MESSAGE_KEY: MessageKey = "hooks.autosave.saveFailedDetail";
 
 export function useAutoSave({
   parsedData,
@@ -41,6 +43,7 @@ export function useAutoSave({
   captureSnapshot,
   broadcastChange
 }: UseAutoSaveOptions) {
+  const { t, locale } = useI18n();
   const [autoSaveInterval, setAutoSaveInterval] = useState<AutoSaveInterval>(() => {
     const saved = storageService.getItem<string>(STORAGE_KEYS.AUTOSAVE_INTERVAL);
     return saved && AUTOSAVE_INTERVALS.includes(saved as AutoSaveInterval) ? (saved as AutoSaveInterval) : "5s";
@@ -114,11 +117,12 @@ export function useAutoSave({
       return;
     }
     // Never claim "saved" after a failed write: the edits stay pending and are retried
-    setSaveError(SAVE_FAILED_MESSAGE);
+    const message = tGlobal(SAVE_FAILED_MESSAGE_KEY);
+    setSaveError(message);
     setSaveStatus("pending");
     if (announceFailure || !failureAnnouncedRef.current) {
       failureAnnouncedRef.current = true;
-      showToastRef.current(SAVE_FAILED_MESSAGE, true);
+      showToastRef.current(message, true);
     }
   }, []);
 
@@ -158,7 +162,7 @@ export function useAutoSave({
   }, [flushEditorDraft, flushSave]);
 
   const handleManualSaveNow = useCallback(() => {
-    if (runSave(true)) showToast("Plan saved to browser storage.");
+    if (runSave(true)) showToast(tGlobal("hooks.autosave.savedToast"));
   }, [runSave, showToast]);
 
   // Persist pending edits when the page goes away. Mobile browsers often skip beforeunload,
@@ -201,7 +205,7 @@ export function useAutoSave({
         } catch (err) {
           console.error("Saving the previous plan failed:", err);
         }
-        if (!ok) showToastRef.current(SAVE_FAILED_MESSAGE, true);
+        if (!ok) showToastRef.current(tGlobal(SAVE_FAILED_MESSAGE_KEY), true);
       }
       clearTimer();
       isDirtyRef.current = false;
@@ -253,17 +257,23 @@ export function useAutoSave({
 
   let autoSaveLabel: string;
   if (saveError) {
-    autoSaveLabel = "Save failed";
+    autoSaveLabel = t("hooks.autosave.saveFailed");
   } else if (saveStatus === "saving") {
-    autoSaveLabel = "Saving...";
+    autoSaveLabel = t("hooks.autosave.saving");
   } else if (saveStatus === "pending") {
-    autoSaveLabel = "Unsaved";
+    autoSaveLabel = t("hooks.autosave.unsaved");
   } else {
     const diffSec = Math.floor((Date.now() - lastSavedAt.getTime()) / 1000);
-    if (diffSec < 10) autoSaveLabel = "Saved just now";
-    else if (diffSec < 60) autoSaveLabel = `Saved ${Math.floor(diffSec / 10) * 10}s ago`;
-    else if (diffSec < 3600) autoSaveLabel = `Saved ${Math.floor(diffSec / 60)}m ago`;
-    else autoSaveLabel = `Saved at ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    if (diffSec < 10) autoSaveLabel = t("hooks.autosave.savedJustNow");
+    else if (diffSec < 60) {
+      autoSaveLabel = t("hooks.autosave.savedSecondsAgo", { time: Math.floor(diffSec / 10) * 10 });
+    } else if (diffSec < 3600) {
+      autoSaveLabel = t("hooks.autosave.savedMinutesAgo", { time: Math.floor(diffSec / 60) });
+    } else {
+      autoSaveLabel = t("hooks.autosave.savedAt", {
+        time: lastSavedAt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+      });
+    }
   }
 
   // Scanning all of localStorage is costly; only do it while the settings dialog is open

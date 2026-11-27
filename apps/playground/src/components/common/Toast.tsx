@@ -1,6 +1,7 @@
 import React from "react";
 import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import type { ToastItem } from "../../hooks/useToast";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface ToastProps {
   /** Queue from `useToast().toasts`. */
@@ -17,11 +18,12 @@ interface ToastProps {
  * messages: successes politely (role=status), errors immediately (role=alert).
  */
 export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss, toastMessage, isToastError = false }) => {
+  const { t } = useI18n();
   const items: ToastItem[] =
     toasts ?? (toastMessage ? [{ id: 0, message: toastMessage, isError: isToastError }] : []);
 
   return (
-    <div className="jantt-toast-region" role="region" aria-label="Notifications">
+    <div className="jantt-toast-region" role="region" aria-label={t("toast.region")}>
       {items.map((toast) => (
         <div
           key={toast.id}
@@ -40,7 +42,7 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss, toastMessage, i
               type="button"
               className="jantt-toast-close"
               onClick={() => onDismiss(toast.id)}
-              aria-label="Dismiss notification"
+              aria-label={t("toast.dismiss")}
             >
               <X size={14} aria-hidden="true" />
             </button>

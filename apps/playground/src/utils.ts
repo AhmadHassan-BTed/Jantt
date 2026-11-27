@@ -33,6 +33,7 @@ import {
   AUTO_SAVE_SNAPSHOT_REASON
 } from "./constants";
 import { storageService } from "./services/storage";
+import { tGlobal } from "./i18n";
 
 /** Share payloads above this size are rejected before decompression (zip-bomb guard). */
 export const MAX_SHARE_PAYLOAD_CHARS = 512 * 1024;
@@ -54,16 +55,16 @@ const VALID_VIEWS: ActiveView[] = ["gantt", "canvas", "kanban", "summary", "task
 const VALID_SCALES: TimeScale[] = ["day", "week", "month", "quarter", "year"];
 const VALID_KANBAN_SORT_FIELDS: KanbanSortField[] = ["priority", "start", "end", "wbs", "assignee", "progress", "name"];
 
-export function formatRelativeTime(isoStr?: string): string {
-  if (!isoStr) return "Never";
+export function formatRelativeTime(isoStr: string | undefined, t = tGlobal): string {
+  if (!isoStr) return t("utils.never");
   const time = new Date(isoStr).getTime();
-  if (Number.isNaN(time)) return "Unknown";
+  if (Number.isNaN(time)) return t("utils.unknown");
   const diff = Math.floor((Date.now() - time) / 1000);
-  if (diff < 5) return "Just now";
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 5) return t("utils.justNow");
+  if (diff < 60) return t("utils.secondsAgo", { count: diff });
+  if (diff < 3600) return t("utils.minutesAgo", { count: Math.floor(diff / 60) });
+  if (diff < 86400) return t("utils.hoursAgo", { count: Math.floor(diff / 3600) });
+  return t("utils.daysAgo", { count: Math.floor(diff / 86400) });
 }
 
 function randomToken(length: number): string {
@@ -201,7 +202,7 @@ function normalizeStoredProject(raw: unknown): SavedProject | null {
   if (typeof p.id !== "string" || !p.id || !isPlanShape(p.data)) return null;
   const project: LegacyStoredProject = { ...(p as LegacyStoredProject) };
   if (typeof project.name !== "string" || !project.name.trim()) {
-    project.name = sanitizePlanName(p.data.meta?.title) || "Untitled plan";
+    project.name = sanitizePlanName(p.data.meta?.title) || tGlobal("utils.untitledPlan");
   }
   if (typeof project.updatedAt !== "string") {
     project.updatedAt = new Date(0).toISOString();
@@ -216,7 +217,7 @@ function normalizeStoredProject(raw: unknown): SavedProject | null {
     delete project.lastSyncedAt;
     delete project.syncError;
     // Strip legacy "(Cloud Feed...)" or "(Cloud Feed + N tasks)" badges from title
-    project.name = project.name.replace(/\s*\((?:Cloud Feed|\d+\s*tasks)[^)]*\)/gi, "").trim() || "Untitled plan";
+    project.name = project.name.replace(/\s*\((?:Cloud Feed|\d+\s*tasks)[^)]*\)/gi, "").trim() || tGlobal("utils.untitledPlan");
   } else if (project.source !== undefined && project.source !== "local" && project.source !== "room") {
     delete project.source;
   }
@@ -561,7 +562,7 @@ export function importSharedPlan(
 
   const decoded = decodeDataFromBase64Url(payload);
   if (!decoded) return null;
-  const baseName = sanitizePlanName(nameOverride) || sanitizePlanName(decoded.meta?.title) || "Shared Plan";
+  const baseName = sanitizePlanName(nameOverride) || sanitizePlanName(decoded.meta?.title) || tGlobal("utils.sharedPlan");
   const name = uniquePlanName(baseName, projects);
   const project: SavedProject = {
     id: generateId("shared"),
@@ -688,7 +689,7 @@ export function loadInitialState(compact = false) {
   if (isBrowser && new URLSearchParams(window.location.search).has("url")) {
     updateBrowserUrl((url) => url.searchParams.delete("url"));
     launchNotice = {
-      message: "Links to plans hosted at another address are no longer supported. Download the file and use Import instead.",
+      message: tGlobal("app.legacyPlanLink"),
       isError: true
     };
   }
@@ -853,20 +854,20 @@ export function loadInitialState(compact = false) {
           stripSharePayloadFromUrl();
           const imported = importSharedPlan(savedProjects, share.payload, share.name);
           if (!imported) {
-            launchNotice = { message: "This share link is invalid, damaged or too large to open.", isError: true };
+            launchNotice = { message: tGlobal("app.shareLinkInvalid"), isError: true };
           } else if (imported.isNew) {
             savedProjects = imported.projects;
             const stored = saveCustomProjects(savedProjects);
             activeProjectId = imported.project.id;
             launchNotice = stored
-              ? { message: `Opened shared plan "${imported.project.name}" as a new local plan.`, isError: false }
+              ? { message: tGlobal("app.shareLinkImported", { name: imported.project.name }), isError: false }
               : {
-                  message: `Opened shared plan "${imported.project.name}", but browser storage is full: it is not saved yet.`,
+                  message: tGlobal("app.shareLinkStorageFull", { name: imported.project.name }),
                   isError: true
                 };
           } else {
             activeProjectId = imported.project.id;
-            launchNotice = { message: `Opened "${imported.project.name}" (imported from this link earlier).`, isError: false };
+            launchNotice = { message: tGlobal("app.shareLinkAlreadyImported", { name: imported.project.name }), isError: false };
           }
         } else if (urlParams.get("plan") === "default") {
           activeProjectId = "default";

@@ -56,6 +56,7 @@ export class JanttTimelineElement extends ElementBase {
     "data-src",
     "scale",
     "theme",
+    "locale",
     ...BOOLEAN_ATTRIBUTES
   ];
 
@@ -92,8 +93,18 @@ export class JanttTimelineElement extends ElementBase {
     return this._controller;
   }
 
+  public get locale(): string | null {
+    return this.getAttribute("locale");
+  }
+
+  public set locale(value: string | null) {
+    if (value == null) this.removeAttribute("locale");
+    else this.setAttribute("locale", value);
+  }
+
   public connectedCallback(): void {
     this.upgradeProperty("data");
+    this.upgradeProperty("locale");
 
     if (!this._container) {
       this._container = document.createElement("div");
@@ -144,6 +155,9 @@ export class JanttTimelineElement extends ElementBase {
         return;
       case "scale":
         this.applyChanges({ viewport: { scale: this.readScale() } });
+        return;
+      case "locale":
+        this.applyChanges({ locale: newValue ?? undefined });
         return;
       case "theme":
         this.applyChanges({ themeClassName: this.readThemeClassName() ?? "" });
@@ -295,6 +309,7 @@ export class JanttTimelineElement extends ElementBase {
       autoCascade: this.readBoolean("auto-cascade"),
       readOnly: this.readBoolean("read-only") ?? false,
       themeClassName: this.readThemeClassName(),
+      locale: this.getAttribute("locale") ?? undefined,
       viewport,
       onTaskClick: (task: Task) => this.emit("jantt-task-click", { task }),
       onTaskAdd: (task: Task) => this.emit("jantt-task-add", { task }),
@@ -349,11 +364,12 @@ export class JanttTimelineElement extends ElementBase {
    * A property set before the element was defined shadows the class accessor; re-assign it
    * through the setter (the standard custom-element upgrade pattern).
    */
-  private upgradeProperty(prop: "data"): void {
+  private upgradeProperty(prop: "data" | "locale"): void {
     if (Object.prototype.hasOwnProperty.call(this, prop)) {
       const value = (this as unknown as Record<string, unknown>)[prop];
       delete (this as unknown as Record<string, unknown>)[prop];
-      this._data = (value as JanttData | null) ?? null;
+      if (prop === "data") this._data = (value as JanttData | null) ?? null;
+      else this.locale = typeof value === "string" ? value : null;
     }
   }
 

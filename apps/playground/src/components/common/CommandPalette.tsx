@@ -22,6 +22,9 @@ import {
 import type { JanttData, Task } from "@jantt/core";
 import type { ActiveView } from "../../types";
 import { AVAILABLE_THEMES } from "../../constants";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { MessageKey } from "../../i18n";
+import { themeDescription } from "../../i18n/theme";
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -51,6 +54,16 @@ export interface CommandPaletteProps {
 }
 
 type CommandCategory = "Views" | "Actions" | "Tasks" | "Export & Interop" | "Themes" | "Help";
+
+/** Category ids stay stable (they drive filtering); only their rendered label is translated. */
+const CATEGORY_LABEL_KEYS: Record<CommandCategory, MessageKey> = {
+  Views: "palette.categoryViews",
+  Actions: "palette.categoryActions",
+  Tasks: "palette.categoryTasks",
+  "Export & Interop": "palette.categoryExport",
+  Themes: "palette.categoryThemes",
+  Help: "palette.categoryHelp"
+};
 
 interface CommandItem {
   id: string;
@@ -92,6 +105,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = (props) => {
 };
 
 const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
+  const { t } = useI18n();
   const { parsedData, selectedThemeId, showCriticalPath, showBaselines } = props;
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -142,18 +156,18 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
     const view = (id: ActiveView, title: string, subtitle: string, icon: React.ReactNode, shortcut: string) =>
       list.push({ id: `view-${id}`, category: "Views", title, subtitle, icon, shortcut, action: run((p) => p.setActiveView(id)) });
 
-    view("gantt", "Gantt Timeline Schedule", "Standard timeline with critical path and baseline bars", <Layers size={15} style={{ color: "#38BDF8" }} />, "1");
-    view("canvas", "Canvas 60 FPS Engine", "Hardware-accelerated viewport for 100k+ tasks", <Zap size={15} style={{ color: "#A855F7" }} />, "2");
-    view("kanban", "Kanban Board", "Status-based card workflow and drag management", <Kanban size={15} style={{ color: "#F59E0B" }} />, "3");
-    view("tasks", "Task Checklist & Grid", "Detailed tabular task manager with completion checks", <CheckSquare size={15} style={{ color: "#10B981" }} />, "4");
-    view("summary", "Health & EVM Analytics", "DCMA 14-point audit, S-Curve, Earned Value Performance", <Activity size={15} style={{ color: "#F43F5E" }} />, "5");
-    view("notes", "Project Notes & Docs", "Markdown documentation linked to schedule activities", <StickyNote size={15} style={{ color: "#06B6D4" }} />, "6");
+    view("gantt", t("palette.viewGantt"), t("palette.viewGanttDesc"), <Layers size={15} style={{ color: "#38BDF8" }} />, "1");
+    view("canvas", t("palette.viewCanvas"), t("palette.viewCanvasDesc"), <Zap size={15} style={{ color: "#A855F7" }} />, "2");
+    view("kanban", t("palette.viewKanban"), t("palette.viewKanbanDesc"), <Kanban size={15} style={{ color: "#F59E0B" }} />, "3");
+    view("tasks", t("palette.viewTasks"), t("palette.viewTasksDesc"), <CheckSquare size={15} style={{ color: "#10B981" }} />, "4");
+    view("summary", t("palette.viewSummary"), t("palette.viewSummaryDesc"), <Activity size={15} style={{ color: "#F43F5E" }} />, "5");
+    view("notes", t("palette.viewNotes"), t("palette.viewNotesDesc"), <StickyNote size={15} style={{ color: "#06B6D4" }} />, "6");
 
     list.push({
       id: "action-critical-path",
       category: "Actions",
-      title: `${showCriticalPath ? "Disable" : "Enable"} Critical Path Highlighting`,
-      subtitle: "Highlight zero-float tasks driving project deadline",
+      title: showCriticalPath ? t("palette.criticalPathDisable") : t("palette.criticalPathEnable"),
+      subtitle: t("palette.criticalPathDesc"),
       icon: <Activity size={15} style={{ color: "#EF4444" }} />,
       shortcut: "C",
       action: run((p) => p.onToggleCriticalPath())
@@ -161,8 +175,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
     list.push({
       id: "action-baselines",
       category: "Actions",
-      title: `${showBaselines ? "Hide" : "Show"} Planned vs Actual Baselines`,
-      subtitle: "Compare current dates with baseline commitments",
+      title: showBaselines ? t("palette.baselinesHide") : t("palette.baselinesShow"),
+      subtitle: t("palette.baselinesDesc"),
       icon: <Sliders size={15} style={{ color: "#818CF8" }} />,
       shortcut: "B",
       action: run((p) => p.onToggleBaselines())
@@ -171,8 +185,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "action-filter-today",
         category: "Actions",
-        title: "Filter: Tasks Active Today",
-        subtitle: "Show only the tasks scheduled for today",
+        title: t("palette.filterToday"),
+        subtitle: t("palette.filterTodayDesc"),
         icon: <Calendar size={15} style={{ color: "#38BDF8" }} />,
         shortcut: "T",
         action: run((p) => p.onJumpToday?.())
@@ -182,8 +196,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "action-filter-week",
         category: "Actions",
-        title: "Filter: Tasks Active This Week",
-        subtitle: "Focus activities scheduled for this week",
+        title: t("palette.filterWeek"),
+        subtitle: t("palette.filterWeekDesc"),
         icon: <Calendar size={15} style={{ color: "#A78BFA" }} />,
         shortcut: "W",
         action: run((p) => p.onFilterWeek?.())
@@ -193,8 +207,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "action-monte-carlo",
         category: "Actions",
-        title: "Open Health & Risk Analytics",
-        subtitle: "Schedule health, EVM and Monte Carlo risk simulation (P50, P80, P95)",
+        title: t("palette.riskAnalytics"),
+        subtitle: t("palette.riskAnalyticsDesc"),
         icon: <Sparkles size={15} style={{ color: "#F59E0B" }} />,
         action: run((p) => p.onOpenMonteCarlo?.())
       });
@@ -203,8 +217,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "action-new-plan",
         category: "Actions",
-        title: "Create New Project Plan",
-        subtitle: "Start a fresh project from scratch or from templates",
+        title: t("palette.newPlan"),
+        subtitle: t("palette.newPlanDesc"),
         icon: <Command size={15} style={{ color: "#10B981" }} />,
         action: run((p) => p.onOpenAddPlan?.())
       });
@@ -213,8 +227,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "action-manage-plans",
         category: "Actions",
-        title: "Plan Manager & Cloud Hub",
-        subtitle: "Organize, clone, export, and sync all saved projects",
+        title: t("palette.planManager"),
+        subtitle: t("palette.planManagerDesc"),
         icon: <Layers size={15} style={{ color: "#818CF8" }} />,
         action: run((p) => p.onOpenPlanManager?.())
       });
@@ -224,8 +238,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "export-msproject",
         category: "Export & Interop",
-        title: "Export Microsoft Project XML (.xml)",
-        subtitle: "Native MSPDI XML format compatible with MS Project 2010-2024",
+        title: t("palette.exportMsProject"),
+        subtitle: t("palette.exportMsProjectDesc"),
         icon: <FileCode size={15} style={{ color: "#38BDF8" }} />,
         action: run((p) => p.onExportMsProject?.())
       });
@@ -234,8 +248,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "export-primavera",
         category: "Export & Interop",
-        title: "Export Primavera P6 XER (.xer)",
-        subtitle: "Oracle Primavera P6 Enterprise batch interchange format",
+        title: t("palette.exportPrimavera"),
+        subtitle: t("palette.exportPrimaveraDesc"),
         icon: <FileSpreadsheet size={15} style={{ color: "#F59E0B" }} />,
         action: run((p) => p.onExportPrimavera?.())
       });
@@ -244,8 +258,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "export-csv",
         category: "Export & Interop",
-        title: "Export Universal Spreadsheet CSV (.csv)",
-        subtitle: "Standard tabular data for Excel, Google Sheets, or BI tools",
+        title: t("palette.exportCsv"),
+        subtitle: t("palette.exportCsvDesc"),
         icon: <FileSpreadsheet size={15} style={{ color: "#10B981" }} />,
         action: run((p) => p.onExportCsv?.())
       });
@@ -254,8 +268,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "export-exec-report",
         category: "Export & Interop",
-        title: "Generate Executive Status Booklet (.html)",
-        subtitle: "Self-contained C-level briefing document formatted for vector PDF print",
+        title: t("palette.exportExecReport"),
+        subtitle: t("palette.exportExecReportDesc"),
         icon: <Download size={15} style={{ color: "#A855F7" }} />,
         action: run((p) => p.onExportExecutiveReport?.())
       });
@@ -264,8 +278,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "export-json",
         category: "Export & Interop",
-        title: "Download Native Jantt JSON (.json)",
-        subtitle: "Zero-loss local backup containing all metadata, people, and baselines",
+        title: t("palette.exportJson"),
+        subtitle: t("palette.exportJsonDesc"),
         icon: <FileCode size={15} style={{ color: "#64748B" }} />,
         action: run((p) => p.onDownloadJson?.())
       });
@@ -274,8 +288,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "action-share-link",
         category: "Export & Interop",
-        title: "Share Project Link & Embed Snippet",
-        subtitle: "Generate compressed read-only URL or iframe embed code",
+        title: t("palette.shareLink"),
+        subtitle: t("palette.shareLinkDesc"),
         icon: <Share2 size={15} style={{ color: "#A855F7" }} />,
         action: run((p) => p.onOpenShare?.())
       });
@@ -285,8 +299,11 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: `theme-${theme.id}`,
         category: "Themes",
-        title: `Theme: ${theme.name}`,
-        subtitle: `${theme.mode.toUpperCase()} MODE - ${theme.description || "Sophisticated color scheme"}`,
+        title: t("palette.themeTitle", { name: theme.name }),
+        subtitle: t("palette.themeSubtitle", {
+          mode: t(theme.mode === "dark" ? "palette.themeModeDark" : "palette.themeModeLight"),
+          description: themeDescription(theme, t) || t("palette.themeFallbackDesc")
+        }),
         icon: <Palette size={15} style={{ color: selectedThemeId === theme.id ? "#10B981" : "#94A3B8" }} />,
         action: run((p) => p.setSelectedThemeId(theme.id))
       });
@@ -296,8 +313,8 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       list.push({
         id: "help-shortcuts",
         category: "Help",
-        title: "Keyboard Shortcuts Cheatsheet",
-        subtitle: "View all desktop-grade hotkeys and navigation controls",
+        title: t("palette.shortcuts"),
+        subtitle: t("palette.shortcutsDesc"),
         icon: <HelpCircle size={15} style={{ color: "#38BDF8" }} />,
         shortcut: "?",
         action: run((p) => p.onOpenShortcuts?.())
@@ -307,6 +324,7 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
     return list;
     // `has` is a fresh object each render; its individual flags are the real dependencies.
   }, [
+    t,
     showCriticalPath,
     showBaselines,
     selectedThemeId,
@@ -334,7 +352,12 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       if (task._deleted) continue;
       const taskTitle = String(task.label || task.name || task.id);
       const progressPct = Math.round((task.progress || 0) * 100);
-      const subtitle = `ID: ${task.id} • ${task.start} → ${task.end} • ${progressPct}% completed`;
+      const subtitle = t("palette.taskSubtitle", {
+        id: task.id,
+        start: String(task.start),
+        end: String(task.end),
+        progress: progressPct
+      });
       if (!taskTitle.toLowerCase().includes(normalizedQuery) && !subtitle.toLowerCase().includes(normalizedQuery)) {
         continue;
       }
@@ -358,7 +381,7 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
       if (results.length >= MAX_TASK_RESULTS) break;
     }
     return results;
-  }, [parsedData, normalizedQuery]);
+  }, [parsedData, normalizedQuery, t]);
 
   const filteredCommands = useMemo(() => {
     if (!normalizedQuery) {
@@ -419,7 +442,7 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
         className="command-palette-card"
         role="dialog"
         aria-modal="true"
-        aria-label="Command palette"
+        aria-label={t("palette.title")}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="command-palette-search">
@@ -428,7 +451,7 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
             ref={inputRef}
             type="text"
             className="command-palette-input"
-            placeholder="Type a command, jump to a task, or switch view..."
+            placeholder={t("palette.placeholder")}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -440,21 +463,21 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
-            aria-label="Search commands and tasks"
+            aria-label={t("palette.searchAria")}
             autoComplete="off"
             spellCheck={false}
           />
           <button type="button" className="palette-close" onClick={props.onClose} onKeyDown={e => {
             if (e.key === "Tab") { e.preventDefault(); inputRef.current?.focus(); }
             if (e.key === "Escape") props.onClose();
-          }} aria-label="Close search"><X size={18} /></button>
+          }} aria-label={t("palette.closeSearch")}><X size={18} /></button>
           <kbd className="command-palette-kbd">ESC</kbd>
         </div>
 
-        <div ref={listRef} id={listId} className="command-palette-list" role="listbox" aria-label="Commands">
+        <div ref={listRef} id={listId} className="command-palette-list" role="listbox" aria-label={t("palette.commands")}>
           {filteredCommands.length === 0 ? (
             <div className="command-palette-empty" role="presentation">
-              No matching commands or tasks found for &ldquo;{query}&rdquo;
+              {t("palette.noResults", { query })}
             </div>
           ) : (
             filteredCommands.map((cmd, idx) => {
@@ -480,7 +503,7 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
                     </div>
                   </div>
                   <div className="command-item-meta">
-                    <span className="command-item-category">{cmd.category}</span>
+                    <span className="command-item-category">{t(CATEGORY_LABEL_KEYS[cmd.category])}</span>
                     {cmd.shortcut && <kbd className="command-item-shortcut">{cmd.shortcut}</kbd>}
                   </div>
                 </div>
@@ -491,9 +514,9 @@ const CommandPaletteDialog: React.FC<CommandPaletteProps> = (props) => {
 
         <div className="command-palette-footer" aria-hidden="true">
           <div className="command-palette-hints">
-            <span>&uarr;&darr; Navigate</span>
-            <span>&crarr; Select</span>
-            <span>ESC Close</span>
+            <span>&uarr;&darr; {t("palette.navigate")}</span>
+            <span>&crarr; {t("palette.select")}</span>
+            <span>{t("palette.escClose")}</span>
           </div>
           <span className="command-palette-brand">{PRIMARY_MODIFIER_LABEL}+K</span>
         </div>

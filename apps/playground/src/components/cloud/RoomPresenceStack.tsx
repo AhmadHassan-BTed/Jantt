@@ -1,5 +1,6 @@
 import type { RoomPresence } from "../../firebase/types";
 import { getTrustedAvatarUrl } from "../../room-storage";
+import { useI18n } from "../../i18n/I18nProvider";
 import "./room-presence.css";
 
 const RINGS = ["#38bdf8", "#a78bfa", "#34d399", "#f59e0b", "#fb7185"];
@@ -11,9 +12,10 @@ function ringColor(uid: string) {
 }
 
 export function RoomPresenceStack({ users, limit = 3 }: { users: RoomPresence[]; limit?: number }) {
+  const { t } = useI18n();
   if (!users.length) return null;
   const label = users.map(user => user.displayName || user.username).join(", ");
-  return <span className="room-avatar-stack" role="img" aria-label={`Online: ${label}`} title={label}>
+  return <span className="room-avatar-stack" role="img" aria-label={t("cloud.onlineAria", { names: label })} title={label}>
     {users.slice(0, limit).map(user => {
       const avatar = getTrustedAvatarUrl(user.photoURL);
       return <span className="room-avatar-ring" key={user.uid} style={{ borderColor: ringColor(user.uid) }}>
@@ -25,10 +27,11 @@ export function RoomPresenceStack({ users, limit = 3 }: { users: RoomPresence[];
 }
 
 export function TaskPresenceTag({ users, taskId }: { users?: RoomPresence[]; taskId: string }) {
+  const { t } = useI18n();
   const viewers = users?.filter(user => user.inspectedTaskId === taskId);
   if (!viewers?.length) return null;
   const names = viewers.map(user => user.displayName || user.username).join(", ");
-  return <span className="task-presence-tag" aria-label={`Inspecting: ${names}`} title={names}>
+  return <span className="task-presence-tag" aria-label={t("cloud.inspectingAria", { names })} title={names}>
     <i aria-hidden="true" style={{ backgroundColor: ringColor(viewers[0].uid) }} />
     {viewers[0].displayName || viewers[0].username}{viewers.length > 1 && ` +${viewers.length - 1}`}
   </span>;

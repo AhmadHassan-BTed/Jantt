@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   AlertTriangle
 } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader } from "./ModalHost";
 import type { AutoSaveInterval } from "../../types";
 import { AUTOSAVE_OPTIONS } from "../../constants";
@@ -34,11 +35,11 @@ interface AutoSaveModalProps {
   onExportCsv?: () => void;
 }
 
-const STATUS_COPY: Record<AutoSaveStatus, { title: string; color: string }> = {
-  saved: { title: "All changes saved", color: "#10B981" },
-  saving: { title: "Saving changes...", color: "var(--jantt-accent)" },
-  pending: { title: "Unsaved changes", color: "#F59E0B" },
-  error: { title: "Changes are NOT saved", color: "#EF4444" }
+const STATUS_COLORS: Record<AutoSaveStatus, string> = {
+  saved: "#10B981",
+  saving: "var(--jantt-accent)",
+  pending: "#F59E0B",
+  error: "#EF4444"
 };
 
 const exportButtonStyle: React.CSSProperties = { justifyContent: "center", height: "34px", padding: "0 8px" };
@@ -57,6 +58,7 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
   onExportJson,
   onExportCsv
 }) => {
+  const { t, locale } = useI18n();
   const cadenceRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   if (!showAutoSaveModal) return null;
@@ -64,18 +66,20 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
   const close = () => setShowAutoSaveModal(false);
   // useAutoSave keeps a failed write "pending" (it is retried) and reports the failure through saveError.
   const effectiveStatus: AutoSaveStatus = saveError && saveStatus !== "saving" ? "error" : saveStatus;
-  const status = STATUS_COPY[effectiveStatus] ?? STATUS_COPY.pending;
+  const status = { title: t(`autosave.status.${effectiveStatus}`), color: STATUS_COLORS[effectiveStatus] };
   const isOff = autoSaveInterval === "off";
 
   const lastSavedText = lastSavedAt
-    ? `Last saved: ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
-    : "Not saved yet in this session";
+    ? t("autosave.lastSaved", {
+        time: lastSavedAt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      })
+    : t("autosave.notSavedSession");
 
   const statusDetail =
     effectiveStatus === "error"
-      ? saveError || "Browser storage rejected the save (it may be full). Export a JSON backup now to avoid losing work."
+      ? saveError || t("autosave.storageRejected")
       : effectiveStatus === "pending" && isOff
-      ? `Auto-save is off. Click Save Now to keep your changes. ${lastSavedText}.`
+      ? t("autosave.offHint", { lastSaved: lastSavedText })
       : lastSavedText;
 
   const selectedIndex = Math.max(0, AUTOSAVE_OPTIONS.findIndex((opt) => opt.id === autoSaveInterval));
@@ -102,8 +106,8 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
     <Modal onClose={close} maxWidth={520}>
       <ModalHeader
         icon={<Save size={18} />}
-        title="Auto-Save Settings"
-        subtitle="Choose how often plans are saved to this browser"
+        title={t("autosave.title")}
+        subtitle={t("autosave.subtitle")}
       />
 
       {/* Modal Body */}
@@ -144,10 +148,10 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
                 className="btn-nav"
                 onClick={onExportJson}
                 style={{ fontSize: "12px", padding: "0 12px", height: "30px", borderRadius: "8px" }}
-                title="Download the current plan as a JSON backup"
+                title={t("autosave.exportBackupTitle")}
               >
                 <ArrowDownToLine size={13} />
-                <span>Export Backup</span>
+                <span>{t("autosave.exportBackup")}</span>
               </button>
             )}
             <button
@@ -166,10 +170,10 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
                 fontWeight: 600,
                 opacity: effectiveStatus === "saving" ? 0.6 : 1
               }}
-              title="Save to browser storage now"
+              title={t("autosave.saveNowTitle")}
             >
               <Save size={13} />
-              <span>{effectiveStatus === "error" ? "Retry Save" : "Save Now"}</span>
+              <span>{effectiveStatus === "error" ? t("autosave.retrySave") : t("autosave.saveNow")}</span>
             </button>
           </div>
         </div>
@@ -177,7 +181,7 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
         {/* Cadence Selector */}
         <div>
           <div className="settings-section-title" id="autosave-cadence-label">
-            Save Frequency
+            {t("autosave.frequency")}
           </div>
           <div className="settings-cadence-list" role="radiogroup" aria-labelledby="autosave-cadence-label">
             {AUTOSAVE_OPTIONS.map((opt, index) => {
@@ -204,16 +208,16 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--jantt-text)" }}>
-                        {opt.label}
+                        {t(`autosave.opt.${opt.id}.label`)}
                       </span>
                       {opt.recommended && (
                         <span className="settings-badge-rec">
-                          Recommended
+                          {t("autosave.recommended")}
                         </span>
                       )}
                     </div>
                     <div id={`autosave-opt-${opt.id}-desc`} style={{ fontSize: "11px", color: "var(--jantt-text-muted)", marginTop: "2px", lineHeight: 1.3 }}>
-                      {opt.desc}
+                      {t(`autosave.opt.${opt.id}.desc`)}
                     </div>
                   </div>
                 </div>
@@ -228,15 +232,15 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
             <HardDrive size={15} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
             <div>
               <span style={{ fontWeight: 600, color: "var(--jantt-text)" }}>
-                Browser Storage
+                {t("autosave.browserStorage")}
               </span>
               <span style={{ display: "block", fontSize: "10.5px", color: "var(--jantt-text-muted)" }}>
-                Plans live only in this browser on this device. Export JSON to back them up.
+                {t("autosave.storageNote")}
               </span>
             </div>
           </div>
           <span
-            title="Approximate space used by Jantt in this browser's localStorage"
+            title={t("autosave.storageSizeTitle")}
             style={{
               fontFamily: "var(--jantt-font-mono, monospace)",
               fontWeight: 700,
@@ -249,14 +253,14 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
               flexShrink: 0
             }}
           >
-            ~{storageSizeKb} KB used
+            {t("autosave.storageUsed", { size: storageSizeKb })}
           </span>
         </div>
 
         {/* Data Import & Export Section */}
         {(onImportJson || onExportJson || onExportCsv) && (
           <div>
-            <div className="settings-section-title">Import &amp; Export</div>
+            <div className="settings-section-title">{t("autosave.importExport")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "8px" }}>
               {onImportJson && (
                 <button
@@ -267,10 +271,10 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
                     onImportJson();
                   }}
                   style={exportButtonStyle}
-                  title="Open a JSON, MS Project XML, Primavera XER or CSV file as a new plan"
+                  title={t("autosave.importTitle")}
                 >
                   <ArrowUpFromLine size={13} />
-                  <span style={{ fontSize: "11.5px" }}>Import File</span>
+                  <span style={{ fontSize: "11.5px" }}>{t("autosave.import")}</span>
                 </button>
               )}
               {onExportJson && (
@@ -279,10 +283,10 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
                   className="btn-nav"
                   onClick={onExportJson}
                   style={exportButtonStyle}
-                  title="Download the current plan as JSON"
+                  title={t("autosave.exportJsonTitle")}
                 >
                   <ArrowDownToLine size={13} />
-                  <span style={{ fontSize: "11.5px" }}>Export JSON</span>
+                  <span style={{ fontSize: "11.5px" }}>{t("autosave.exportJson")}</span>
                 </button>
               )}
               {onExportCsv && (
@@ -291,10 +295,10 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
                   className="btn-nav"
                   onClick={onExportCsv}
                   style={exportButtonStyle}
-                  title="Download the current plan's tasks as CSV"
+                  title={t("autosave.exportCsvTitle")}
                 >
                   <FileSpreadsheet size={13} />
-                  <span style={{ fontSize: "11.5px" }}>Export CSV</span>
+                  <span style={{ fontSize: "11.5px" }}>{t("autosave.exportCsv")}</span>
                 </button>
               )}
             </div>
@@ -310,7 +314,7 @@ export const AutoSaveModal: React.FC<AutoSaveModalProps> = ({
           onClick={close}
           style={{ padding: "0 18px", height: "32px" }}
         >
-          Done
+          {t("common.done")}
         </button>
       </div>
     </Modal>

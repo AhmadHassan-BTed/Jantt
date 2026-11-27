@@ -1,5 +1,6 @@
 import React from "react";
 import { Keyboard } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader } from "./ModalHost";
 import { PRIMARY_MODIFIER_LABEL } from "../common/CommandPalette";
 
@@ -16,33 +17,6 @@ export interface ShortcutsModalProps {
   show: boolean;
   onClose: () => void;
 }
-
-/** Mirrors the global key handler in App.tsx; keep the two in sync. */
-const SHORTCUTS: ShortcutRow[] = [
-  { keys: ["Mod", "K"], description: "Open the command palette", category: "General" },
-  { keys: ["Mod", "J"], description: "Toggle AI Copilot sidebar", category: "General" },
-  { keys: ["?"], description: "Show this list of shortcuts", category: "General" },
-  { keys: ["Esc"], description: "Close the open dialog", category: "General" },
-
-  { keys: ["1"], description: "Gantt timeline", category: "Switch View" },
-  { keys: ["2"], description: "Canvas timeline (large plans)", category: "Switch View" },
-  { keys: ["3"], description: "Kanban board", category: "Switch View" },
-  { keys: ["4"], description: "Task list", category: "Switch View" },
-  { keys: ["5"], description: "Health & EVM analytics", category: "Switch View" },
-  { keys: ["6"], description: "Notes", category: "Switch View" },
-
-  { keys: ["C"], description: "Toggle critical path highlighting", category: "Filters & Display" },
-  { keys: ["B"], description: "Toggle baseline (planned vs actual) bars", category: "Filters & Display" },
-  { keys: ["T"], description: "Toggle filter: tasks active today", category: "Filters & Display" },
-  { keys: ["W"], description: "Toggle filter: tasks active this week", category: "Filters & Display" },
-
-  { keys: ["+"], altKeys: ["="], description: "Zoom timeline scale in (finer)", category: "Timeline Scale (Gantt & Canvas)" },
-  { keys: ["-"], description: "Zoom timeline scale out (coarser)", category: "Timeline Scale (Gantt & Canvas)" },
-  { keys: ["0"], description: "Reset timeline scale to Week", category: "Timeline Scale (Gantt & Canvas)" },
-
-  { keys: ["Mod", "Z"], description: "Undo", category: "History" },
-  { keys: ["Mod", "Shift", "Z"], altKeys: ["Mod", "Y"], description: "Redo", category: "History" }
-];
 
 // Same platform detection as the command palette and navbar hints.
 const keyLabel = (key: string) => (key === "Mod" ? PRIMARY_MODIFIER_LABEL : key);
@@ -71,22 +45,50 @@ const KeyCombo: React.FC<{ keys: string[] }> = ({ keys }) => (
   </span>
 );
 
-const CATEGORIES = Array.from(new Set(SHORTCUTS.map((s) => s.category)));
-
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ show, onClose }) => {
+  const { t } = useI18n();
   if (!show) return null;
+
+  /** Mirrors the global key handler in App.tsx; keep the two in sync. */
+  const shortcuts: ShortcutRow[] = [
+    { keys: ["Mod", "K"], description: t("shortcuts.openPalette"), category: t("shortcuts.categories.general") },
+    { keys: ["Mod", "J"], description: t("shortcuts.toggleCopilot"), category: t("shortcuts.categories.general") },
+    { keys: ["?"], description: t("shortcuts.showList"), category: t("shortcuts.categories.general") },
+    { keys: ["Esc"], description: t("shortcuts.closeDialog"), category: t("shortcuts.categories.general") },
+
+    { keys: ["1"], description: t("shortcuts.gantt"), category: t("shortcuts.categories.switchView") },
+    { keys: ["2"], description: t("shortcuts.canvas"), category: t("shortcuts.categories.switchView") },
+    { keys: ["3"], description: t("shortcuts.kanban"), category: t("shortcuts.categories.switchView") },
+    { keys: ["4"], description: t("shortcuts.tasks"), category: t("shortcuts.categories.switchView") },
+    { keys: ["5"], description: t("shortcuts.health"), category: t("shortcuts.categories.switchView") },
+    { keys: ["6"], description: t("shortcuts.notes"), category: t("shortcuts.categories.switchView") },
+
+    { keys: ["C"], description: t("shortcuts.criticalPath"), category: t("shortcuts.categories.filters") },
+    { keys: ["B"], description: t("shortcuts.baselines"), category: t("shortcuts.categories.filters") },
+    { keys: ["T"], description: t("shortcuts.today"), category: t("shortcuts.categories.filters") },
+    { keys: ["W"], description: t("shortcuts.week"), category: t("shortcuts.categories.filters") },
+
+    { keys: ["+"], altKeys: ["="], description: t("shortcuts.zoomIn"), category: t("shortcuts.categories.timelineScale") },
+    { keys: ["-"], description: t("shortcuts.zoomOut"), category: t("shortcuts.categories.timelineScale") },
+    { keys: ["0"], description: t("shortcuts.resetScale"), category: t("shortcuts.categories.timelineScale") },
+
+    { keys: ["Mod", "Z"], description: t("shortcuts.undo"), category: t("shortcuts.categories.history") },
+    { keys: ["Mod", "Shift", "Z"], altKeys: ["Mod", "Y"], description: t("shortcuts.redo"), category: t("shortcuts.categories.history") }
+  ];
+
+  const categories = Array.from(new Set(shortcuts.map((s) => s.category)));
 
   return (
     <Modal onClose={onClose} maxWidth={620}>
       <ModalHeader
         icon={<Keyboard size={18} />}
-        title="Keyboard Shortcuts"
-        subtitle="Single-key shortcuts are ignored while you type in a text field."
+        title={t("shortcuts.title")}
+        subtitle={t("shortcuts.subtitle")}
       />
 
       <div className="prompt-modal-body" style={{ overflowY: "auto", padding: "16px 20px" }}>
-        {CATEGORIES.map((category) => {
-          const rows = SHORTCUTS.filter((s) => s.category === category);
+        {categories.map((category) => {
+          const rows = shortcuts.filter((s) => s.category === category);
           return (
             <section key={category} style={{ marginBottom: "20px" }} aria-label={category}>
               <h4
@@ -122,7 +124,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ show, onClose })
                       <KeyCombo keys={row.keys} />
                       {row.altKeys && (
                         <>
-                          <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>or</span>
+                          <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>{t("shortcuts.or")}</span>
                           <KeyCombo keys={row.altKeys} />
                         </>
                       )}
@@ -137,10 +139,10 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ show, onClose })
 
       <div className="prompt-modal-footer" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
         <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-          Tip: press <kbd style={kbdStyle}>?</kbd> anytime to open this list.
+          {t("shortcuts.tipBefore")} <kbd style={kbdStyle}>?</kbd> {t("shortcuts.tipAfter")}
         </span>
         <button type="button" className="btn-nav btn-nav-primary" onClick={onClose} style={{ padding: "6px 16px" }}>
-          Got it
+          {t("shortcuts.gotIt")}
         </button>
       </div>
     </Modal>
