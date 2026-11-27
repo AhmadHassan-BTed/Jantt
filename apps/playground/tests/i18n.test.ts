@@ -90,6 +90,10 @@ describe("loading", () => {
     expect(getMessages("en")["toolbar.addTask"]).toBe("Add Task");
     expect(await preloadLocale("en")).toBe(getMessages("en"));
   });
+
+  it("falls back to English for an unsupported runtime locale", async () => {
+    expect(await preloadLocale("fr" as Parameters<typeof preloadLocale>[0])).toBe(getMessages("en"));
+  });
 });
 
 describe("formatLocaleDate", () => {

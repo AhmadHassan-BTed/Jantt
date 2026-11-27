@@ -45,8 +45,9 @@ function showRemoveLinkChip(host: HTMLElement, e: MouseEvent, description: strin
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
-    <span>${removeLinkLabel}</span>
+    <span></span>
   `;
+  chip.querySelector("span")!.textContent = removeLinkLabel;
   chip.style.left = `${e.clientX - rect.left}px`;
   chip.style.top = `${e.clientY - rect.top}px`;
   // Open below the click point when there is no room above it (under the sticky timeline header)

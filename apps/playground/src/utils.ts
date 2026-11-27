@@ -216,8 +216,13 @@ function normalizeStoredProject(raw: unknown): SavedProject | null {
     delete project.source;
     delete project.lastSyncedAt;
     delete project.syncError;
-    // Strip legacy "(Cloud Feed...)" or "(Cloud Feed + N tasks)" badges from title
-    project.name = project.name.replace(/\s*\((?:Cloud Feed|\d+\s*tasks)[^)]*\)/gi, "").trim() || tGlobal("utils.untitledPlan");
+    // Scan each closing-parenthesis segment once, including names with incomplete badges.
+    const segments = project.name.split(")");
+    const tail = segments.pop();
+    project.name = segments.map((segment) => {
+      const badge = segment.search(/\((?:Cloud Feed|\d+\s*tasks)/i);
+      return badge === -1 ? segment + ")" : segment.slice(0, badge).trimEnd();
+    }).join("").concat(tail ?? "").trim() || tGlobal("utils.untitledPlan");
   } else if (project.source !== undefined && project.source !== "local" && project.source !== "room") {
     delete project.source;
   }

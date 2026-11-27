@@ -692,7 +692,7 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" value="${props.dayWidth}" aria-label="${escapeHtml(text(props, "zoomSlider"))}" />
+          <input type="range" class="jantt-zoom-slider" min="${DAY_WIDTH_MIN}" max="${DAY_WIDTH_MAX}" step="0.1" aria-label="${escapeHtml(text(props, "zoomSlider"))}" />
           <button type="button" class="jantt-zoom-btn is-zoom-in" aria-label="${escapeHtml(text(props, "zoomIn"))}" title="${escapeHtml(text(props, "zoomInTitle"))}">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -705,8 +705,8 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
       <div class="jantt-settings-row">
         <label class="jantt-settings-label">${escapeHtml(text(props, "rowHeight"))}</label>
         <div class="jantt-settings-slider-wrap">
-          <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" value="${props.rowHeight}" title="${escapeHtml(text(props, "rowHeightTitle", { height: props.rowHeight }))}" aria-label="${escapeHtml(text(props, "rowHeightSlider"))}" ${props.rowHeightMode === "fit" ? "disabled style='opacity: 0.45; pointer-events: none;'" : ""} />
-          <span class="jantt-rowheight-label">${props.rowHeightMode === "fit" ? escapeHtml(text(props, "fit")) : `${props.rowHeight}px`}</span>
+          <input type="range" class="jantt-rowheight-slider" min="${MIN_ROW_HEIGHT}" max="${MAX_ROW_HEIGHT}" step="2" aria-label="${escapeHtml(text(props, "rowHeightSlider"))}" />
+          <span class="jantt-rowheight-label"></span>
         </div>
       </div>
     </div>
@@ -738,7 +738,7 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
           <span class="jantt-settings-switch-label">${escapeHtml(text(props, "cascade"))}</span>
           <span class="jantt-settings-switch-sub">${escapeHtml(text(props, "cascadeHint"))}</span>
         </div>
-        <button type="button" class="jantt-toggle-switch ${props.autoCascade ? "is-active" : ""}" role="switch" aria-checked="${props.autoCascade}" data-switch="auto-cascade" aria-label="${escapeHtml(text(props, "cascadeSwitch"))}">
+        <button type="button" class="jantt-toggle-switch" role="switch" data-switch="auto-cascade" aria-label="${escapeHtml(text(props, "cascadeSwitch"))}">
           <span class="jantt-toggle-thumb"></span>
         </button>
       </div>
@@ -776,6 +776,7 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
   const zoomOutBtn = panel.querySelector<HTMLButtonElement>(".is-zoom-out");
   const zoomInBtn = panel.querySelector<HTMLButtonElement>(".is-zoom-in");
   const zoomLabel = panel.querySelector<HTMLSpanElement>(".jantt-zoom-label");
+  zoomSlider!.value = String(props.dayWidth);
 
   zoomSlider?.addEventListener("input", (e) => {
     const val = parseFloat((e.target as HTMLInputElement).value);
@@ -797,6 +798,15 @@ function renderSettingsPopover(propsRef: ToolbarPropsRef, onClose: () => void): 
 
   const rhSlider = panel.querySelector<HTMLInputElement>(".jantt-rowheight-slider");
   const rhLabel = panel.querySelector<HTMLSpanElement>(".jantt-rowheight-label");
+  const fit = props.rowHeightMode === "fit";
+  rhSlider!.value = String(props.rowHeight);
+  rhSlider!.title = text(props, "rowHeightTitle", { height: props.rowHeight });
+  rhSlider!.disabled = fit;
+  if (fit) {
+    rhSlider!.style.opacity = "0.45";
+    rhSlider!.style.pointerEvents = "none";
+  }
+  rhLabel!.textContent = fit ? text(props, "fit") : `${props.rowHeight}px`;
   rhSlider?.addEventListener("input", (e) => {
     const val = parseInt((e.target as HTMLInputElement).value, 10);
     if (!isNaN(val)) {

@@ -1,6 +1,6 @@
 import en from "./locales/en.json";
 
-/** Locales offered in Settings. Adding a language means adding its file and one loader below. */
+/** Locales offered in Settings. */
 export const LOCALES = [
   { id: "en", nativeLabel: "English" },
   { id: "zh-CN", nativeLabel: "简体中文" }
@@ -15,11 +15,6 @@ export type Messages = Record<string, string>;
 
 const enMessages = en as Messages;
 const messageCache = new Map<Locale, Messages>([["en", enMessages]]);
-
-/** English ships in the main bundle; every other locale is fetched on demand as its own chunk. */
-const LOCALE_LOADERS: Record<Exclude<Locale, "en">, () => Promise<{ default: Messages }>> = {
-  "zh-CN": () => import("./locales/zh-CN.json") as Promise<{ default: Messages }>
-};
 
 export const LOCALE_STORAGE_KEY = "jantt_ui_locale";
 
@@ -94,8 +89,8 @@ export function tGlobal(key: MessageKey, params?: MessageParams): string {
 export async function preloadLocale(locale: Locale): Promise<Messages> {
   const cached = messageCache.get(locale);
   if (cached) return cached;
-  if (locale === "en") return enMessages;
-  const { default: messages } = await LOCALE_LOADERS[locale]();
+  if (locale !== "zh-CN") return enMessages;
+  const { default: messages } = await import("./locales/zh-CN.json");
   messageCache.set(locale, messages);
   return messages;
 }

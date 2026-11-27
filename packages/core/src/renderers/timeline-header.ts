@@ -492,9 +492,10 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       : labels.todayTitleNoDate;
 
     todayMarker.innerHTML = `
-      <span class="jantt-header-today-pill">${labels.today}</span>
+      <span class="jantt-header-today-pill"></span>
       <span class="jantt-header-today-arrow"></span>
     `;
+    todayMarker.querySelector(".jantt-header-today-pill")!.textContent = labels.today;
 
     if (options?.onDateClick && todayDateStr) {
       todayMarker.addEventListener("click", (e) => {
