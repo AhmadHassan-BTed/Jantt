@@ -76,6 +76,8 @@ that runs before the module loads) is picked up on upgrade.
 
 ## Attributes & Properties
 
+Set `locale="zh-CN"` for Simplified Chinese. To switch an existing chart, set `element.locale` or update the `locale` attribute. English is the default.
+
 Boolean attributes follow HTML conventions: present means on (`show-baselines` or
 `show-baselines="true"`), `="false"` means off, and absent means the plan's `meta` value, then
 the engine default.

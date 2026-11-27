@@ -32,6 +32,8 @@ import type { UserProfile, RoomPresence, FullRoomPayload } from "../firebase/typ
 import { createRoom, joinRoomViaInvite, getRoom, saveRoomDataAtomic, listenToRoom } from "../firebase/roomService";
 import { trackRoomPresence, listenToRoomPresence } from "../firebase/presenceService";
 import { ENABLE_GITHUB_VERIFICATION_GATE } from "../firebase/githubVerificationService";
+import { tGlobal, type MessageKey, type MessageParams } from "../i18n";
+import { useI18n } from "../i18n/I18nProvider";
 
 export type RoomSyncStatus = "idle" | "in-sync" | "syncing" | "merged" | "conflict" | "error" | "offline";
 
@@ -97,11 +99,7 @@ function cloneData<T>(data: T): T {
 }
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : String(err || "Unknown error");
-}
-
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
+  return err instanceof Error && err.message ? err.message : String(err || tGlobal("sync.unknownError"));
 }
 
 function isVerifiedUser(user: UserProfile, isCloudVerified: boolean | undefined): boolean {
@@ -238,12 +236,13 @@ function syncRoomUrl(activeRoomId: string | null, keepRoomParam: boolean): void 
 }
 
 export function useRoomSync(options: UseRoomSyncOptions) {
+  const { t } = useI18n();
   const { customProjects, activeProjectId, parsedData, userProfile, isLoadingAuth = false } = options;
 
   const [showRoomModal, setShowRoomModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<RoomSyncStatus>("idle");
-  const [syncMessage, setSyncMessage] = useState<string>("");
+  const [syncDetail, setSyncDetail] = useState<{ key: MessageKey; params?: MessageParams } | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(() => new Date());
   const [onlineUsers, setOnlineUsers] = useState<RoomPresence[]>([]);
   const [isActiveRoomMember, setIsActiveRoomMember] = useState(false);
@@ -316,10 +315,10 @@ export function useRoomSync(options: UseRoomSyncOptions) {
   }
 
   const statusRef = useRef<RoomSyncStatus>("idle");
-  const report = useCallback((status: RoomSyncStatus, message: string) => {
+  const report = useCallback((status: RoomSyncStatus, key?: MessageKey, params?: MessageParams) => {
     statusRef.current = status;
     setSyncStatus(status);
-    setSyncMessage(message);
+    setSyncDetail(key ? { key, params } : null);
     if (status === "in-sync" || status === "merged") setLastSyncTime(new Date());
   }, []);
 
@@ -425,11 +424,17 @@ export function useRoomSync(options: UseRoomSyncOptions) {
   const announceLostEdits = useCallback(
     (ctx: RoomSyncContext, lost: ConflictRecord[], before: JanttData) => {
       const o = optionsRef.current;
-      o.captureSnapshot(ctx.projectId, before, "Your version before a merge replaced some of your edits");
+      o.captureSnapshot(ctx.projectId, before, tGlobal("sync.snapshotBeforeMergeReplaced"));
       recordLostEdits(ctx, lost);
-      const replaced = `${plural(lost.length, "of your edits was", "of your edits were")} replaced by newer ones`;
-      report("conflict", `Merged teammates' changes – ${replaced}`);
-      o.showToast(`Merged teammates' changes: ${replaced}. Your previous version is in Version History.`);
+      const one = lost.length === 1;
+      report(
+        "conflict",
+        one ? "sync.mergedTeammatesStatusOne" : "sync.mergedTeammatesStatusMany",
+        { count: lost.length }
+      );
+      o.showToast(
+        tGlobal(one ? "sync.mergedTeammatesToastOne" : "sync.mergedTeammatesToastMany", { count: lost.length })
+      );
     },
     [recordLostEdits, report]
   );
@@ -468,7 +473,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         // Preserve edits before an in-flight merge. With no save in flight, reconcileIncoming snapshots the draft.
         const local = parsedDataRef.current;
         if (inFlightRef.current && local && ctx.baseHash !== null && calculatePlanHash(local) !== ctx.baseHash) {
-          o.captureSnapshot(proj.id, local, "Unsaved edits before losing edit access");
+          o.captureSnapshot(proj.id, local, tGlobal("sync.snapshotBeforeLosingEditAccess"));
         }
         if (pendingSaveRef.current?.ctx === ctx) pendingSaveRef.current = null;
       }
@@ -481,14 +486,14 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       if (lostEditing) {
         o.showToast(
           isMember
-            ? "Your access to this room changed to view only."
-            : "Your edit access was removed. You can still view the shared plan.",
+            ? tGlobal("sync.accessChangedViewOnly")
+            : tGlobal("sync.editAccessRemoved"),
           true
         );
       } else if (role === "collaborator" && previousRole === "viewer") {
-        o.showToast("You can now edit this room.");
+        o.showToast(tGlobal("sync.canEditNow"));
       } else if (lostMembership) {
-        o.showToast("You were removed from this room's members. You can still view it.", true);
+        o.showToast(tGlobal("sync.removedFromMembers"), true);
       }
     },
     [getActiveProject, patchRoomProject]
@@ -544,19 +549,19 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     const active = isActiveCtx(ctx);
     if (active && roleRef.current !== "collaborator") return;
     if (ENABLE_GITHUB_VERIFICATION_GATE && !isVerifiedUser(user, optionsRef.current.isCloudVerified)) {
-      if (active) report("error", "Verify your GitHub account to sync edits to this room.");
+      if (active) report("error", "sync.verifyToSync");
       return;
     }
     // Unknown base: the next room snapshot establishes it and pushes or merges these edits.
     const sentBase = ctx.base;
     if (sentBase === null) return;
     if (connectedRef.current === false) {
-      if (active) report("offline", "Offline – your edits will sync when you reconnect.");
+      if (active) report("offline", "sync.offlineHeld");
       return;
     }
     const sentHash = calculatePlanHash(data);
     if (sentHash === ctx.baseHash) {
-      if (active && !inFlightRef.current) report("in-sync", "All changes saved");
+      if (active && !inFlightRef.current) report("in-sync", "sync.allSaved");
       return;
     }
     if (inFlightRef.current) {
@@ -566,7 +571,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
 
     inFlightRef.current = true;
     inFlightCtxRef.current = ctx;
-    if (active) report("syncing", "Saving to room…");
+    if (active) report("syncing", "sync.saving");
     try {
       const result = await saveRoomDataAtomic(ctx.roomId, data, user, sentBase);
       retryDelayRef.current = RETRY_MIN_MS;
@@ -586,7 +591,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       const local = parsedDataRef.current ?? data;
       if (committedHash === sentHash) {
         acknowledge(ctx, committed, committedHash, result.revision, local);
-        report("in-sync", "All changes saved");
+        report("in-sync", "sync.allSaved");
         return;
       }
       // The room merged in teammates' edits made while we were saving: bring them into the editor.
@@ -603,7 +608,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       if (lost.length > 0) {
         announceLostEdits(ctx, lost, local);
       } else {
-        report("merged", "Saved and merged teammates' changes");
+        report("merged", "sync.savedMerged");
       }
     } catch (err) {
       const message = errorMessage(err);
@@ -614,11 +619,11 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         return;
       }
       if (isPermissionDeniedError(err) || /no longer exists/i.test(message)) {
-        report("error", message);
+        report("error", "sync.rawError", { message });
         const snap = lastSnapshotRef.current;
         if (snap && snap.roomId === ctx.roomId) applyAccess(ctx, snap.room);
       } else {
-        report("error", `${message} Retrying shortly…`);
+        report("error", "sync.retrying", { message });
         scheduleRetry();
       }
     } finally {
@@ -654,14 +659,14 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       const o = optionsRef.current;
       const local = parsedDataRef.current ?? proj.data;
       if (pendingSaveRef.current?.ctx === ctx) pendingSaveRef.current = null;
-      o.captureSnapshot(proj.id, local, "Cloud room deleted – kept as local plan");
+      o.captureSnapshot(proj.id, local, tGlobal("sync.snapshotRoomDeleted"));
       updateProjects(
         (list) =>
           list.map((p) =>
             p.id === proj.id
               ? {
                   ...p,
-                  name: `${p.name} (room deleted)`,
+                  name: `${p.name}${tGlobal("sync.roomDeletedSuffix")}`,
                   data: local,
                   updatedAt: new Date().toISOString(),
                   source: "local" as const,
@@ -681,7 +686,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       storedBaseRef.current.delete(ctx.projectId);
       removeRoomBase(ctx.projectId);
       clearLostEdits();
-      o.showToast("This cloud room was deleted by its owner. Your copy was kept as a local plan.", true);
+      o.showToast(tGlobal("sync.roomDeletedToast"), true);
     },
     [clearLostEdits, getActiveProject, isActiveCtx, updateProjects]
   );
@@ -703,7 +708,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         // Members/meta-only change, or our own save echoing back.
         ctx.revision = Math.max(ctx.revision, revision);
         if (statusRef.current === "syncing" && !inFlightRef.current && !pendingSaveRef.current) {
-          report("in-sync", "Up to date");
+          report("in-sync", "sync.upToDate");
         }
         return;
       }
@@ -715,7 +720,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       if (incomingHash === localHash) {
         acknowledge(ctx, incoming, incomingHash, revision, local);
         if (pendingSaveRef.current?.ctx === ctx) pendingSaveRef.current = null;
-        report("in-sync", "Up to date");
+        report("in-sync", "sync.upToDate");
         return;
       }
 
@@ -723,10 +728,10 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         const proj = getActiveProject();
         if (proj?.role === "collaborator" && !userProfileRef.current) {
           // A signed-out editor: keep their unsaved edits until they sign in and they can be merged.
-          report("error", "Sign in to sync your unsaved changes with the room.");
+          report("error", "sync.signInToSync");
           return;
         }
-        if (proj) o.captureSnapshot(proj.id, local, "Unsaved edits replaced by the cloud room version");
+        if (proj) o.captureSnapshot(proj.id, local, tGlobal("sync.snapshotUnsavedReplaced"));
       }
       if (!canEdit || (ctx.base !== null && !hasUnsyncedEdits)) {
         // Nothing local to keep: take the room's version.
@@ -734,7 +739,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         const adopted = cloneData(incoming);
         applyToEditor(adopted, true);
         acknowledge(ctx, incoming, incomingHash, revision, adopted);
-        report("in-sync", "Updated with teammates' changes");
+        report("in-sync", "sync.updatedTeammates");
         return;
       }
 
@@ -747,7 +752,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         // Edits from an earlier session on top of a room that has not changed since.
         acknowledge(ctx, incoming, incomingHash, revision, local);
         schedulePush(ctx, local);
-        report("syncing", "Uploading changes made while you were away…");
+        report("syncing", "sync.uploadingAway");
         return;
       }
 
@@ -755,20 +760,20 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         // The room changed since this copy, and nothing tells local edits from teammates' changes
         // (merging blind would bring back tasks teammates deleted): take the room's version and
         // keep the copy in Version History.
-        o.captureSnapshot(ctx.projectId, local, "Cached copy replaced by the cloud room version");
+        o.captureSnapshot(ctx.projectId, local, tGlobal("sync.snapshotCachedReplaced"));
         if (pendingSaveRef.current?.ctx === ctx) pendingSaveRef.current = null;
         const adopted = cloneData(incoming);
         applyToEditor(adopted, true);
         acknowledge(ctx, incoming, incomingHash, revision, adopted);
-        report("in-sync", "Updated to the room's latest version");
-        o.showToast("Updated this room to its latest version. Your earlier copy is in Version History.");
+        report("in-sync", "sync.updatedLatest");
+        o.showToast(tGlobal("sync.updatedLatestToast"));
         return;
       }
 
       // Both sides changed: 3-way merge (2-way when the base is unknown, with a safety snapshot).
       const base = ctx.base;
       if (base === null) {
-        o.captureSnapshot(ctx.projectId, local, "Before merging offline edits with the cloud room");
+        o.captureSnapshot(ctx.projectId, local, tGlobal("sync.snapshotBeforeOfflineMerge"));
       }
       const result = reconcilePlans(base, local, incoming, { clientId: clientId() });
       const lost = lostLocalEdits(result.conflicts);
@@ -780,11 +785,19 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         announceLostEdits(ctx, lost, local);
       } else if (base === null) {
         recordLostEdits(ctx, lost);
-        const replaced = lost.length > 0 ? ` (${plural(lost.length, "edit was", "edits were")} replaced by newer ones)` : "";
-        report(lost.length > 0 ? "conflict" : "merged", `Merged your offline edits with the room${replaced}`);
-        o.showToast(`Merged your offline edits with the room${replaced}. The previous version is in Version History.`);
+        const one = lost.length === 1;
+        const baseKey: MessageKey = one ? "sync.mergedOfflineStatusOne" : "sync.mergedOfflineStatusMany";
+        const toastKey: MessageKey = one ? "sync.mergedOfflineToastOne" : "sync.mergedOfflineToastMany";
+        report(
+          lost.length > 0 ? "conflict" : "merged",
+          lost.length > 0 ? baseKey : "sync.mergedOfflineStatus",
+          { count: lost.length }
+        );
+        o.showToast(
+          lost.length > 0 ? tGlobal(toastKey, { count: lost.length }) : tGlobal("sync.mergedOfflineToast")
+        );
       } else {
-        report("merged", "Merged teammates' changes with yours");
+        report("merged", "sync.mergedWithYours");
       }
     },
     [acknowledge, announceLostEdits, applyToEditor, clientId, getActiveProject, recordLostEdits, report, schedulePush]
@@ -818,7 +831,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       ctxRef.current = null;
       setIsActiveRoomMember(false);
       clearLostEdits();
-      report("idle", "");
+      report("idle");
       return;
     }
     const proj = customProjectsRef.current.find((p) => p.id === activeProjectIdRef.current);
@@ -850,7 +863,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     stashedSnapshotRef.current = null;
     setIsActiveRoomMember(false);
     clearLostEdits();
-    report("syncing", "Connecting to room…");
+    report("syncing", "sync.connecting");
 
     return () => {
       // Push edits made just before switching away; the save keeps targeting this room.
@@ -878,7 +891,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       roomId,
       (room) => handleSnapshotRef.current(roomId, room),
       (error) => {
-        if (ctxRef.current?.roomId === roomId) report("error", `Live updates stopped: ${error.message}`);
+        if (ctxRef.current?.roomId === roomId) report("error", "sync.liveUpdatesStopped", { error: error.message });
       }
     );
     return () => unsubscribe();
@@ -895,11 +908,11 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         // Reconnected, or edits were held back while starting offline: push them now. The live
         // listeners resync on their own, so a viewer (nothing to push) is simply back online.
         const wasOffline = statusRef.current === "offline";
-        if (wasOffline) report("in-sync", "Back online");
+        if (wasOffline) report("in-sync", "sync.backOnline");
         if (hasConnected || wasOffline) retryCloudSave();
         hasConnected = true;
       } else if (hasConnected) {
-        report("offline", "Offline – your edits will sync when you reconnect.");
+        report("offline", "sync.offlineHeld");
       }
     });
     return () => {
@@ -1022,17 +1035,17 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     async (title: string, data: JanttData | null): Promise<string | null> => {
       const o = optionsRef.current;
       if (!data) {
-        o.showToast("There is no plan to share yet.", true);
+        o.showToast(tGlobal("sync.noPlanToShare"), true);
         return null;
       }
       const user = userProfileRef.current;
       if (!user) {
-        o.showToast("Sign in with GitHub to create a cloud room.", true);
+        o.showToast(tGlobal("sync.signInToCreate"), true);
         return null;
       }
       if (ENABLE_GITHUB_VERIFICATION_GATE && !isVerifiedUser(user, o.isCloudVerified)) {
         o.onRequireVerification?.();
-        o.showToast("Verify your GitHub account to create cloud rooms.", true);
+        o.showToast(tGlobal("sync.verifyToCreate"), true);
         return null;
       }
       joinSeqRef.current++; // A room opened meanwhile must not replace the new room.
@@ -1040,10 +1053,10 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       try {
         const payload = await createRoom(user, title, data);
         activateRoom(payload, payload.meta.roomId, "collaborator");
-        o.showToast(`Cloud room "${payload.meta.title}" is live. Use Share to invite teammates.`);
+        o.showToast(tGlobal("sync.roomLive", { title: payload.meta.title }));
         return payload.meta.roomId;
       } catch (err) {
-        o.showToast(`Couldn't create the room: ${errorMessage(err)}`, true);
+        o.showToast(tGlobal("sync.createFailed", { error: errorMessage(err) }), true);
         return null;
       } finally {
         setIsProcessing(false);
@@ -1062,7 +1075,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
   /** Creates a room from the active plan (or `dataOverride`) and returns its id. */
   const createRoomFromActive = useCallback(
     async (title?: string, dataOverride?: JanttData): Promise<string | null> => {
-      const fallbackTitle = getActiveProject()?.name || "Shared Jantt Plan";
+      const fallbackTitle = getActiveProject()?.name || tGlobal("sync.sharedPlanTitle");
       return createRoomInternal(title || fallbackTitle, dataOverride || parsedDataRef.current);
     },
     [createRoomInternal, getActiveProject]
@@ -1078,7 +1091,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       const o = optionsRef.current;
       const roomId = normalizeRoomId(roomIdInput);
       if (!roomId) {
-        o.showToast("That room link or ID is not valid.", true);
+        o.showToast(tGlobal("sync.invalidRoomRef"), true);
         return false;
       }
       // Already open and live: reloading the cached copy would drop edits not yet autosaved.
@@ -1090,17 +1103,22 @@ export function useRoomSync(options: UseRoomSyncOptions) {
         // A later join (or room creation) superseded this one.
         if (seq !== joinSeqRef.current) return false;
         if (!payload?.meta || !payload.data) {
-          throw new Error(`Room "${roomId}" was not found or has been deleted.`);
+          throw new Error(tGlobal("sync.roomNotFound", { id: roomId }));
         }
         if (payload.meta.roomId && payload.meta.roomId !== roomId) {
-          throw new Error("The room's data does not match its link.");
+          throw new Error(tGlobal("sync.roomLinkMismatch"));
         }
         const { role } = deriveAccess(payload, userProfileRef.current);
         activateRoom(payload, roomId, role);
-        o.showToast(`Opened room "${payload.meta.title || roomId}" (${role === "collaborator" ? "can edit" : "view only"}).`);
+        o.showToast(
+          tGlobal("sync.openedRoom", {
+            title: payload.meta.title || roomId,
+            role: role === "collaborator" ? tGlobal("sync.roleCanEdit") : tGlobal("sync.roleViewOnly")
+          })
+        );
         return true;
       } catch (err) {
-        if (seq === joinSeqRef.current) o.showToast(`Couldn't open the room: ${errorMessage(err)}`, true);
+        if (seq === joinSeqRef.current) o.showToast(tGlobal("sync.openFailed", { error: errorMessage(err) }), true);
         return false;
       } finally {
         if (seq === joinSeqRef.current) setIsProcessing(false);
@@ -1115,7 +1133,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     const user = userProfileRef.current;
     const ctx = ctxRef.current;
     if (!user) {
-      o.showToast("Sign in with GitHub to save rooms to your account.", true);
+      o.showToast(tGlobal("sync.signInToSave"), true);
       return false;
     }
     if (!ctx) return false;
@@ -1123,13 +1141,13 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       // joinRoomViaInvite returns the room read-only when the rules refuse the self-enrollment.
       const room = await joinRoomViaInvite(ctx.roomId, user);
       if (room.meta?.ownerUid !== user.uid && !room.members?.[user.uid]) {
-        o.showToast("This room doesn't accept new members. You can still open it with its link.", true);
+        o.showToast(tGlobal("sync.joinRefused"), true);
         return false;
       }
-      o.showToast("Room saved to your rooms.");
+      o.showToast(tGlobal("sync.roomSaved"));
       return true;
     } catch (err) {
-      o.showToast(`Couldn't save the room: ${errorMessage(err)}`, true);
+      o.showToast(tGlobal("sync.saveRoomFailed", { error: errorMessage(err) }), true);
       return false;
     }
   }, []);
@@ -1145,7 +1163,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     try {
       const payload = await getRoom(ctx.roomId);
       if (!isActiveCtx(ctx)) return false;
-      if (!payload?.meta || !payload.data) throw new Error("The room was not found or has been deleted.");
+      if (!payload?.meta || !payload.data) throw new Error(tGlobal("sync.roomNotFoundShort"));
       // The discarded edits must not be pushed any more.
       if (pendingSaveRef.current?.ctx === ctx) pendingSaveRef.current = null;
       if (rerunRef.current?.ctx === ctx) rerunRef.current = null;
@@ -1155,17 +1173,17 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       applyToEditor(server, true);
       acknowledge(ctx, payload.data, hash, Number(payload.meta.revision) || 0, server);
       clearLostEdits();
-      report("in-sync", "Up to date");
+      report("in-sync", "sync.upToDate");
       if (before && calculatePlanHash(before) !== hash) {
         // Recorded like any local edit, so Ctrl+Z brings the discarded changes back.
         commandBus.emit("LOCAL_COMMIT", { before, after: server });
-        o.showToast("Reset to the room's saved version. Press Ctrl+Z to undo.");
+        o.showToast(tGlobal("sync.resetDone"));
       } else {
-        o.showToast("This plan already matches the room's saved version.");
+        o.showToast(tGlobal("sync.alreadyMatches"));
       }
       return true;
     } catch (err) {
-      if (isActiveCtx(ctx)) o.showToast(`Couldn't reload the room: ${errorMessage(err)}`, true);
+      if (isActiveCtx(ctx)) o.showToast(tGlobal("sync.reloadFailed", { error: errorMessage(err) }), true);
       return false;
     }
   }, [acknowledge, applyToEditor, clearLostEdits, isActiveCtx, report]);
@@ -1181,16 +1199,13 @@ export function useRoomSync(options: UseRoomSyncOptions) {
       return 0;
     }
     if (roleRef.current !== "collaborator") {
-      o.showToast("You can't edit this room right now. Your earlier version is in Version History.", true);
+      o.showToast(tGlobal("sync.cannotEditNow"), true);
       return 0;
     }
     const { data, restored } = restoreLocalValues(current, list);
     clearLostEdits();
     if (restored === 0) {
-      o.showToast(
-        "These edits can't be restored automatically (they were changed again or removed). Your earlier version is in Version History.",
-        true
-      );
+      o.showToast(tGlobal("sync.restoreImpossible"), true);
       return 0;
     }
     // Fresh field stamps, so the restored values win the next merge like any new edit.
@@ -1198,11 +1213,12 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     applyToEditor(next, false);
     commandBus.emit("LOCAL_COMMIT", { before: current, after: next });
     const notRestored = list.length - restored;
-    o.showToast(
-      `Restored ${plural(restored, "of your edits", "of your edits")}.${
-        notRestored > 0 ? ` ${plural(notRestored, "other change", "other changes")} can only be recovered from Version History.` : ""
-      }`
-    );
+    const restoredText = tGlobal(restored === 1 ? "sync.restoredOne" : "sync.restoredMany", { count: restored });
+    const otherText =
+      notRestored > 0
+        ? ` ${tGlobal(notRestored === 1 ? "sync.otherChangesOne" : "sync.otherChangesMany", { count: notRestored })}`
+        : "";
+    o.showToast(`${restoredText}${otherText}`);
     return restored;
   }, [applyToEditor, clearLostEdits]);
 
@@ -1214,14 +1230,14 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     async (_secretKey?: string): Promise<void> => {
       const o = optionsRef.current;
       if (!userProfileRef.current) {
-        o.showToast("Sign in with GitHub to edit. The room owner grants edit access.", true);
+        o.showToast(tGlobal("sync.signInToEdit"), true);
         return;
       }
       const ctx = ctxRef.current;
       const snap = lastSnapshotRef.current;
       if (ctx && snap && snap.roomId === ctx.roomId) applyAccess(ctx, snap.room);
       if (roleRef.current !== "collaborator") {
-        o.showToast("Ask the room owner to make you an Editor from their Share dialog.");
+        o.showToast(tGlobal("sync.askOwnerEditor"));
       }
     },
     [applyAccess]
@@ -1235,7 +1251,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     deepLinkRef.current = null;
     const activeRoom = getActiveProject()?.roomId ?? null;
     if (!link.roomId) {
-      optionsRef.current.showToast("This room link is not valid.", true);
+      optionsRef.current.showToast(tGlobal("sync.invalidRoomLink"), true);
       syncRoomUrl(activeRoom, false);
       return;
     }
@@ -1261,7 +1277,7 @@ export function useRoomSync(options: UseRoomSyncOptions) {
     setShowRoomModal,
     isProcessing,
     syncStatus,
-    syncMessage,
+    syncMessage: syncDetail ? t(syncDetail.key, syncDetail.params) : "",
     lastSyncTime,
     activeRoomId,
     activeRoomRole,

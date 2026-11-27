@@ -82,6 +82,8 @@ Include the compiled CSS and JS script directly from your CDN or local assets di
 
 ## Global API (`window.Jantt`)
 
+Use `Jantt.mount("#chart", plan, { locale: "zh-CN" })` for a Simplified Chinese chart. English is the default.
+
 * `Jantt.mount(target, data, options)` (alias `Jantt.render`): Mounts a full interactive Gantt chart into an HTMLElement or query selector string and returns the chart instance (`update`, `destroy`, `getData`, ...).
 * `Jantt.validate(data)`: Validates a raw JSON payload against the schema contract and DAG constraints.
 * `Jantt.resolveSchedule(tasks, defaultGapDaysOrOptions)`: Resolves topological dates and dependencies headlessly.

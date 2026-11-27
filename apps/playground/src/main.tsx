@@ -2,6 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { I18nProvider } from "./i18n/I18nProvider";
+import { bootstrapI18n } from "./i18n";
 import "./index.css";
 import "./components/layout/phone-workspace.css";
 
@@ -102,11 +104,22 @@ function dismissBootSplash() {
   });
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>
-);
-dismissBootSplash();
+function start() {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <I18nProvider>
+          <App />
+        </I18nProvider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+  dismissBootSplash();
+}
+
+// Give the preferred dictionary a head start before mounting. If the chunk is slow,
+// the provider starts in English and switches once the dictionary is ready.
+void Promise.race([
+  bootstrapI18n(),
+  new Promise<void>((resolve) => window.setTimeout(resolve, 400))
+]).finally(start);

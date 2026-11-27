@@ -16,6 +16,8 @@ import {
   generateRoomId
 } from "@jantt/core";
 import { getTrustedAvatarUrl, isValidRoomId } from "../room-storage";
+import { validationMessage } from "../i18n/diagnostics";
+import { tGlobal } from "../i18n";
 import { auth, rtdb, isPermissionDeniedError } from "./firebaseConfig";
 import {
   validateRoomMetadata,
@@ -52,7 +54,8 @@ function isSafeKey(key: unknown): key is string {
  */
 function assertRoomId(roomId: string): void {
   if (!isValidRoomId(roomId)) {
-    throw new Error("Invalid room ID.");
+    // i18n: asserted by tests
+    throw new Error(tGlobal("services.room.invalidRoomId"));
   }
 }
 
@@ -99,7 +102,7 @@ function buildSharedPointer(
 ): UserRoomPointer {
   return {
     roomId,
-    title: clip(meta.title || "Untitled room", MAX_TITLE_LENGTH),
+    title: clip(meta.title || tGlobal("services.room.untitled"), MAX_TITLE_LENGTH),
     ownerUid: meta.ownerUid,
     ownerUsername: meta.ownerUsername || "",
     role,
@@ -201,12 +204,13 @@ export async function createRoom(
 ): Promise<FullRoomPayload> {
   const userValidation = validateUserProfile(user);
   if (!userValidation.valid) {
-    throw new Error(userValidation.error || "Invalid user profile.");
+    throw new Error(userValidation.error || tGlobal("services.room.invalidUserProfile"));
   }
 
   const validation = validate(initialData);
   if (!validation.valid) {
-    throw new Error(`Invalid plan data: ${validation.errors[0]?.message || "Validation failed"}`);
+    const issue = validation.errors[0];
+    throw new Error(tGlobal("services.room.invalidPlanData", { message: issue ? validationMessage(issue) : tGlobal("services.room.validationFailed") }));
   }
 
   const roomId = generateRoomId();
@@ -231,13 +235,13 @@ export async function createRoom(
 
   const metaValidation = validateRoomMetadata(meta);
   if (!metaValidation.valid) {
-    throw new Error(metaValidation.error || "Invalid room metadata.");
+    throw new Error(metaValidation.error || tGlobal("services.room.invalidRoomMetadata"));
   }
 
   const ownerMember = buildMember(user, "owner", now);
   const ownerMemberValidation = validateRoomMember(ownerMember);
   if (!ownerMemberValidation.valid) {
-    throw new Error(ownerMemberValidation.error || "Invalid owner member.");
+    throw new Error(ownerMemberValidation.error || tGlobal("services.room.invalidOwnerMember"));
   }
 
   const ownerPointer: UserRoomPointer = {
@@ -271,21 +275,21 @@ export async function shareRoomWithUser(
 ): Promise<RoomMember> {
   assertRoomId(roomId);
   if (!isSafeKey(targetUser?.uid)) {
-    throw new Error("Invalid user.");
+    throw new Error(tGlobal("services.room.invalidUser"));
   }
   const meta = await readValue<RoomMetadata>(`rooms/${roomId}/meta`);
   if (!meta) {
-    throw new Error("Room does not exist.");
+    throw new Error(tGlobal("services.room.roomNotExist"));
   }
   if (targetUser.uid === meta.ownerUid) {
-    throw new Error("The room owner already has full access.");
+    throw new Error(tGlobal("services.room.ownerFullAccess"));
   }
 
   const now = new Date().toISOString();
   const newMember = buildMember(targetUser, role, now);
   const newMemberValidation = validateRoomMember(newMember);
   if (!newMemberValidation.valid) {
-    throw new Error(newMemberValidation.error || "Invalid member data.");
+    throw new Error(newMemberValidation.error || tGlobal("services.room.invalidMemberData"));
   }
 
   await update(ref(rtdb), {
@@ -312,7 +316,7 @@ export async function shareRoomWithTeam(
   assertRoomId(roomId);
   // The rules key teams by their id (`teams/{id}.id === id`).
   if (!isSafeKey(team?.id) || !team.name?.trim()) {
-    throw new Error("Invalid team.");
+    throw new Error(tGlobal("services.room.invalidTeam"));
   }
 
   const [meta, existingMembers] = await Promise.all([
@@ -320,7 +324,7 @@ export async function shareRoomWithTeam(
     readValue<Record<string, RoomMember>>(`rooms/${roomId}/members`)
   ]);
   if (!meta) {
-    throw new Error("Room does not exist.");
+    throw new Error(tGlobal("services.room.roomNotExist"));
   }
   const members = existingMembers || {};
 
@@ -344,7 +348,7 @@ export async function shareRoomWithTeam(
     .map((u) => u?.username || u?.displayName || "unknown");
 
   if (resolved.length === 0 && alreadyIn.length === 0) {
-    throw new Error(`Nobody in "${team.name}" has a Jantt account yet. Share the room link with them instead.`);
+    throw new Error(tGlobal("services.room.noTeamAccounts", { name: team.name }));
   }
 
   const now = new Date().toISOString();
@@ -362,7 +366,7 @@ export async function shareRoomWithTeam(
 
   const teamValidation = validateRoomTeam(roomTeam);
   if (!teamValidation.valid) {
-    throw new Error(teamValidation.error || "Invalid room team.");
+    throw new Error(teamValidation.error || tGlobal("services.room.invalidRoomTeam"));
   }
 
   const updates: Record<string, unknown> = {
@@ -388,7 +392,7 @@ export async function removeTeamFromRoom(
 ): Promise<void> {
   assertRoomId(roomId);
   if (!isSafeKey(teamId)) {
-    throw new Error("Invalid team.");
+    throw new Error(tGlobal("services.room.invalidTeam"));
   }
   const [teams, members, meta] = await Promise.all([
     readValue<Record<string, RoomTeam>>(`rooms/${roomId}/teams`),
@@ -438,11 +442,11 @@ export async function removeMemberFromRoom(
 ): Promise<void> {
   assertRoomId(roomId);
   if (!isSafeKey(targetUid)) {
-    throw new Error("Invalid member.");
+    throw new Error(tGlobal("services.room.invalidMember"));
   }
   const ownerUid = await readValue<string>(`rooms/${roomId}/meta/ownerUid`);
   if (ownerUid && ownerUid === targetUid) {
-    throw new Error("The room owner cannot be removed. Delete the room instead.");
+    throw new Error(tGlobal("services.room.ownerCannotBeRemoved"));
   }
   const updates: Record<string, true | null> = {
     [`rooms/${roomId}/members/${targetUid}`]: null,
@@ -465,20 +469,20 @@ export async function updateMemberRole(
 ): Promise<void> {
   assertRoomId(roomId);
   if (!isSafeKey(targetUid)) {
-    throw new Error("Invalid member.");
+    throw new Error(tGlobal("services.room.invalidMember"));
   }
   const [meta, member] = await Promise.all([
     readValue<RoomMetadata>(`rooms/${roomId}/meta`),
     readValue<RoomMember>(`rooms/${roomId}/members/${targetUid}`)
   ]);
   if (!meta) {
-    throw new Error("Room does not exist.");
+    throw new Error(tGlobal("services.room.roomNotExist"));
   }
   if (meta.ownerUid === targetUid) {
-    throw new Error("The room owner's role cannot be changed.");
+    throw new Error(tGlobal("services.room.ownerRoleLocked"));
   }
   if (!member) {
-    throw new Error("This person is no longer a member of the room.");
+    throw new Error(tGlobal("services.room.memberNotFound"));
   }
 
   await update(ref(rtdb), {
@@ -524,7 +528,7 @@ export async function deleteRoom(
 
   if (ownerOfRecord) {
     if (ownerOfRecord !== ownerUid) {
-      throw new Error("Only the room owner can delete this room.");
+      throw new Error(tGlobal("services.room.onlyOwnerDelete"));
     }
     updates[`rooms/${roomId}`] = null;
 
@@ -559,7 +563,7 @@ export async function joinRoomViaInvite(
 ): Promise<FullRoomPayload> {
   const room = await fetchRoom(roomId);
   if (!room) {
-    throw new Error(`Room "${roomId}" was not found or has been deleted by its owner.`);
+    throw new Error(tGlobal("services.room.roomDeleted", { id: roomId }));
   }
 
   const isOwner = room.meta.ownerUid === user.uid;
@@ -602,7 +606,7 @@ export async function renameRoom(
   assertRoomId(roomId);
   const nextTitle = clip(typeof title === "string" ? title.trim() : "", MAX_TITLE_LENGTH);
   if (!nextTitle) {
-    throw new Error("Room name cannot be empty.");
+    throw new Error(tGlobal("services.room.emptyName"));
   }
   const [ownerUid, pointer] = await Promise.all([
     readValue<string>(`rooms/${roomId}/meta/ownerUid`),
@@ -612,7 +616,7 @@ export async function renameRoom(
     throw new Error(ROOM_GONE_MESSAGE);
   }
   if (ownerUid !== user.uid) {
-    throw new Error("Only the room owner can rename this room.");
+    throw new Error(tGlobal("services.room.onlyOwnerRename"));
   }
 
   const updates: Record<string, string> = { [`rooms/${roomId}/meta/title`]: nextTitle };
@@ -720,7 +724,7 @@ export async function saveRoomDataAtomic(
         return { success: true, revision: await readRevisionSafely(roomId), data: nextData };
       }
       if (!result.committed) {
-        throw new Error("Failed to save room data atomically. The room may have been deleted or modified.");
+        throw new Error(tGlobal("services.room.saveConflict"));
       }
 
       const committed = result.snapshot.val();
@@ -744,7 +748,7 @@ export async function saveRoomDataAtomic(
         throw new Error(stillExists ? EDIT_DENIED_MESSAGE : ROOM_GONE_MESSAGE);
       }
       if (err instanceof Error && err.message === "maxretry") {
-        throw new Error("The room is busy with other edits right now. Please retry in a moment.");
+        throw new Error(tGlobal("services.room.busy"));
       }
       throw err;
     });
@@ -752,7 +756,7 @@ export async function saveRoomDataAtomic(
   return withTimeout(
     commit,
     SAVE_TIMEOUT_MS,
-    "Saving to the cloud room is taking too long. Check your connection; your edits are kept on this device."
+    tGlobal("services.room.saveTakingTooLong")
   );
 }
 

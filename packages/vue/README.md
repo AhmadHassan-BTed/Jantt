@@ -51,6 +51,7 @@ function handleTaskClick(task: Task) {
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `data` | `JanttData` | Required | The project timeline specification. Replacing it or mutating it in place updates the chart. |
+| `locale` | `string` | `"en"` | Localizes the built-in timeline, toolbar, and task details. Supports English and Simplified Chinese (`zh-CN`). Other locales use English. |
 | `viewport` | `ViewportOptions` | `undefined` | Scale, `dayWidth`, `linkRouting`, `rowHeight`, `rowHeightMode`, `showCriticalPath`, `showBaselines`, ... Each value is applied when it changes, so the user's zoom and toolbar toggles survive data updates. |
 | `theme` | `Record<string, string>` | `undefined` | Custom CSS theme variables, e.g. `{ accent: "#38BDF8" }`. |
 | `themeClassName` | `string` | `undefined` | Built-in theme class: `jantt-theme-light`, `jantt-theme-dark`, `jantt-theme-cyber-emerald`, `jantt-theme-midnight-rose`, `jantt-theme-nordic-frost`, `jantt-theme-sunset-crimson` or `jantt-theme-beenie`. |
@@ -67,6 +68,21 @@ function handleTaskClick(task: Task) {
 | `renderDetail` | `(task, container, api) => void` | `undefined` | Custom task detail renderer. |
 
 Unset optional booleans fall back to the engine defaults, the same as in `@jantt/react` and `@jantt/elements`.
+
+Import the component as `Jantt` if you prefer that tag. Bind `locale` to your app's reactive language setting, or pass `locale="zh-CN"` for a fixed language. Open task details keep their current wording until reopened so pending edits can stay in place.
+
+```vue
+<script setup>
+import { Jantt } from "@jantt/vue";
+import "@jantt/core/theme.css";
+
+defineProps(["plan", "appLocale"]);
+</script>
+
+<template>
+  <Jantt :data="plan" :locale="appLocale" />
+</template>
+```
 
 ## Emits
 

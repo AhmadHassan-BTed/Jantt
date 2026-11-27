@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ChevronDown, ArrowUp, Square, Plus } from "lucide-react";
 import { CopilotModelSelector } from "./CopilotModelSelector";
+import { useI18n } from "../../i18n/I18nProvider";
 import type { ProviderDefinition, ProviderAccount } from "../../services/ai/types";
 import type { ModelDiscoveryResult } from "../../services/ai/model-discovery";
 
@@ -41,6 +42,7 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
   onSelectAccountAndModel,
   onOpenSettings
 }) => {
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,11 +76,18 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
     }
   };
 
+  const suggestions = [
+    t("copilot.suggestCriticalPath"),
+    t("copilot.suggestCompress"),
+    t("copilot.suggestLevel"),
+    t("copilot.suggestEstimate"),
+    t("copilot.suggestReport")
+  ];
+
   return (
     <div className="copilot-input-wrapper">
-      <div className="copilot-suggestions" role="group" aria-label="Suggested prompts">
-        {["Identify critical path bottlenecks", "Compress schedule by 2 weeks", "Level over-allocated resources",
-          "Estimate optimistic vs pessimistic delivery dates", "Generate executive markdown progress report"].map(prompt =>
+      <div className="copilot-suggestions" role="group" aria-label={t("copilot.suggestedPrompts")}>
+        {suggestions.map(prompt =>
           <button key={prompt} type="button" disabled={isStreaming} onClick={() => {
             setText(prompt);
             textareaRef.current?.focus();
@@ -90,8 +99,8 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          aria-label="Message Copilot"
-          placeholder="Ask about this plan…"
+          aria-label={t("copilot.messageAria")}
+          placeholder={t("copilot.placeholder")}
           rows={1}
           className="copilot-textarea"
           disabled={isReadOnly}
@@ -103,7 +112,7 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
               type="button"
               className="copilot-model-pill"
               onClick={() => setIsModelSelectorOpen((prev) => !prev)}
-              title="Select AI Model or Provider"
+              title={t("copilot.selectModel")}
             >
               <Plus size={11} className="copilot-pill-plus" />
               <span className="copilot-pill-text">{currentModelLabel}</span>
@@ -132,8 +141,8 @@ export const CopilotInput: React.FC<CopilotInputProps> = ({
             className={`copilot-action-btn ${isStreaming ? "is-streaming" : text.trim() ? "is-ready" : "is-disabled"}`}
             onClick={handleButtonClick}
             disabled={!isStreaming && (!text.trim() || isReadOnly)}
-            title={isStreaming ? "Stop generation" : "Send instruction"}
-            aria-label={isStreaming ? "Stop generation" : "Send instruction"}
+            title={isStreaming ? t("copilot.stopGeneration") : t("copilot.send")}
+            aria-label={isStreaming ? t("copilot.stopGeneration") : t("copilot.send")}
           >
             {isStreaming ? (
               <Square size={12} className="copilot-stop-icon" />

@@ -25,6 +25,9 @@ import {
 } from "../utils";
 import { storageService } from "../services/storage";
 import { commandBus } from "../services/bus";
+import { validationMessage } from "../i18n/diagnostics";
+import { tGlobal } from "../i18n";
+import { useI18n } from "../i18n/I18nProvider";
 
 interface UseProjectStateOptions {
   initialProjects: SavedProject[];
@@ -43,9 +46,6 @@ interface UseProjectStateOptions {
   onCreateCloudRoom?: (title: string, data: JanttData) => Promise<string | null>;
   onUpdateExistingRoom?: (roomId: string, data: JanttData) => Promise<boolean>;
 }
-
-const STORAGE_FULL_MESSAGE =
-  "Browser storage is full: the plan list could not be saved and only lives in this tab. Export your plans (JSON) or delete old ones.";
 
 /**
  * Mirrors the active plan in the address bar. A room's editor secret is never written there:
@@ -92,6 +92,7 @@ export function useProjectState({
   onCreateCloudRoom,
   onUpdateExistingRoom
 }: UseProjectStateOptions) {
+  const { t } = useI18n();
   const [customProjects, setCustomProjects] = useState<SavedProject[]>(initialProjects);
   const [activeProjectId, setActiveProjectId] = useState<string>(initialActiveId);
   const customProjectsRef = useRef(customProjects);
@@ -116,8 +117,8 @@ export function useProjectState({
 
   const currentProjectName = useMemo(() => {
     if (activeProjectId === "default") return DEFAULT_TEMPLATE.name;
-    return activeProject?.name || parsedData?.meta?.title || "Project Plan";
-  }, [activeProjectId, activeProject, parsedData]);
+    return activeProject?.name || parsedData?.meta?.title || t("app.projectPlanName");
+  }, [activeProjectId, activeProject, parsedData, t]);
 
   // Persist and announce every active-plan change, whichever code path made it
   const previousActiveIdRef = useRef<string | null>(null);
@@ -151,7 +152,7 @@ export function useProjectState({
     const ok = updateStoredProjects(mutate);
     customProjectsRef.current = mutate(customProjectsRef.current);
     setCustomProjects((prev) => mutate(prev));
-    if (!ok) showToastRef.current(STORAGE_FULL_MESSAGE, true);
+    if (!ok) showToastRef.current(tGlobal("app.storageFull"), true);
     return ok;
   }, []);
 
@@ -228,7 +229,7 @@ export function useProjectState({
         customProjectsRef.current.find((p) => p.id === projectId) ||
         loadSavedProjects().find((p) => p.id === projectId);
       if (!found) {
-        showToastRef.current("That plan no longer exists in this browser. Opened the default plan instead.", true);
+        showToastRef.current(tGlobal("app.planGone"), true);
         activateProject("default", loadDefaultPlanData());
         return;
       }
@@ -238,7 +239,7 @@ export function useProjectState({
   );
 
   const handleOpenAddPlanModal = useCallback(() => {
-    setNewPlanTitle(`Custom Plan ${customProjects.length + 1}`);
+    setNewPlanTitle(tGlobal("app.customPlanName", { count: customProjects.length + 1 }));
     setNewPlanTemplateType("blank");
     setShowAddPlanModal(true);
   }, [customProjects.length]);
@@ -289,7 +290,7 @@ export function useProjectState({
       };
       addAndOpenProject(newProj);
       setShowAddPlanModal(false);
-      showToast(`Created local plan "${newProj.name}"`);
+      showToast(tGlobal("app.createdLocalPlan", { name: newProj.name }));
     },
     [newPlanTitle, newPlanTemplateType, onCreateCloudRoom, onUpdateExistingRoom, addAndOpenProject, showToast]
   );
@@ -298,7 +299,7 @@ export function useProjectState({
     const activeProj = customProjectsRef.current.find((p) => p.id === activeProjectIdRef.current);
     if (!activeProj) return;
 
-    const forkedName = `${activeProj.name} (Editable Copy)`;
+    const forkedName = `${activeProj.name}${tGlobal("app.editableCopySuffix")}`;
     const newProj: SavedProject = {
       id: generateId("plan"),
       name: forkedName,
@@ -307,12 +308,13 @@ export function useProjectState({
       source: "local"
     };
     addAndOpenProject(newProj);
-    showToast(`Created independent local copy: "${newProj.name}"`);
+    showToast(tGlobal("app.createdLocalCopy", { name: newProj.name }));
   }, [addAndOpenProject, showToast]);
 
   const handleCreateLocalCopyFromData = useCallback(
     (title: string, data: JanttData) => {
-      const copyTitle = title.endsWith("(Local Copy)") ? title : `${title} (Local Copy)`;
+      const localCopySuffix = tGlobal("app.localCopySuffix");
+      const copyTitle = title.endsWith(localCopySuffix) ? title : `${title}${localCopySuffix}`;
       const newProj: SavedProject = {
         id: generateId("plan"),
         name: copyTitle,
@@ -321,7 +323,7 @@ export function useProjectState({
         source: "local"
       };
       addAndOpenProject(newProj);
-      showToast(`Saved local offline copy: "${copyTitle}"`);
+      showToast(tGlobal("app.savedOfflineCopy", { name: copyTitle }));
     },
     [addAndOpenProject, showToast]
   );
@@ -353,7 +355,7 @@ export function useProjectState({
         setParsedData(updatedActiveData);
         setJsonText(JSON.stringify(updatedActiveData, null, 2));
       }
-      showToast(`Renamed plan to "${trimmed}"`);
+      showToast(tGlobal("app.renamedPlan", { name: trimmed }));
     },
     [commitProjects, setParsedData, setJsonText, showToast]
   );
@@ -363,7 +365,7 @@ export function useProjectState({
       // The active plan is duplicated from the editor so unsaved edits are included
       const isActive = projectId === activeProjectIdRef.current && parsedDataRef.current;
       let sourceData: JanttData | null = isActive ? parsedDataRef.current : null;
-      let baseName = "Plan";
+      let baseName = tGlobal("app.planBaseName");
       if (projectId === "default") {
         sourceData = sourceData || loadDefaultPlanData();
         baseName = DEFAULT_TEMPLATE.name;
@@ -376,7 +378,7 @@ export function useProjectState({
       }
       if (!sourceData) return;
 
-      const copyTitle = `${baseName} (Copy)`;
+      const copyTitle = `${baseName}${tGlobal("app.copySuffix")}`;
       const newProj: SavedProject = {
         id: generateId("plan"),
         name: copyTitle,
@@ -385,7 +387,7 @@ export function useProjectState({
         source: "local"
       };
       addAndOpenProject(newProj);
-      showToast(`Duplicated into "${copyTitle}"`);
+      showToast(tGlobal("app.duplicatedPlan", { name: copyTitle }));
     },
     [addAndOpenProject, showToast]
   );
@@ -401,8 +403,8 @@ export function useProjectState({
       const name = projToDelete?.name || projectId;
       const isRoom = projToDelete?.source === "room";
       const promptMsg = isRoom
-        ? `Remove the offline copy of cloud room "${name}" from this device?\n\nThe room itself, its members and its cloud data are not affected. To leave or delete the room, use the Plan Manager.`
-        : `Permanently delete the local plan "${name}" and its version history from this browser?\n\nThis cannot be undone. Export it first if you may need it again.`;
+        ? tGlobal("app.deleteRoomCopyPrompt", { name })
+        : tGlobal("app.deletePlanPrompt", { name });
       if (options?.confirm !== false && !window.confirm(promptMsg)) return;
 
       // Switch away first (this flushes pending edits), then remove the plan and its storage
@@ -411,7 +413,7 @@ export function useProjectState({
       }
       commitProjects((list) => list.filter((p) => p.id !== projectId));
       purgeProjectStorage(projectId);
-      showToast(isRoom ? `Removed the offline copy of "${name}" from this device.` : `Deleted local plan "${name}".`);
+      showToast(isRoom ? tGlobal("app.removedOfflineCopy", { name }) : tGlobal("app.deletedLocalPlan", { name }));
     },
     [activateProject, commitProjects, showToast]
   );
@@ -420,7 +422,7 @@ export function useProjectState({
     (file: File) => {
       const reader = new FileReader();
       reader.onerror = () => {
-        showToast(`Could not read "${file.name}".`, true);
+        showToast(tGlobal("app.fileReadFailed", { name: file.name }), true);
       };
       reader.onload = (event) => {
         try {
@@ -440,9 +442,9 @@ export function useProjectState({
 
           const val = validate(parsed);
           if (!val.valid) {
-            const shown = val.errors.slice(0, 3).map((err) => `${err.path}: ${err.message}`).join(" | ");
-            const more = val.errors.length > 3 ? ` (+${val.errors.length - 3} more)` : "";
-            showToast(`"${file.name}" was not imported: ${shown}${more}`, true);
+            const shown = val.errors.slice(0, 3).map((err) => `${err.path}: ${validationMessage(err)}`).join(" | ");
+            const more = val.errors.length > 3 ? tGlobal("app.moreErrors", { count: val.errors.length - 3 }) : "";
+            showToast(tGlobal("app.importValidationFailed", { name: file.name, errors: `${shown}${more}` }), true);
             return;
           }
 
@@ -455,9 +457,10 @@ export function useProjectState({
             source: "local"
           };
           addAndOpenProject(newProj);
-          showToast(`Imported "${newProj.name}"`);
+          showToast(tGlobal("app.imported", { name: newProj.name }));
         } catch (err: any) {
-          showToast(`Failed to parse "${file.name}": ${err?.message || err}`, true);
+          const error = err instanceof SyntaxError ? tGlobal("editor.diagnostics.JSON_SYNTAX") : err?.message || String(err);
+          showToast(tGlobal("app.parseFailed", { name: file.name, error }), true);
         }
       };
       reader.readAsText(file);
@@ -491,7 +494,7 @@ export function useProjectState({
     if (before) {
       // Recorded like any local edit, so Ctrl+Z brings the discarded changes back
       commandBus.emit("LOCAL_COMMIT", { before, after: target });
-      showToast("Reset to the last saved state. Press Ctrl+Z to undo.");
+      showToast(tGlobal("app.resetDone"));
     }
   }, [loadIntoEditor, showToast]);
 

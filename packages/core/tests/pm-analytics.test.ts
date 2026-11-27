@@ -227,6 +227,17 @@ describe("Schedule Health Audit (DCMA 14-Point Inspired)", () => {
 
   const audit = (tasks: Task[]) => auditScheduleIntegrity(tasks, calculateCriticalPath(tasks));
 
+  it("localizes report text without changing the health score or losing task IDs", () => {
+    const tasks: Task[] = [
+      { id: "a", label: "Review", category: "general", start: "2026-09-01", end: "2026-09-02", dependsOn: "missing" }
+    ];
+    const localized = auditScheduleIntegrity(tasks, calculateCriticalPath(tasks), {
+      translate: key => key === "missingDependency" ? "任务 {task} 的依赖 {predecessor} 不存在。" : undefined
+    });
+    expect(localized.healthScore).toBe(audit(tasks).healthScore);
+    expect(localized.issues[0]).toMatchObject({ taskId: "a", message: "任务 Review 的依赖 missing 不存在。" });
+  });
+
   it("flags open ends (missing predecessor or successor), exempting project start and finish", () => {
     const result = audit([
       { id: "A", category: "dev", start: "2026-09-01", end: "2026-09-05" },

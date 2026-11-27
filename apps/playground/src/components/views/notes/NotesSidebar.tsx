@@ -3,6 +3,8 @@ import { StickyNote, Plus, Search, Trash2, Pin, Clock, Paperclip } from "lucide-
 import { sanitizeCssColor, type NoteItem } from "@jantt/core";
 import { formatRelativeTime } from "../../../utils";
 import { DEFAULT_NOTE_COLOR, NOTE_PALETTE, noteContentToPlainText, toText } from "./note-markdown";
+import { useI18n } from "../../../i18n/I18nProvider";
+import type { MessageKey } from "../../../i18n";
 
 export interface NotesSidebarProps {
   notes: NoteItem[];
@@ -24,6 +26,20 @@ const timeOf = (note: NoteItem) => {
   return Number.isFinite(t) ? t : 0;
 };
 
+/** Localized palette color name; unknown palette entries keep their English label. */
+function noteColorLabel(t: (key: MessageKey) => string, id: string, fallback: string): string {
+  switch (id) {
+    case "#3B82F6": return t("notes.color.blue");
+    case "#10B981": return t("notes.color.emerald");
+    case "#F59E0B": return t("notes.color.amber");
+    case "#8B5CF6": return t("notes.color.violet");
+    case "#F43F5E": return t("notes.color.rose");
+    case "#06B6D4": return t("notes.color.cyan");
+    case "#64748B": return t("notes.color.slate");
+    default: return fallback;
+  }
+}
+
 export const NotesSidebar: React.FC<NotesSidebarProps> = ({
   notes,
   activeNoteId,
@@ -37,6 +53,7 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
   isViewer = false,
   liveTaskIds
 }) => {
+  const { t } = useI18n();
   // Plain-text excerpts depend only on the notes, not on the search or on keystrokes in the
   // open editor (which re-render this list), so they are derived once per notes change.
   const plainTextById = useMemo(
@@ -77,19 +94,19 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
         <div className="notes-sidebar-title-row">
           <div className="notes-sidebar-brand">
             <StickyNote size={18} className="notes-brand-icon" />
-            <span className="notes-brand-title">Project Notes</span>
+            <span className="notes-brand-title">{t("notes.sidebarTitle")}</span>
             <span className="notes-count-badge">{notes.length}</span>
-            {isViewer && <span className="notes-view-only-badge">View-Only</span>}
+            {isViewer && <span className="notes-view-only-badge">{t("notes.viewOnly")}</span>}
           </div>
           {!isViewer && (
             <button
               type="button"
               className="notes-new-btn"
               onClick={onCreateNote}
-              title="Create a new note"
+              title={t("notes.createTitle")}
             >
               <Plus size={14} />
-              <span>New Note</span>
+              <span>{t("notes.newNote")}</span>
             </button>
           )}
         </div>
@@ -99,22 +116,22 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
           <input
             type="text"
             className="notes-search-input"
-            placeholder="Search notes or tags..."
-            aria-label="Search notes"
+            placeholder={t("notes.searchPlaceholder")}
+            aria-label={t("notes.searchAria")}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
 
-        <div className="notes-color-filter-strip" role="group" aria-label="Filter notes by color">
+        <div className="notes-color-filter-strip" role="group" aria-label={t("notes.filterByColorGroup")}>
           <button
             type="button"
             className={`notes-color-chip is-all ${selectedColor === "all" ? "is-active" : ""}`}
             onClick={() => onSelectColor("all")}
             aria-pressed={selectedColor === "all"}
-            title="Show all note colors"
+            title={t("notes.showAllColors")}
           >
-            All
+            {t("common.all")}
           </button>
           {NOTE_PALETTE.map((pal) => (
             <button
@@ -124,8 +141,8 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
               style={{ backgroundColor: pal.bg }}
               onClick={() => onSelectColor(selectedColor === pal.id ? "all" : pal.id)}
               aria-pressed={selectedColor === pal.id}
-              aria-label={`Filter by ${pal.label}`}
-              title={`Filter by ${pal.label}`}
+              aria-label={t("notes.filterByColor", { color: noteColorLabel(t, pal.id, pal.label) })}
+              title={t("notes.filterByColor", { color: noteColorLabel(t, pal.id, pal.label) })}
             />
           ))}
         </div>
@@ -138,20 +155,20 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
             {notes.length > 0 && hasFilter ? (
               <>
                 <p className="notes-empty-text">
-                  {searchQuery.trim() ? "No notes match your search." : "No notes with this color."}
+                  {searchQuery.trim() ? t("notes.noSearchMatch") : t("notes.noColorMatch")}
                 </p>
                 <button type="button" className="notes-empty-create-btn" onClick={clearFilters}>
-                  Clear filters
+                  {t("notes.clearFilters")}
                 </button>
               </>
             ) : (
               <>
                 <p className="notes-empty-text">
-                  {isViewer ? "No project notes yet in this shared room." : "No project notes yet."}
+                  {isViewer ? t("notes.emptyViewerList") : t("notes.emptyList")}
                 </p>
                 {!isViewer && (
                   <button type="button" className="notes-empty-create-btn" onClick={onCreateNote}>
-                    Create your first note
+                    {t("notes.createFirst")}
                   </button>
                 )}
               </>
@@ -161,7 +178,7 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
           sortedNotes.map((note) => {
             const isActive = note.id === activeNoteId;
             const attachedCount = countAttached(note);
-            const title = toText(note.title) || "Untitled Note";
+            const title = toText(note.title) || t("notes.untitled");
             const preview = (plainTextById.get(note.id) ?? "").slice(0, 90);
             return (
               <div
@@ -171,16 +188,16 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
               >
                 <div className="note-item-header">
                   <button type="button" className="note-item-title note-open-button" onClick={() => onSelectNote(note.id)}
-                    aria-label={`Open note ${title}`} aria-current={isActive ? "true" : undefined}>{title}</button>
+                    aria-label={t("notes.openNote", { title })} aria-current={isActive ? "true" : undefined}>{title}</button>
                   <div className="note-item-badges">
-                    {note.pinned && <Pin size={11} className="note-pin-badge" aria-label="Pinned" />}
+                    {note.pinned && <Pin size={11} className="note-pin-badge" aria-label={t("notes.pinned")} />}
                     {!isViewer && (
                       <button
                         type="button"
                         className="note-item-del-btn"
                         onClick={(e) => onDeleteNote(note.id, e)}
-                        aria-label={`Delete note ${title}`}
-                        title="Delete note"
+                        aria-label={t("notes.deleteNoteAria", { title })}
+                        title={t("notes.deleteNote")}
                       >
                         <Trash2 size={12} />
                       </button>
@@ -188,15 +205,15 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
                   </div>
                 </div>
 
-                <p className="note-item-preview">{preview || "Empty note..."}</p>
+                <p className="note-item-preview">{preview || t("notes.emptyPreview")}</p>
 
                 <div className="note-item-footer">
                   <span className="note-item-time">
                     <Clock size={11} />
-                    <span>{formatRelativeTime(toText(note.updatedAt || note.createdAt) || undefined)}</span>
+                    <span>{formatRelativeTime(toText(note.updatedAt || note.createdAt) || undefined, t)}</span>
                   </span>
                   {attachedCount > 0 && (
-                    <span className="note-item-attached-count" title={`${attachedCount} linked task(s)`}>
+                    <span className="note-item-attached-count" title={t("notes.linkedTasks", { count: attachedCount })}>
                       <Paperclip size={10} />
                       <span>{attachedCount}</span>
                     </span>

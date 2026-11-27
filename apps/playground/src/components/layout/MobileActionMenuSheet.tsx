@@ -8,6 +8,7 @@ import {
   Sparkles,
   FileJson,
   Palette,
+  Languages,
   Github,
   LogOut,
   FolderKanban,
@@ -36,6 +37,8 @@ import { AVAILABLE_THEMES } from "../../constants";
 import { getTrustedAvatarUrl } from "../../room-storage";
 import { useSheetSwipeDismiss } from "../../hooks/useSheetSwipeDismiss";
 import { renderPanelSlot, type PanelSlot } from "./Navbar";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { MessageKey } from "../../i18n";
 
 interface MobileActionMenuSheetProps {
   isOpen: boolean;
@@ -86,13 +89,13 @@ interface MobileActionMenuSheetProps {
   appModeLabel: string;
 }
 
-const VIEW_TILES: Array<{ id: ActiveView; label: string; icon: React.ReactNode }> = [
-  { id: "gantt", label: "Gantt", icon: <Layers size={16} /> },
-  { id: "canvas", label: "Canvas", icon: <Zap size={16} /> },
-  { id: "kanban", label: "Kanban", icon: <Kanban size={16} /> },
-  { id: "tasks", label: "Tasks", icon: <CheckSquare size={16} /> },
-  { id: "summary", label: "Health", icon: <Activity size={16} /> },
-  { id: "notes", label: "Notes", icon: <StickyNote size={16} /> }
+const VIEW_TILES: Array<{ id: ActiveView; labelKey: MessageKey; icon: React.ReactNode }> = [
+  { id: "gantt", labelKey: "view.gantt", icon: <Layers size={16} /> },
+  { id: "canvas", labelKey: "view.canvas", icon: <Zap size={16} /> },
+  { id: "kanban", labelKey: "view.kanban", icon: <Kanban size={16} /> },
+  { id: "tasks", labelKey: "view.tasks", icon: <CheckSquare size={16} /> },
+  { id: "summary", labelKey: "view.health", icon: <Activity size={16} /> },
+  { id: "notes", labelKey: "view.notes", icon: <StickyNote size={16} /> }
 ];
 
 const FOCUSABLE_SELECTOR =
@@ -138,6 +141,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
   onApplyUpdate,
   appModeLabel
 }) => {
+  const { t, locale, setLocale, locales } = useI18n();
   const cardRef = useRef<HTMLDivElement>(null);
   const [isCloudExpanded, setIsCloudExpanded] = useState(false);
   const onCloseRef = useRef(onClose);
@@ -209,9 +213,9 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
 
         <div className="mobile-sheet-header" {...swipe.handleProps}>
           <h3 className="mobile-sheet-title" id="mobile-sheet-title">
-            Tools &amp; Settings
+            {t("mobile.toolsSettings")}
           </h3>
-          <button type="button" className="mobile-sheet-close-btn" onClick={onClose} aria-label="Close menu">
+          <button type="button" className="mobile-sheet-close-btn" onClick={onClose} aria-label={t("mobile.closeMenu")}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>
@@ -221,8 +225,8 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
             <div className="mobile-sheet-update-card" role="status">
               <RefreshCw size={16} aria-hidden="true" />
               <div className="mobile-sheet-update-copy">
-                <strong>Update Available</strong>
-                <span>A new version of Jantt is ready. Refresh to load it.</span>
+                <strong>{t("mobile.updateAvailable")}</strong>
+                <span>{t("mobile.updateBody")}</span>
               </div>
               <button
                 type="button"
@@ -232,23 +236,23 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                   onClose();
                 }}
               >
-                Refresh Now
+                {t("mobile.refreshNow")}
               </button>
             </div>
           )}
 
-          <div className="mobile-menu-grid mobile-menu-shortcuts" role="group" aria-label="Plan actions">
-            <button type="button" className="mobile-menu-tile" onClick={act(onShare)}><Share2 size={17} /><span>Share</span></button>
+          <div className="mobile-menu-grid mobile-menu-shortcuts" role="group" aria-label={t("mobile.planActions")}>
+            <button type="button" className="mobile-menu-tile" onClick={act(onShare)}><Share2 size={17} /><span>{t("mobile.share")}</span></button>
             {onToggleCopilot && <button type="button" className="mobile-menu-tile" onClick={act(onToggleCopilot)}>
-              <Sparkles size={17} /><span>Copilot</span></button>}
+              <Sparkles size={17} /><span>{t("mobile.copilot")}</span></button>}
             <button type="button" className="mobile-menu-tile" disabled={!onUndo} onClick={act(onUndo)}>
-              <Undo2 size={17} /><span>Undo</span></button>
+              <Undo2 size={17} /><span>{t("mobile.undo")}</span></button>
             <button type="button" className="mobile-menu-tile" disabled={!onRedo} onClick={act(onRedo)}>
-              <Redo2 size={17} /><span>Redo</span></button>
+              <Redo2 size={17} /><span>{t("mobile.redo")}</span></button>
           </div>
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><Layers size={18} />Views and renderer<ChevronDown size={16} /></summary>
-            <div className="mobile-menu-grid is-three-col" role="group" aria-label="Switch view">
+            <summary><Layers size={18} />{t("mobile.viewsRenderer")}<ChevronDown size={16} /></summary>
+            <div className="mobile-menu-grid is-three-col" role="group" aria-label={t("mobile.switchView")}>
               {VIEW_TILES.map((tile) => (
                 <button
                   key={tile.id}
@@ -258,7 +262,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                   onClick={act(() => setActiveView(tile.id))}
                 >
                   {tile.icon}
-                  <span>{tile.label}</span>
+                  <span>{t(tile.labelKey)}</span>
                 </button>
               ))}
             </div>
@@ -266,45 +270,45 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
 
           {/* Core Plan & JSON State */}
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><FolderKanban size={18} />Plans and files<ChevronDown size={16} /></summary>
+            <summary><FolderKanban size={18} />{t("mobile.plansFiles")}<ChevronDown size={16} /></summary>
             <div className="mobile-menu-grid">
               <button type="button" className="mobile-menu-tile" onClick={act(onCreateNewPlan)}>
                 <FolderPlus size={16} aria-hidden="true" />
-                <span>New Plan</span>
+                <span>{t("mobile.newPlan")}</span>
               </button>
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPlanManager)}>
                 <FolderKanban size={16} aria-hidden="true" />
-                <span>Manage Plans</span>
+                <span>{t("mobile.managePlans")}</span>
               </button>
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPeopleModal)}>
                 <Users size={16} aria-hidden="true" />
-                <span>People &amp; Teams</span>
+                <span>{t("mobile.peopleTeams")}</span>
               </button>
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenJsonEditor)}>
                 <FileJson size={16} aria-hidden="true" />
-                <span>JSON Editor</span>
+                <span>{t("mobile.jsonEditor")}</span>
               </button>
 
               {onImportFile && (
                 <button type="button" className="mobile-menu-tile" onClick={act(onImportFile)}>
                   <Upload size={16} aria-hidden="true" />
-                  <span>Import File</span>
+                  <span>{t("mobile.importFile")}</span>
                 </button>
               )}
 
               <button type="button" className="mobile-menu-tile" onClick={act(onOpenPromptModal)}>
                 <FileJson size={16} aria-hidden="true" />
-                <span>Prompt AI</span>
+                <span>{t("mobile.promptAi")}</span>
               </button>
             </div>
           </details>
 
           {/* User Account Section */}
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><Cloud size={18} />Account and cloud<ChevronDown size={16} /></summary>
+            <summary><Cloud size={18} />{t("mobile.accountCloud")}<ChevronDown size={16} /></summary>
             {currentUser ? (
               <div className="mobile-menu-user-row">
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
@@ -321,24 +325,24 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
                       {isGitHubVerified ? (
-                        "GitHub Verified"
+                        t("mobile.githubVerified")
                       ) : onOpenVerificationModal ? (
                         <button
                           type="button"
                           className="mobile-menu-link-btn"
                           onClick={act(onOpenVerificationModal)}
                         >
-                          Verify GitHub Profile
+                          {t("mobile.verifyGithub")}
                         </button>
                       ) : (
-                        "Signed in with GitHub"
+                        t("mobile.signedInGithub")
                       )}
                     </div>
                   </div>
                 </div>
                 <button type="button" className="mobile-menu-item-btn is-logout" onClick={act(onLogout)}>
                   <LogOut size={14} aria-hidden="true" />
-                  <span>Sign out</span>
+                  <span>{t("mobile.signOut")}</span>
                 </button>
               </div>
             ) : (
@@ -354,7 +358,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                 ) : (
                   <Github size={15} aria-hidden="true" />
                 )}
-                <span>{isSigningIn ? "Signing in…" : "Sign in with GitHub"}</span>
+                <span>{isSigningIn ? t("mobile.signingIn") : t("mobile.signIn")}</span>
               </button>
             )}
 
@@ -369,7 +373,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <Cloud size={14} style={{ color: "var(--jantt-accent)" }} aria-hidden="true" />
-                    <span>Cloud collaboration</span>
+                    <span>{t("mobile.cloudCollab")}</span>
                   </div>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                     {cloudStatusLabel && <span className="mobile-menu-badge">{cloudStatusLabel}</span>}
@@ -391,7 +395,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
 
           {/* AutoSave & History */}
           <details className="mobile-menu-section mobile-tools-group">
-            <summary><History size={18} />Saving and history<ChevronDown size={16} /></summary>
+            <summary><History size={18} />{t("mobile.savingHistory")}<ChevronDown size={16} /></summary>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <button type="button" className="mobile-menu-list-row" onClick={act(onOpenAutoSave)}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -402,7 +406,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                   ) : (
                     <CheckCircle2 size={14} style={{ color: "#22C55E" }} aria-hidden="true" />
                   )}
-                  <span>Autosave interval</span>
+                  <span>{t("mobile.autosaveInterval")}</span>
                 </div>
                 <span className="mobile-menu-badge">{autoSaveLabel}</span>
               </button>
@@ -411,33 +415,33 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
                 <button type="button" className="mobile-menu-list-row" onClick={act(onOpenVersionHistory)}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <History size={14} aria-hidden="true" />
-                    <span>Version history</span>
+                    <span>{t("mobile.versionHistory")}</span>
                   </div>
-                  {snapshotsCount > 0 && <span className="mobile-menu-badge">{snapshotsCount} snapshots</span>}
+                  {snapshotsCount > 0 && <span className="mobile-menu-badge">{t("mobile.snapshots", { count: snapshotsCount })}</span>}
                 </button>
               )}
             </div>
           </details>
 
           <div className="mobile-theme-row">
-            <label htmlFor="mobile-theme-select"><Palette size={18} />Theme</label>
+            <label htmlFor="mobile-theme-select"><Palette size={18} />{t("mobile.theme")}</label>
             <select
               id="mobile-theme-select"
               className="select-input mobile-theme-select"
               value={selectedThemeId}
               onChange={(e) => setSelectedThemeId(e.target.value)}
             >
-              <optgroup label="Dark Modes">
-                {AVAILABLE_THEMES.filter((t) => t.mode === "dark").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
+              <optgroup label={t("mobile.darkModes")}>
+                {AVAILABLE_THEMES.filter((theme) => theme.mode === "dark").map((theme) => (
+                  <option key={theme.id} value={theme.id}>
+                    {theme.label}
                   </option>
                 ))}
               </optgroup>
-              <optgroup label="Light Modes">
-                {AVAILABLE_THEMES.filter((t) => t.mode === "light").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
+              <optgroup label={t("mobile.lightModes")}>
+                {AVAILABLE_THEMES.filter((theme) => theme.mode === "light").map((theme) => (
+                  <option key={theme.id} value={theme.id}>
+                    {theme.label}
                   </option>
                 ))}
               </optgroup>
@@ -445,22 +449,39 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
             <ChevronDown size={16} aria-hidden="true" />
           </div>
 
+          <div className="mobile-theme-row">
+            <label htmlFor="mobile-language-select"><Languages size={18} />{t("mobile.language")}</label>
+            <select
+              id="mobile-language-select"
+              className="select-input mobile-theme-select"
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as (typeof locales)[number]["id"])}
+            >
+              {locales.map((option) => (
+                <option key={option.id} value={option.id} lang={option.id}>
+                  {option.nativeLabel}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={16} aria-hidden="true" />
+          </div>
+
           {!isStandalone && (canInstall || isIosSafari) && (
             <div className="mobile-menu-section">
-              <span className="mobile-menu-section-label">Install</span>
+              <span className="mobile-menu-section-label">{t("mobile.install")}</span>
               {canInstall ? (
                 <button type="button" className="mobile-menu-install-row" onClick={act(onInstall)}>
                   <Download size={16} aria-hidden="true" />
                   <span className="mobile-menu-install-copy">
-                    <strong>Install Jantt</strong>
-                    <span>Full-screen app with offline access</span>
+                    <strong>{t("mobile.installJantt")}</strong>
+                    <span>{t("mobile.installDesc")}</span>
                   </span>
                 </button>
               ) : (
                 <div className="mobile-menu-install-hint">
                   <Share size={15} aria-hidden="true" />
                   <span>
-                    On iPhone or iPad, tap the Share button in Safari, then choose Add to Home Screen.
+                    {t("mobile.iosInstallHint")}
                   </span>
                 </div>
               )}
@@ -479,7 +500,7 @@ const MobileActionMenuSheetDialog: React.FC<MobileActionMenuSheetProps> = ({
               rel="noopener noreferrer"
             >
               <ShieldCheck size={12} aria-hidden="true" />
-              <span>Privacy Policy</span>
+              <span>{t("mobile.privacy")}</span>
             </a>
           </div>
         </div>

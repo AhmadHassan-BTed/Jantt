@@ -4,6 +4,7 @@ import type { EffectivePerson } from "../../types";
 import { commandBus } from "../../services/bus";
 import { storageService } from "../../services/storage";
 import { STORAGE_KEYS } from "../../constants";
+import { useI18n } from "../../i18n/I18nProvider";
 import {
   DEFAULT_NOTE_COLOR,
   getCaretTextOffset,
@@ -43,6 +44,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   registerNoteBack,
   activeProjectId = "default"
 }) => {
+  const { t } = useI18n();
   const notes: NoteItem[] = useMemo(
     () => (Array.isArray(parsedData.notes) ? parsedData.notes : []).filter((n) => n && typeof n.id === "string" && !n._deleted),
     [parsedData.notes]
@@ -294,7 +296,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
     const now = new Date().toISOString();
     const newNote: NoteItem = {
       id: newId,
-      title: "New Project Note",
+      title: t("notes.newNoteTitle"),
       content: "",
       color: DEFAULT_NOTE_COLOR,
       pinned: false,
@@ -320,8 +322,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
       return;
     }
     const target = notes.find((n) => n.id === noteId);
-    const label = toText(target?.title).trim() || "this note";
-    if (!window.confirm(`Delete "${label}" from the project?`)) return;
+    const label = toText(target?.title).trim() || t("notes.thisNote");
+    if (!window.confirm(t("notes.deleteConfirm", { title: label }))) return;
 
     if (pendingRef.current?.noteId === noteId) {
       if (debounceTimerRef.current !== null) window.clearTimeout(debounceTimerRef.current);
@@ -442,18 +444,18 @@ export const NotesView: React.FC<NotesViewProps> = ({
         />
       ) : (
         <div className="note-editor-empty-state">
-          <p className="note-editor-empty-title">Select or create a note</p>
+          <p className="note-editor-empty-title">{t("notes.selectOrCreate")}</p>
           <p className="note-editor-empty-sub">
             {isViewer
-              ? "This shared room is read-only. Select a note to read it, or make a local copy to edit."
-              : "Capture project meeting summaries, team action items, and link roadmap tasks directly in your notes."}
+              ? t("notes.emptyViewer")
+              : t("notes.emptyOwner")}
           </p>
           <button
             type="button"
             className="notes-empty-create-btn"
             onClick={isViewer ? onPromptFork : handleCreateNote}
           >
-            {isViewer ? "Make a Local Copy" : "Create New Note"}
+            {isViewer ? t("tasks.makeLocalCopy") : t("notes.createNew")}
           </button>
         </div>
       )}

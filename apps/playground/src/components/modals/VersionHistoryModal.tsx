@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { History, RotateCcw, Clock, ShieldCheck, Trash2, Eye } from "lucide-react";
+import { getActiveLocale, tGlobal, type MessageKey, type MessageParams } from "../../i18n";
+import { useI18n } from "../../i18n/I18nProvider";
 import { ConfirmDialog, Modal, ModalHeader } from "./ModalHost";
 import type { SnapshotEntry, JanttData } from "@jantt/core";
+
+type Translator = (key: MessageKey, params?: MessageParams) => string;
 
 interface VersionHistoryModalProps {
   /** View-only room (viewer, or an editor who has not signed in): restoring is disabled. */
@@ -20,30 +24,30 @@ const parseTimestamp = (isoString: string): Date | null => {
 };
 
 /** Stable, absolute wording for labels that are persisted or need to stay meaningful later. */
-const formatAbsoluteTime = (isoString: string) => {
+const formatAbsoluteTime = (isoString: string, t: Translator = tGlobal, locale = getActiveLocale()) => {
   const d = parseTimestamp(isoString);
-  if (!d) return isoString || "Unknown time";
-  return d.toLocaleString([], { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  if (!d) return isoString || t("history.unknownTime");
+  return d.toLocaleString(locale, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
 /** Relative wording for display only; never persist it. */
-const formatRelativeTime = (isoString: string) => {
+const formatRelativeTime = (isoString: string, t: Translator = tGlobal, locale = getActiveLocale()) => {
   const d = parseTimestamp(isoString);
-  if (!d) return isoString || "Unknown time";
+  if (!d) return isoString || t("history.unknownTime");
   const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (diffSec < 60) return "Just now";
+  if (diffSec < 60) return t("history.justNow");
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return t("history.minutesAgo", { count: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  return formatAbsoluteTime(isoString);
+  if (diffHr < 24) return t("history.hoursAgo", { count: diffHr });
+  return formatAbsoluteTime(isoString, t, locale);
 };
 
 /**
  * Entries come straight from browser storage: coerce every rendered field so a malformed or
  * hand-edited entry renders (and is skipped for restore) instead of crashing the dialog.
  */
-const describeSnapshot = (snap: SnapshotEntry, index: number) => {
+const describeSnapshot = (snap: SnapshotEntry, index: number, t: Translator = tGlobal) => {
   const data = snap.data && typeof snap.data === "object" && !Array.isArray(snap.data) ? snap.data : null;
   const taskCount =
     typeof snap.taskCount === "number" && Number.isFinite(snap.taskCount)
@@ -54,7 +58,7 @@ const describeSnapshot = (snap: SnapshotEntry, index: number) => {
   return {
     key: typeof snap.id === "string" && snap.id ? snap.id : `snapshot-${index}`,
     timestamp: typeof snap.timestamp === "string" ? snap.timestamp : "",
-    reason: typeof snap.reason === "string" && snap.reason ? snap.reason : "Snapshot",
+    reason: typeof snap.reason === "string" && snap.reason ? snap.reason : t("history.snapshot"),
     taskCount,
     hash: typeof snap.contentHash === "string" ? snap.contentHash.slice(0, 8) : "",
     data
@@ -63,7 +67,8 @@ const describeSnapshot = (snap: SnapshotEntry, index: number) => {
 
 type SnapshotView = ReturnType<typeof describeSnapshot>;
 
-const pluralTasks = (n: number) => `${n} task${n === 1 ? "" : "s"}`;
+const pluralTasks = (n: number, t: Translator = tGlobal) =>
+  n === 1 ? t("history.taskOne", { count: n }) : t("history.taskMany", { count: n });
 
 const getReasonBadgeStyle = (reason: string): React.CSSProperties => {
   if (reason.includes("Collaborator") || reason.includes("Pre-Merge")) {
@@ -73,7 +78,7 @@ const getReasonBadgeStyle = (reason: string): React.CSSProperties => {
       border: "1px solid rgba(245, 158, 11, 0.3)"
     };
   }
-  if (reason.includes("Restore")) {
+  if (reason.includes("Restore") || reason.includes("恢复")) {
     return {
       background: "rgba(139, 92, 246, 0.15)",
       color: "#8B5CF6",
@@ -96,6 +101,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   onRestoreSnapshot,
   onClearHistory
 }) => {
+  const { t, locale } = useI18n();
   const [pendingRestore, setPendingRestore] = useState<SnapshotView | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -112,7 +118,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   const close = () => setShowModal(false);
   const entries = (Array.isArray(snapshots) ? snapshots : [])
     .filter((snap): snap is SnapshotEntry => Boolean(snap) && typeof snap === "object")
-    .map(describeSnapshot);
+    .map((snap, index) => describeSnapshot(snap, index, t));
   const count = entries.length;
   // A role downgrade while the confirmation is open must not let the restore through.
   const restoreTarget = readOnly ? null : pendingRestore;
@@ -120,7 +126,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   const handleConfirmRestore = (snap: SnapshotView) => {
     if (readOnly || !snap.data) return;
     // Absolute time keeps the persisted audit label meaningful later ("5m ago" would not be).
-    onRestoreSnapshot(snap.data, `Restored version from ${formatAbsoluteTime(snap.timestamp)}`);
+    onRestoreSnapshot(snap.data, t("history.restoreReason", { time: formatAbsoluteTime(snap.timestamp, t, locale) }));
     setPendingRestore(null);
     close();
   };
@@ -135,10 +141,11 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       <Modal onClose={close} maxWidth={680}>
         <ModalHeader
           icon={<History size={18} />}
-          title="Version History"
+          title={t("history.title")}
           subtitle={
             <span style={{ overflowWrap: "anywhere" }}>
-              Plan: <strong>{currentProjectName}</strong> &bull; {count} restore point{count === 1 ? "" : "s"}
+              {t("history.planLabel")} <strong>{currentProjectName}</strong> &bull;{" "}
+              {count === 1 ? t("history.restorePointOne", { count }) : t("history.restorePoints", { count })}
             </span>
           }
         />
@@ -159,9 +166,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
           >
             <ShieldCheck size={16} style={{ color: "#10B981", flexShrink: 0 }} />
             <span>
-              Restore points are captured automatically after each auto-save and before collaborator changes are merged
-              (newest 30 per plan, kept in this browser). Restoring replaces the current plan; edits that are not in a
-              restore point are overwritten.
+              {t("history.info")}
             </span>
           </div>
 
@@ -183,20 +188,19 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
             >
               <Eye size={14} aria-hidden="true" style={{ color: "#F59E0B", flexShrink: 0, marginTop: "2px" }} />
               <span>
-                <strong>View only.</strong> Restoring a version would change this room, so it is disabled. Make a local
-                copy to edit your own version.
+                <strong>{t("history.viewOnlyTitle")}</strong> {t("history.viewOnlyBody")}
               </span>
             </div>
           )}
 
           {count === 0 ? (
             <div style={{ textAlign: "center", padding: "36px 0", color: "var(--jantt-text-muted)", fontSize: "13px" }}>
-              No restore points for this plan yet. One is captured after the next auto-save or collaborator sync.
+              {t("history.empty")}
             </div>
           ) : (
             <ul style={{ display: "flex", flexDirection: "column", gap: "8px", listStyle: "none", margin: 0, padding: 0 }}>
               {entries.map((snap, idx) => {
-                const absoluteTime = formatAbsoluteTime(snap.timestamp);
+                const absoluteTime = formatAbsoluteTime(snap.timestamp, t, locale);
                 const { reason } = snap;
                 const canRestore = !readOnly && snap.data !== null;
                 return (
@@ -241,20 +245,20 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                               color: "#10B981"
                             }}
                           >
-                            Latest
+                            {t("history.latest")}
                           </span>
                         )}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", fontSize: "12px", color: "var(--jantt-text-muted)" }}>
                         <time dateTime={snap.timestamp || undefined} title={absoluteTime} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <Clock size={12} />
-                          {formatRelativeTime(snap.timestamp)}
+                          {formatRelativeTime(snap.timestamp, t, locale)}
                         </time>
                         <span aria-hidden="true">&bull;</span>
-                        <span>{pluralTasks(snap.taskCount)}</span>
+                        <span>{pluralTasks(snap.taskCount, t)}</span>
                         <span aria-hidden="true">&bull;</span>
-                        <span style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }} title="Content fingerprint">
-                          hash: {snap.hash}
+                        <span style={{ fontFamily: "var(--jantt-font-mono)", fontSize: "11px" }} title={t("history.hashTitle")}>
+                          {t("history.hashLabel", { hash: snap.hash })}
                         </span>
                       </div>
                     </div>
@@ -275,14 +279,14 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                       disabled={!canRestore}
                       title={
                         readOnly
-                          ? "View only: make a local copy to edit"
+                          ? t("history.viewOnlyShort")
                           : canRestore
-                          ? `Restore the version from ${absoluteTime}`
-                          : "This restore point is damaged and cannot be restored"
+                          ? t("history.restoreTitle", { time: absoluteTime })
+                          : t("history.damaged")
                       }
                     >
                       <RotateCcw size={13} />
-                      <span>Restore&hellip;</span>
+                      <span>{t("history.restore")}</span>
                     </button>
                   </li>
                 );
@@ -300,13 +304,13 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
               onClick={() => setConfirmClear(true)}
             >
               <Trash2 size={13} />
-              <span>Clear History&hellip;</span>
+              <span>{t("history.clear")}</span>
             </button>
           ) : (
             <div />
           )}
           <button type="button" className="btn-nav btn-nav-primary" onClick={close}>
-            Close
+            {t("common.close")}
           </button>
         </div>
       </Modal>
@@ -314,14 +318,15 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       {restoreTarget && (
         <ConfirmDialog
           tone="danger"
-          title="Restore this version?"
+          title={t("history.confirmRestore.title")}
           message={
             <>
-              Replace the current plan with the version from <strong>{formatAbsoluteTime(restoreTarget.timestamp)}</strong>{" "}
-              ({pluralTasks(restoreTarget.taskCount)})? Edits that are not in a restore point are overwritten.
+              {t("history.confirmRestore.messageBefore")}{" "}
+              <strong>{formatAbsoluteTime(restoreTarget.timestamp, t, locale)}</strong>{" "}
+              {t("history.confirmRestore.messageAfter", { tasks: pluralTasks(restoreTarget.taskCount, t) })}
             </>
           }
-          confirmLabel="Restore Version"
+          confirmLabel={t("history.confirmRestore.confirm")}
           onConfirm={() => handleConfirmRestore(restoreTarget)}
           onCancel={() => setPendingRestore(null)}
         />
@@ -330,14 +335,16 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       {confirmClear && (
         <ConfirmDialog
           tone="danger"
-          title="Delete all restore points?"
+          title={t("history.confirmClear.title")}
           message={
             <>
-              This permanently deletes all {count} restore point{count === 1 ? "" : "s"} for{" "}
-              <strong>{currentProjectName}</strong> from this browser. The current plan itself is not changed.
+              {count === 1
+                ? t("history.confirmClear.messageBeforeOne")
+                : t("history.confirmClear.messageBefore", { count })}{" "}
+              <strong>{currentProjectName}</strong>{t("history.confirmClear.messageAfter")}
             </>
           }
-          confirmLabel="Delete All"
+          confirmLabel={t("history.confirmClear.confirm")}
           onConfirm={handleConfirmClear}
           onCancel={() => setConfirmClear(false)}
         />

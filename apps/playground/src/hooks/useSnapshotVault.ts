@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { JanttData, SnapshotEntry } from "@jantt/core";
 import { storageService } from "../services/storage";
 import { generateId, hashString, snapshotStorageKey } from "../utils";
+import { tGlobal } from "../i18n";
 
 const MAX_SNAPSHOTS_PER_PROJECT = 30;
 /** Automatic snapshots closer together than this are folded into the newest one. */
@@ -50,13 +51,13 @@ function safeSaveSnapshots(key: string, updated: SnapshotEntry[]): boolean {
   for (const keep of [Math.max(5, Math.floor(updated.length / 2)), 3, 1]) {
     if (keep >= updated.length) continue;
     if (storageService.setItem(key, updated.slice(0, keep))) {
-      console.warn(`Browser storage is full: version history of this plan was trimmed to ${keep} entries.`);
+      console.warn(tGlobal("hooks.snapshotVault.trimmed", { count: keep }));
       return true;
     }
   }
   // Every attempt failed: keep the full list (not the last trimmed attempt) for this session
   storageService.setItem(key, updated);
-  console.warn("Browser storage is full: this version is kept for the current session only.");
+  console.warn(tGlobal("hooks.snapshotVault.sessionOnly"));
   return false;
 }
 

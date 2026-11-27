@@ -207,6 +207,13 @@ describe("Project list persistence", () => {
     expect(b.name).toBe("Feed");
   });
 
+  it("removes only complete legacy badges from linked plan names", () => {
+    storageService.setItem(STORAGE_KEYS.CUSTOM_PROJECTS, [
+      plan("feed", { source: "linked", name: "Feed (Draft)  (Cloud Feed) (12 tasks) v2 (Cloud Feed" })
+    ]);
+    expect(loadSavedProjects()[0]?.name).toBe("Feed (Draft) v2 (Cloud Feed");
+  });
+
   it("read-modify-write keeps plans another tab saved in the meantime", () => {
     saveCustomProjects([plan("mine")]);
     // Another tab appends a plan after this tab last read the list

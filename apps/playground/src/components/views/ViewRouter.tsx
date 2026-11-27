@@ -17,6 +17,9 @@ import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
 import { triggerHaptic } from "../../services/platform";
 import { TimelineHeading } from "./TimelineHeading";
+import { useTimelineLabels } from "../../i18n/timeline";
+import { useI18n } from "../../i18n/I18nProvider";
+import { tGlobal } from "../../i18n";
 
 // Heavy, less-used views load on first use: the canvas renderer and the EVM / schedule-health
 // dashboard stay out of the startup bundle. (They are deliberately not re-exported from the
@@ -27,11 +30,14 @@ const NotesView = React.lazy(() => import("./NotesView").then((m) => ({ default:
 const CanvasView = React.lazy(() => import("./CanvasView").then((m) => ({ default: m.CanvasView })));
 const BudgetKpiView = React.lazy(() => import("./BudgetKpiView").then((m) => ({ default: m.BudgetKpiView })));
 
-const viewLoadingFallback = (
-  <div className="today-empty-state" role="status" aria-live="polite">
-    <p>Loading view...</p>
-  </div>
-);
+const ViewLoadingFallback: React.FC = () => {
+  const { t } = useI18n();
+  return (
+    <div className="today-empty-state" role="status" aria-live="polite">
+      <p>{t("router.loading")}</p>
+    </div>
+  );
+};
 
 export interface ViewRouterProps {
   remotePresence?: RoomPresence[];
@@ -99,17 +105,16 @@ class ViewErrorBoundary extends React.Component<ViewErrorBoundaryProps, { error:
     if (!this.state.error) return this.props.children;
     return (
       <div className="today-empty-state" role="alert">
-        <h3>This view could not be displayed</h3>
+        <h3>{tGlobal("router.errorTitle")}</h3>
         <p>
-          Your plan was not changed. Some data may have an unexpected format, or the view could not be loaded (check
-          your connection and reload). Try another view, or check the plan in the JSON editor.
+          {tGlobal("router.errorBody")}
           <button
             type="button"
             className="date-filter-reset-btn"
             style={{ marginTop: "12px", display: "inline-flex" }}
             onClick={() => this.setState({ error: null })}
           >
-            Try Again
+            {tGlobal("router.tryAgain")}
           </button>
         </p>
       </div>
@@ -142,6 +147,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const { t } = useI18n();
   const [jumpToTodayCount, setJumpToTodayCount] = React.useState(0);
   const [showMobileTaskList, setShowMobileTaskList] = React.useState(true);
   const handleToggleMobileTaskList = React.useCallback(() => {
@@ -158,6 +164,7 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
     ganttScrollRef.current = pos;
     storageService.setItem(STORAGE_KEYS.GANTT_SCROLL, pos);
   }, []);
+  const timelineLabels = useTimelineLabels();
 
   const inspectingUsers = React.useMemo(() => remotePresence.flatMap(user =>
     user.inspectedTaskId ? [{ taskId: user.inspectedTaskId, name: user.displayName }] : []), [remotePresence]);
@@ -215,15 +222,17 @@ export const ViewRouter: React.FC<ViewRouterProps> = ({
       )}
 
       <ViewErrorBoundary resetKey={activeView}>
-        <React.Suspense fallback={viewLoadingFallback}>
+        <React.Suspense fallback={<ViewLoadingFallback />}>
           {activeView === "gantt" && ganttDisplayData && (
             <Jantt
               showSplit={showMobileTaskList}
               onToggleSplit={isMobile ? handleToggleMobileTaskList : undefined}
               onPreviewOpen={taskDetail.openTaskDetailSidebar}
+              translateTaskSidebar={key => t(`sidebar.${key}`)}
               onInspectTask={onInspectTask}
               inspectingUsers={inspectingUsers}
               data={ganttDisplayData}
+              labels={timelineLabels}
               onCommit={handleGanttCommit}
               readOnly={isViewer}
               showToolbar={false}

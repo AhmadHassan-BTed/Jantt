@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Eye
 } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 import { ConfirmDialog, Modal, ModalHeader } from "./ModalHost";
 import {
   type Person,
@@ -65,8 +66,6 @@ const safeColor = (value: unknown) => sanitizeCssColor(value, ACCENT);
 
 /** Plan text fields are untrusted JSON; anything but a non-empty string renders as absent. */
 const textOf = (value: unknown) => (typeof value === "string" && value.trim() ? value : undefined);
-
-const VIEW_ONLY_TITLE = "View only: make a local copy to edit";
 
 const getInitials = (name: string) =>
   name
@@ -171,12 +170,6 @@ const disabledLook = (disabled: boolean): React.CSSProperties => (disabled ? { o
 
 const normalizeKey = (value: unknown) => (typeof value === "string" ? value.trim().toLowerCase() : "");
 
-const pluralize = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-/** "a", "a and b", "a, b and c". */
-const joinList = (items: string[]) =>
-  items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-
 type PendingRemoval = { kind: "person"; person: EffectivePerson } | { kind: "team"; team: Team } | null;
 
 export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
@@ -209,6 +202,20 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
   handleAddTeam,
   handleRemoveTeam
 }) => {
+  const { t } = useI18n();
+  const pluralTasks = (n: number) =>
+    n === 1 ? t("people.tasksOne", { count: n }) : t("people.tasksMany", { count: n });
+  const pluralMembers = (n: number) =>
+    n === 1 ? t("people.membersOne", { count: n }) : t("people.membersMany", { count: n });
+  const pluralDocuments = (n: number) =>
+    n === 1 ? t("people.documentsOne", { count: n }) : t("people.documentsMany", { count: n });
+  const pluralAssignees = (n: number) =>
+    n === 1 ? t("people.assigneesOne", { count: n }) : t("people.assigneesMany", { count: n });
+  /** "a", "a and b", "a, b and c". */
+  const joinList = (items: string[]) =>
+    items.length <= 1
+      ? items.join("")
+      : `${items.slice(0, -1).join(t("people.listSeparator"))}${t("people.and")}${items[items.length - 1]}`;
   const [memberMode, setMemberMode] = useState<"search" | "custom">("search");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
@@ -294,9 +301,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
 
   const describeOtherReferences = (p: Person) => {
     const parts: string[] = [];
-    if (resolveMemberId(parsedData?.meta?.person) === p.id) parts.push("the project lead");
+    if (resolveMemberId(parsedData?.meta?.person) === p.id) parts.push(t("people.projectLead"));
     const docCount = (parsedData?.documents || []).filter((d) => d && resolveMemberId(d.owner) === p.id).length;
-    if (docCount > 0) parts.push(`the owner of ${pluralize(docCount, "document")}`);
+    if (docCount > 0) parts.push(t("people.docOwner", { documents: pluralDocuments(docCount) }));
     return parts;
   };
 
@@ -335,8 +342,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
     >
       <Eye size={14} aria-hidden="true" style={{ color: "#F59E0B", flexShrink: 0, marginTop: "2px" }} />
       <span>
-        <strong>View only.</strong> Members and teams of this room can&apos;t be changed here. Make a local copy to
-        edit your own version.
+        <strong>{t("people.viewOnlyTitle")}</strong> {t("people.viewOnlyBody")}
       </span>
     </div>
   );
@@ -358,16 +364,20 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
       // handleRemovePerson unassigns the person's tasks in the same commit; other references stay.
       const otherRefs = describeOtherReferences(person);
       return {
-        title: `Remove ${person.name}?`,
+        title: t("people.removePersonTitle", { name: person.name }),
         message: (
           <>
-            <strong>{person.name}</strong> will be removed from this plan&apos;s members
-            {assignedCount > 0 ? ` and unassigned from ${pluralize(assignedCount, "task")}` : ""}.
-            {otherRefs.length > 0 &&
-              ` They stay listed as "Detected" while they are still ${joinList(otherRefs)}; change that to remove them completely.`}
+            <strong>{person.name}</strong>{" "}
+            {assignedCount > 0
+              ? t("people.removePersonUnassigned", { tasks: pluralTasks(assignedCount) })
+              : t("people.removePersonSimple")}
+            {otherRefs.length > 0 && ` ${t("people.removePersonRefs", { refs: joinList(otherRefs) })}`}
           </>
         ),
-        confirmLabel: assignedCount > 0 ? `Unassign ${pluralize(assignedCount, "Task")} & Remove` : "Remove Member",
+        confirmLabel:
+          assignedCount > 0
+            ? t("people.unassignAndRemove", { tasks: pluralTasks(assignedCount) })
+            : t("people.removeMember"),
         onConfirm: () => handleRemovePerson(person.id)
       };
     }
@@ -376,18 +386,18 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
       const memberCount = effectivePeople.filter((p) => p.teamId === team.id).length;
       const taskCount = (parsedData?.tasks || []).filter((t) => t && !t._deleted && t.teamId === team.id).length;
       const detached = [
-        ...(memberCount > 0 ? [pluralize(memberCount, "member")] : []),
-        ...(taskCount > 0 ? [pluralize(taskCount, "task")] : [])
+        ...(memberCount > 0 ? [pluralMembers(memberCount)] : []),
+        ...(taskCount > 0 ? [pluralTasks(taskCount)] : [])
       ];
       return {
-        title: `Delete team ${team.name}?`,
+        title: t("people.deleteTeamTitle", { name: team.name }),
         message: (
           <>
-            The team <strong>{team.name}</strong> will be deleted.
-            {detached.length > 0 ? ` Its ${joinList(detached)} stay in the plan without a team.` : ""}
+            {t("people.teamDeletedBefore")} <strong>{team.name}</strong> {t("people.teamDeletedAfter")}
+            {detached.length > 0 ? ` ${t("people.teamDetached", { detached: joinList(detached) })}` : ""}
           </>
         ),
-        confirmLabel: "Delete Team",
+        confirmLabel: t("people.deleteTeam"),
         onConfirm: () => handleRemoveTeam(team.id)
       };
     }
@@ -400,13 +410,13 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
   return (
     <>
       <Modal onClose={close} maxWidth={620}>
-        <ModalHeader icon={<Users size={18} />} title="People & Teams" />
+        <ModalHeader icon={<Users size={18} />} title={t("people.title")} />
 
         {/* Modal Tabs (Members vs Teams) */}
         <div
           className="prompt-modal-tabs"
           role="tablist"
-          aria-label="People and teams"
+          aria-label={t("people.tabsAria")}
           onKeyDown={handleTabKeyDown}
           style={{ overflowX: "auto" }}
         >
@@ -421,7 +431,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
             onClick={() => setPeopleModalTab("people")}
           >
             <Users size={13} />
-            <span>Members ({effectivePeople.length})</span>
+            <span>{t("people.membersTab", { count: effectivePeople.length })}</span>
           </button>
           <button
             type="button"
@@ -434,7 +444,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
             onClick={() => setPeopleModalTab("teams")}
           >
             <Layers size={13} />
-            <span>Teams ({teams.length})</span>
+            <span>{t("people.teamsTab", { count: teams.length })}</span>
           </button>
         </div>
 
@@ -451,10 +461,10 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
               {readOnlyNotice || (
                 <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-                    <span style={sectionLabelStyle}>Add Member</span>
+                    <span style={sectionLabelStyle}>{t("people.addMember")}</span>
                     <div
                       role="group"
-                      aria-label="Member type"
+                      aria-label={t("people.memberType")}
                       style={{ display: "flex", background: "var(--jantt-bg)", borderRadius: "6px", padding: "2px", border: "1px solid var(--jantt-border)" }}
                     >
                       <button
@@ -463,7 +473,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                         onClick={() => setMemberMode("search")}
                         style={segmentButtonStyle(memberMode === "search")}
                       >
-                        Jantt Account
+                        {t("people.janttAccount")}
                       </button>
                       <button
                         type="button"
@@ -471,7 +481,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                         onClick={() => setMemberMode("custom")}
                         style={segmentButtonStyle(memberMode === "custom")}
                       >
-                        Name Only (No Account)
+                        {t("people.nameOnly")}
                       </button>
                     </div>
                   </div>
@@ -487,8 +497,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                           style={{ ...fieldStyle, width: "100%", padding: "8px 12px 8px 34px" }}
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search Jantt users by @username"
-                          aria-label="Search Jantt users by username"
+                          placeholder={t("people.searchPlaceholder")}
+                          aria-label={t("people.searchAria")}
                           autoComplete="off"
                           spellCheck={false}
                         />
@@ -496,25 +506,25 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
 
                       <div aria-live="polite" style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)", marginTop: "6px" }}>
                         {searchQuery.trim().length > 0 && searchTerm.length < MIN_SEARCH_CHARS && (
-                          <span>Type at least {MIN_SEARCH_CHARS} characters to search.</span>
+                          <span>{t("people.minChars", { count: MIN_SEARCH_CHARS })}</span>
                         )}
-                        {isSearching && <span>Searching registered accounts...</span>}
+                        {isSearching && <span>{t("people.searching")}</span>}
                         {showNoMatch && (
                           <span>
-                            No Jantt account found for &quot;{searchTerm}&quot;. Use &quot;Name Only&quot; to add someone without an account.
+                            {t("people.noAccount", { term: searchTerm })}
                           </span>
                         )}
                         {searchError && !isSearching && (
                           <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#EF4444" }}>
                             <AlertTriangle size={12} />
-                            <span>Search is unavailable right now.</span>
+                            <span>{t("people.searchUnavailable")}</span>
                             <button
                               type="button"
                               className="btn-nav"
                               style={{ height: "22px", padding: "0 8px", fontSize: "11px" }}
                               onClick={() => setSearchAttempt((n) => n + 1)}
                             >
-                              Retry
+                              {t("people.retry")}
                             </button>
                           </span>
                         )}
@@ -522,7 +532,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
 
                       {searchResults.length > 0 && (
                         <ul
-                          aria-label="Matching accounts"
+                          aria-label={t("people.matchingAccounts")}
                           style={{
                             listStyle: "none",
                             margin: "8px 0 0 0",
@@ -567,7 +577,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                 {alreadyAdded ? (
                                   <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)", display: "inline-flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
                                     <Check size={12} />
-                                    Already a member
+                                    {t("people.alreadyMember")}
                                   </span>
                                 ) : (
                                   <button
@@ -580,10 +590,10 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                       onAddRealTeammate({ ...usr, photoURL: getTrustedAvatarUrl(usr.photoURL) ?? undefined });
                                       setSearchQuery("");
                                     }}
-                                    aria-label={`Add @${usr.username} to this plan`}
+                                    aria-label={t("people.addUserAria", { username: usr.username })}
                                   >
                                     <Plus size={12} />
-                                    <span>Add</span>
+                                    <span>{t("people.add")}</span>
                                   </button>
                                 )}
                               </li>
@@ -604,8 +614,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                           onKeyDown={(e) => {
                             if (e.key === "Enter") submitPerson();
                           }}
-                          placeholder="Full name (e.g. Alex Morgan)"
-                          aria-label="Member name"
+                          placeholder={t("people.namePlaceholder")}
+                          aria-label={t("people.nameAria")}
                           aria-invalid={personNameTaken}
                           aria-describedby={personNameTaken ? "people-name-taken" : undefined}
                         />
@@ -618,8 +628,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                           onKeyDown={(e) => {
                             if (e.key === "Enter") submitPerson();
                           }}
-                          placeholder="Role (optional)"
-                          aria-label="Member role (optional)"
+                          placeholder={t("people.rolePlaceholder")}
+                          aria-label={t("people.roleAria")}
                         />
                         {teams.length > 0 && (
                           <select
@@ -634,11 +644,11 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                             }}
                             value={newPersonTeamId}
                             onChange={(e) => setNewPersonTeamId(e.target.value)}
-                            aria-label="Member team"
+                            aria-label={t("people.teamAria")}
                           >
-                            <option value="">No team</option>
+                            <option value="">{t("people.noTeam")}</option>
                             {teams.map((tm) => (
-                              <option key={tm.id} value={tm.id}>Team: {tm.name}</option>
+                              <option key={tm.id} value={tm.id}>{t("people.teamOption", { name: tm.name })}</option>
                             ))}
                           </select>
                         )}
@@ -650,12 +660,12 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                           disabled={!canAddPerson}
                         >
                           <Plus size={14} />
-                          <span>Add Member</span>
+                          <span>{t("people.addMember")}</span>
                         </button>
                       </div>
                       {personNameTaken && (
                         <div id="people-name-taken" style={{ fontSize: "11.5px", color: "#F59E0B", marginTop: "6px" }}>
-                          A member named &quot;{trimmedPersonName}&quot; already exists in this plan.
+                          {t("people.nameTaken", { name: trimmedPersonName })}
                         </div>
                       )}
                     </div>
@@ -666,7 +676,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
               {/* People List */}
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
-                  <span style={sectionLabelStyle}>Current Members ({effectivePeople.length})</span>
+                  <span style={sectionLabelStyle}>{t("people.currentMembers", { count: effectivePeople.length })}</span>
                   {effectivePeople.length > people.length && (
                     <button
                       type="button"
@@ -674,9 +684,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                       style={{ height: "24px", padding: "0 10px", fontSize: "10.5px", ...disabledLook(readOnly) }}
                       onClick={handlePersistAllPeople}
                       disabled={readOnly}
-                      title={readOnly ? VIEW_ONLY_TITLE : "Save every detected assignee into the plan's member list"}
+                      title={readOnly ? t("people.viewOnlyHint") : t("people.saveAllTitle")}
                     >
-                      Save All Detected
+                      {t("people.saveAll")}
                     </button>
                   )}
                 </div>
@@ -701,13 +711,12 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                     <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                       <Lightbulb size={14} style={{ color: "var(--jantt-accent)", flexShrink: 0 }} />
                       <span>
-                        <strong>{pluralize(effectivePeople.length - people.length, "assignee")}</strong> detected from task
-                        assignees, the project lead and document owners.
+                        <strong>{pluralAssignees(effectivePeople.length - people.length)}</strong> {t("people.detectedAfter")}
                       </span>
                     </span>
                     {!readOnly && (
                       <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                        Save them to keep a role, team and avatar.
+                        {t("people.saveHint")}
                       </span>
                     )}
                   </div>
@@ -716,9 +725,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                 {effectivePeople.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "28px 16px", background: "var(--jantt-surface)", border: "1px dashed var(--jantt-border)", borderRadius: "10px", color: "var(--jantt-text-muted)" }}>
                     <Users size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
-                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No members yet.</p>
+                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>{t("people.noMembers")}</p>
                     {!readOnly && (
-                      <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Add members above to assign tasks and filter views by person.</p>
+                      <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>{t("people.noMembersHint")}</p>
                     )}
                   </div>
                 ) : (
@@ -767,7 +776,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                       alignItems: "center",
                                       gap: "3px"
                                     }}
-                                    title="Linked Jantt account"
+                                    title={t("people.linkedAccount")}
                                   >
                                     <UserCheck size={10} />
                                     {username.startsWith("@") ? username : `@${username}`}
@@ -781,9 +790,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                       padding: "1px 5px",
                                       borderRadius: "4px"
                                     }}
-                                    title="Name only, not linked to a Jantt account"
+                                    title={t("people.nameOnlyTitle")}
                                   >
-                                    No account
+                                    {t("people.noAccountBadge")}
                                   </span>
                                 )}
                                 {p.isInferred && (
@@ -797,9 +806,9 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                       borderRadius: "100px",
                                       border: "1px solid rgba(56, 189, 248, 0.25)"
                                     }}
-                                    title="Detected from task assignees, the project lead or document owners; not saved as a member yet"
+                                    title={t("people.detectedTitle")}
                                   >
-                                    Detected
+                                    {t("people.detected")}
                                   </span>
                                 )}
                                 {memberTeam && (
@@ -837,7 +846,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                 color: assignedCount > 0 ? "var(--jantt-accent)" : "var(--jantt-text-muted)"
                               }}
                             >
-                              {pluralize(assignedCount, "task")}
+                              {pluralTasks(assignedCount)}
                             </span>
                             {p.isInferred ? (
                               <button
@@ -854,10 +863,10 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                   gap: "4px",
                                   ...disabledLook(readOnly)
                                 }}
-                                title={readOnly ? VIEW_ONLY_TITLE : `Save ${p.name} as a member of this plan`}
+                                title={readOnly ? t("people.viewOnlyHint") : t("people.saveAsMemberTitle", { name: p.name })}
                               >
                                 <Plus size={11} />
-                                <span>Save as Member</span>
+                                <span>{t("people.saveAsMember")}</span>
                               </button>
                             ) : (
                               <button
@@ -865,8 +874,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                 onClick={() => setPendingRemoval({ kind: "person", person: p })}
                                 disabled={readOnly}
                                 style={{ ...iconButtonStyle, ...disabledLook(readOnly) }}
-                                title={readOnly ? VIEW_ONLY_TITLE : `Remove ${p.name}`}
-                                aria-label={`Remove ${p.name}`}
+                                title={readOnly ? t("people.viewOnlyHint") : t("people.removeTitle", { name: p.name })}
+                                aria-label={t("people.removeTitle", { name: p.name })}
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -884,7 +893,7 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
               {/* Add New Team Box; view-only rooms get the notice instead */}
               {readOnlyNotice || (
                 <div style={{ background: "var(--jantt-surface)", border: "1px solid var(--jantt-border)", borderRadius: "10px", padding: "14px" }}>
-                  <span style={{ ...sectionLabelStyle, marginBottom: "8px" }}>Add Team</span>
+                  <span style={{ ...sectionLabelStyle, marginBottom: "8px" }}>{t("people.addTeam")}</span>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                     <input
                       type="text"
@@ -895,8 +904,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                       onKeyDown={(e) => {
                         if (e.key === "Enter") submitTeam();
                       }}
-                      placeholder="Team name (e.g. Core Engineering)"
-                      aria-label="Team name"
+                      placeholder={t("people.teamNamePlaceholder")}
+                      aria-label={t("people.teamNameAria")}
                       aria-invalid={teamNameTaken}
                       aria-describedby={teamNameTaken ? "team-name-taken" : undefined}
                     />
@@ -913,8 +922,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                       }}
                       value={newTeamColor}
                       onChange={(e) => setNewTeamColor(e.target.value)}
-                      title="Team color"
-                      aria-label="Team color"
+                      title={t("people.teamColor")}
+                      aria-label={t("people.teamColor")}
                     />
                     <input
                       type="text"
@@ -925,8 +934,8 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                       onKeyDown={(e) => {
                         if (e.key === "Enter") submitTeam();
                       }}
-                      placeholder="Description (optional)"
-                      aria-label="Team description (optional)"
+                      placeholder={t("people.teamDescPlaceholder")}
+                      aria-label={t("people.teamDescAria")}
                     />
                     <button
                       type="button"
@@ -936,12 +945,12 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                       disabled={!canAddTeam}
                     >
                       <Plus size={14} />
-                      <span>Add Team</span>
+                      <span>{t("people.addTeam")}</span>
                     </button>
                   </div>
                   {teamNameTaken && (
                     <div id="team-name-taken" style={{ fontSize: "11.5px", color: "#F59E0B", marginTop: "6px" }}>
-                      A team named &quot;{trimmedTeamName}&quot; already exists.
+                      {t("people.teamNameTaken", { name: trimmedTeamName })}
                     </div>
                   )}
                 </div>
@@ -949,13 +958,13 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
 
               {/* Teams List */}
               <div>
-                <span style={{ ...sectionLabelStyle, marginBottom: "8px" }}>Current Teams ({teams.length})</span>
+                <span style={{ ...sectionLabelStyle, marginBottom: "8px" }}>{t("people.currentTeams", { count: teams.length })}</span>
                 {teams.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "28px 16px", background: "var(--jantt-surface)", border: "1px dashed var(--jantt-border)", borderRadius: "10px", color: "var(--jantt-text-muted)" }}>
                     <Layers size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
-                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>No teams yet.</p>
+                    <p style={{ margin: 0, fontSize: "13px", fontWeight: 500 }}>{t("people.noTeams")}</p>
                     {!readOnly && (
-                      <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>Create teams above to group members and filter schedules by team.</p>
+                      <p style={{ margin: "4px 0 0 0", fontSize: "11.5px" }}>{t("people.noTeamsHint")}</p>
                     )}
                   </div>
                 ) : (
@@ -1018,15 +1027,15 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
                                 color: "var(--jantt-accent)"
                               }}
                             >
-                              {pluralize(memberCount, "member")}
+                              {pluralMembers(memberCount)}
                             </span>
                             <button
                               type="button"
                               onClick={() => setPendingRemoval({ kind: "team", team: tm })}
                               disabled={readOnly}
                               style={{ ...iconButtonStyle, ...disabledLook(readOnly) }}
-                              title={readOnly ? VIEW_ONLY_TITLE : `Delete team ${tm.name}`}
-                              aria-label={`Delete team ${tm.name}`}
+                              title={readOnly ? t("people.viewOnlyHint") : t("people.deleteTeamTitleAttr", { name: tm.name })}
+                              aria-label={t("people.deleteTeamTitleAttr", { name: tm.name })}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -1043,11 +1052,11 @@ export const PeopleTeamsModal: React.FC<PeopleTeamsModalProps> = ({
 
         <div className="prompt-modal-footer" style={{ flexWrap: "wrap" }}>
           <span style={{ fontSize: "11.5px", color: "var(--jantt-text-muted)" }}>
-            {readOnly ? "View only: changes can't be saved to this room." : "Changes apply to this plan immediately."}
+            {readOnly ? t("people.footerReadOnly") : t("people.footer")}
           </span>
           <button type="button" className="btn-nav btn-nav-primary" onClick={close}>
             <Check size={14} />
-            <span>Done</span>
+            <span>{t("common.done")}</span>
           </button>
         </div>
       </Modal>

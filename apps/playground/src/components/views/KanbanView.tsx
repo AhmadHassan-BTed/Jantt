@@ -35,17 +35,45 @@ import type {
 import { isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
 import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
+import { useI18n } from "../../i18n/I18nProvider";
+import { formatLocaleDate, type Locale, type MessageKey } from "../../i18n";
 
 /** Workflow statuses offered by every status control (Kanban and Tasks views). */
-export const TASK_STATUS_OPTIONS = [
-  { id: "not-started", label: "To Do" },
-  { id: "in-progress", label: "In Progress" },
-  { id: "blocked", label: "Blocked" },
-  { id: "submitted", label: "In Review" },
-  { id: "completed", label: "Completed" }
-] as const;
+export const TASK_STATUS_OPTIONS: ReadonlyArray<{ id: string; labelKey: MessageKey }> = [
+  { id: "not-started", labelKey: "status.notStarted" },
+  { id: "in-progress", labelKey: "status.inProgress" },
+  { id: "blocked", labelKey: "status.blocked" },
+  { id: "submitted", labelKey: "status.submitted" },
+  { id: "completed", labelKey: "status.completed" }
+];
 
-export type WorkflowStatus = (typeof TASK_STATUS_OPTIONS)[number]["id"];
+export type WorkflowStatus = "not-started" | "in-progress" | "blocked" | "submitted" | "completed";
+
+/** Localized label for a workflow status; unknown values are shown verbatim. */
+export function taskStatusLabel(t: (key: MessageKey) => string, status: string): string {
+  const option = TASK_STATUS_OPTIONS.find((item) => item.id === status);
+  return option ? t(option.labelKey) : status;
+}
+
+const SORT_FIELDS = {
+  priority: "kanban.priority",
+  start: "kanban.startDate",
+  end: "kanban.endDate",
+  wbs: "kanban.wbs",
+  assignee: "kanban.assignee",
+  progress: "kanban.progress",
+  name: "kanban.taskName"
+} as const satisfies Record<KanbanSortField, MessageKey>;
+
+export function taskPriorityLabel(t: (key: MessageKey) => string, priority: string): string {
+  switch (priority) {
+    case "low": return t("timeline.priorityLow");
+    case "medium": return t("timeline.priorityMedium");
+    case "high": return t("timeline.priorityHigh");
+    case "urgent": return t("timeline.priorityUrgent");
+    default: return priority;
+  }
+}
 
 const KNOWN_STATUSES = new Set<string>(TASK_STATUS_OPTIONS.map((o) => o.id));
 
@@ -82,10 +110,10 @@ export function tintColor(color: string, percent: number): string {
   return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
 }
 
-const shortDateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
 const boardSearch = new SearchQueryFilterStage();
 
-export function formatShortRange(start: string, end: string): string {
+/** "Mar 9" / "3月9日": month + day in the active interface language. */
+export function formatShortRange(start: string, end: string, locale: Locale = "en"): string {
   const parse = (value: string) => {
     const date = new Date(`${value}T00:00:00Z`);
     return Number.isNaN(date.getTime()) || !/^\d{4}-\d{2}-\d{2}$/.test(value) || date.toISOString().slice(0, 10) !== value
@@ -95,11 +123,15 @@ export function formatShortRange(start: string, end: string): string {
   const a = parse(start);
   const b = parse(end);
   if (!a || !b) return start === end ? start : `${start} - ${end}`;
-  const fmt = (date: Date) => shortDateFormatter.format(date);
+  const fmt = (date: Date) => formatLocaleDate(date, locale, { month: "short", day: "numeric", timeZone: "UTC" });
   if (start === end) return fmt(a);
-  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth()
-    ? `${fmt(a).replace(/\s\d+$/, "")} ${a.getUTCDate()}–${b.getUTCDate()}`
-    : `${fmt(a)}-${fmt(b)}`;
+  if (a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth()) {
+    // Same month: drop the repeated month, e.g. "Mar 9–12" / "3月9日–12日".
+    return locale === "zh-CN"
+      ? `${a.getUTCMonth() + 1}月${a.getUTCDate()}日–${b.getUTCDate()}日`
+      : `${formatLocaleDate(a, locale, { month: "short", timeZone: "UTC" })} ${a.getUTCDate()}–${b.getUTCDate()}`;
+  }
+  return `${fmt(a)} – ${fmt(b)}`;
 }
 
 export interface TaskStatusSelectProps {
@@ -117,33 +149,36 @@ export const TaskStatusSelect: React.FC<TaskStatusSelectProps> = ({
   disabled = false,
   optionPrefix = "",
   onStatusChange
-}) => (
-  <select
-    className="kanban-status-select"
-    value={value}
-    disabled={disabled}
-    aria-label={`Status of ${task.label || task.name || task.id}`}
-    title={disabled ? "Read-only: make a local copy to change status" : undefined}
-    onClick={(e) => e.stopPropagation()}
-    onKeyDown={(e) => e.stopPropagation()}
-    onChange={(e) => {
-      e.stopPropagation();
-      if (e.target.value !== value) onStatusChange(e.target.value);
-    }}
-  >
-    {!KNOWN_STATUSES.has(value) && (
-      <option value={value} disabled>
-        {value}
-      </option>
-    )}
-    {TASK_STATUS_OPTIONS.map((opt) => (
-      <option key={opt.id} value={opt.id}>
-        {optionPrefix}
-        {opt.label}
-      </option>
-    ))}
-  </select>
-);
+}) => {
+  const { t } = useI18n();
+  return (
+    <select
+      className="kanban-status-select"
+      value={value}
+      disabled={disabled}
+      aria-label={t("kanban.statusOf", { task: task.label || task.name || task.id })}
+      title={disabled ? t("kanban.readOnlyStatus") : undefined}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        e.stopPropagation();
+        if (e.target.value !== value) onStatusChange(e.target.value);
+      }}
+    >
+      {!KNOWN_STATUSES.has(value) && (
+        <option value={value} disabled>
+          {value}
+        </option>
+      )}
+      {TASK_STATUS_OPTIONS.map((opt) => (
+        <option key={opt.id} value={opt.id}>
+          {optionPrefix}
+          {t(opt.labelKey)}
+        </option>
+      ))}
+    </select>
+  );
+};
 
 /** Keyboard activation (Enter / Space) for clickable, non-button containers. */
 export function onActivateKey(action: () => void) {
@@ -180,12 +215,12 @@ interface KanbanViewProps {
   onPromptFork?: () => void;
 }
 
-const KANBAN_COLUMNS: ReadonlyArray<{ id: WorkflowStatus; label: string; shortLabel: string }> = [
-  { id: "not-started", label: "To Do / Not Started", shortLabel: "To Do" },
-  { id: "in-progress", label: "In Progress", shortLabel: "In Progress" },
-  { id: "blocked", label: "Blocked", shortLabel: "Blocked" },
-  { id: "submitted", label: "In Review / Submitted", shortLabel: "Review" },
-  { id: "completed", label: "Completed", shortLabel: "Done" }
+const KANBAN_COLUMNS: ReadonlyArray<{ id: WorkflowStatus; labelKey: MessageKey; shortLabelKey: MessageKey }> = [
+  { id: "not-started", labelKey: "kanban.notStarted", shortLabelKey: "kanban.notStartedShort" },
+  { id: "in-progress", labelKey: "kanban.inProgress", shortLabelKey: "kanban.inProgress" },
+  { id: "blocked", labelKey: "kanban.blocked", shortLabelKey: "kanban.blocked" },
+  { id: "submitted", labelKey: "kanban.submitted", shortLabelKey: "kanban.submittedShort" },
+  { id: "completed", labelKey: "kanban.completed", shortLabelKey: "kanban.completedShort" }
 ];
 
 export const KanbanView: React.FC<KanbanViewProps> = ({
@@ -210,6 +245,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const { t: translate, locale } = useI18n();
   const isPersonFiltering =
     selectedPersonFilter !== "all" && !selectedPersonFilter.startsWith("sort:");
   const isPersonSorting = selectedPersonFilter === "sort:assignee";
@@ -262,8 +298,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     }
     const task = (parsedData.tasks || []).find((t) => t.id === taskId && !t._deleted);
     if (!task || (getKanbanColumn(task) === status && getStatusValue(task) === status)) return;
-    const statusName = TASK_STATUS_OPTIONS.find(option => option.id === status)?.label || status;
-    setMoveAnnouncement(`${task.label || task.name || task.id} moved to ${statusName}`);
+    setMoveAnnouncement(translate("kanban.movedTo", {
+      task: task.label || task.name || task.id,
+      status: taskStatusLabel(translate, status)
+    }));
     triggerHaptic(task.milestone && status === "completed" ? "success" : "light");
     handleChartCommit({ ...parsedData, tasks: applyTaskStatus(parsedData.tasks, taskId, status) });
   };
@@ -330,7 +368,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             disabled={Boolean(searchQuery.trim() && !visibleTasks.length)}
             onClick={() => setMobileActiveCol(col.id)}
           >
-            <span>{col.shortLabel}</span>
+            <span>{translate(col.shortLabelKey)}</span>
             <span className="mobile-kanban-tab-count">{searchQuery.trim() ? visibleTasks.length : hasActiveFilter ? matchingCount : displayTotal}</span>
           </button>
         ))}
@@ -338,38 +376,37 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
       {/* Multi-Sort Bar */}
       {isMobile && <button type="button" className="board-sort-toggle" aria-expanded={sortOpen} onClick={() => setSortOpen(open => !open)}>
-        <SortAsc size={15} />Sort{kanbanSortRules.length > 0 && <span>{kanbanSortRules.map(rule => rule.field).join(", ")}</span>}
+        <SortAsc size={15} />{translate("kanban.sort")}{kanbanSortRules.length > 0 && <span>{kanbanSortRules.map(rule => translate(SORT_FIELDS[rule.field])).join(", ")}</span>}
       </button>}
       {(!isMobile || sortOpen) && <div className="kanban-sort-bar">
         <span className="kanban-sort-label">
           <SortAsc size={12} />
-          {isMobile ? "Sort:" : "Sort by:"}
+          {isMobile ? translate("kanban.sort") : translate("kanban.sortBy")}
         </span>
         {kanbanSortRules.map((rule, idx) => (
           <div key={idx} className="kanban-sort-chip">
             <select
               className="kanban-sort-field-select"
               value={rule.field}
-              aria-label={`Sort rule ${idx + 1} field`}
+              aria-label={translate("kanban.sortFieldAria", { index: idx + 1 })}
               onChange={(e) => {
                 const updated = [...kanbanSortRules];
                 updated[idx] = { ...rule, field: e.target.value as KanbanSortField };
                 setKanbanSortRules(updated);
               }}
             >
-              <option value="priority">Priority</option>
-              <option value="start">Start Date</option>
-              <option value="end">End Date</option>
-              <option value="wbs">WBS</option>
-              <option value="assignee">Assignee</option>
-              <option value="progress">Progress</option>
-              <option value="name">Task Name</option>
+              {Object.entries(SORT_FIELDS).map(([field, key]) => (
+                <option key={field} value={field}>{translate(key)}</option>
+              ))}
             </select>
             <button
               type="button"
               className="kanban-sort-dir-btn"
-              title={rule.direction === "asc" ? "Ascending - click to reverse" : "Descending - click to reverse"}
-              aria-label={`Sort rule ${idx + 1}: ${rule.direction === "asc" ? "ascending" : "descending"}, click to reverse`}
+              title={rule.direction === "asc" ? translate("kanban.ascending") : translate("kanban.descending")}
+              aria-label={translate("kanban.sortRuleAria", {
+                index: idx + 1,
+                direction: rule.direction === "asc" ? translate("kanban.ascendingShort") : translate("kanban.descendingShort")
+              })}
               onClick={() => {
                 const updated = [...kanbanSortRules];
                 updated[idx] = { ...rule, direction: rule.direction === "asc" ? "desc" : "asc" };
@@ -383,8 +420,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
               <button
                 type="button"
                 className="kanban-sort-remove-btn"
-                title="Remove this sort rule"
-                aria-label={`Remove sort rule ${idx + 1}`}
+                title={translate("kanban.removeSortRule")}
+                aria-label={translate("kanban.removeSortRuleAria", { index: idx + 1 })}
                 onClick={() => setKanbanSortRules(kanbanSortRules.filter((_, i) => i !== idx))}
                 style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
@@ -401,18 +438,18 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
           >
             <Plus size={11} />
-            <span>{isMobile ? "Sort" : "Add Sort"}</span>
+            <span>{isMobile ? translate("kanban.sort") : translate("kanban.addSort")}</span>
           </button>
         )}
       </div>}
 
       {/* Kanban Columns */}
       <div className={isFoldable ? "board-split-layout" : "board-column-layout"}>
-      {isFoldable && <aside className="board-master-list" aria-label="Board task list">
+      {isFoldable && <aside className="board-master-list" aria-label={translate("kanban.boardTaskList")}>
         {columns.flatMap(({ col, visibleTasks }) => visibleTasks.map(task =>
           <button key={task.id} type="button" aria-pressed={focusedTask === task.id}
             onClick={() => { setMobileActiveCol(col.id); setFocusedTask(task.id); }}>
-            {task.label || task.name || task.id}<small>{col.shortLabel}</small>
+            {task.label || task.name || task.id}<small>{translate(col.shortLabelKey)}</small>
           </button>
         ))}
       </aside>}
@@ -423,7 +460,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             id={`kanban-col-${col.id}`}
             className="kanban-column"
             role="group"
-            aria-label={`${col.label} column`}
+            aria-label={translate("kanban.columnAria", { column: translate(col.labelKey) })}
             style={
               dropColumn === col.id
                 ? { outline: "2px dashed var(--jantt-accent)", outlineOffset: "-4px" }
@@ -449,15 +486,19 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             }}
           >
             <div className="kanban-col-header">
-              <span className="kanban-col-title">{col.shortLabel}</span>
+              <span className="kanban-col-title">{translate(col.shortLabelKey)}</span>
               <button type="button" className={`kanban-col-count board-wip-limit ${getLimit(col.id) && count > getLimit(col.id)! ? "is-over" : ""}`}
-                aria-label={`${col.shortLabel} work in progress limit, ${count} tasks, ${getLimit(col.id) ?? "unlimited"}`}
-                title={getLimit(col.id) ? `${count} of ${getLimit(col.id)} WIP limit` : "Set work in progress limit"}
+                aria-label={translate("kanban.wipLimitAria", {
+                  column: translate(col.shortLabelKey),
+                  count,
+                  limit: getLimit(col.id) ?? translate("common.unlimited")
+                })}
+                title={getLimit(col.id) ? translate("kanban.wipLimitTitle", { count, limit: getLimit(col.id)! }) : translate("kanban.setWipLimit")}
                 disabled={isViewer} onClick={() => { setLimitDraft(String(getLimit(col.id) ?? "")); setLimitColumn(col.id); }}>
                 {searchQuery.trim() ? visibleTasks.length : hasActiveFilter ? `${matchingCount}/${displayTotal}` : displayTotal}
-                {getLimit(col.id) && <> / {getLimit(col.id)}{count > getLimit(col.id)! && " · over limit"}</>}
+                {getLimit(col.id) && <> / {getLimit(col.id)}{count > getLimit(col.id)! && ` · ${translate("kanban.overLimit")}`}</>}
               </button>
-              {!isViewer && onQuickTask && <button type="button" className="board-column-add" onClick={() => onQuickTask(col.id)} aria-label={`Quick task in ${col.shortLabel}`}>
+              {!isViewer && onQuickTask && <button type="button" className="board-column-add" onClick={() => onQuickTask(col.id)} aria-label={translate("kanban.quickTask", { column: translate(col.shortLabelKey) })}>
                 <Plus size={18} aria-hidden="true" />
               </button>}
             </div>
@@ -476,7 +517,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 const title = t.label || t.name || t.id;
                 const teamColor = sanitizeCssColor(assigneeInfo.team?.color, "var(--jantt-accent)");
-                const shortRange = formatShortRange(t.start, t.end);
+                const shortRange = formatShortRange(t.start, t.end, locale);
                 const editableTitle = <EditableBoardTitle title={title} readOnly={isViewer} mobile={isMobile}
                   onSave={label => {
                     if (isViewer) return;
@@ -502,7 +543,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       <div className="kanban-mobile-row-top">
                         {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
                         {editableTitle}
-                        {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
+                        {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{taskPriorityLabel(translate, t.priority)}</span>}
                       </div>
                       <div className="kanban-mobile-row-bottom">
                         <span className="kanban-mobile-date">{shortRange}</span>
@@ -517,12 +558,12 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                         {isDimmed && (
-                          <span className="task-dimmed-tag" title="Task is dimmed by the active filters">
-                            {isCompletedDimmed ? "Completed" : !isPersonMatch ? "Other Assignee" : "Outside Date"}
+                          <span className="task-dimmed-tag" title={translate("kanban.dimmedByFilters")}>
+                            {isCompletedDimmed ? translate("kanban.dimmedCompleted") : !isPersonMatch ? translate("kanban.dimmedOtherAssignee") : translate("kanban.dimmedOutsideDate")}
                           </span>
                         )}
                         {t.priority && (
-                          <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>
+                          <span className={`kanban-prio-badge is-${t.priority}`}>{taskPriorityLabel(translate, t.priority)}</span>
                         )}
                       </div>
                     </div>
@@ -577,7 +618,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                     {isCompleted ? (
                       <div className="kanban-card-complete-badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                         <Check size={11} />
-                        <span>Done</span>
+                        <span>{translate("common.done")}</span>
                       </div>
                     ) : typeof t.progress === "number" && Number.isFinite(t.progress) ? (
                       <div className="kanban-card-prog-wrap">
@@ -592,7 +633,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                         task={t}
                         value={col.id}
                         disabled={isViewer}
-                        optionPrefix="Move to: "
+                        optionPrefix={translate("kanban.moveTo")}
                         onStatusChange={(status) => moveTask(t.id, status)}
                       />
                     </div>
@@ -604,14 +645,14 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
               })}
               <MoreTaskRows count={visibleTasks.length} limit={page.limit} onMore={page.loadMore} />
               {insertion === visibleTasks.length && placeholder}
-              {!visibleTasks.length && insertion < 0 && <p className="board-empty">{searchQuery.trim() ? "No matching tasks" : "No tasks in this column"}</p>}
+              {!visibleTasks.length && insertion < 0 && <p className="board-empty">{searchQuery.trim() ? translate("kanban.noMatching") : translate("kanban.noTasksColumn")}</p>}
             </div>
           </div>
         ))}
       </div>
       </div>
       {limitColumn && !isViewer && <Modal onClose={() => setLimitColumn(null)} maxWidth={360}>
-        <ModalHeader title="Work in progress limit" />
+        <ModalHeader title={translate("kanban.wipLimit")} />
         <form className="task-action-form" onSubmit={event => {
           event.preventDefault();
           const value = Number(limitDraft);
@@ -622,11 +663,11 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
           handleChartCommit({ ...parsedData, meta: { ...parsedData.meta, kanbanWipLimits: nextLimits } });
           setLimitColumn(null);
         }}>
-          <label>{KANBAN_COLUMNS.find(col => col.id === limitColumn)?.shortLabel} column capacity
-            <input data-autofocus type="number" min={1} step={1} placeholder="Unlimited" value={limitDraft}
+          <label>{translate("kanban.columnCapacity", { column: translate(KANBAN_COLUMNS.find(col => col.id === limitColumn)?.shortLabelKey ?? "kanban.blocked") })}
+            <input data-autofocus type="number" min={1} step={1} placeholder={translate("common.unlimited")} value={limitDraft}
               onChange={event => setLimitDraft(event.target.value)} />
           </label>
-          <button className="btn-nav is-primary" type="submit">Save limit</button>
+          <button className="btn-nav is-primary" type="submit">{translate("kanban.saveLimit")}</button>
         </form>
       </Modal>}
     </div>

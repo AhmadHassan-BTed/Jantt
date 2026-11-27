@@ -50,8 +50,8 @@ export const MAX_DEPENDENCY_LAG_DAYS = 3650;
 
 const DEPENDENCY_TYPES: ReadonlySet<string> = new Set(["FS", "SS", "FF", "SF"]);
 
-// "task-1:SS", "Phase 1 : FF-2d", "t1:FS+3days" (the id may contain anything up to the last ':')
-const TYPED_PATTERN = /^(.+?)\s*:\s*(FS|SS|FF|SF)(?:\s*([+-]\d+)\s*(?:d|days?)?)?$/i;
+// Match only the suffix after the last ':' so scanning the id cannot backtrack over spaces.
+const TYPED_SUFFIX_PATTERN = /^(FS|SS|FF|SF)(?:\s*([+-]\d+)\s*(?:d|days?)?)?$/i;
 // "task-1+2d", "task-1-3days" (a unit suffix is required so "task-1" stays a plain id)
 const OFFSET_DAYS_PATTERN = /^([a-zA-Z0-9_\-.]+?)([+-]\d+)(?:d|days?)$/i;
 // "task-1+4"
@@ -96,12 +96,16 @@ export function inspectDependencyItem(item: unknown, knownIds?: TaskIdLookup): D
     if (!trimmed) return { relation: null };
     if (knownIds?.has(trimmed)) return { relation: makeRelation(trimmed, "FS", undefined) };
 
-    const typed = trimmed.match(TYPED_PATTERN);
-    if (typed) {
-      const type = typed[2].toUpperCase() as DependencyType;
-      if (!typed[3]) return { relation: makeRelation(typed[1], type, undefined) };
-      const { lag, issue } = sanitizeLag(parseInt(typed[3], 10));
-      return { relation: makeRelation(typed[1], type, lag), issue };
+    const colon = trimmed.lastIndexOf(":");
+    if (colon > 0) {
+      const id = trimmed.slice(0, colon).trimEnd();
+      const typed = trimmed.slice(colon + 1).trimStart().match(TYPED_SUFFIX_PATTERN);
+      if (typed && !/[\n\r\u2028\u2029]/.test(id)) {
+        const type = typed[1].toUpperCase() as DependencyType;
+        if (!typed[2]) return { relation: makeRelation(id, type, undefined) };
+        const { lag, issue } = sanitizeLag(parseInt(typed[2], 10));
+        return { relation: makeRelation(id, type, lag), issue };
+      }
     }
 
     const offset = trimmed.match(OFFSET_DAYS_PATTERN) || trimmed.match(PLUS_PATTERN);
@@ -110,7 +114,7 @@ export function inspectDependencyItem(item: unknown, knownIds?: TaskIdLookup): D
       return { relation: makeRelation(offset[1], "FS", lag), issue };
     }
 
-    if (trimmed.includes(":")) {
+    if (colon !== -1) {
       return {
         relation: makeRelation(trimmed, "FS", undefined),
         issue: `Dependency '${trimmed}' does not use a recognised type; expected '<id>:FS', ':SS', ':FF' or ':SF' with an optional lag such as '+2d'.`

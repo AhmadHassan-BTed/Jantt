@@ -11,6 +11,7 @@ import type { DateFilterMode, CompletedFilterMode, ActiveView, EffectivePerson }
 import { STORAGE_KEYS } from "../constants";
 import { sortTasksByAssignee } from "../utils";
 import { storageService } from "../services/storage";
+import { useI18n } from "../i18n/I18nProvider";
 
 /** Date value, range and Dim/Hide behaviour (the mode itself is persisted under STORAGE_KEYS.DATE_FILTER_MODE). */
 const DATE_FILTER_DETAILS_KEY = "jantt_date_filter_details";
@@ -72,6 +73,7 @@ export function useDateFilter({
   effectivePeople = [],
   teams = []
 }: UseDateFilterOptions) {
+  const { t, locale, formatDate } = useI18n();
   const [initialDetails] = useState(loadDateFilterDetails);
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>(initialMode);
   const [dateFilterValue, setDateFilterValue] = useState<string>(initialDetails.value);
@@ -194,18 +196,19 @@ export function useDateFilter({
     return tasks;
   }, [parsedData, completedFilterMode, hasActiveFilter, dateFilterBehavior, isTaskMatchingActiveFilter, isPersonSorting, effectivePeople, teams]);
 
-  const dateFilterActiveSummary = useMemo(() => {
+  const dateFilterActiveSummary = (() => {
     if (dateFilterMode === "all" && !isPersonFiltering && completedFilterMode === "show") return null;
     const total = (parsedData?.tasks || []).filter((t) => !t._deleted).length;
-    const countText = `${matchingTasksCount} of ${total} tasks active`;
+    const countText = t("hooks.dateFilter.summaryCount", { count: matchingTasksCount, total });
+    const displayDate = (date: string) => locale === "en" ? date : formatDate(date, { dateStyle: "medium" });
     let label = "";
 
-    if (dateFilterMode === "today") label = `Today (${getTodayISODate()})`;
-    else if (dateFilterMode === "week") label = `This Week`;
-    else if (dateFilterMode === "date") label = dateFilterValue || "Selected Date";
+    if (dateFilterMode === "today") label = t("hooks.dateFilter.today", { date: displayDate(getTodayISODate()) });
+    else if (dateFilterMode === "week") label = t("hooks.dateFilter.thisWeek");
+    else if (dateFilterMode === "date") label = displayDate(dateFilterValue) || t("hooks.dateFilter.selectedDate");
     else if (dateFilterMode === "range") {
-      const from = dateFilterRangeStart || "Start";
-      const to = dateFilterRangeEnd || "End";
+      const from = displayDate(dateFilterRangeStart) || t("hooks.dateFilter.rangeStart");
+      const to = displayDate(dateFilterRangeEnd) || t("hooks.dateFilter.rangeEnd");
       label = `${from} → ${to}`;
     }
 
@@ -218,25 +221,15 @@ export function useDateFilter({
     }
 
     if (completedFilterMode === "filter") {
-      label = label ? `${label} • Hide Completed` : "Hide Completed";
+      const hideCompleted = t("hooks.dateFilter.hideCompleted");
+      label = label ? `${label} • ${hideCompleted}` : hideCompleted;
     } else if (completedFilterMode === "dim") {
-      label = label ? `${label} • Dim Completed` : "Dim Completed";
+      const dimCompleted = t("hooks.dateFilter.dimCompleted");
+      label = label ? `${label} • ${dimCompleted}` : dimCompleted;
     }
 
     return { label, countText };
-  }, [
-    dateFilterMode,
-    dateFilterValue,
-    dateFilterRangeStart,
-    dateFilterRangeEnd,
-    isPersonFiltering,
-    selectedPersonFilter,
-    completedFilterMode,
-    matchingTasksCount,
-    parsedData,
-    teams,
-    effectivePeople
-  ]);
+  })();
 
   const tasksById = useMemo(() => {
     const map = new Map<string, Task>();

@@ -33,6 +33,8 @@ import {
   type RoomTeam
 } from "../../firebase";
 import { buildRoomViewerUrl, getTrustedAvatarUrl, isValidRoomId } from "../../room-storage";
+import { tGlobal } from "../../i18n";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader, ConfirmDialog } from "../modals/ModalHost";
 
 interface ShareRoomModalProps {
@@ -94,7 +96,7 @@ const sectionLabel: React.CSSProperties = {
 };
 
 function errorText(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : String(err || "Unknown error");
+  return err instanceof Error && err.message ? err.message : String(err || tGlobal("cloud.unknownError"));
 }
 
 function toList<T>(value: unknown, isItem: (item: unknown) => item is T): T[] {
@@ -127,7 +129,7 @@ function membersFromSnapshot(value: unknown): RoomMember[] {
     return {
       uid,
       username,
-      displayName: str(m.displayName)?.trim() || username || "Unknown member",
+      displayName: str(m.displayName)?.trim() || username || tGlobal("cloud.unknownMember"),
       photoURL: str(m.photoURL),
       role: m.role === "owner" || m.role === "editor" ? m.role : "viewer",
       joinedAt: str(m.joinedAt) ?? "",
@@ -208,6 +210,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   activeView,
   selectedThemeId
 }) => {
+  const { t } = useI18n();
   const baseId = useId();
   const [savingForkSetting, setSavingForkSetting] = useState(false);
   const [activeTab, setActiveTab] = useState<ShareTab>("link");
@@ -337,9 +340,9 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
     const q = teamSearchQuery.toLowerCase().trim();
     if (!q) return planTeams;
     return planTeams.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        (typeof t.department === "string" && t.department.toLowerCase().includes(q))
+      (team) =>
+        team.name.toLowerCase().includes(q) ||
+        (typeof team.department === "string" && team.department.toLowerCase().includes(q))
     );
   }, [planTeams, teamSearchQuery]);
 
@@ -353,20 +356,20 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
 
   const close = () => setShow(false);
   const viewLink = validRoomId ? buildRoomViewerUrl(validRoomId, activeView, selectedThemeId) : "";
-  const ownerHandle = meta?.ownerUsername ? `@${meta.ownerUsername}` : "the owner";
+  const ownerHandle = meta?.ownerUsername ? `@${meta.ownerUsername}` : t("cloud.theOwner");
   const title = meta?.title || roomTitle;
 
   const tabs: { id: ShareTab; label: string; icon: React.ReactNode }[] = [
-    { id: "link", label: "Room link", icon: <Globe size={14} aria-hidden="true" /> },
+    { id: "link", label: t("cloud.tabLink"), icon: <Globe size={14} aria-hidden="true" /> },
     ...(isOwner
       ? [
-          { id: "people" as const, label: "Invite people", icon: <UserPlus size={14} aria-hidden="true" /> },
-          { id: "teams" as const, label: "Invite a team", icon: <Layers size={14} aria-hidden="true" /> }
+          { id: "people" as const, label: t("cloud.tabPeople"), icon: <UserPlus size={14} aria-hidden="true" /> },
+          { id: "teams" as const, label: t("cloud.tabTeams"), icon: <Layers size={14} aria-hidden="true" /> }
         ]
       : []),
-    { id: "members", label: `Members (${members.length})`, icon: <Users size={14} aria-hidden="true" /> }
+    { id: "members", label: t("cloud.tabMembers", { count: members.length }), icon: <Users size={14} aria-hidden="true" /> }
   ];
-  const currentTab = tabs.some((t) => t.id === activeTab) ? activeTab : "link";
+  const currentTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : "link";
   const tabId = (tab: ShareTab) => `${baseId}-tab-${tab}`;
   const panelId = `${baseId}-panel`;
 
@@ -376,7 +379,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   };
 
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    const index = tabs.findIndex((t) => t.id === currentTab);
+    const index = tabs.findIndex((tab) => tab.id === currentTab);
     if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
       event.preventDefault();
       const delta = event.key === "ArrowRight" ? 1 : -1;
@@ -392,9 +395,9 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
     try {
       await navigator.clipboard.writeText(viewLink);
       setCopiedLink(true);
-      showToast("Room link copied. Anyone with it can view the plan.");
+      showToast(t("cloud.linkCopiedToast"));
     } catch {
-      showToast("Couldn't copy the link. Select it and copy it manually.", true);
+      showToast(t("cloud.copyLinkFailed"), true);
     }
   };
 
@@ -422,12 +425,15 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
     try {
       await shareRoomWithUser(validRoomId, selectedUser, selectedRole);
       showToast(
-        `Added @${selectedUser.username} as ${selectedRole === "editor" ? "an editor" : "a viewer"}. The room now appears in their "Shared with me" list.`
+        t("cloud.addedUserToast", {
+          username: selectedUser.username,
+          role: selectedRole === "editor" ? t("cloud.roleAnEditor") : t("cloud.roleAViewer")
+        })
       );
       setSelectedUser(null);
       setSearchQuery("");
     } catch (err) {
-      showToast(`Couldn't add @${selectedUser.username}: ${errorText(err)}`, true);
+      showToast(t("cloud.addUserFailed", { username: selectedUser.username, error: errorText(err) }), true);
     } finally {
       setIsSharing(false);
     }
@@ -442,7 +448,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
     );
     const withoutUsername = people.length - people.filter((p) => typeof p.username === "string" && normalizeUsername(p.username)).length;
     if (handles.length === 0) {
-      showToast(`Nobody in "${team.name}" has a username in this plan. Share the room link with them instead.`, true);
+      showToast(t("cloud.teamNoUsernames", { team: team.name }), true);
       return;
     }
 
@@ -465,8 +471,8 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
       if (accounts.length === 0) {
         showToast(
           failedLookups > 0
-            ? `Couldn't look up the people in "${team.name}". Check your connection and try again.`
-            : `Nobody in "${team.name}" has a Jantt account yet. Share the room link with them instead.`,
+            ? t("cloud.teamLookupFailed", { team: team.name })
+            : t("cloud.teamNoAccounts", { team: team.name }),
           true
         );
         return;
@@ -482,17 +488,19 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
       // People who already had access are neither added nor missing.
       const addedText =
         added > 0
-          ? `Added ${added} ${added === 1 ? "person" : "people"} from "${team.name}".`
-          : `Everyone in "${team.name}" with a Jantt account already has access.`;
+          ? t(added === 1 ? "cloud.teamAddedOne" : "cloud.teamAddedMany", { count: added, team: team.name })
+          : t("cloud.teamAllHaveAccess", { team: team.name });
       const missingText =
         missing > 0
-          ? ` ${missing} ${missing === 1 ? "person has" : "people have"} no Jantt account yet; share the room link with them.`
+          ? t(missing === 1 ? "cloud.teamMissingOne" : "cloud.teamMissingMany", { count: missing })
           : "";
       const failedText =
-        failedLookups > 0 ? ` ${failedLookups} ${failedLookups === 1 ? "person" : "people"} couldn't be looked up; try inviting the team again.` : "";
+        failedLookups > 0
+          ? t(failedLookups === 1 ? "cloud.teamFailedOne" : "cloud.teamFailedMany", { count: failedLookups })
+          : "";
       showToast(addedText + missingText + failedText, failedLookups > 0);
     } catch (err) {
-      showToast(`Couldn't add team "${team.name}": ${errorText(err)}`, true);
+      showToast(t("cloud.addTeamFailed", { team: team.name, error: errorText(err) }), true);
     } finally {
       setBusyTeamId(null);
     }
@@ -501,15 +509,15 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   const confirmRemoveTeam = (team: { id: string; name: string }) => {
     if (!validRoomId) return;
     setPendingConfirm({
-      title: `Remove team "${team.name}"?`,
-      message: "People who were added only through this team lose access to the room. People you invited individually keep their access.",
-      confirmLabel: "Remove team",
+      title: t("cloud.removeTeamConfirm", { team: team.name }),
+      message: t("cloud.removeTeamBody"),
+      confirmLabel: t("cloud.removeTeam"),
       onConfirm: async () => {
         try {
           await removeTeamFromRoom(validRoomId, team.id);
-          showToast(`Removed team "${team.name}".`);
+          showToast(t("cloud.teamRemoved", { team: team.name }));
         } catch (err) {
-          showToast(`Couldn't remove the team: ${errorText(err)}`, true);
+          showToast(t("cloud.removeTeamFailed", { error: errorText(err) }), true);
         }
       }
     });
@@ -518,15 +526,15 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
   const confirmRemoveMember = (member: RoomMember) => {
     if (!validRoomId) return;
     setPendingConfirm({
-      title: `Remove ${memberLabel(member)}?`,
-      message: `${memberLabel(member)} will lose access to this room and it disappears from their room list.`,
-      confirmLabel: "Remove",
+      title: t("cloud.removeMemberConfirm", { name: memberLabel(member) }),
+      message: t("cloud.removeMemberBody", { name: memberLabel(member) }),
+      confirmLabel: t("cloud.remove"),
       onConfirm: async () => {
         try {
           await removeMemberFromRoom(validRoomId, member.uid);
-          showToast(`Removed ${memberLabel(member)} from the room.`);
+          showToast(t("cloud.memberRemoved", { name: memberLabel(member) }));
         } catch (err) {
-          showToast(`Couldn't remove ${memberLabel(member)}: ${errorText(err)}`, true);
+          showToast(t("cloud.removeMemberFailed", { name: memberLabel(member), error: errorText(err) }), true);
         }
       }
     });
@@ -536,16 +544,25 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
     if (!validRoomId || member.role === newRole) return;
     try {
       await updateMemberRole(validRoomId, member.uid, newRole);
-      showToast(`${memberLabel(member)} can now ${newRole === "editor" ? "edit" : "only view"} this room.`);
+      showToast(
+        t("cloud.roleChanged", {
+          name: memberLabel(member),
+          role: newRole === "editor" ? t("cloud.roleEdit") : t("cloud.roleViewOnly")
+        })
+      );
     } catch (err) {
-      showToast(`Couldn't change the role: ${errorText(err)}`, true);
+      showToast(t("cloud.roleChangeFailed", { error: errorText(err) }), true);
     }
   };
 
   const counts = [
-    `${members.length} member${members.length === 1 ? "" : "s"}`,
-    typeof meta?.taskCount === "number" ? `${meta.taskCount} task${meta.taskCount === 1 ? "" : "s"}` : null,
-    typeof meta?.noteCount === "number" ? `${meta.noteCount} note${meta.noteCount === 1 ? "" : "s"}` : null
+    t(members.length === 1 ? "cloud.membersOne" : "cloud.membersMany", { count: members.length }),
+    typeof meta?.taskCount === "number"
+      ? t(meta.taskCount === 1 ? "cloud.tasksOne" : "cloud.tasksMany", { count: meta.taskCount })
+      : null,
+    typeof meta?.noteCount === "number"
+      ? t(meta.noteCount === 1 ? "cloud.notesOne" : "cloud.notesMany", { count: meta.noteCount })
+      : null
   ].filter(Boolean);
 
   const listboxId = `${baseId}-results`;
@@ -556,17 +573,17 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
       <Modal onClose={close} maxWidth={640}>
         <ModalHeader
           icon={<Users size={18} />}
-          title={`Share "${title}"`}
+          title={t("cloud.shareTitle", { title })}
           subtitle={
             <>
-              Room <code style={{ color: "var(--jantt-accent)" }}>{roomId}</code> · {counts.join(" · ")}
+              {t("cloud.roomWord")} <code style={{ color: "var(--jantt-accent)" }}>{roomId}</code> · {counts.join(" · ")}
             </>
           }
         />
 
         <div
           role="tablist"
-          aria-label="Share options"
+          aria-label={t("cloud.shareOptionsAria")}
           style={{
             display: "flex",
             flexWrap: "wrap",
@@ -623,13 +640,13 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
         >
           {!validRoomId ? (
             <p role="alert" style={mutedText}>
-              This room ID is not valid.
+              {t("cloud.invalidRoomId")}
             </p>
           ) : (
             <>
               {loadError && (
                 <p role="alert" style={{ ...mutedText, color: "#F87171", marginBottom: "12px" }}>
-                  Couldn't load the room's members: {loadError}
+                  {t("cloud.loadMembersFailed", { error: loadError })}
                 </p>
               )}
 
@@ -640,19 +657,18 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <Eye size={16} aria-hidden="true" style={{ color: "var(--jantt-accent)" }} />
-                        <strong style={{ fontSize: "0.9rem" }}>Room link</strong>
+                        <strong style={{ fontSize: "0.9rem" }}>{t("cloud.tabLink")}</strong>
                         <span style={{ fontSize: "0.7rem", fontWeight: 700, padding: "2px 7px", borderRadius: "999px", background: "rgba(56, 189, 248, 0.15)", color: "var(--jantt-accent)" }}>
-                          View access
+                          {t("cloud.viewAccess")}
                         </span>
                       </div>
                       <button type="button" onClick={handleCopyLink} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: "0.82rem" }}>
                         {copiedLink ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-                        {copiedLink ? "Copied" : "Copy link"}
+                        {copiedLink ? t("cloud.copied") : t("share.copyLink")}
                       </button>
                     </div>
                     <p style={{ ...mutedText, marginBottom: "10px" }}>
-                      Anyone with this link can view the plan and its live updates, without signing in. The link never
-                      gives edit access.
+                      {t("cloud.linkDesc")}
                     </p>
                     <RoomQr url={viewLink} />
                     {isOwner && <label className="room-fork-setting">
@@ -662,14 +678,14 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                           setSavingForkSetting(true);
                           try {
                             await set(ref(rtdb, `rooms/${validRoomId}/meta/allowViewerForks`), allow);
-                          } catch (error) { showToast(`Could not save the viewer copy setting. ${errorText(error)}`, true); }
+                          } catch (error) { showToast(t("cloud.forkSaveFailed", { error: errorText(error) }), true); }
                           finally { setSavingForkSetting(false); }
                         }} />
-                      <span>Offer viewers a private local copy<small>Controls the copy action in Jantt. People with the link can still read and export the plan.</small></span>
+                      <span>{t("cloud.forkToggle")}<small>{t("cloud.forkToggleHint")}</small></span>
                     </label>}
                     <input
                       readOnly
-                      aria-label="Room link"
+                      aria-label={t("cloud.roomLinkAria")}
                       value={viewLink}
                       onFocus={(e) => e.currentTarget.select()}
                       style={{ ...inputStyle, fontFamily: "var(--jantt-font-mono, monospace)", fontSize: "0.8rem" }}
@@ -679,23 +695,22 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                   <div style={{ ...cardStyle, display: "flex", gap: "10px", alignItems: "flex-start" }}>
                     <Shield size={16} aria-hidden="true" style={{ color: "#34D399", flexShrink: 0, marginTop: "2px" }} />
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }}>
-                      <strong style={{ fontSize: "0.88rem" }}>Who can edit</strong>
+                      <strong style={{ fontSize: "0.88rem" }}>{t("cloud.whoCanEdit")}</strong>
                       {isOwner ? (
                         <>
                           <p style={mutedText}>
-                            Invite teammates by their Jantt username and choose <strong>Can edit</strong>. They edit
-                            after signing in with GitHub; you can change or remove their access any time under Members.
+                            {t("cloud.whoCanEditOwnerBefore")}<strong>{t("cloud.canEdit")}</strong>{t("cloud.whoCanEditOwnerAfter")}
                           </p>
                           <div>
                             <button type="button" className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: "0.82rem" }} onClick={() => setActiveTab("people")}>
-                              <UserPlus size={14} aria-hidden="true" /> Invite people
+                              <UserPlus size={14} aria-hidden="true" /> {t("cloud.tabPeople")}
                             </button>
                           </div>
                         </>
                       ) : (
                         <p style={mutedText}>
-                          Only {ownerHandle} can invite people or change access.
-                          {currentUserProfile ? " Ask them to make you an Editor." : " Sign in with GitHub, then ask them to make you an Editor."}
+                          {t("cloud.onlyOwnerCanInvite", { owner: ownerHandle })}
+                          {currentUserProfile ? t("cloud.askEditor") : t("cloud.askEditorSignIn")}
                         </p>
                       )}
                     </div>
@@ -707,10 +722,10 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
               {currentTab === "people" && isOwner && (
                 <div>
                   <p style={{ ...mutedText, marginBottom: "12px" }}>
-                    Find a teammate by their Jantt username. They must have signed in to Jantt once.
+                    {t("cloud.findTeammate")}
                   </p>
                   <label htmlFor={`${baseId}-search`} style={sectionLabel}>
-                    Username
+                    {t("cloud.usernameLabel")}
                   </label>
                   <div style={{ position: "relative", marginBottom: "14px" }}>
                     <Search size={16} aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--jantt-text-muted)" }} />
@@ -735,13 +750,13 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                       style={{ ...inputStyle, padding: "10px 36px" }}
                     />
                     {isSearching && (
-                      <Loader2 size={16} className="spin-sync-icon" aria-label="Searching" style={{ position: "absolute", right: "12px", top: "50%", marginTop: "-8px", color: "var(--jantt-text-muted)" }} />
+                      <Loader2 size={16} className="spin-sync-icon" aria-label={t("cloud.searchingAria")} style={{ position: "absolute", right: "12px", top: "50%", marginTop: "-8px", color: "var(--jantt-text-muted)" }} />
                     )}
                     {showResults && (
                       <ul
                         id={listboxId}
                         role="listbox"
-                        aria-label="Matching users"
+                        aria-label={t("cloud.matchingUsers")}
                         style={{
                           position: "absolute",
                           top: "calc(100% + 4px)",
@@ -790,12 +805,12 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                   </div>
                   {searchError && (
                     <p role="alert" style={{ ...mutedText, color: "#F87171", marginBottom: "12px" }}>
-                      Couldn't search for accounts: {searchError}
+                      {t("cloud.searchFailed", { error: searchError })}
                     </p>
                   )}
                   {!isSearching && !searchError && searchQuery.trim() && !selectedUser && searchResults.length === 0 && (
                     <p style={{ ...mutedText, marginBottom: "12px" }}>
-                      No matching account that isn't already a member. People without a Jantt account can view with the room link.
+                      {t("cloud.noMatches")}
                     </p>
                   )}
 
@@ -810,7 +825,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <label htmlFor={`${baseId}-role`} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
-                          Access for @{selectedUser.username}
+                          {t("cloud.accessForUser", { username: selectedUser.username })}
                         </label>
                         <select
                           id={`${baseId}-role`}
@@ -819,11 +834,11 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                           className="select-input"
                           style={{ padding: "6px 10px", fontSize: "0.82rem" }}
                         >
-                          <option value="editor">Can edit</option>
-                          <option value="viewer">Can view</option>
+                          <option value="editor">{t("cloud.canEdit")}</option>
+                          <option value="viewer">{t("cloud.canView")}</option>
                         </select>
                         <button type="button" onClick={handleShareWithSelectedUser} disabled={isSharing} className="btn btn-primary" style={{ padding: "7px 14px", fontSize: "0.85rem" }}>
-                          {isSharing ? <Loader2 size={14} className="spin-sync-icon" aria-hidden="true" /> : <UserPlus size={14} aria-hidden="true" />} Add
+                          {isSharing ? <Loader2 size={14} className="spin-sync-icon" aria-hidden="true" /> : <UserPlus size={14} aria-hidden="true" />} {t("cloud.add")}
                         </button>
                       </div>
                     </div>
@@ -835,38 +850,37 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
               {currentTab === "teams" && isOwner && (
                 <div>
                   <p style={{ ...mutedText, marginBottom: "12px" }}>
-                    Invite everyone in one of this room's teams. People are matched to Jantt accounts by the username in
-                    their People &amp; Teams entry; anyone without an account can still view with the room link.
+                    {t("cloud.teamsDesc")}
                   </p>
                   <div style={{ marginBottom: "14px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
                     <div style={{ position: "relative", flex: "1 1 220px" }}>
                       <Search size={16} aria-hidden="true" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--jantt-text-muted)" }} />
                       <input
                         type="search"
-                        aria-label="Filter teams"
-                        placeholder="Filter teams…"
+                        aria-label={t("cloud.filterTeamsAria")}
+                        placeholder={t("cloud.filterTeamsPlaceholder")}
                         value={teamSearchQuery}
                         onChange={(e) => setTeamSearchQuery(e.target.value)}
                         style={{ ...inputStyle, paddingLeft: "36px" }}
                       />
                     </div>
                     <select
-                      aria-label="Access for invited team members"
+                      aria-label={t("cloud.teamAccessAria")}
                       value={selectedTeamRole}
                       onChange={(e) => setSelectedTeamRole(e.target.value as "editor" | "viewer")}
                       className="select-input"
                       style={{ padding: "6px 10px", fontSize: "0.82rem" }}
                     >
-                      <option value="editor">Add as editors</option>
-                      <option value="viewer">Add as viewers</option>
+                      <option value="editor">{t("cloud.addAsEditors")}</option>
+                      <option value="viewer">{t("cloud.addAsViewers")}</option>
                     </select>
                   </div>
 
                   {filteredTeams.length === 0 ? (
                     <p style={{ ...mutedText, textAlign: "center", padding: "24px 10px" }}>
                       {planTeams.length === 0
-                        ? "This room's plan has no teams yet. Create teams under People & Teams first."
-                        : "No team matches the filter."}
+                        ? t("cloud.noTeams")
+                        : t("cloud.noTeamMatch")}
                     </p>
                   ) : (
                     <ul style={{ display: "flex", flexDirection: "column", gap: "10px", margin: 0, padding: 0, listStyle: "none" }}>
@@ -882,18 +896,18 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                   <strong style={{ fontSize: "0.9rem" }}>{team.name}</strong>
                                   {isAdded && (
-                                    <span style={{ fontSize: "0.68rem", padding: "1px 6px", borderRadius: "10px", background: "#10B981", color: "#FFFFFF", fontWeight: 700 }}>Added</span>
+                                    <span style={{ fontSize: "0.68rem", padding: "1px 6px", borderRadius: "10px", background: "#10B981", color: "#FFFFFF", fontWeight: 700 }}>{t("cloud.added")}</span>
                                   )}
                                 </div>
                                 <div style={{ fontSize: "0.78rem", color: "var(--jantt-text-muted)" }}>
-                                  {memberCount} {memberCount === 1 ? "person" : "people"}
+                                  {t(memberCount === 1 ? "cloud.peopleOne" : "cloud.peopleMany", { count: memberCount })}
                                   {typeof team.department === "string" && team.department ? ` · ${team.department}` : ""}
                                 </div>
                               </div>
                             </div>
                             {isAdded ? (
                               <button type="button" onClick={() => confirmRemoveTeam(team)} className="btn btn-secondary" style={{ fontSize: "0.78rem", padding: "5px 10px", color: "#EF4444" }}>
-                                Remove team
+                                {t("cloud.removeTeam")}
                               </button>
                             ) : (
                               <button
@@ -903,7 +917,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                                 className="btn btn-primary"
                                 style={{ fontSize: "0.8rem", padding: "6px 12px" }}
                               >
-                                {isBusy ? <Loader2 size={13} className="spin-sync-icon" aria-hidden="true" /> : <Layers size={13} aria-hidden="true" />} Invite team
+                                {isBusy ? <Loader2 size={13} className="spin-sync-icon" aria-hidden="true" /> : <Layers size={13} aria-hidden="true" />} {t("cloud.inviteTeam")}
                               </button>
                             )}
                           </li>
@@ -917,25 +931,25 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
               {/* MEMBERS */}
               {currentTab === "members" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {!isOwner && <p style={{ ...mutedText, marginBottom: "6px" }}>Only {ownerHandle} can change access.</p>}
+                  {!isOwner && <p style={{ ...mutedText, marginBottom: "6px" }}>{t("cloud.onlyOwnerCanChange", { owner: ownerHandle })}</p>}
 
                   {roomTeams.length > 0 && (
                     <div style={{ marginBottom: "10px" }}>
-                      <div style={sectionLabel}>Teams ({roomTeams.length})</div>
+                      <div style={sectionLabel}>{t("cloud.teamsCount", { count: roomTeams.length })}</div>
                       <ul style={{ display: "flex", flexWrap: "wrap", gap: "8px", margin: 0, padding: 0, listStyle: "none" }}>
                         {roomTeams.map((rt) => (
                           <li key={rt.id} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "5px 10px", borderRadius: "8px", background: "rgba(56, 189, 248, 0.1)", border: "1px solid rgba(56, 189, 248, 0.25)" }}>
                             <span aria-hidden="true" style={{ width: "8px", height: "8px", borderRadius: "50%", background: teamColor(rt.color) }} />
                             <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>{rt.name}</span>
                             <span style={{ fontSize: "0.72rem", color: "var(--jantt-text-muted)" }}>
-                              {rt.memberUids?.length || 0} {rt.memberUids?.length === 1 ? "person" : "people"}
+                              {t((rt.memberUids?.length || 0) === 1 ? "cloud.peopleOne" : "cloud.peopleMany", { count: rt.memberUids?.length || 0 })}
                             </span>
                             {isOwner && (
                               <button
                                 type="button"
                                 onClick={() => confirmRemoveTeam(rt)}
-                                aria-label={`Remove team ${rt.name}`}
-                                title="Remove team"
+                                aria-label={t("cloud.removeTeamAria", { name: rt.name })}
+                                title={t("cloud.removeTeam")}
                                 style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: "0 2px", display: "inline-flex" }}
                               >
                                 <X size={12} aria-hidden="true" />
@@ -947,12 +961,16 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                     </div>
                   )}
 
-                  <div style={sectionLabel}>People ({members.length})</div>
+                  <div style={sectionLabel}>{t("cloud.peopleCount", { count: members.length })}</div>
                   <ul style={{ display: "flex", flexDirection: "column", gap: "8px", margin: 0, padding: 0, listStyle: "none" }}>
                     {sortedMembers.map((member) => {
                       const isRoomOwnerRow = member.uid === meta?.ownerUid;
                       const isMe = member.uid === currentUid;
-                      const roleLabel = isRoomOwnerRow ? "Owner" : member.role === "editor" ? "Editor" : "Viewer";
+                      const roleLabel = isRoomOwnerRow
+                        ? t("share.roleOwner")
+                        : member.role === "editor"
+                        ? t("share.roleEditor")
+                        : t("share.roleViewer");
                       return (
                         <li key={member.uid} style={{ ...cardStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", padding: "10px 14px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
@@ -960,7 +978,7 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                             <div style={{ minWidth: 0 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                 <strong style={{ fontSize: "0.88rem" }}>{member.displayName || member.username}</strong>
-                                {isMe && <span style={{ fontSize: "0.7rem", color: "var(--jantt-accent)", fontWeight: 700 }}>(you)</span>}
+                                {isMe && <span style={{ fontSize: "0.7rem", color: "var(--jantt-accent)", fontWeight: 700 }}>{t("cloud.you")}</span>}
                                 {member.teamName && (
                                   <span style={{ fontSize: "0.68rem", padding: "1px 5px", borderRadius: "4px", background: "rgba(99, 102, 241, 0.15)", color: "#818CF8" }}>
                                     {member.teamName}
@@ -976,26 +994,26 @@ export const ShareRoomModal: React.FC<ShareRoomModalProps> = ({
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             {isRoomOwnerRow ? (
                               <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "0.75rem", fontWeight: 700, color: "#F59E0B", padding: "3px 8px", borderRadius: "6px", background: "rgba(245, 158, 11, 0.15)" }}>
-                                <Crown size={12} aria-hidden="true" /> Owner
+                                <Crown size={12} aria-hidden="true" /> {t("share.roleOwner")}
                               </span>
                             ) : isOwner ? (
                               <>
                                 <select
-                                  aria-label={`Access for ${memberLabel(member)}`}
+                                  aria-label={t("cloud.accessForMember", { name: memberLabel(member) })}
                                   value={member.role === "editor" ? "editor" : "viewer"}
                                   onChange={(e) => handleRoleChange(member, e.target.value as "editor" | "viewer")}
                                   className="select-input"
                                   style={{ padding: "4px 8px", fontSize: "0.78rem" }}
                                 >
-                                  <option value="editor">Can edit</option>
-                                  <option value="viewer">Can view</option>
+                                  <option value="editor">{t("cloud.canEdit")}</option>
+                                  <option value="viewer">{t("cloud.canView")}</option>
                                 </select>
                                 <button
                                   type="button"
                                   onClick={() => confirmRemoveMember(member)}
                                   className="btn btn-secondary"
-                                  aria-label={`Remove ${memberLabel(member)} from the room`}
-                                  title="Remove from room"
+                                  aria-label={t("cloud.removeMemberAria", { name: memberLabel(member) })}
+                                  title={t("cloud.removeFromRoom")}
                                   style={{ color: "#EF4444", padding: "6px 8px" }}
                                 >
                                   <Trash2 size={13} aria-hidden="true" />

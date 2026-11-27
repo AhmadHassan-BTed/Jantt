@@ -385,8 +385,8 @@ function readBoot(html: string) {
 }
 
 /** Starts `jantt open <file>` on a free loopback port and resolves once it prints its URL. */
-function startViewer(file: string) {
-  const child = spawn(process.execPath, [cliPath, "open", file, "--port", "0", "--no-open"], { env: childEnv });
+function startViewer(file: string, ...flags: string[]) {
+  const child = spawn(process.execPath, [cliPath, "open", file, "--port", "0", "--no-open", ...flags], { env: childEnv });
   const port = new Promise<number>((resolve, reject) => {
     let out = "";
     const timer = setTimeout(() => reject(new Error(`server did not start: ${out}`)), 10000);
@@ -432,6 +432,18 @@ describe("jantt open (local viewer server)", () => {
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
     expect(res.headers["content-security-policy"]).toContain("script-src 'self' 'nonce-");
     expect(res.body).toContain('src="/assets/jantt.standalone.js"');
+  });
+
+  it("opens the viewer and sync controls in the configured language", async () => {
+    const viewer = startViewer(planFile, "--locale", "zh-CN");
+    try {
+      const res = await request(await viewer.port);
+      expect(res.body).toContain('<html lang="zh-CN">');
+      expect(res.body).toContain("已与磁盘同步");
+      expect(readBoot(res.body)).toMatchObject({ locale: "zh-CN" });
+    } finally {
+      viewer.child.kill();
+    }
   });
 
   it("escapes plan data so labels cannot break out of the script element", async () => {

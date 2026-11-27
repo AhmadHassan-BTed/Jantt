@@ -15,6 +15,13 @@ import { Task } from "../src/types";
 
 describe("Enterprise 4-Type Dependency & Lead/Lag Engine", () => {
   describe("parseDependencyRelation", () => {
+    it("keeps colons inside task IDs and parses only the final typed suffix", () => {
+      expect(parseDependencyRelation("phase:design  : ff -2 day")).toEqual({
+        id: "phase:design", type: "FF", lagDays: -2, explicitLag: true
+      });
+      expect(parseDependencyRelation("phase:design:unknown")?.id).toBe("phase:design:unknown");
+    });
+
     it("parses classic string id as default FS with 0 lag", () => {
       const rel = parseDependencyRelation("task-1");
       expect(rel).toEqual({ id: "task-1", type: "FS", lagDays: 0 });

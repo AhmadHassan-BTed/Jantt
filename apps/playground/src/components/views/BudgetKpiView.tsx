@@ -34,6 +34,8 @@ import {
 } from "@jantt/core";
 import type { SummarySortConfig, CompletedFilterMode, EffectivePerson } from "../../types";
 import { isTaskMatchingPersonFilter } from "../../utils";
+import { useI18n } from "../../i18n/I18nProvider";
+import { tGlobal, type MessageKey, type MessageParams } from "../../i18n";
 import { ResourceLevelingPanel } from "./ResourceLevelingPanel";
 import "./health.css";
 import { EvmKpiCards, formatMoney, getPlanCurrency } from "./EvmKpiCards";
@@ -70,41 +72,43 @@ interface BudgetKpiViewProps {
 
 type QuickFilter = "all" | "ready" | "blocked" | "bottleneck";
 
-const QUICK_FILTER_LABELS: Record<Exclude<QuickFilter, "all">, string> = {
-  ready: "Ready to Start",
-  blocked: "Blocked",
-  bottleneck: "Critical Bottlenecks"
+type Translator = (key: MessageKey, params?: MessageParams) => string;
+
+const QUICK_FILTER_LABELS: Record<Exclude<QuickFilter, "all">, MessageKey> = {
+  ready: "health.budget.filterReady",
+  blocked: "health.budget.filterBlocked",
+  bottleneck: "health.budget.filterBottleneck"
 };
 
 /**
  * Total-float label driven by the float value itself (never by the critical flag), so
  * negative float (target breached) and positive float on the least-float path stay visible.
  */
-export function formatFloatLabel(totalFloat: number): string {
-  if (totalFloat < 0) return `${Math.abs(totalFloat)}d past target`;
-  if (totalFloat === 0) return "0d (Bottleneck)";
-  return `${totalFloat}d buffer`;
+export function formatFloatLabel(totalFloat: number, t: Translator = tGlobal): string {
+  if (totalFloat < 0) return t("health.shared.floatPastTarget", { days: Math.abs(totalFloat) });
+  if (totalFloat === 0) return t("health.shared.floatBottleneck");
+  return t("health.shared.floatBuffer", { days: totalFloat });
 }
 
-function describeFloatForPeople(totalFloat: number): string {
+function describeFloatForPeople(totalFloat: number, t: Translator): string {
   if (totalFloat < 0) {
-    return `Planned to finish ${Math.abs(totalFloat)} day(s) after the target date unless it is recovered`;
+    return t("health.budget.floatDescPastTarget", { days: Math.abs(totalFloat) });
   }
-  if (totalFloat === 0) return "No slack: any delay to this task delays the project finish";
-  return `Can slip by ${totalFloat} day(s) without delaying the project finish`;
+  if (totalFloat === 0) return t("health.budget.floatDescZero");
+  return t("health.budget.floatDescBuffer", { days: totalFloat });
 }
 
-const SORTABLE_COLUMNS: ReadonlyArray<{ id: string; label: (essential: boolean, currency: string) => string }> = [
+const SORTABLE_COLUMNS: ReadonlyArray<{ id: string; label: (t: Translator, essential: boolean, currency: string) => string }> = [
   { id: "wbs", label: () => "WBS" },
-  { id: "name", label: () => "Task Name" },
-  { id: "category", label: () => "Category" },
-  { id: "assignee", label: () => "Assignee / Team" },
-  { id: "start", label: () => "Start" },
-  { id: "end", label: () => "End" },
-  { id: "buffer", label: (essential) => (essential ? "Wiggle Room" : "Total Float (Slack)") },
-  { id: "budget", label: (_essential, currency) => `Budget (${currency})` },
-  { id: "status", label: () => "Status" },
-  { id: "progress", label: () => "Progress" }
+  { id: "name", label: (t) => t("health.budget.colTaskName") },
+  { id: "category", label: (t) => t("health.budget.colCategory") },
+  { id: "assignee", label: (t) => t("health.budget.colAssignee") },
+  { id: "start", label: (t) => t("health.budget.colStart") },
+  { id: "end", label: (t) => t("health.budget.colEnd") },
+  { id: "buffer", label: (t, essential) => (essential ? t("health.budget.colBufferEssential") : t("health.budget.colBuffer")) },
+  { id: "budget", label: (t, _essential, currency) => t("health.budget.colBudget", { currency }) },
+  { id: "status", label: (t) => t("health.budget.colStatus") },
+  { id: "progress", label: (t) => t("health.budget.colProgress") }
 ];
 
 export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
@@ -126,6 +130,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   onPromptFork,
   onOpenMonteCarlo
 }) => {
+  const { t: tr, locale } = useI18n();
   // Mode switcher: "essential" (simple/hobbyist/team lead) vs "advanced" (senior PM/EVM/audit)
   const [viewMode, setViewMode] = useState<"essential" | "advanced">(() => {
     const saved = storageService.getItem<{ viewMode?: string }>(STORAGE_KEYS.SUMMARY_VIEW_STATE);
@@ -154,7 +159,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   }, [viewMode, quickFilter]);
 
   const currency = getPlanCurrency(parsedData);
-  const money = (val: number) => formatMoney(val, currency);
+  const money = (val: number) => formatMoney(val, currency, false, locale);
   const rawTargetDate = parsedData.meta?.targetDate;
   const targetDate = typeof rawTargetDate === "string" && isValidISODate(rawTargetDate) ? rawTargetDate : undefined;
 
@@ -189,8 +194,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
   }, [usesWorkingDays, planCalendar, planCalendars]);
 
   const audit = useMemo(
-    () => auditScheduleIntegrity(allProjectTasks, cpm, healthOptions),
-    [allProjectTasks, cpm, healthOptions]
+    () => auditScheduleIntegrity(allProjectTasks, cpm, {
+      ...healthOptions,
+      translate: key => tr(`health.diagnostic.${key}`)
+    }),
+    [allProjectTasks, cpm, healthOptions, tr]
   );
 
   // Ready / blocked use the same definition as the EVM engine (whole plan, dangling links ignored),
@@ -310,10 +318,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", width: isMobile ? "100%" : undefined }}>
           {!isMobile && (
             <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--jantt-text)" }}>
-              View Dashboard:
+              {tr("health.budget.viewDashboard")}
             </span>
           )}
-          <div className="summary-mode-tabs" role="group" aria-label="Dashboard detail level">
+          <div className="summary-mode-tabs" role="group" aria-label={tr("health.budget.detailLevelAria")}>
             {(["essential", "advanced"] as const).map((mode) => (
               <button
                 key={mode}
@@ -323,7 +331,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                 className={`summary-mode-tab ${viewMode === mode ? "is-active" : ""}`}
               >
                 {mode === "essential" ? <Sparkles size={13} /> : <BarChart3 size={13} />}
-                <span>{isMobile ? (mode === "essential" ? "Essential" : "Advanced PM") : mode === "essential" ? "Essential (Simple & Visual)" : "Advanced PM (EVM & Audit)"}</span>
+                <span>{isMobile ? (mode === "essential" ? tr("health.budget.essential") : tr("health.budget.advancedPm")) : mode === "essential" ? tr("health.budget.essentialLong") : tr("health.budget.advancedPmLong")}</span>
               </button>
             ))}
           </div>
@@ -332,27 +340,27 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
         {/* Status pill summary & Monte Carlo Trigger */}
         <div className="summary-mode-status">
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-            <span>Pace: <strong style={{ color: evm.scheduleStatus === "ahead" ? "var(--jantt-status-good)" : evm.scheduleStatus === "behind" ? "var(--jantt-status-bad)" : "inherit" }}>{evm.scheduleStatus}</strong></span>
+            <span>{tr("health.budget.pace")} <strong style={{ color: evm.scheduleStatus === "ahead" ? "var(--jantt-status-good)" : evm.scheduleStatus === "behind" ? "var(--jantt-status-bad)" : "inherit" }}>{evm.scheduleStatus}</strong></span>
             <span>•</span>
             {isCostMeasured ? (
-              <span>Spend: <strong style={{ color: evm.costStatus === "under-budget" ? "var(--jantt-status-good)" : evm.costStatus === "over-budget" ? "var(--jantt-status-bad)" : "inherit" }}>{evm.costStatus}</strong></span>
+              <span>{tr("health.budget.spend")} <strong style={{ color: evm.costStatus === "under-budget" ? "var(--jantt-status-good)" : evm.costStatus === "over-budget" ? "var(--jantt-status-bad)" : "inherit" }}>{evm.costStatus}</strong></span>
             ) : (
-              <span title={evm.costDataAvailable ? "No budgeted task reports an actualCost" : "No task has an estimatedCost"}>
-                Spend: <strong>n/a</strong>
+              <span title={evm.costDataAvailable ? tr("health.budget.spendNoActualHint") : tr("health.budget.spendNoEstimateHint")}>
+                {tr("health.budget.spend")} <strong>n/a</strong>
               </span>
             )}
           </div>
 
           {onCommit && <button type="button" className="summary-monte-carlo-btn" aria-expanded={showScenarios}
-            onClick={() => setShowScenarios(open => !open)}><Layers size={14} />Schedule scenarios</button>}
+            onClick={() => setShowScenarios(open => !open)}><Layers size={14} />{tr("health.budget.scheduleScenarios")}</button>}
           <button
             type="button"
             onClick={openMonteCarlo}
             className="summary-monte-carlo-btn"
-            title="Run Monte Carlo Probabilistic Risk Simulation (2,000+ iterations)"
+            title={tr("health.budget.monteCarloTitle")}
           >
             <Dice5 size={14} style={{ color: "var(--jantt-status-warn)" }} />
-            <span>{isMobile ? "Delivery risk" : "Monte Carlo Risk Analysis"}</span>
+            <span>{isMobile ? tr("health.budget.deliveryRisk") : tr("health.budget.monteCarlo")}</span>
           </button>
         </div>
       </div>
@@ -363,7 +371,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
       {/* ========================================================================= */}
       {viewMode === "essential" && (
         <div className="health-essential" style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
-          <div className="kpi-accordion-list" role="region" aria-label="Essential Project Highlights">
+          <div className="kpi-accordion-list" role="region" aria-label={tr("health.budget.essentialHighlightsAria")}>
             {/* Row 1: Time Countdown */}
             <div className={`kpi-accordion-item ${expandedEssentialKeys.has("time") ? "is-expanded" : ""}`}>
               <button
@@ -377,22 +385,22 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     <Clock size={16} />
                   </div>
                   <div className="kpi-accordion-title-wrap">
-                    <span className="kpi-accordion-title">Time Remaining</span>
+                    <span className="kpi-accordion-title">{tr("health.budget.timeRemaining")}</span>
                     <span className="kpi-accordion-subtitle">
-                      Forecast finish: {forecastFinish || "-"}
-                      {targetDate && ` · Target: ${targetDate}`}
+                      {tr("health.budget.forecastFinishLabel")} {forecastFinish || "-"}
+                      {targetDate && ` · ${tr("health.budget.targetLabel")} ${targetDate}`}
                     </span>
                   </div>
                 </div>
                 <div className="kpi-accordion-trailing">
-                  <span className="kpi-accordion-value">{daysToForecast} Days</span>
+                  <span className="kpi-accordion-value">{tr("health.budget.daysValue", { days: daysToForecast })}</span>
                   {daysLateVsTarget > 0 ? (
                     <span className="kpi-accordion-badge" style={{ background: "color-mix(in srgb, var(--jantt-status-bad) 15%, transparent)", color: "var(--jantt-status-bad)" }}>
-                      {daysLateVsTarget}d late
+                      {tr("health.budget.daysLate", { days: daysLateVsTarget })}
                     </span>
                   ) : (
                     <span className="kpi-accordion-badge" style={{ background: "color-mix(in srgb, var(--jantt-status-good) 15%, transparent)", color: "var(--jantt-status-good)" }}>
-                      On Track
+                      {tr("health.shared.onTrack")}
                     </span>
                   )}
                   <ChevronDown size={14} className="kpi-accordion-chevron" />
@@ -401,10 +409,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               {expandedEssentialKeys.has("time") && (
                 <div className="kpi-accordion-body">
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                    <div><strong>Forecast Finish:</strong> {forecastFinish || "Not scheduled"}</div>
-                    <div><strong>Target Date:</strong> {targetDate || "None specified"}</div>
-                    <div><strong>Calendar Days Left:</strong> {daysToForecast} days</div>
-                    <div><strong>Schedule Slippage:</strong> {daysLateVsTarget > 0 ? `${daysLateVsTarget} days past target` : "None (on schedule)"}</div>
+                    <div><strong>{tr("health.budget.forecastFinishBold")}</strong> {forecastFinish || tr("health.budget.notScheduled")}</div>
+                    <div><strong>{tr("health.budget.targetDateBold")}</strong> {targetDate || tr("health.budget.noneSpecified")}</div>
+                    <div><strong>{tr("health.budget.calendarDaysLeft")}</strong> {tr("health.shared.daysCount", { count: daysToForecast })}</div>
+                    <div><strong>{tr("health.budget.scheduleSlippage")}</strong> {daysLateVsTarget > 0 ? tr("health.budget.daysPastTarget", { days: daysLateVsTarget }) : tr("health.budget.noneOnSchedule")}</div>
                   </div>
                 </div>
               )}
@@ -423,14 +431,14 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     <DollarSign size={16} />
                   </div>
                   <div className="kpi-accordion-title-wrap">
-                    <span className="kpi-accordion-title">Budget &amp; Spend</span>
+                    <span className="kpi-accordion-title">{tr("health.shared.budgetSpend")}</span>
                     <span className="kpi-accordion-subtitle">
-                      {!isActualCostKnown ? "No actual costs reported" : `Spent: ${money(evm.ac)} (${spentPercent}%)`}
+                      {!isActualCostKnown ? tr("health.shared.noActualCosts") : tr("health.shared.spentWithPct", { amount: money(evm.ac), percent: spentPercent })}
                     </span>
                   </div>
                 </div>
                 <div className="kpi-accordion-trailing">
-                  <span className="kpi-accordion-value">{evm.bac > 0 ? money(evm.bac) : "No budget set"}</span>
+                  <span className="kpi-accordion-value">{evm.bac > 0 ? money(evm.bac) : tr("health.shared.noBudgetSet")}</span>
                   <span
                     className="kpi-accordion-badge"
                     style={{
@@ -438,7 +446,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                       color: isOverBudget ? "var(--jantt-status-bad)" : "var(--jantt-status-good)"
                     }}
                   >
-                    {isOverBudget ? "Over Budget" : "Funded"}
+                    {isOverBudget ? tr("health.shared.overBudget") : tr("health.budget.funded")}
                   </span>
                   <ChevronDown size={14} className="kpi-accordion-chevron" />
                 </div>
@@ -447,17 +455,17 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                 <div className="kpi-accordion-body">
                   {budgetTrend && (
                     <div style={{ marginBottom: "6px" }}>
-                      <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>Cumulative Planned Budget:</span>
-                      <svg className="budget-sparkline" viewBox="0 0 100 26" role="img" aria-label="Cumulative planned budget over the project" style={{ width: "100%", height: "30px", marginTop: "4px" }}>
+                      <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>{tr("health.budget.cumulativePlannedBudget")}</span>
+                      <svg className="budget-sparkline" viewBox="0 0 100 26" role="img" aria-label={tr("health.budget.cumulativeBudgetAria")} style={{ width: "100%", height: "30px", marginTop: "4px" }}>
                         <polyline points={budgetTrend} fill="none" stroke="currentColor" strokeWidth="2" />
                       </svg>
                     </div>
                   )}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                    <div><strong>Budget at Completion (BAC):</strong> {evm.bac > 0 ? money(evm.bac) : "n/a"}</div>
-                    <div><strong>Actual Cost (AC):</strong> {isActualCostKnown ? money(evm.ac) : "n/a"}</div>
-                    <div><strong>Cash Remaining:</strong> {evm.bac > 0 ? (isOverBudget ? `Over by ${money(evm.ac - evm.bac)}` : money(evm.bac - evm.ac)) : "n/a"}</div>
-                    <div><strong>Percent Spent:</strong> {spentPercent}%</div>
+                    <div><strong>{tr("health.budget.bacBold")}</strong> {evm.bac > 0 ? money(evm.bac) : "n/a"}</div>
+                    <div><strong>{tr("health.evm.acBold")}</strong> {isActualCostKnown ? money(evm.ac) : "n/a"}</div>
+                    <div><strong>{tr("health.budget.cashRemaining")}</strong> {evm.bac > 0 ? (isOverBudget ? tr("health.shared.overBy", { amount: money(evm.ac - evm.bac) }) : money(evm.bac - evm.ac)) : "n/a"}</div>
+                    <div><strong>{tr("health.budget.percentSpent")}</strong> {spentPercent}%</div>
                   </div>
                 </div>
               )}
@@ -476,16 +484,16 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     <CheckCircle2 size={16} />
                   </div>
                   <div className="kpi-accordion-title-wrap">
-                    <span className="kpi-accordion-title">Work Done &amp; Progress</span>
+                    <span className="kpi-accordion-title">{tr("health.budget.workDone")}</span>
                     <span className="kpi-accordion-subtitle">
-                      {evm.taskCountCompleted} of {evm.taskCountTotal} tasks completed
+                      {tr("health.budget.tasksCompletedOf", { done: evm.taskCountCompleted, total: evm.taskCountTotal })}
                     </span>
                   </div>
                 </div>
                 <div className="kpi-accordion-trailing">
                   <span className="kpi-accordion-value">{evm.projectProgressPercent}%</span>
                   <span className="kpi-accordion-badge" style={{ background: "color-mix(in srgb, var(--jantt-status-info) 15%, transparent)", color: "var(--jantt-status-info)" }}>
-                    {evm.projectProgressPercent >= 100 ? "Completed" : "In Progress"}
+                    {evm.projectProgressPercent >= 100 ? tr("health.shared.completed") : tr("health.shared.inProgress")}
                   </span>
                   <ChevronDown size={14} className="kpi-accordion-chevron" />
                 </div>
@@ -502,10 +510,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", marginTop: "6px" }}>
-                    <div><strong>Tasks Completed:</strong> {evm.taskCountCompleted}</div>
-                    <div><strong>Tasks Remaining:</strong> {evm.taskCountTotal - evm.taskCountCompleted}</div>
-                    <div><strong>Total Tasks in Plan:</strong> {evm.taskCountTotal}</div>
-                    <div><strong>Schedule Pace:</strong> {evm.scheduleStatus}</div>
+                    <div><strong>{tr("health.budget.tasksCompletedBold")}</strong> {evm.taskCountCompleted}</div>
+                    <div><strong>{tr("health.budget.tasksRemaining")}</strong> {evm.taskCountTotal - evm.taskCountCompleted}</div>
+                    <div><strong>{tr("health.budget.totalTasksInPlan")}</strong> {evm.taskCountTotal}</div>
+                    <div><strong>{tr("health.budget.schedulePace")}</strong> {evm.scheduleStatus}</div>
                   </div>
                 </div>
               )}
@@ -524,15 +532,15 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     <Layers size={16} />
                   </div>
                   <div className="kpi-accordion-title-wrap">
-                    <span className="kpi-accordion-title">Bottleneck Tasks (Critical Chain)</span>
+                    <span className="kpi-accordion-title">{tr("health.budget.bottleneckTitle")}</span>
                     <span className="kpi-accordion-subtitle">
-                      {pathSpan} calendar days on critical path · {formatFloatLabel(cpm.projectTotalFloat)}
+                      {tr("health.budget.criticalPathSummary", { days: pathSpan, float: formatFloatLabel(cpm.projectTotalFloat, tr) })}
                     </span>
                   </div>
                 </div>
                 <div className="kpi-accordion-trailing">
                   <span className="kpi-accordion-value" style={{ color: "var(--jantt-status-bad)" }}>
-                    {cpm.criticalTaskIds.size} Tasks
+                    {tr("health.budget.tasksCountBadge", { count: cpm.criticalTaskIds.size })}
                   </span>
                   <ChevronDown size={14} className="kpi-accordion-chevron" />
                 </div>
@@ -540,10 +548,10 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               {expandedEssentialKeys.has("bottlenecks") && (
                 <div className="kpi-accordion-body">
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                    <div><strong>Critical Tasks (0 Slack):</strong> {cpm.criticalTaskIds.size}</div>
-                    <div><strong>Longest Critical Path:</strong> {pathSpan} calendar days</div>
-                    <div><strong>Project Total Float:</strong> {formatFloatLabel(cpm.projectTotalFloat)}</div>
-                    <div><strong>Float Description:</strong> {describeFloatForPeople(cpm.projectTotalFloat)}</div>
+                    <div><strong>{tr("health.budget.criticalTasksBold")}</strong> {cpm.criticalTaskIds.size}</div>
+                    <div><strong>{tr("health.budget.longestCriticalPath")}</strong> {tr("health.budget.calendarDaysValue", { days: pathSpan })}</div>
+                    <div><strong>{tr("health.budget.projectTotalFloat")}</strong> {formatFloatLabel(cpm.projectTotalFloat, tr)}</div>
+                    <div><strong>{tr("health.budget.floatDescription")}</strong> {describeFloatForPeople(cpm.projectTotalFloat, tr)}</div>
                   </div>
                 </div>
               )}
@@ -554,7 +562,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           <div
             className="summary-quick-filter-bar"
             role="group"
-            aria-label="Quick filter"
+            aria-label={tr("health.budget.quickFilterAria")}
             style={{
               display: "flex",
               alignItems: "center",
@@ -567,14 +575,14 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             }}
           >
             <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--jantt-text-muted)", textTransform: "uppercase", marginRight: "4px" }}>
-              Quick Filter:
+              {tr("health.budget.quickFilterLabel")}
             </span>
-            {quickFilterButton("all", <>All Tasks ({summaryKpiTasks.length})</>, "var(--jantt-text)", "var(--jantt-accent)")}
+            {quickFilterButton("all", <>{tr("health.budget.allTasks", { count: summaryKpiTasks.length })}</>, "var(--jantt-text)", "var(--jantt-accent)")}
             {quickFilterButton(
               "ready",
               <>
                 <PlayCircle size={12} />
-                <span>Ready to Start ({readyTaskIds.size})</span>
+                <span>{tr("health.budget.readyToStart", { count: readyTaskIds.size })}</span>
               </>,
               "var(--jantt-status-good)",
               "var(--jantt-status-good)"
@@ -583,7 +591,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               "blocked",
               <>
                 <AlertTriangle size={12} />
-                <span>Blocked Tasks ({blockedTaskIds.size})</span>
+                <span>{tr("health.budget.blockedTasks", { count: blockedTaskIds.size })}</span>
               </>,
               "var(--jantt-status-warn)",
               "var(--jantt-status-warn)"
@@ -592,7 +600,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
               "bottleneck",
               <>
                 <Layers size={12} />
-                <span>Critical Bottlenecks ({cpm.criticalTaskIds.size})</span>
+                <span>{tr("health.budget.criticalBottlenecks", { count: cpm.criticalTaskIds.size })}</span>
               </>,
               "var(--jantt-status-bad)",
               "var(--jantt-status-bad)"
@@ -621,14 +629,16 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
       {/* WORK BREAKDOWN & METRICS TABLE (Adaptable to Active Mode)                 */}
       {/* ========================================================================= */}
       {slip && <details className="health-slippage">
-        <summary>{slip.top.length} {slip.top.length === 1 ? "task accounts" : "tasks account"} for {slip.pct}% of late task-days</summary>
+        <summary>{slip.top.length === 1
+          ? tr("health.budget.slippageSummaryOne", { percent: slip.pct })
+          : tr("health.budget.slippageSummaryMany", { count: slip.top.length, percent: slip.pct })}</summary>
         <ul>{slip.top.map((item, index) => <li key={index}>{item.label}<strong>+{item.days}d</strong></li>)}</ul>
-        <small>Compared with each task’s baseline finish.</small>
+        <small>{tr("health.budget.slippageFootnote")}</small>
       </details>}
       <div className="summary-breakdown-card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
           <h3 style={{ fontSize: "14px", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-            <span>{viewMode === "essential" ? "Work Breakdown & Wiggle Room" : "Work Breakdown & Schedule Performance (CPM / Float)"}</span>
+            <span>{viewMode === "essential" ? tr("health.budget.workBreakdownEssential") : tr("health.budget.workBreakdownAdvanced")}</span>
             {activeQuickFilter !== "all" && (
               <span
                 style={{
@@ -643,12 +653,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                   color: "var(--jantt-text)"
                 }}
               >
-                Filter: {QUICK_FILTER_LABELS[activeQuickFilter]}
+                {tr("health.budget.filterChip", { label: tr(QUICK_FILTER_LABELS[activeQuickFilter]) })}
                 <button
                   type="button"
                   onClick={() => setQuickFilter("all")}
-                  aria-label="Clear quick filter"
-                  title="Clear quick filter"
+                  aria-label={tr("health.budget.clearQuickFilter")}
+                  title={tr("health.budget.clearQuickFilter")}
                   style={{ display: "inline-flex", background: "none", border: "none", cursor: "pointer", color: "var(--jantt-text-muted)", padding: "2px" }}
                 >
                   <X size={11} />
@@ -657,18 +667,18 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             )}
             {summarySortConfig.column && (
               <span style={{ fontSize: "11px", fontWeight: 400, color: "var(--jantt-text-muted)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                <span>Sorted by {summarySortConfig.column}</span>
+                <span>{tr("health.budget.sortedBy", { column: summarySortConfig.column })}</span>
                 {summarySortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
                 <button
                   type="button"
                   onClick={() => setSummarySortConfig({ column: "", direction: null })}
                   style={{ marginLeft: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--jantt-accent)", fontSize: "11px" }}
-                >Clear</button>
+                >{tr("health.budget.clear")}</button>
               </span>
             )}
           </h3>
           <span style={{ fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-            Showing {displayTasks.length} of {summaryKpiTasks.length} tasks
+            {tr("health.budget.showingTasks", { shown: displayTasks.length, total: summaryKpiTasks.length })}
           </span>
         </div>
 
@@ -676,11 +686,11 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
           <>
             <select
               className="summary-mobile-sort-select"
-              aria-label="Sort breakdown tasks"
+              aria-label={tr("health.budget.sortBreakdownAria")}
               value={summarySortConfig.column || "wbs"}
               onChange={(event) => setSummarySortConfig({ column: event.target.value, direction: summarySortConfig.direction || "asc" })}
             >
-              <option value="wbs">WBS</option><option value="name">Name</option><option value="buffer">Float / Wiggle Room</option><option value="budget">Budget</option><option value="status">Status</option><option value="progress">Progress</option>
+              <option value="wbs">WBS</option><option value="name">{tr("health.budget.optName")}</option><option value="buffer">{tr("health.budget.optFloat")}</option><option value="budget">{tr("health.budget.optBudget")}</option><option value="status">{tr("health.budget.optStatus")}</option><option value="progress">{tr("health.budget.optProgress")}</option>
             </select>
             <div className="summary-mobile-card-list">
               {displayTasks.slice(0, taskLimit).map((task) => {
@@ -694,16 +704,16 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     <span className="kanban-wbs-badge">{task.wbs || "-"}</span>
                     <span className="summary-mobile-card-title">{task.label || task.name || task.id}</span>
                     <span className={`kanban-prio-badge is-status-${(task.status || "not-started").replace("-", "")}`}>
-                      {completed ? "Done" : critical ? "Critical" : blocked ? "Blocked" : "Ready"}
+                      {completed ? tr("health.shared.done") : critical ? tr("health.shared.critical") : blocked ? tr("health.shared.blocked") : tr("health.shared.ready")}
                     </span>
                   </div>
-                  <div className="summary-mobile-card-bottom"><span>{metric?.totalFloat === undefined ? "Float -" : `Float ${formatFloatLabel(metric.totalFloat)}`}</span><span>{typeof task.estimatedCost === "number" ? money(task.estimatedCost) : "-"}</span><span>{progress}%</span></div>
+                  <div className="summary-mobile-card-bottom"><span>{metric?.totalFloat === undefined ? tr("health.budget.floatNone") : tr("health.budget.floatValue", { value: formatFloatLabel(metric.totalFloat, tr) })}</span><span>{typeof task.estimatedCost === "number" ? money(task.estimatedCost) : "-"}</span><span>{progress}%</span></div>
                   <div className="summary-mobile-progress-track"><div className="summary-mobile-progress-fill" style={{ width: `${progress}%` }} /></div>
                 </article>;
               })}
             </div>
             {taskLimit < displayTasks.length && <button type="button" className="health-more-tasks" onClick={() => setTaskLimit(current => current + 40)}>
-              Show {Math.min(40, displayTasks.length - taskLimit)} more tasks
+              {tr("health.budget.showMoreTasks", { count: Math.min(40, displayTasks.length - taskLimit) })}
             </button>}
           </>
         )}
@@ -712,7 +722,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
             <tr>
               {SORTABLE_COLUMNS.map((col) => {
                 const isSorted = summarySortConfig.column === col.id && Boolean(summarySortConfig.direction);
-                const label = col.label(viewMode === "essential", currency);
+                const label = col.label(tr, viewMode === "essential", currency);
                 return (
                   <th
                     key={col.id}
@@ -722,7 +732,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleSummarySort(col.id)}
-                      title={`Sort by ${label}`}
+                      title={tr("health.budget.sortBy", { label })}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -788,7 +798,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                       <span>{t.label || t.name || t.id}</span>
                       {isCrit && (
                         <span
-                          title="Critical: Delaying this task directly delays the final completion date"
+                          title={tr("health.budget.criticalTip")}
                           style={{
                             fontSize: "9px",
                             fontWeight: 800,
@@ -800,12 +810,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                             textTransform: "uppercase"
                           }}
                         >
-                          Critical
+                          {tr("health.shared.critical")}
                         </span>
                       )}
                       {isReady && !isCrit && (
                         <span
-                          title="Ready: All prerequisites are done, can start now"
+                          title={tr("health.budget.readyTip")}
                           style={{
                             fontSize: "9px",
                             fontWeight: 700,
@@ -816,12 +826,12 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                             border: "1px solid #10B98140"
                           }}
                         >
-                          Ready
+                          {tr("health.shared.ready")}
                         </span>
                       )}
                       {isBlocked && (
                         <span
-                          title="Blocked: Waiting on one or more prerequisites"
+                          title={tr("health.budget.blockedTip")}
                           style={{
                             fontSize: "9px",
                             fontWeight: 700,
@@ -832,7 +842,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                             border: "1px solid #F59E0B40"
                           }}
                         >
-                          Blocked
+                          {tr("health.shared.blocked")}
                         </span>
                       )}
                     </div>
@@ -888,7 +898,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                       <span style={{ color: floatColor }}>-</span>
                     ) : (
                       <span
-                        title={viewMode === "essential" ? describeFloatForPeople(tf) : `Total Float: ${tf}d, Free Float: ${ff}d`}
+                        title={viewMode === "essential" ? describeFloatForPeople(tf, tr) : tr("health.budget.floatTooltip", { total: tf, free: ff })}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
@@ -899,7 +909,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
                           color: floatColor
                         }}
                       >
-                        {formatFloatLabel(tf)}
+                        {formatFloatLabel(tf, tr)}
                       </span>
                     )}
                   </td>
@@ -936,7 +946,7 @@ export const BudgetKpiView: React.FC<BudgetKpiViewProps> = ({
       </div>
 
       {!onOpenMonteCarlo && showMonteCarlo && (
-        <React.Suspense fallback={<p role="status">Loading simulation…</p>}>
+        <React.Suspense fallback={<p role="status">{tr("health.budget.loadingSimulation")}</p>}>
           <MonteCarloModal show onClose={() => setShowMonteCarlo(false)} parsedData={parsedData} />
         </React.Suspense>
       )}

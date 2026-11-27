@@ -73,6 +73,12 @@ Workspace packages (`@jantt/core`, `@jantt/react`, `@jantt/interop`, `@jantt/ren
 
 ---
 
+## Interface language
+
+Choose English or Simplified Chinese under **Appearance → Language** on desktop or **Tools & Settings → Language** on mobile. The choice is stored on this device, and shared plans keep their original task names, notes, and status values.
+
+Translations live in `src/i18n/locales/<locale>.json`. Register a new language and its lazy loader in `src/i18n/index.ts`, and add its month and weekday labels in `src/i18n/timeline.ts`. Keep message keys and named placeholders such as `{count}` in sync with English. Run `npm test -w @jantt/playground` to check both dictionaries.
+
 ## License
 
 MIT © [Ahmad Hassan (B-Ted)](https://github.com/AhmadHassan-BTed)

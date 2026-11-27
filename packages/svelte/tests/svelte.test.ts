@@ -43,6 +43,24 @@ describe("Jantt Svelte Action Adapter", () => {
     actionResult.destroy();
   });
 
+  it("reacts to locale changes and retains the current chart zoom", () => {
+    const viewport = { dayWidth: 36 };
+    const ready = vi.fn();
+    const action = janttAction(node, { data: samplePlan, options: { locale: "zh-CN", viewport }, onReady: ready });
+    try {
+      expect(node.querySelector(".jantt-label-header")?.textContent).toContain("任务与分类");
+      const instance = ready.mock.calls[0][0];
+      instance.setDayWidth(18);
+      const zoom = instance.getDayWidth();
+      action.update({ data: samplePlan, options: { locale: "en", viewport } });
+      expect(node.querySelector(".jantt-label-header")?.textContent).toContain("Task & Category");
+      expect(instance.getDayWidth()).toBe(zoom);
+      expect(ready).toHaveBeenCalledTimes(1);
+    } finally {
+      action.destroy();
+    }
+  });
+
   it("reactively updates chart when action update is invoked", () => {
     let readyInstance: any = null;
     const actionResult = janttAction(node, {

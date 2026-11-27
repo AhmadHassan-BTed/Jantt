@@ -27,6 +27,7 @@ import { ENABLE_GITHUB_VERIFICATION_GATE } from "./githubVerificationService";
 import { releaseAllRoomPresence } from "./presenceService";
 import { getTrustedAvatarUrl } from "../room-storage";
 import { storageService } from "../services/storage";
+import { tGlobal } from "../i18n";
 
 const GH_TOKEN_KEY = "jantt_gh_access_token";
 const REDIRECT_PENDING_KEY = "jantt_auth_redirect_pending";
@@ -115,17 +116,17 @@ export function describeAuthError(error: unknown): string | null {
   if (SILENT_AUTH_CODES.has(code)) return null;
   switch (code) {
     case "auth/network-request-failed":
-      return "Network error during sign-in. Check your connection and try again.";
+      return tGlobal("auth.networkError");
     case "auth/unauthorized-domain":
-      return "GitHub sign-in is not enabled for this site.";
+      return tGlobal("services.auth.unauthorizedDomain");
     case "auth/account-exists-with-different-credential":
-      return "An account with this email already exists with another sign-in method.";
+      return tGlobal("services.auth.accountExistsOtherMethod");
     case "auth/too-many-requests":
-      return "Too many sign-in attempts. Please wait a moment and try again.";
+      return tGlobal("services.auth.tooManyAttempts");
     case "auth/user-disabled":
-      return "This account has been disabled.";
+      return tGlobal("services.auth.accountDisabled");
     default:
-      return "GitHub sign-in failed. Please try again.";
+      return tGlobal("auth.githubFailed");
   }
 }
 
@@ -413,7 +414,7 @@ export async function checkUsernameAvailable(rawUsername: string): Promise<{
     return { available: false, normalized, error: validation.error };
   }
   if (RESERVED_USERNAMES.has(normalized)) {
-    return { available: false, normalized, error: "This username is reserved. Try another." };
+    return { available: false, normalized, error: tGlobal("auth.usernameReserved") };
   }
 
   try {
@@ -423,7 +424,7 @@ export async function checkUsernameAvailable(rawUsername: string): Promise<{
       return {
         available: isCurrent,
         normalized,
-        error: isCurrent ? undefined : "This username is already taken. Try another."
+        error: isCurrent ? undefined : tGlobal("services.auth.usernameTaken")
       };
     }
     return { available: true, normalized };
@@ -433,8 +434,8 @@ export async function checkUsernameAvailable(rawUsername: string): Promise<{
       available: false,
       normalized,
       error: isPermissionDeniedError(err)
-        ? "Usernames can't be checked right now. Please try again later."
-        : "Couldn't check availability. Check your connection and try again."
+        ? tGlobal("services.auth.usernameCheckDenied")
+        : tGlobal("services.auth.usernameCheckFailed")
     };
   }
 }
@@ -449,7 +450,7 @@ export async function claimUsername(
 ): Promise<UserProfile> {
   const { available, normalized, error } = await checkUsernameAvailable(rawUsername);
   if (!available) {
-    throw new Error(error || "Username is not available.");
+    throw new Error(error || tGlobal("services.auth.usernameUnavailable"));
   }
 
   const previous = await getUserProfile(user.uid);
@@ -477,10 +478,11 @@ export async function claimUsername(
   } catch (err) {
     if (!isPermissionDeniedError(err)) throw err;
     console.warn("[authService] Username claim rejected by the database rules:", err);
-    throw new Error("This username can't be claimed right now. Try another one, or try again later.");
+    // i18n: asserted by tests
+    throw new Error(tGlobal("services.auth.cannotClaimUsername"));
   }
   if (outcome === "taken") {
-    throw new Error("This username was just taken. Please choose another.");
+    throw new Error(tGlobal("auth.usernameTaken"));
   }
   return withSessionEmail(merged, user);
 }

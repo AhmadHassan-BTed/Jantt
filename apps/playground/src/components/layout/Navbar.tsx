@@ -32,6 +32,9 @@ import type { User as FirebaseUser } from "firebase/auth";
 import type { UserProfile, UserRoomPointer } from "../../firebase/types";
 import type { RoomSyncStatus } from "../../hooks/useRoomSync";
 import { JanttLogo } from "../common/JanttLogo";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { MessageKey } from "../../i18n";
+import { themeDescription } from "../../i18n/theme";
 import { PRIMARY_MODIFIER_LABEL } from "../common/CommandPalette";
 import type { SavedProject } from "../../types";
 import { AVAILABLE_THEMES, DEFAULT_TEMPLATE } from "../../constants";
@@ -229,42 +232,50 @@ function countLiveTasks(project: SavedProject): number {
 function buildPlanGroups(
   customProjects: SavedProject[],
   ownedRooms: UserRoomPointer[],
-  sharedRooms: UserRoomPointer[]
+  sharedRooms: UserRoomPointer[],
+  t: (key: MessageKey, params?: Record<string, string | number>) => string
 ): PlanGroup[] {
   const ownedIds = new Set(ownedRooms.map((r) => `room-${r.roomId}`));
   const sharedIds = new Set(sharedRooms.map((r) => `room-${r.roomId}`));
 
   const local: PlanEntry[] = [
-    { id: "default", name: DEFAULT_TEMPLATE.name, meta: "Built-in template" },
+    { id: "default", name: DEFAULT_TEMPLATE.name, meta: t("nav.builtInTemplate") },
     ...customProjects
       .filter((p) => p.source !== "room")
       .map((p) => {
         const count = countLiveTasks(p);
-        return { id: p.id, name: p.name, meta: `${count} task${count === 1 ? "" : "s"}` };
+        return {
+          id: p.id,
+          name: p.name,
+          meta: count === 1 ? t("nav.taskCountOne", { count }) : t("nav.taskCount", { count })
+        };
       })
   ];
 
-  const owned: PlanEntry[] = ownedRooms.map((r) => ({ id: `room-${r.roomId}`, name: r.title, meta: "Owner" }));
+  const owned: PlanEntry[] = ownedRooms.map((r) => ({ id: `room-${r.roomId}`, name: r.title, meta: t("nav.owner") }));
 
   const shared: PlanEntry[] = [
     ...sharedRooms.map((r) => ({
       id: `room-${r.roomId}`,
       name: r.title,
-      meta: `@${r.ownerUsername} • ${r.role === "editor" ? "Editor" : "Viewer"}`
+      meta: t("nav.roomRoleMeta", {
+        user: r.ownerUsername,
+        role: r.role === "editor" ? t("nav.editorRole") : t("nav.viewerRole")
+      })
     })),
     ...customProjects
       .filter((p) => p.source === "room" && !ownedIds.has(p.id) && !sharedIds.has(p.id))
       .map((p) => ({
         id: p.id,
         name: p.name,
-        meta: p.role === "collaborator" ? "Room • Editor" : "Room • Viewer"
+        meta: p.role === "collaborator" ? t("nav.roomEditor") : t("nav.roomViewer")
       }))
   ];
 
   return [
-    { id: "local", label: "Local plans", emptyText: "No local plans yet.", entries: local },
-    { id: "owned", label: "My cloud rooms", emptyText: "Rooms you create appear here.", entries: owned },
-    { id: "shared", label: "Shared with me", emptyText: "Rooms others invite you to appear here.", entries: shared }
+    { id: "local", label: t("nav.groupLocal"), emptyText: t("nav.groupLocalEmpty"), entries: local },
+    { id: "owned", label: t("nav.groupOwned"), emptyText: t("nav.groupOwnedEmpty"), entries: owned },
+    { id: "shared", label: t("nav.groupShared"), emptyText: t("nav.groupSharedEmpty"), entries: shared }
   ];
 }
 
@@ -299,9 +310,10 @@ const PlanSwitcherBody: React.FC<PlanSwitcherBodyProps> = ({
   onDeleteActivePlan
 }) => {
   const [query, setQuery] = useState("");
+  const { t } = useI18n();
   const groups = useMemo(
-    () => buildPlanGroups(customProjects, ownedRooms, sharedRooms),
-    [customProjects, ownedRooms, sharedRooms]
+    () => buildPlanGroups(customProjects, ownedRooms, sharedRooms, t),
+    [customProjects, ownedRooms, sharedRooms, t]
   );
   const total = groups.reduce((sum, g) => sum + g.entries.length, 0);
   const q = query.trim().toLowerCase();
@@ -320,8 +332,8 @@ const PlanSwitcherBody: React.FC<PlanSwitcherBodyProps> = ({
   return (
     <div className="plan-switcher">
       <div className="nav-popover-header">
-        <span className="nav-popover-title">Switch plan</span>
-        <span className="nav-popover-subtitle">{total} available</span>
+        <span className="nav-popover-title">{t("nav.switchPlan")}</span>
+        <span className="nav-popover-subtitle">{t("nav.availableCount", { count: total })}</span>
       </div>
 
       {total > PLAN_SEARCH_THRESHOLD && (
@@ -331,8 +343,8 @@ const PlanSwitcherBody: React.FC<PlanSwitcherBodyProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter plans..."
-            aria-label="Filter plans"
+            placeholder={t("nav.filterPlans")}
+            aria-label={t("nav.filterPlansAria")}
             data-popover-item
             data-autofocus
           />
@@ -347,7 +359,7 @@ const PlanSwitcherBody: React.FC<PlanSwitcherBodyProps> = ({
               <span className="plan-switcher-group-count">{group.entries.length}</span>
             </div>
             {group.entries.length === 0 ? (
-              <div className="plan-switcher-empty">{q ? "No match." : group.emptyText}</div>
+              <div className="plan-switcher-empty">{q ? t("nav.noMatch") : group.emptyText}</div>
             ) : (
               group.entries.map((entry) => {
                 const isActive = entry.id === activeProjectId;
@@ -379,15 +391,15 @@ const PlanSwitcherBody: React.FC<PlanSwitcherBodyProps> = ({
       <div className="nav-popover-footer">
         <button type="button" className="nav-popover-action" data-popover-item onClick={act(onNewPlan)}>
           <Plus size={14} aria-hidden="true" />
-          <span>New plan</span>
+          <span>{t("nav.newPlan")}</span>
         </button>
         <button type="button" className="nav-popover-action" data-popover-item onClick={act(onImportFile)}>
           <Upload size={14} aria-hidden="true" />
-          <span>Import file (.json, .xml, .xer, .csv)</span>
+          <span>{t("nav.importFile")}</span>
         </button>
         <button type="button" className="nav-popover-action" data-popover-item onClick={act(onOpenPlanManager)}>
           <Layers size={14} aria-hidden="true" />
-          <span>Manage plans (move, rename, publish)</span>
+          <span>{t("nav.managePlans")}</span>
         </button>
         {onDeleteActivePlan && (
           <button
@@ -397,7 +409,7 @@ const PlanSwitcherBody: React.FC<PlanSwitcherBodyProps> = ({
             onClick={act(onDeleteActivePlan)}
           >
             <Trash2 size={14} aria-hidden="true" />
-            <span className="nav-popover-action-text">Delete &ldquo;{activePlanName}&rdquo;</span>
+            <span className="nav-popover-action-text">{t("nav.deletePlan", { name: activePlanName })}</span>
           </button>
         )}
       </div>
@@ -416,12 +428,14 @@ interface ThemeMenuBodyProps {
 }
 
 const ThemeMenuBody: React.FC<ThemeMenuBodyProps> = ({ selectedThemeId, onSelectTheme, close }) => {
+  const { t, locale, setLocale, locales } = useI18n();
+
   const renderGroup = (mode: "dark" | "light") => {
     const themes = AVAILABLE_THEMES.filter((theme) => theme.mode === mode);
     if (themes.length === 0) return null;
     return (
-      <div className="theme-menu-group" role="group" aria-label={mode === "dark" ? "Dark themes" : "Light themes"}>
-        <div className="theme-menu-group-label">{mode === "dark" ? "Dark" : "Light"}</div>
+      <div className="theme-menu-group" role="group" aria-label={mode === "dark" ? t("appearance.darkThemes") : t("appearance.lightThemes")}>
+        <div className="theme-menu-group-label">{mode === "dark" ? t("appearance.dark") : t("appearance.light")}</div>
         {themes.map((theme) => {
           const isActive = theme.id === selectedThemeId;
           return (
@@ -431,7 +445,7 @@ const ThemeMenuBody: React.FC<ThemeMenuBodyProps> = ({ selectedThemeId, onSelect
               className={`theme-menu-item ${isActive ? "is-active" : ""}`}
               aria-current={isActive ? "true" : undefined}
               data-popover-item
-              title={theme.description}
+              title={themeDescription(theme, t)}
               onClick={() => {
                 onSelectTheme(theme.id);
                 close(true);
@@ -452,7 +466,7 @@ const ThemeMenuBody: React.FC<ThemeMenuBodyProps> = ({ selectedThemeId, onSelect
               </span>
               <span className="theme-menu-copy">
                 <span className="theme-menu-name">{theme.label}</span>
-                <span className="theme-menu-meta">{theme.mode === "dark" ? "Dark" : "Light"} mode</span>
+                <span className="theme-menu-meta">{theme.mode === "dark" ? t("appearance.darkMode") : t("appearance.lightMode")}</span>
               </span>
               {isActive && <Check size={14} className="theme-menu-check" aria-hidden="true" />}
             </button>
@@ -465,11 +479,37 @@ const ThemeMenuBody: React.FC<ThemeMenuBodyProps> = ({ selectedThemeId, onSelect
   return (
     <div className="theme-menu">
       <div className="nav-popover-header">
-        <span className="nav-popover-title">Appearance</span>
-        <span className="nav-popover-subtitle">{AVAILABLE_THEMES.length} themes</span>
+        <span className="nav-popover-title">{t("appearance.title")}</span>
+        <span className="nav-popover-subtitle">{t("appearance.themeCount", { count: AVAILABLE_THEMES.length })}</span>
       </div>
       {renderGroup("dark")}
       {renderGroup("light")}
+
+      <div className="theme-menu-divider" role="separator" />
+
+      <div className="theme-menu-group" role="group" aria-label={t("appearance.interfaceLanguage")}>
+        <div className="theme-menu-group-label">{t("appearance.language")}</div>
+        <div className="language-menu-options">
+          {locales.map((option) => {
+            const isActive = option.id === locale;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                className={`language-menu-item ${isActive ? "is-active" : ""}`}
+                aria-pressed={isActive}
+                data-popover-item
+                lang={option.id}
+                onClick={() => setLocale(option.id)}
+              >
+                <span className="language-menu-name">{option.nativeLabel}</span>
+                {isActive && <Check size={14} className="theme-menu-check" aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </div>
+        <p className="language-menu-hint">{t("appearance.languageHint")}</p>
+      </div>
     </div>
   );
 };
@@ -479,14 +519,14 @@ const ThemeMenuBody: React.FC<ThemeMenuBodyProps> = ({ selectedThemeId, onSelect
 /* -------------------------------------------------------------------------- */
 
 /** Partial on purpose: an unknown future status falls back to its raw name. */
-const SYNC_STATE_LABEL: Partial<Record<RoomSyncStatus, string>> = {
-  idle: "Idle",
-  "in-sync": "Connected",
-  syncing: "Syncing",
-  merged: "Merged",
-  conflict: "Conflict",
-  error: "Sync error",
-  offline: "Offline"
+const SYNC_STATE_KEY: Partial<Record<RoomSyncStatus, MessageKey>> = {
+  idle: "nav.syncIdle",
+  "in-sync": "nav.syncConnected",
+  syncing: "nav.syncSyncing",
+  merged: "nav.syncMerged",
+  conflict: "nav.syncConflict",
+  error: "nav.syncError",
+  offline: "nav.syncOffline"
 };
 
 /** Statuses where local edits may not have reached collaborators. */
@@ -615,20 +655,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLeaveRoom,
   onDeleteRoom
 }) => {
+  const { t, locale } = useI18n();
   const isRoomActive = Boolean(activeRoomId);
+  const savedLocally = t("nav.savedLocally");
   // In a room the badge only reflects the local browser backup; cloud state lives on the Cloud chip.
-  const saveLabel = isRoomActive ? autoSaveLabel.replace(/^Saved/, "Saved locally") : autoSaveLabel;
+  const saveLabel = isRoomActive ? autoSaveLabel.replace(/^Saved/, savedLocally) : autoSaveLabel;
   // Keep the chip short; the relative time stays in its title.
-  const saveChipLabel = saveStatus === "saved" ? (isRoomActive ? "Saved locally" : "Saved") : saveLabel;
-  const syncLabel = SYNC_STATE_LABEL[syncStatus] || syncStatus;
+  const saveChipLabel = saveStatus === "saved" ? (isRoomActive ? savedLocally : t("nav.saved")) : saveLabel;
+  const syncKey = SYNC_STATE_KEY[syncStatus];
+  const syncLabel = syncKey ? t(syncKey) : syncStatus;
   const isSyncProblem = SYNC_PROBLEM_STATES.has(syncStatus);
+  const lastSavedTime = lastSavedAt.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
 
   // Plans can store a legacy theme alias (e.g. "noir"): resolve it before showing the label.
   const activeTheme = themeManager.getTheme(selectedThemeId);
-  const activeThemeLabel = activeTheme?.label || "Theme";
+  const activeThemeLabel = activeTheme?.label || t("appearance.title");
   const activeThemeId = activeTheme?.id || selectedThemeId;
 
-  const accountName = userProfile?.username ? `@${userProfile.username}` : currentUser?.displayName || "Account";
+  const accountName = userProfile?.username ? `@${userProfile.username}` : currentUser?.displayName || t("nav.account");
   // Only GitHub-hosted avatars are loaded (profile fields are self-written); otherwise initials.
   const avatarUrl = getTrustedAvatarUrl(userProfile?.photoURL) || getTrustedAvatarUrl(currentUser?.photoURL);
 
@@ -642,8 +690,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="button"
           className={`btn-nav btn-sidebar-toggle nav-icon-btn ${!isSidebarCollapsed ? "is-active" : ""}`}
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          title={isSidebarCollapsed ? "Show JSON editor sidebar (split pane)" : "Hide JSON editor sidebar"}
-          aria-label={isSidebarCollapsed ? "Show JSON editor sidebar" : "Hide JSON editor sidebar"}
+          title={isSidebarCollapsed ? t("nav.showSidebarTitle") : t("nav.hideSidebarTitle")}
+          aria-label={isSidebarCollapsed ? t("nav.showSidebarAria") : t("nav.hideSidebarAria")}
           aria-expanded={!isSidebarCollapsed}
           aria-controls="editor-pane"
         >
@@ -657,10 +705,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <NavPopover
           id="nav-plan-switcher"
-          label="Switch plan"
+          label={t("nav.switchPlan")}
           triggerClassName="nav-plan-trigger"
-          triggerTitle="Switch plan, create a new one, import a file or manage all plans"
-          triggerAriaLabel={`Current plan: ${activePlanName}. Switch plan`}
+          triggerTitle={t("nav.switchPlanTitle")}
+          triggerAriaLabel={t("nav.currentPlanAria", { name: activePlanName })}
           triggerContent={
             <>
               <FolderKanban size={14} className="nav-plan-trigger-icon" aria-hidden="true" />
@@ -694,17 +742,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="nav-cluster nav-cluster-workspace">
           <NavPopover
             id="nav-cloud-panel"
-            label="Cloud collaboration"
+            label={t("nav.cloudCollab")}
             triggerClassName={`nav-cloud-trigger ${isRoomActive ? `is-live is-sync-${syncStatus}` : ""}`}
             triggerTitle={
               isRoomActive
-                ? `Live cloud room${roomRoleLabel ? ` • ${roomRoleLabel}` : ""} • ${syncMessage || syncLabel}`
-                : "Cloud collaboration: sign in, start or join a live room"
+                ? roomRoleLabel
+                  ? t("nav.cloudRoomTitleRole", { role: roomRoleLabel, status: syncMessage || syncLabel })
+                  : t("nav.cloudRoomTitle", { status: syncMessage || syncLabel })
+                : t("nav.cloudStartTitle")
             }
             triggerAriaLabel={
               isRoomActive
-                ? `Cloud room, ${roomRoleLabel || "member"}, ${syncLabel}${onlineCount > 0 ? `, ${onlineCount} online` : ""}`
-                : "Cloud collaboration"
+                ? onlineCount > 0
+                  ? t("nav.cloudRoomAriaOnline", {
+                      role: roomRoleLabel || t("nav.member"),
+                      status: syncLabel,
+                      count: onlineCount
+                    })
+                  : t("nav.cloudRoomAria", { role: roomRoleLabel || t("nav.member"), status: syncLabel })
+                : t("nav.cloudCollab")
             }
             triggerContent={
               <>
@@ -713,7 +769,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ) : (
                   <Cloud size={14} style={{ color: "#38BDF8" }} aria-hidden="true" />
                 )}
-                <span className="nav-label">{isRoomActive ? syncLabel : "Cloud"}</span>
+                <span className="nav-label">{isRoomActive ? syncLabel : t("nav.cloud")}</span>
                 {isRoomActive && <RoomPresenceStack users={onlineUsers} limit={3} />}
                 <ChevronDown size={12} className="nav-popover-chevron" aria-hidden="true" />
               </>
@@ -738,7 +794,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         }}
                       >
                         <DoorOpen size={14} aria-hidden="true" />
-                        <span>Leave room</span>
+                        <span>{t("nav.leaveRoom")}</span>
                       </button>
                     )}
                     {onDeleteRoom && (
@@ -752,7 +808,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         }}
                       >
                         <Trash2 size={14} aria-hidden="true" />
-                        <span>Delete room for everyone…</span>
+                        <span>{t("nav.deleteRoom")}</span>
                       </button>
                     )}
                   </div>
@@ -766,19 +822,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               className="btn-autosave-badge is-viewer"
               onClick={onPromptFork}
-              title="Read-only cloud room. Click to make a local copy you can edit."
-              aria-label="Read-only room. Make a local copy to edit"
+              title={t("nav.readOnlyTitle")}
+              aria-label={t("nav.readOnlyAria")}
             >
               <Eye size={12} aria-hidden="true" />
-              <span className="nav-label">Read-only</span>
+              <span className="nav-label">{t("nav.readOnly")}</span>
             </button>
           ) : (
             <button
               type="button"
               className={`btn-autosave-badge is-${saveStatus}`}
               onClick={() => setShowAutoSaveModal(true)}
-              title={`${isRoomActive ? "Local browser backup. " : ""}Last saved: ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • Cadence: ${autoSaveInterval} • Click to configure`}
-              aria-label={`${saveLabel}. Configure auto-save`}
+              title={
+                isRoomActive
+                  ? t("nav.saveTitleLocal", { time: lastSavedTime, interval: autoSaveInterval })
+                  : t("nav.saveTitle", { time: lastSavedTime, interval: autoSaveInterval })
+              }
+              aria-label={t("nav.configureAutoSave", { status: saveLabel })}
             >
               {saveStatus === "saving" ? (
                 <RefreshCw size={11} className="spin-sync-icon" aria-hidden="true" />
@@ -796,8 +856,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               className="btn-nav btn-version-history nav-icon-btn"
               onClick={() => setShowVersionHistoryModal(true)}
-              title="Version history: roll back to an earlier snapshot"
-              aria-label={`Version history${snapshotsCount > 0 ? ` (${snapshotsCount} snapshots)` : ""}`}
+              title={t("nav.versionHistoryTitle")}
+              aria-label={
+                snapshotsCount > 0
+                  ? t("nav.versionHistoryAriaCount", { count: snapshotsCount })
+                  : t("nav.versionHistoryAria")
+              }
             >
               <History size={13} style={{ color: "#818CF8" }} aria-hidden="true" />
               {snapshotsCount > 0 && <span className="history-count-badge">{snapshotsCount}</span>}
@@ -810,11 +874,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             className="btn-nav nav-icon-btn nav-share-btn"
             onClick={onOpenShare}
-            title={isRoomActive ? "Invite people and share this room" : "Share this plan by link, WhatsApp or JSON"}
-            aria-label={isRoomActive ? "Invite and share room" : "Share plan"}
+            title={isRoomActive ? t("nav.shareRoomTitle") : t("nav.sharePlanTitle")}
+            aria-label={isRoomActive ? t("nav.shareRoomAria") : t("nav.sharePlanAria")}
           >
             <Share2 size={13} style={{ color: "#A855F7" }} aria-hidden="true" />
-            <span className="nav-label">{isRoomActive ? "Invite" : "Share"}</span>
+            <span className="nav-label">{isRoomActive ? t("nav.invite") : t("nav.share")}</span>
             {peopleCount > 0 && <span className="nav-count-pill">{peopleCount}</span>}
           </button>
 
@@ -823,11 +887,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               className="btn-nav nav-icon-btn nav-install-btn"
               onClick={onInstall}
-              title="Install Jantt as a desktop app"
-              aria-label="Install Jantt as a desktop app"
+              title={t("nav.installTitle")}
+              aria-label={t("nav.installTitle")}
             >
               <Download size={13} style={{ color: "#22C55E" }} aria-hidden="true" />
-              <span className="nav-label">Install App</span>
+              <span className="nav-label">{t("nav.installApp")}</span>
             </button>
           )}
 
@@ -835,8 +899,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             className="btn-nav nav-icon-btn"
             onClick={onOpenPeople}
-            title="People & teams: members, roles and task assignees"
-            aria-label={`People and teams (${peopleCount})`}
+            title={t("nav.peopleTitle")}
+            aria-label={t("nav.peopleAria", { count: peopleCount })}
           >
             <Users size={13} style={{ color: "#F59E0B" }} aria-hidden="true" />
           </button>
@@ -849,8 +913,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               className="btn-nav nav-icon-btn"
               onClick={onOpenCommandPalette}
-              title={`Command palette & search (${PRIMARY_MODIFIER_LABEL}+K)`}
-              aria-label="Open command palette"
+              title={t("nav.commandPaletteTitle", { shortcut: PRIMARY_MODIFIER_LABEL })}
+              aria-label={t("nav.openCommandPalette")}
               aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+K" : "Control+K"}
             >
               <Search size={14} style={{ color: "#38BDF8" }} aria-hidden="true" />
@@ -863,8 +927,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               className={`btn-prompt ${showCopilot ? "is-active" : ""}`}
               onClick={onToggleCopilot}
-              title={`AI Copilot: chat with AI to edit your plan live (${PRIMARY_MODIFIER_LABEL}+J)`}
-              aria-label={showCopilot ? "Close AI Copilot" : "Open AI Copilot"}
+              title={t("nav.copilotTitle", { shortcut: PRIMARY_MODIFIER_LABEL })}
+              aria-label={showCopilot ? t("nav.closeCopilot") : t("nav.openCopilot")}
               aria-expanded={showCopilot}
               aria-keyshortcuts={PRIMARY_MODIFIER_LABEL === "⌘" ? "Meta+J" : "Control+J"}
             >
@@ -878,10 +942,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="nav-cluster nav-cluster-preferences">
           <NavPopover
             id="nav-theme-menu"
-            label="Choose a theme"
+            label={t("appearance.chooseTheme")}
             triggerClassName="nav-theme-trigger"
-            triggerTitle={`Theme: ${activeThemeLabel}`}
-            triggerAriaLabel={`Theme: ${activeThemeLabel}. Choose a theme`}
+            triggerTitle={t("appearance.currentTheme", { name: activeThemeLabel })}
+            triggerAriaLabel={`${t("appearance.currentTheme", { name: activeThemeLabel })}. ${t("appearance.chooseTheme")}`}
             triggerContent={
               <>
                 <Palette size={14} className="nav-theme-icon" aria-hidden="true" />
@@ -906,8 +970,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               className="btn-nav nav-icon-btn"
               onClick={onOpenShortcuts}
-              title="Keyboard shortcuts (?)"
-              aria-label="Keyboard shortcuts"
+              title={t("nav.shortcutsTitle")}
+              aria-label={t("nav.shortcutsAria")}
               aria-keyshortcuts="Shift+?"
             >
               <HelpCircle size={14} style={{ color: "#818CF8" }} aria-hidden="true" />
@@ -924,10 +988,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={onOpenUserHub}
               title={
                 userProfile
-                  ? `Signed in as ${userProfile.displayName || "User"} (@${userProfile.username}). Open your plans and rooms.`
-                  : "Finishing sign-in. Open your plans and rooms."
+                  ? t("nav.signedInAs", {
+                      name: userProfile.displayName || t("nav.user"),
+                      handle: userProfile.username
+                    })
+                  : t("nav.finishingSignIn")
               }
-              aria-label={`Account ${accountName}. Open plans and rooms`}
+              aria-label={t("nav.accountAria", { name: accountName })}
             >
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="nav-avatar" referrerPolicy="no-referrer" />
@@ -936,7 +1003,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {(userProfile?.displayName?.[0] || userProfile?.username?.[0] || currentUser.displayName?.[0] || "U").toUpperCase()}
                 </span>
               )}
-              <span className="nav-account-name nav-label">{userProfile ? accountName : "Signing in..."}</span>
+              <span className="nav-account-name nav-label">{userProfile ? accountName : t("nav.signingIn")}</span>
             </button>
 
             {onOpenVerificationModal && userProfile && (
@@ -945,13 +1012,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className={`nav-verify-badge ${isGitHubVerified ? "is-verified" : ""}`}
                 onClick={onOpenVerificationModal}
                 title={
-                  isGitHubVerified
-                    ? "GitHub verification complete: cloud rooms unlocked."
-                    : "Action required: star the repositories and follow the creator to unlock cloud rooms."
+                  isGitHubVerified ? t("nav.verifyCompleteTitle") : t("nav.verifyNeededTitle")
                 }
               >
                 {isGitHubVerified ? <CheckCircle2 size={11} aria-hidden="true" /> : <Star size={11} aria-hidden="true" />}
-                <span className="nav-label">{isGitHubVerified ? "Cloud Active" : "Verify Cloud"}</span>
+                <span className="nav-label">{isGitHubVerified ? t("nav.cloudActive") : t("nav.verifyCloud")}</span>
               </button>
             )}
 
@@ -960,8 +1025,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 className="nav-signout-btn"
                 onClick={onLogout}
-                title="Sign out of GitHub on this device"
-                aria-label="Sign out"
+                title={t("nav.signOutTitle")}
+                aria-label={t("nav.signOut")}
               >
                 <LogOut size={12} aria-hidden="true" />
               </button>
@@ -975,9 +1040,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             disabled={isSigningIn}
             aria-busy={isSigningIn || undefined}
             title={
-              isSigningIn
-                ? "Finish signing in in the GitHub window"
-                : "Editor invitation: sign in with GitHub to activate your editor permissions"
+              isSigningIn ? t("nav.finishSignInTitle") : t("nav.editorInviteTitle")
             }
           >
             {isSigningIn ? (
@@ -985,14 +1048,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             ) : (
               <KeyRound size={14} aria-hidden="true" />
             )}
-            <span>{isSigningIn ? "Signing in…" : "Sign in to Edit"}</span>
+            <span>{isSigningIn ? t("nav.signingIn") : t("nav.signInToEdit")}</span>
           </button>
         ) : null}
       </div>
 
       {/* Announce only sync problems; routine "syncing / in sync" flips would be noise. */}
       <span className="sr-only" role="status">
-        {isRoomActive && isSyncProblem ? `Cloud sync problem: ${syncMessage || syncLabel}` : ""}
+        {isRoomActive && isSyncProblem
+          ? t("nav.syncProblem", { status: syncMessage || syncLabel })
+          : ""}
       </span>
     </header>
   );

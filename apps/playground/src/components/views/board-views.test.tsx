@@ -191,7 +191,7 @@ describe("TasksView", () => {
       select.value = value;
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    change(container.querySelector<HTMLSelectElement>('[aria-label="Bulk action"]')!, "status");
+    change(container.querySelector<HTMLSelectElement>('[aria-label="Actions"]')!, "status");
     change(container.querySelector<HTMLSelectElement>('[role="dialog"] select')!, "completed");
     act(() => button("Apply changes").click());
     expect(commit).toHaveBeenCalledTimes(1);

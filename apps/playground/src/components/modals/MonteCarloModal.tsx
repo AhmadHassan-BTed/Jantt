@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { FinishConfidence } from "./FinishConfidence";
 import "../views/health.css";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { MessageKey, MessageParams } from "../../i18n";
 import { Modal, ModalHeader } from "./ModalHost";
 import type { JanttData, MonteCarloResult, ScheduleWorkerClient, TaskCriticalityMetric } from "@jantt/core";
 import { DEFAULT_GAP_DAYS, createScheduleWorkerClient } from "@jantt/core";
@@ -24,30 +26,25 @@ export interface MonteCarloModalProps {
 
 /** Duration spread applied to tasks that carry no PERT estimate of their own (right-skewed, like real schedules). */
 const UNCERTAINTY_PRESETS = [
-  { id: "low", label: "Low", optimistic: 0.08, pessimistic: 0.14 },
-  { id: "standard", label: "Standard", optimistic: 0.2, pessimistic: 0.35 },
-  { id: "high", label: "High", optimistic: 0.32, pessimistic: 0.56 }
+  { id: "low", optimistic: 0.08, pessimistic: 0.14 },
+  { id: "standard", optimistic: 0.2, pessimistic: 0.35 },
+  { id: "high", optimistic: 0.32, pessimistic: 0.56 }
 ] as const;
 
 type UncertaintyId = (typeof UNCERTAINTY_PRESETS)[number]["id"];
 
-const ITERATION_OPTIONS: { value: number; label: string }[] = [
-  { value: 500, label: "500 runs" },
-  { value: 1000, label: "1,000 runs" },
-  { value: 2000, label: "2,000 runs (Recommended)" },
-  { value: 5000, label: "5,000 runs (Deep Audit)" }
-];
+const ITERATION_OPTIONS: number[] = [500, 1000, 2000, 5000];
 
 const TOP_DRIVER_COUNT = 7;
 
 /** A deep run of a large plan on a slow device can take a while; past this the run is reported as failed. */
 const SIMULATION_TIMEOUT_MS = 120_000;
 
-const describeSimulationError = (err: unknown): string => {
+const describeSimulationError = (err: unknown, t: (key: MessageKey, params?: MessageParams) => string): string => {
   if (err instanceof Error && err.name === "TimeoutError") {
-    return "The simulation took too long. Try fewer simulation runs.";
+    return t("montecarlo.error.timeout");
   }
-  return err instanceof Error && err.message ? err.message : "Unknown simulation error.";
+  return err instanceof Error && err.message ? err.message : t("montecarlo.error.unknown");
 };
 
 const formatPct = (fraction: number) => `${Math.round(fraction * 100)}%`;
@@ -87,6 +84,29 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
   onClose,
   parsedData
 }) => {
+  const { t, locale } = useI18n();
+  const uncertaintyLabel = (id: UncertaintyId) =>
+    id === "low"
+      ? t("montecarlo.uncertainty.low")
+      : id === "high"
+      ? t("montecarlo.uncertainty.high")
+      : t("montecarlo.uncertainty.standard");
+  const iterationLabel = (value: number) =>
+    value === 500
+      ? t("montecarlo.runs500")
+      : value === 1000
+      ? t("montecarlo.runs1000")
+      : value === 5000
+      ? t("montecarlo.runs5000")
+      : t("montecarlo.runs2000");
+  const riskLevelLabel = (level: string) =>
+    level === "critical"
+      ? t("montecarlo.risk.critical")
+      : level === "high"
+      ? t("montecarlo.risk.high")
+      : level === "medium"
+      ? t("montecarlo.risk.medium")
+      : t("montecarlo.risk.low");
   const [iterations, setIterations] = useState<number>(2000);
   const [uncertainty, setUncertainty] = useState<UncertaintyId>("standard");
   const [run, setRun] = useState<SimulationRun | null>(null);
@@ -161,10 +181,10 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
             console.error("Monte Carlo simulation failed:", err);
             // A timed-out worker is still busy; the next run gets a fresh one.
             if (err instanceof Error && err.name === "TimeoutError") disposeWorker();
-            setError(describeSimulationError(err));
+            setError(describeSimulationError(err, t));
           })
       );
-  }, [liveTasks, gapDays, iterations, uncertainty, planSignature, cancelPendingRun, disposeWorker]);
+  }, [liveTasks, gapDays, iterations, uncertainty, planSignature, cancelPendingRun, disposeWorker, t]);
 
   const isPlanStale = run !== null && run.planSignature !== planSignature;
   const isSettingsStale = run !== null && (run.iterations !== iterations || run.uncertainty !== uncertainty);
@@ -223,25 +243,25 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
 
   const kpis = hasResult && result && p50 && p80 && p95
     ? [
-        { label: "PLANNED DURATION", value: result.baselineDurationDays, sub: `Finish: ${result.baselineCompletionDate}`, color: "var(--jantt-text)" },
-        { label: "P50 (MEDIAN)", value: p50.durationDays, sub: p50.completionDate, color: "var(--jantt-status-info)" },
-        { label: "P80 CONFIDENCE", value: p80.durationDays, sub: p80.completionDate, color: "var(--jantt-status-good)" },
-        { label: "P95 CONFIDENCE", value: p95.durationDays, sub: p95.completionDate, color: riskColor }
+        { label: t("montecarlo.kpi.planned"), value: result.baselineDurationDays, sub: t("montecarlo.kpi.finish", { date: result.baselineCompletionDate }), color: "var(--jantt-text)" },
+        { label: t("montecarlo.kpi.p50"), value: p50.durationDays, sub: p50.completionDate, color: "var(--jantt-status-info)" },
+        { label: t("montecarlo.kpi.p80"), value: p80.durationDays, sub: p80.completionDate, color: "var(--jantt-status-good)" },
+        { label: t("montecarlo.kpi.p95"), value: p95.durationDays, sub: p95.completionDate, color: riskColor }
       ]
     : [];
 
   const staleMessage = isPlanStale
-    ? "The plan changed since this simulation ran."
+    ? t("montecarlo.stalePlan")
     : isSettingsStale
-    ? "Simulation settings changed since these results were computed."
+    ? t("montecarlo.staleSettings")
     : null;
 
   return (
     <Modal onClose={onClose} maxWidth={680}>
       <ModalHeader
         icon={<Dice5 size={18} />}
-        title="Monte Carlo Schedule Risk Analysis"
-        subtitle="Simulates many possible task durations to estimate finish-date confidence and the tasks that drive delay."
+        title={t("montecarlo.title")}
+        subtitle={t("montecarlo.subtitle")}
       />
 
       {/* Content */}
@@ -263,7 +283,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
           <div style={{ display: "flex", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <label htmlFor="mc-iterations" style={{ fontSize: "11px", fontWeight: 600, color: "var(--jantt-text-muted)" }}>
-                SIMULATION RUNS
+                {t("montecarlo.runsLabel")}
               </label>
               <select
                 id="mc-iterations"
@@ -272,30 +292,34 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
                 onChange={(e) => setIterations(Number(e.target.value))}
                 style={selectStyle}
               >
-                {ITERATION_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {ITERATION_OPTIONS.map((value) => (
+                  <option key={value} value={value}>{iterationLabel(value)}</option>
                 ))}
               </select>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <label htmlFor="mc-uncertainty" style={{ fontSize: "11px", fontWeight: 600, color: "var(--jantt-text-muted)" }}>
-                TASK UNCERTAINTY
+                {t("montecarlo.uncertaintyLabel")}
               </label>
               <input type="range" id="mc-uncertainty" min="0" max={UNCERTAINTY_PRESETS.length - 1} step="1"
                 value={UNCERTAINTY_PRESETS.findIndex(preset => preset.id === uncertainty)}
-                disabled={isSimulating} aria-valuetext={uncertainty}
+                disabled={isSimulating} aria-valuetext={uncertaintyLabel(uncertainty)}
                 onChange={event => setUncertainty(UNCERTAINTY_PRESETS[Number(event.target.value)].id)}
                 aria-describedby="mc-uncertainty-hint" />
               {UNCERTAINTY_PRESETS.filter(preset => preset.id === uncertainty).map(preset =>
-                <output htmlFor="mc-uncertainty" key={preset.id}>{preset.label} (−{formatPct(preset.optimistic)} / +{formatPct(preset.pessimistic)})</output>)}
+                <output htmlFor="mc-uncertainty" key={preset.id}>{t("montecarlo.uncertaintyRange", {
+                  label: uncertaintyLabel(preset.id),
+                  optimistic: formatPct(preset.optimistic),
+                  pessimistic: formatPct(preset.pessimistic)
+                })}</output>)}
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             {isSimulating && (
               <button type="button" className="btn-nav" onClick={cancelPendingRun} style={{ height: "34px" }}>
-                Cancel
+                {t("common.cancel")}
               </button>
             )}
             <button
@@ -314,19 +338,22 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
               }}
             >
               {isSimulating ? <RefreshCw size={14} className="spin-sync-icon" /> : <Play size={14} />}
-              <span>{isSimulating ? "Simulating..." : run ? "Re-run Simulation" : "Run Monte Carlo"}</span>
+              <span>{isSimulating ? t("montecarlo.simulating") : run ? t("montecarlo.rerun") : t("montecarlo.run")}</span>
             </button>
           </div>
 
           <p id="mc-uncertainty-hint" style={{ flexBasis: "100%", margin: 0, fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-            Uncertainty widens each task&apos;s duration by the shown optimistic / pessimistic range. Tasks with their own PERT
-            estimates (<code>pert</code> or <code>optimistic</code>/<code>pessimistic</code>) keep their ranges.
+            {t("montecarlo.uncertaintyHint.before")}
+            <code>pert</code>
+            {t("montecarlo.uncertaintyHint.or")}
+            <code>optimistic</code>/<code>pessimistic</code>
+            {t("montecarlo.uncertaintyHint.after")}
           </p>
         </div>
 
         {liveTasks.length === 0 && (
           <div style={{ textAlign: "center", padding: "24px 12px", fontSize: "12.5px", color: "var(--jantt-text-muted)" }}>
-            This plan has no tasks to simulate yet. Add tasks with start and end dates, then run the analysis.
+            {t("montecarlo.empty")}
           </div>
         )}
 
@@ -347,8 +374,8 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
           >
             <AlertTriangle size={16} style={{ color: "var(--jantt-status-bad)", flexShrink: 0, marginTop: "1px" }} />
             <span>
-              <strong>Simulation failed.</strong> {error}
-              {result ? " The results below are from the previous run." : ""}
+              <strong>{t("montecarlo.failedTitle")}</strong> {error}
+              {result ? ` ${t("montecarlo.previousResults")}` : ""}
             </span>
           </div>
         )}
@@ -372,11 +399,11 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
               <AlertTriangle size={14} style={{ color: "var(--jantt-status-warn)", flexShrink: 0 }} />
-              <span><strong>Results out of date.</strong> {staleMessage}</span>
+              <span><strong>{t("montecarlo.staleTitle")}</strong> {staleMessage}</span>
             </span>
             <button type="button" className="btn-nav" onClick={handleRunSimulation} style={{ height: "28px" }}>
               <RefreshCw size={12} />
-              <span>Re-run</span>
+              <span>{t("montecarlo.rerunShort")}</span>
             </button>
           </div>
         )}
@@ -393,7 +420,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
               {kpis.map((kpi) => (
                 <div key={kpi.label} style={kpiCardStyle}>
                   <div style={{ fontSize: "11px", color: "var(--jantt-text-muted)", fontWeight: 600 }}>{kpi.label}</div>
-                  <div style={{ fontSize: "18px", fontWeight: 800, color: kpi.color }}>{kpi.value}d</div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: kpi.color }}>{t("montecarlo.daysValue", { value: kpi.value })}</div>
                   <div style={{ fontSize: "10.5px", color: "var(--jantt-text-muted)" }}>{kpi.sub}</div>
                 </div>
               ))}
@@ -416,14 +443,17 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
               <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: "1 1 260px" }}>
                 <TrendingUp size={16} style={{ color: "var(--jantt-status-info)", flexShrink: 0 }} />
                 <span style={{ fontSize: "12px", color: "var(--jantt-text)" }}>
-                  <strong>Recommended Contingency Buffer:</strong> Add{" "}
-                  <strong>{Math.max(p90.durationDays - result.baselineDurationDays, 0)} days</strong>{" "}
-                  to the planned duration for 90% confidence of on-time delivery
-                  ({result.iterations.toLocaleString()} simulated runs).
+                  <strong>{t("montecarlo.buffer.title")}</strong> {t("montecarlo.buffer.before")}{" "}
+                  <strong>
+                    {t("montecarlo.buffer.days", {
+                      count: Math.max(p90.durationDays - result.baselineDurationDays, 0)
+                    })}
+                  </strong>
+                  {t("montecarlo.buffer.after", { runs: result.iterations.toLocaleString(locale) })}
                 </span>
               </div>
               <span
-                title="Based on the gap between the P95 finish and the planned finish"
+                title={t("montecarlo.risk.title")}
                 style={{
                   fontSize: "11px",
                   fontWeight: 700,
@@ -435,7 +465,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
                   flexShrink: 0
                 }}
               >
-                Risk: {scheduleRiskLevel}
+                {t("montecarlo.risk.value", { level: riskLevelLabel(scheduleRiskLevel) })}
               </span>
             </div>
 
@@ -443,9 +473,9 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
             <div>
               <div style={{ fontSize: "12.5px", fontWeight: 700, marginBottom: "8px", color: "var(--jantt-text)", display: "flex", alignItems: "center", gap: "6px" }}>
                 <BarChart2 size={14} />
-                <span>Top Critical Path Drivers</span>
+                <span>{t("montecarlo.drivers.title")}</span>
                 <span style={{ fontWeight: 500, fontSize: "11px", color: "var(--jantt-text-muted)" }}>
-                  (share of runs in which the task was on the critical path)
+                  {t("montecarlo.drivers.subtitle")}
                 </span>
               </div>
 
@@ -459,15 +489,15 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
               >
                 {topDrivers.length === 0 ? (
                   <div style={{ padding: "14px", fontSize: "12px", color: "var(--jantt-text-muted)" }}>
-                    No task landed on the critical path in the simulated runs.
+                    {t("montecarlo.drivers.empty")}
                   </div>
                 ) : (
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--jantt-border)", background: "var(--jantt-surface-hover, #F1F5F9)" }}>
-                        <th scope="col" style={{ padding: "8px 12px", textAlign: "left", fontSize: "11px", color: "var(--jantt-text-muted)" }}>TASK</th>
-                        <th scope="col" style={{ padding: "8px 12px", textAlign: "left", width: "140px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>CRITICALITY</th>
-                        <th scope="col" style={{ padding: "8px 12px", textAlign: "right", width: "80px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>ON CRITICAL PATH</th>
+                        <th scope="col" style={{ padding: "8px 12px", textAlign: "left", fontSize: "11px", color: "var(--jantt-text-muted)" }}>{t("montecarlo.table.task")}</th>
+                        <th scope="col" style={{ padding: "8px 12px", textAlign: "left", width: "140px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>{t("montecarlo.table.criticality")}</th>
+                        <th scope="col" style={{ padding: "8px 12px", textAlign: "right", width: "80px", fontSize: "11px", color: "var(--jantt-text-muted)" }}>{t("montecarlo.table.onCriticalPath")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -522,7 +552,7 @@ export const MonteCarloModal: React.FC<MonteCarloModalProps> = ({
       {/* Footer */}
       <div className="prompt-modal-footer" style={{ justifyContent: "flex-end" }}>
         <button type="button" className="btn-nav" onClick={onClose}>
-          Close
+          {t("common.close")}
         </button>
       </div>
     </Modal>

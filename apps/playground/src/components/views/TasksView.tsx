@@ -3,7 +3,7 @@ import { MoreTaskRows, usePhoneListPage } from "./PhoneListPage";
 import { TaskPresenceTag } from "../cloud/RoomPresenceStack";
 import type { RoomPresence } from "../../firebase/types";
 import { triggerHaptic } from "../../services/platform";
-import { ChecklistActionDialog, checklistActions, type ChecklistAction, type TaskSelection } from "./ChecklistActionDialog";
+import { ChecklistActionDialog, CHECKLIST_ACTION_KEYS, checklistActions, type ChecklistAction, type TaskSelection } from "./ChecklistActionDialog";
 import {
   CheckSquare,
   X,
@@ -31,7 +31,8 @@ import { storageService } from "../../services/storage";
 import { ResourceLevelingPanel } from "./ResourceLevelingPanel";
 import type { DateFilterMode, CompletedFilterMode, EffectivePerson } from "../../types";
 import { deleteTasks, getPeerId, isTaskMatchingPersonFilter, sortTasksByAssignee } from "../../utils";
-import { TaskStatusSelect, applyTaskStatus, getStatusValue, tintColor, formatShortRange } from "./KanbanView";
+import { TaskStatusSelect, applyTaskStatus, getStatusValue, tintColor, formatShortRange, taskPriorityLabel } from "./KanbanView";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface TasksViewProps {
   remotePresence?: RoomPresence[];
@@ -103,6 +104,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const { t: tr, locale } = useI18n();
   const page = usePhoneListPage(JSON.stringify([tasksViewMode, tasksSearchQuery, dateFilterMode, selectedPersonFilter, completedFilterMode]), isMobile);
   const [selecting, setSelecting] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(() => new Set());
@@ -167,7 +169,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const handleDeleteTask = (task: Task) => {
     if (!requestEdit()) return;
     const label = task.label || task.name || task.id;
-    if (window.confirm(`Delete task "${label}"? Links from other tasks to it will be removed.`)) deleteSelected(new Set([task.id]));
+    if (window.confirm(tr("tasks.deleteConfirmedBody", { name: label }))) deleteSelected(new Set([task.id]));
   };
 
   const resetAllConstraints = () => {
@@ -182,18 +184,16 @@ export const TasksView: React.FC<TasksViewProps> = ({
       return (
         <div className="today-empty-state">
           <ListTodo size={48} style={{ color: "var(--jantt-accent)" }} />
-          <h3>No tasks yet</h3>
+          <h3>{tr("tasks.noTasksYet")}</h3>
           <p>
-            {isViewer
-              ? "This shared plan has no tasks. Make a local copy to start planning."
-              : "Add your first task to start planning this project."}
+            {isViewer ? tr("tasks.emptyViewer") : tr("tasks.emptyOwner")}
             <button
               type="button"
               className="date-filter-reset-btn"
               style={{ marginTop: "12px", display: "inline-flex" }}
               onClick={() => (isViewer ? onPromptFork?.() : handleAddNewTask())}
             >
-              {isViewer ? "Make a Local Copy" : "Add Task"}
+              {isViewer ? tr("tasks.makeLocalCopy") : tr("toolbar.addTask")}
             </button>
           </p>
         </div>
@@ -202,9 +202,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
     return (
       <div className="today-empty-state">
         <CheckCircle2 size={48} style={{ color: "#10B981" }} />
-        <h3>No matching tasks</h3>
+        <h3>{tr("tasks.noMatching")}</h3>
         <p>
-          None of the {activeTasks.length} task{activeTasks.length === 1 ? "" : "s"} match the active filters and search.
+          {tr("tasks.noMatchingBody")}
           {hasActiveConstraint && (
             <button
               type="button"
@@ -212,7 +212,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               style={{ marginTop: "12px", display: "inline-flex" }}
               onClick={resetAllConstraints}
             >
-              Show All Tasks
+              {tr("tasks.showAll")}
             </button>
           )}
         </p>
@@ -225,43 +225,45 @@ export const TasksView: React.FC<TasksViewProps> = ({
       {/* Header with Title, Stats, Search, View Mode, Add Task (person filter lives in the filter bar) */}
       {isMobile ? (
         <div className="tasks-view-header is-mobile-compact">
-          <span className="tasks-mobile-stats">{matchingDateFilterTasks.length} tasks • {matchingDateFilterTasks.filter((t) => isTaskDone(t)).length} done</span>
+          <span className="tasks-mobile-stats">{tr("tasks.mobileStats", { count: matchingDateFilterTasks.length, done: matchingDateFilterTasks.filter((task) => isTaskDone(task)).length })}</span>
           <div className="tasks-mobile-controls">
-            <div className="tasks-mode-group" role="group" aria-label="Task layout">
-              <button type="button" className={`tasks-mode-btn ${tasksViewMode === "cards" ? "is-active" : ""}`} onClick={() => setTasksViewMode("cards")} aria-pressed={tasksViewMode === "cards"}>Cards</button>
-              <button type="button" className={`tasks-mode-btn ${tasksViewMode === "todo" ? "is-active" : ""}`} onClick={() => setTasksViewMode("todo")} aria-pressed={tasksViewMode === "todo"}>List</button>
+            <div className="tasks-mode-group" role="group" aria-label={tr("tasks.layout")}>
+              <button type="button" className={`tasks-mode-btn ${tasksViewMode === "cards" ? "is-active" : ""}`} onClick={() => setTasksViewMode("cards")} aria-pressed={tasksViewMode === "cards"}>{tr("tasks.cards")}</button>
+              <button type="button" className={`tasks-mode-btn ${tasksViewMode === "todo" ? "is-active" : ""}`} onClick={() => setTasksViewMode("todo")} aria-pressed={tasksViewMode === "todo"}>{tr("tasks.list")}</button>
             </div>
-            {tasksViewMode === "todo" && !isViewer && <button type="button" className="btn-nav" aria-label={selecting ? "Finish selection" : "Select tasks"} aria-pressed={selecting} onClick={toggleSelection}>
-              {selecting ? "Done" : "Select"}
+            {tasksViewMode === "todo" && !isViewer && <button type="button" className="btn-nav" aria-label={selecting ? tr("tasks.finishSelection") : tr("tasks.selectTasks")} aria-pressed={selecting} onClick={toggleSelection}>
+              {selecting ? tr("common.done") : tr("tasks.select")}
             </button>}
-            <button type="button" className="btn-nav" onClick={() => setShowResourceLeveling((shown) => !shown)} aria-expanded={showResourceLeveling}>Level</button>
+            <button type="button" className="btn-nav" onClick={() => setShowResourceLeveling((shown) => !shown)} aria-expanded={showResourceLeveling}>{tr("tasks.level")}</button>
           </div>
         </div>
       ) : <div className="tasks-view-header">
         <div className="tasks-view-title-section">
           <CheckSquare size={22} style={{ color: "var(--jantt-accent)" }} />
           <div>
-            <h2 className="tasks-view-title">Tasks &amp; Detailed Todo</h2>
+            <h2 className="tasks-view-title">{tr("tasks.title")}</h2>
             <span className="tasks-view-subtitle">
-              {matchingDateFilterTasks.length} task{matchingDateFilterTasks.length === 1 ? "" : "s"}
-              {dateFilterMode !== "all" ? " matching active date filter" : " in project"}
-              {" • "}
-              {matchingDateFilterTasks.filter((t) => isTaskDone(t)).length} completed
-              {" • "}
-              {matchingDateFilterTasks.filter((t) => t.status === "in-progress").length} in progress
+              {tr(
+                matchingDateFilterTasks.length === 1 ? "tasks.subtitleSingle" : "tasks.subtitle",
+                {
+                  total: matchingDateFilterTasks.length,
+                  done: matchingDateFilterTasks.filter((task) => isTaskDone(task)).length,
+                  active: matchingDateFilterTasks.filter((task) => task.status === "in-progress").length
+                }
+              )}
             </span>
           </div>
         </div>
 
         <div className="tasks-view-toolbar">
-          <button type="button" className="btn-nav" onClick={() => setShowResourceLeveling((shown) => !shown)} aria-expanded={showResourceLeveling}>Resource leveling</button>
+          <button type="button" className="btn-nav" onClick={() => setShowResourceLeveling((shown) => !shown)} aria-expanded={showResourceLeveling}>{tr("tasks.resourceLeveling")}</button>
           {/* Search Filter */}
           <div className="tasks-search-wrap">
             <input
               type="text"
               className="tasks-search-input"
-              placeholder="Search tasks, WBS, tags..."
-              aria-label="Search tasks"
+              placeholder={tr("tasks.searchPlaceholder")}
+              aria-label={tr("toolbar.searchAriaShort")}
               value={tasksSearchQuery}
               onChange={(e) => setTasksSearchQuery(e.target.value)}
             />
@@ -270,8 +272,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 type="button"
                 className="tasks-search-clear"
                 onClick={() => setTasksSearchQuery("")}
-                title="Clear search"
-                aria-label="Clear search"
+                title={tr("toolbar.clearSearch")}
+                aria-label={tr("toolbar.clearSearch")}
                 style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
                 <X size={12} />
@@ -280,26 +282,26 @@ export const TasksView: React.FC<TasksViewProps> = ({
           </div>
 
           {/* Mode Selector: Cards vs Todo Checklist */}
-          <div className="tasks-mode-group" role="group" aria-label="Task layout">
+          <div className="tasks-mode-group" role="group" aria-label={tr("tasks.layout")}>
             <button
               type="button"
               className={`tasks-mode-btn ${tasksViewMode === "cards" ? "is-active" : ""}`}
               onClick={() => setTasksViewMode("cards")}
               aria-pressed={tasksViewMode === "cards"}
-              title="Display as detailed task cards"
+              title={tr("tasks.cardsTitle")}
             >
               <Kanban size={12} />
-              Cards
+              {tr("tasks.cards")}
             </button>
             <button
               type="button"
               className={`tasks-mode-btn ${tasksViewMode === "todo" ? "is-active" : ""}`}
               onClick={() => setTasksViewMode("todo")}
               aria-pressed={tasksViewMode === "todo"}
-              title="Display as interactive Todo checklist"
+              title={tr("tasks.listTitle")}
             >
               <ListTodo size={12} />
-              Todo List
+              {tr("tasks.todoList")}
             </button>
           </div>
 
@@ -310,10 +312,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
               className="btn-nav is-primary"
               style={{ padding: "5px 10px", borderRadius: "7px", fontSize: "11.5px" }}
               onClick={handleAddNewTask}
-              title="Create a new task in this project"
+              title={tr("tasks.addTaskTitle")}
             >
               <Plus size={12} />
-              <span>Add Task</span>
+              <span>{tr("toolbar.addTask")}</span>
             </button>
           )}
         </div>
@@ -370,7 +372,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
           return {
             isCompleted,
             isDimmed: isFilterDimmed || isCompletedDimmed,
-            dimReason: isCompletedDimmed ? "Completed" : isPersonFiltering && !isPersonMatch ? "Other Assignee" : "Outside Date"
+            dimReason: isCompletedDimmed ? tr("kanban.dimmedCompleted") : isPersonFiltering && !isPersonMatch ? tr("kanban.dimmedOtherAssignee") : tr("kanban.dimmedOutsideDate")
           };
         };
 
@@ -379,8 +381,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
             <button
               type="button"
               className="kanban-sort-remove-btn"
-              title="Delete task"
-              aria-label={`Delete task ${t.label || t.name || t.id}`}
+              title={tr("tasks.delete")}
+              aria-label={tr("tasks.deleteNamed", { title: t.label || t.name || t.id })}
               onClick={(e) => {
                 e.stopPropagation();
                 handleDeleteTask(t);
@@ -395,17 +397,17 @@ export const TasksView: React.FC<TasksViewProps> = ({
           return (
             <div className="tasks-todo-list">
               {!isViewer && (!isMobile || selecting) && <div className="checklist-selection-bar">
-                {!isMobile && <button type="button" aria-pressed={selecting} onClick={toggleSelection}>{selecting ? "Done" : "Select tasks"}</button>}
+                {!isMobile && <button type="button" aria-pressed={selecting} onClick={toggleSelection}>{selecting ? tr("common.done") : tr("tasks.selectTasks")}</button>}
                 {selecting && <>
                   <button type="button" onClick={() => setSelected(marked.length === tasksToDisplay.length ? new Set() : new Set(tasksToDisplay.map(task => task.id)))}>
-                    {marked.length === tasksToDisplay.length ? "Clear" : "Select all"}
+                    {marked.length === tasksToDisplay.length ? tr("tasks.clear") : tr("tasks.selectAll")}
                   </button>
-                  <span aria-live="polite">{marked.length} selected</span>
-                  <select aria-label="Bulk action" disabled={!marked.length} value="" onChange={event => {
+                  <span aria-live="polite">{tr("tasks.selected", { count: marked.length })}</span>
+                  <select aria-label={tr("tasks.actions")} disabled={!marked.length} value="" onChange={event => {
                     setSelection({ action: event.target.value as ChecklistAction, ids: new Set(marked.map(task => task.id)) });
                   }}>
-                    <option value="" disabled>Actions</option>
-                    {Object.entries(checklistActions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                    <option value="" disabled>{tr("tasks.actions")}</option>
+                    {Object.keys(checklistActions).map(key => <option key={key} value={key}>{tr(CHECKLIST_ACTION_KEYS[key as keyof typeof CHECKLIST_ACTION_KEYS])}</option>)}
                   </select>
                 </>}
               </div>}
@@ -415,25 +417,25 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 const { isCompleted, isDimmed, dimReason } = describeDim(t);
                 const assigneeInfo = resolveTaskAssignee(t, effectivePeople, teams);
                 const title = t.label || t.name || t.id;
-                const dateLabel = formatShortRange(t.start, t.end);
-                const assigneeLabel = t.assignee ? [assigneeInfo.initials, assigneeInfo.displayName].join(" ") : "Unassigned";
+                const dateLabel = formatShortRange(t.start, t.end, locale);
+                const assigneeLabel = t.assignee ? [assigneeInfo.initials, assigneeInfo.displayName].join(" ") : tr("tasks.unassigned");
                 if (isMobile) return <div key={t.id} role="group" aria-label={title}
                   className={`tasks-todo-row phone-task-line ${isCompleted ? "is-completed" : ""} ${isDimmed ? "is-dimmed" : ""}`}
                   style={{ borderLeftColor: catColor }}>
                   {selecting && !isViewer ? <label className="phone-task-check"><input type="checkbox" checked={selected.has(t.id)}
-                    aria-label={`Select ${title}`} onChange={() => toggleSelected(t.id)} /></label> :
+                    aria-label={tr("tasks.selectNamed", { title })} onChange={() => toggleSelected(t.id)} /></label> :
                     <button type="button" className="phone-task-check" disabled={isViewer} aria-pressed={isCompleted}
-                      aria-label={`Mark ${title} as ${isCompleted ? "in progress" : "completed"}`} onClick={() => handleToggleDone(t)}>
+                      aria-label={tr(isCompleted ? "tasks.markNamedInProgress" : "tasks.markNamedCompleted", { title })} onClick={() => handleToggleDone(t)}>
                       {isCompleted ? <CheckCircle2 size={18} /> : <span className="phone-checkbox-outline" />}
                     </button>}
-                  <button type="button" className="phone-task-title" aria-label={`Open details for ${title}`}
+                  <button type="button" className="phone-task-title" aria-label={tr("board.openDetails", { title })}
                     onClick={() => openTaskDetailSidebar(t)}>{title}</button>
-                  <button type="button" className="phone-task-member" disabled={isViewer} aria-label={`${assigneeLabel}. Assign member to ${title}`}
+                  <button type="button" className="phone-task-member" disabled={isViewer} aria-label={tr("tasks.assignNamed", { member: assigneeLabel, title })}
                     title={assigneeInfo.displayName} onClick={() => setSelection({ action: "assignee", ids: new Set([t.id]) })}>
                     {t.assignee ? <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span> : <UserRound size={16} />}
                   </button>
                   <div className="phone-task-controls">
-                    <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={`${dateLabel}. Edit dates for ${title}`}
+                    <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={tr("tasks.editNamedDates", { date: dateLabel, title })}
                       onClick={() => setSelection({ action: "dates", ids: new Set([t.id]) })}>
                       <Calendar size={13} /> {dateLabel}
                     </button>
@@ -454,7 +456,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   >
                     <div className="tasks-todo-left">
                       {selecting && !isViewer ? <label className="checklist-checkbox">
-                        <input type="checkbox" checked={selected.has(t.id)} aria-label={`Select ${title}`} onChange={() => toggleSelected(t.id)} />
+                        <input type="checkbox" checked={selected.has(t.id)} aria-label={tr("tasks.selectNamed", { title })} onChange={() => toggleSelected(t.id)} />
                       </label> :
                       <button
                         type="button"
@@ -465,8 +467,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                           e.stopPropagation();
                           handleToggleDone(t);
                         }}
-                        title={isViewer ? "Read-only" : isCompleted ? "Mark as in progress" : "Mark as completed"}
-                        aria-label={isCompleted ? `Mark ${title} as in progress` : `Mark ${title} as completed`}
+                        title={isViewer ? tr("tasks.readOnlyAria") : isCompleted ? tr("tasks.markInProgress") : tr("tasks.markCompleted")}
+                        aria-label={tr(isCompleted ? "tasks.markNamedInProgress" : "tasks.markNamedCompleted", { title })}
                       >
                         {isCompleted ? (
                           <CheckCircle2 size={18} />
@@ -480,25 +482,25 @@ export const TasksView: React.FC<TasksViewProps> = ({
                           <span className="kanban-cat-dot" style={{ background: catColor }} />
                           <span className="kanban-cat-label" style={{ fontSize: "11px" }}>{cat?.label || t.category}</span>
                           <button type="button" className={`tasks-todo-title checklist-open-task ${isCompleted ? "is-struck" : ""}`}
-                            aria-label={`Open details for ${title}`} onClick={() => openTaskDetailSidebar(t)}>{title}</button>
+                            aria-label={tr("board.openDetails", { title })} onClick={() => openTaskDetailSidebar(t)}>{title}</button>
                           {isDimmed && (
-                            <span className="task-dimmed-tag" title="Task is dimmed by the active filters">
+                            <span className="task-dimmed-tag" title={tr("kanban.dimmedByFilters")}>
                               {dimReason}
                             </span>
                           )}
                           {t.priority && (
-                            <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>
+                            <span className={`kanban-prio-badge is-${t.priority}`}>{taskPriorityLabel(tr, t.priority)}</span>
                           )}
                         </div>
                         <div className="tasks-todo-meta">
-                          <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={`${dateLabel}. Edit dates for ${title}`}
+                          <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={tr("tasks.editNamedDates", { date: dateLabel, title })}
                             onClick={() => setSelection({ action: "dates", ids: new Set([t.id]) })}>
                             <Calendar size={13} /> {dateLabel}
                           </button>
-                          <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={`${assigneeLabel}. Assign member to ${title}`}
+                          <button type="button" className="checklist-row-action" disabled={isViewer} aria-label={tr("tasks.assignNamed", { member: assigneeLabel, title })}
                             onClick={() => setSelection({ action: "assignee", ids: new Set([t.id]) })}>
                             {t.assignee ? <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span> : <UserRound size={13} />}
-                            {t.assignee ? assigneeInfo.displayName : "Unassigned"}
+                            {t.assignee ? assigneeInfo.displayName : tr("tasks.unassigned")}
                           </button>
                         </div>
                         <TaskPresenceTag users={remotePresence} taskId={t.id} />
@@ -547,14 +549,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   <TaskPresenceTag users={remotePresence} taskId={t.id} />
                   {isMobile ? <>
                   <div className="tasks-mobile-card-top">
-                    <button type="button" className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`} disabled={isViewer} aria-pressed={isCompleted} aria-label={isCompleted ? "Mark as in progress" : "Mark as completed"} onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}>{isCompleted ? <Check size={11} /> : null}</button>
+                    <button type="button" className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`} disabled={isViewer} aria-pressed={isCompleted} aria-label={isCompleted ? tr("tasks.markInProgress") : tr("tasks.markCompleted")} onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}>{isCompleted ? <Check size={11} /> : null}</button>
                     {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
-                    <h3 className="tasks-mobile-card-title"><button type="button" className="checklist-open-task" aria-label={`Open details for ${title}`}
+                    <h3 className="tasks-mobile-card-title"><button type="button" className="checklist-open-task" aria-label={tr("board.openDetails", { title })}
                       onClick={() => openTaskDetailSidebar(t)}>{title}</button></h3>
-                    {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
+                    {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{taskPriorityLabel(tr, t.priority)}</span>}
                   </div>
                   <div className="tasks-mobile-card-bottom">
-                    <span className="kanban-mobile-date">{formatShortRange(t.start, t.end)}</span>
+                    <span className="kanban-mobile-date">{formatShortRange(t.start, t.end, locale)}</span>
                     {t.assignee && <span className="task-person-avatar" style={{ borderColor: assigneeInfo.avatarColor }}>{assigneeInfo.initials}</span>}
                     <span className="tasks-mobile-prog-chip">{progressPct}%</span>
                     <TaskStatusSelect task={t} value={getStatusValue(t)} disabled={isViewer} onStatusChange={(status) => handleStatusChange(t.id, status)} />
@@ -566,20 +568,20 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       <span className="kanban-cat-dot" style={{ background: catColor }} />
                       <span>{cat?.label || t.category}</span>
                       {isDimmed && (
-                        <span className="task-dimmed-tag" title="Task is dimmed by the active filters">
+                        <span className="task-dimmed-tag" title={tr("kanban.dimmedByFilters")}>
                           {dimReason}
                         </span>
                       )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       {t.wbs && <span className="kanban-wbs-badge">{t.wbs}</span>}
-                      {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{t.priority}</span>}
+                      {t.priority && <span className={`kanban-prio-badge is-${t.priority}`}>{taskPriorityLabel(tr, t.priority)}</span>}
                       {!isMobile && <button
                         type="button"
                         className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`}
                         disabled={isViewer}
                         aria-pressed={isCompleted}
-                        title={isViewer ? "Read-only" : isCompleted ? "Mark as in progress" : "Mark as completed"}
+                        title={isViewer ? tr("tasks.readOnlyAria") : isCompleted ? tr("tasks.markInProgress") : tr("tasks.markCompleted")}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleToggleDone(t);
@@ -590,7 +592,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       </button>}
                     </div>
                   </div>
-                  <h3 className="today-card-title"><button type="button" className="checklist-open-task" aria-label={`Open details for ${title}`}
+                  <h3 className="today-card-title"><button type="button" className="checklist-open-task" aria-label={tr("board.openDetails", { title })}
                     onClick={() => openTaskDetailSidebar(t)}>{title}</button></h3>
                   <div className="today-card-meta">
                     <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -626,7 +628,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   {!isMobile && (isCompleted ? (
                     <div className="today-card-complete" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                       <Check size={11} />
-                      <span>Completed</span>
+                      <span>{tr("kanban.dimmedCompleted")}</span>
                     </div>
                   ) : (
                     <div className="today-card-progress">
@@ -637,7 +639,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     </div>
                   ))}
                   <div className={isMobile ? "task-card-mobile-actions" : "today-card-actions"} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    {isMobile && <button type="button" className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`} disabled={isViewer} aria-pressed={isCompleted} aria-label={isCompleted ? "Mark as in progress" : "Mark as completed"} onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}>{isCompleted ? <Check size={11} /> : null}</button>}
+                    {isMobile && <button type="button" className={`tasks-card-check-btn ${isCompleted ? "is-checked" : ""}`} disabled={isViewer} aria-pressed={isCompleted} aria-label={isCompleted ? tr("tasks.markInProgress") : tr("tasks.markCompleted")} onClick={(e) => { e.stopPropagation(); handleToggleDone(t); }}>{isCompleted ? <Check size={11} /> : null}</button>}
                     <TaskStatusSelect
                       task={t}
                       value={getStatusValue(t)}

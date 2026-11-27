@@ -26,6 +26,8 @@ import {
 } from "./note-markdown";
 import { AttachedTasksDrawer } from "./AttachedTasksDrawer";
 import { useNoteMentionEngine, usePopoverDismiss } from "./useNoteMentionEngine";
+import { useI18n } from "../../../i18n/I18nProvider";
+import type { MessageKey } from "../../../i18n";
 
 export interface NoteEditorProps {
   activeNote: NoteItem;
@@ -124,6 +126,20 @@ function renderBlock(block: NoteBlock, i: number): React.ReactNode {
   }
 }
 
+/** Localized palette color name; unknown palette entries keep their English label. */
+function noteColorLabel(t: (key: MessageKey) => string, id: string, fallback: string): string {
+  switch (id) {
+    case "#3B82F6": return t("notes.color.blue");
+    case "#10B981": return t("notes.color.emerald");
+    case "#F59E0B": return t("notes.color.amber");
+    case "#8B5CF6": return t("notes.color.violet");
+    case "#F43F5E": return t("notes.color.rose");
+    case "#06B6D4": return t("notes.color.cyan");
+    case "#64748B": return t("notes.color.slate");
+    default: return fallback;
+  }
+}
+
 export const NoteEditor: React.FC<NoteEditorProps> = ({
   activeNote,
   editTitle,
@@ -149,6 +165,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   isViewer = false,
   onPromptFork
 }) => {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -272,11 +289,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             type="button"
             className="note-back-btn"
             onClick={onBackToGallery}
-            aria-label="All notes"
-            title="Back to Notes Overview"
+            aria-label={t("notes.allNotes")}
+            title={t("notes.backToOverview")}
           >
             <ArrowLeft size={16} />
-            <span>All Notes</span>
+            <span>{t("notes.allNotes")}</span>
           </button>
           <div className="note-save-indicator" aria-live="polite">
             {isViewer ? (
@@ -284,20 +301,20 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 type="button"
                 className="save-tag is-viewer"
                 onClick={() => onPromptFork?.()}
-                title="This shared note is read-only. Click to make an editable local copy."
+                title={t("notes.readOnlyCopyTitle")}
               >
                 <Eye size={12} />
-                <span>Read-only · Make a copy</span>
+                <span>{t("notes.readOnlyCopy")}</span>
               </button>
             ) : saveStatus === "saved" ? (
               <span className="save-tag is-saved">
                 <CheckCircle2 size={12} />
-                <span>Saved</span>
+                <span>{t("notes.saved")}</span>
               </span>
             ) : (
               <span className="save-tag is-saving">
                 <RefreshCw size={12} className="spin-icon" />
-                <span>Saving...</span>
+                <span>{t("notes.saving")}</span>
               </span>
             )}
           </div>
@@ -310,8 +327,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             onClick={() => setEditPinned(!editPinned)}
             disabled={isViewer}
             aria-pressed={editPinned}
-            aria-label={editPinned ? "Unpin note" : "Pin note to top"}
-            title={isViewer ? (editPinned ? "Pinned (read-only)" : "Not pinned (read-only)") : editPinned ? "Unpin note" : "Pin note to top"}
+            aria-label={editPinned ? t("notes.unpin") : t("notes.pin")}
+            title={isViewer ? (editPinned ? t("notes.pinnedReadOnly") : t("notes.notPinnedReadOnly")) : editPinned ? t("notes.unpin") : t("notes.pin")}
           >
             <Pin size={15} />
           </button>
@@ -326,14 +343,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               disabled={isViewer}
               aria-haspopup="true"
               aria-expanded={showColorPicker}
-              aria-label="Change note color"
-              title={isViewer ? "Note color (read-only)" : "Change note color"}
+              aria-label={t("notes.changeColor")}
+              title={isViewer ? t("notes.colorReadOnly") : t("notes.changeColor")}
             >
               <span className="note-color-swatch-indicator" style={{ backgroundColor: sanitizeCssColor(editColor, DEFAULT_NOTE_COLOR) }} />
             </button>
 
             {!isViewer && showColorPicker && (
-              <div className="note-color-picker-dropdown" role="group" aria-label="Note color">
+              <div className="note-color-picker-dropdown" role="group" aria-label={t("notes.noteColor")}>
                 {NOTE_PALETTE.map((pal) => (
                   <button
                     key={pal.id}
@@ -341,13 +358,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                     className={`note-picker-swatch ${editColor === pal.id ? "is-selected" : ""}`}
                     style={{ backgroundColor: pal.bg }}
                     aria-pressed={editColor === pal.id}
-                    aria-label={pal.label}
+                    aria-label={noteColorLabel(t, pal.id, pal.label)}
                     onClick={() => {
                       setEditColor(pal.id);
                       setShowColorPicker(false);
                       colorTriggerRef.current?.focus();
                     }}
-                    title={pal.label}
+                    title={noteColorLabel(t, pal.id, pal.label)}
                   />
                 ))}
               </div>
@@ -359,8 +376,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             className={`note-action-btn ${isPreviewMode ? "is-active" : ""}`}
             onClick={() => setIsPreviewMode(!isPreviewMode)}
             aria-pressed={isPreviewMode}
-            aria-label={isPreviewMode ? "Back to editing" : "Preview formatted note"}
-            title={isPreviewMode ? "Back to editing" : "Preview formatted note (Markdown)"}
+            aria-label={isPreviewMode ? t("notes.backToEditing") : t("notes.previewToggle")}
+            title={isPreviewMode ? t("notes.backToEditing") : t("notes.previewToggleTitle")}
           >
             {isPreviewMode ? <Edit3 size={15} /> : <Eye size={15} />}
           </button>
@@ -370,8 +387,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               type="button"
               className="note-action-btn is-danger"
               onClick={() => onDeleteNote(activeNote.id)}
-              aria-label="Delete this note"
-              title="Delete this note"
+              aria-label={t("notes.deleteThis")}
+              title={t("notes.deleteThis")}
             >
               <Trash2 size={15} />
             </button>
@@ -386,8 +403,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             ref={titleInputRef}
             type="text"
             className={`note-title-input ${isViewer ? "is-readonly" : ""}`}
-            placeholder={isViewer ? "Untitled Note" : "Note title..."}
-            aria-label="Note title"
+            placeholder={isViewer ? t("notes.untitled") : t("notes.titlePlaceholder")}
+            aria-label={t("notes.titleAria")}
             value={editTitle}
             readOnly={isViewer}
             onChange={(e) => {
@@ -401,7 +418,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               {toText(editContent).trim() ? (
                 <div style={{ lineHeight: 1.6, overflowWrap: "anywhere" }}>{previewBlocks.map(renderBlock)}</div>
               ) : (
-                <span className="note-preview-empty">No content in this note.</span>
+                <span className="note-preview-empty">{t("notes.noContent")}</span>
               )}
             </div>
           ) : (
@@ -412,7 +429,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               suppressContentEditableWarning
               role="textbox"
               aria-multiline="true"
-              aria-label="Note body"
+              aria-label={t("notes.bodyAria")}
               aria-readonly={isViewer || undefined}
               aria-autocomplete={isViewer ? undefined : "list"}
               aria-controls={isMentionOpen ? listboxId : undefined}
@@ -424,8 +441,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               onDrop={isViewer ? undefined : handleDrop}
               data-placeholder={
                 isViewer
-                  ? "This note is empty."
-                  : "Start typing your note... Use @ to mention team members and / to reference tasks."
+                  ? t("notes.bodyEmptyViewer")
+                  : t("notes.bodyPlaceholder")
               }
             />
           )}
@@ -456,13 +473,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           }}
         >
           <div className="note-dropdown-header" id={`${listboxId}-label`}>
-            {mentionPopup.type === "person" ? "Mention team member" : "Reference task"}
+            {mentionPopup.type === "person" ? t("notes.mentionPerson") : t("notes.mentionTask")}
           </div>
 
           <div className="note-dropdown-list" id={listboxId} role="listbox" aria-labelledby={`${listboxId}-label`}>
             {mentionPopup.type === "person" ? (
               autocompletePeople.length === 0 ? (
-                <div className="note-dropdown-empty">No matching team members</div>
+                <div className="note-dropdown-empty">{t("notes.noMatchingPeople")}</div>
               ) : (
                 autocompletePeople.map((person, idx) => (
                   <button
@@ -488,7 +505,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 ))
               )
             ) : autocompleteTasks.length === 0 ? (
-              <div className="note-dropdown-empty">No matching tasks</div>
+              <div className="note-dropdown-empty">{t("tasks.noMatching")}</div>
             ) : (
               autocompleteTasks.map((task, idx) => (
                 <button

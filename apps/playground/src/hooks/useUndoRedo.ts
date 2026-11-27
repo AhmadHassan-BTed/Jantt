@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { getTaskDependencyRelations, type JanttData, type Task } from "@jantt/core";
 import { commandBus } from "../services/bus";
 import { deleteTasks, getPeerId } from "../utils";
+import { tGlobal } from "../i18n";
 
 const MAX_HISTORY = 50;
 /** Consecutive commits touching exactly the same fields within this window form one undo step. */
@@ -330,9 +331,7 @@ export function useUndoRedo(
       if (result.applied === 0) {
         bump();
         showToastRef.current?.(
-          direction === "undo"
-            ? "Nothing to undo: that change was already modified since."
-            : "Nothing to redo: that change was already modified since.",
+          direction === "undo" ? tGlobal("hooks.undo.nothingToUndo") : tGlobal("hooks.undo.nothingToRedo"),
           true
         );
         return;
@@ -347,8 +346,15 @@ export function useUndoRedo(
       }
       bump();
 
-      const verb = direction === "undo" ? "Undid last change" : "Redid change";
-      showToastRef.current?.(result.skipped > 0 ? `${verb}. Fields edited since were kept.` : verb);
+      const verb =
+        direction === "undo"
+          ? result.skipped > 0
+            ? tGlobal("hooks.undo.undidKept")
+            : tGlobal("hooks.undo.undid")
+          : result.skipped > 0
+            ? tGlobal("hooks.undo.redidKept")
+            : tGlobal("hooks.undo.redid");
+      showToastRef.current?.(verb);
     },
     [bump]
   );

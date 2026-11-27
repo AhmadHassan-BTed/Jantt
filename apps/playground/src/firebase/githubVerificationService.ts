@@ -1,3 +1,4 @@
+import { tGlobal } from "../i18n";
 import type { RepoItem, VerificationStatus } from "./types";
 
 export const TARGET_USER = "AhmadHassan-BTed";
@@ -382,7 +383,7 @@ export async function verifyAllGitHubRequirements(
 
   try {
     if (!githubLogin && !token) {
-      throw new Error("Sign in with GitHub again to verify your account.");
+      throw new Error(tGlobal("services.github.signInAgain"));
     }
 
     const [targetRepos, isFollowingUser, isFollowingOrg, starredSet] = await Promise.all([
@@ -425,7 +426,7 @@ export async function verifyAllGitHubRequirements(
       missingRepos: ALL_TARGET_REPOS,
       totalRepos: ALL_TARGET_REPOS.length,
       isDevBypass: false,
-      error: err?.message || "Failed to verify GitHub status."
+      error: err?.message || tGlobal("services.github.verificationFailed")
     };
   }
 }

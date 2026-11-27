@@ -1,5 +1,6 @@
 import React from "react";
 import { KeyRound, LogIn, Copy, ShieldCheck, RefreshCw } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader } from "./ModalHost";
 
 interface EditorLoginModalProps {
@@ -17,12 +18,13 @@ interface EditorLoginModalProps {
 export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
   show,
   setShow,
-  roomTitle = "Shared Plan",
+  roomTitle,
   onLogin,
   onMakeLocalCopy,
   allowFork = true,
   isSigningIn = false
 }) => {
+  const { t } = useI18n();
   if (!show) return null;
 
   const close = () => setShow(false);
@@ -31,8 +33,8 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
     <Modal onClose={close} maxWidth={480} ariaDescribedBy="editor-login-desc">
       <ModalHeader
         icon={<KeyRound size={18} />}
-        title="Sign In to Edit This Room"
-        subtitle={<span style={{ overflowWrap: "anywhere" }}>{roomTitle}</span>}
+        title={t("editorlogin.title")}
+        subtitle={<span style={{ overflowWrap: "anywhere" }}>{roomTitle ?? t("editorlogin.defaultTitle")}</span>}
       />
 
       <div className="prompt-modal-body" style={{ gap: "16px" }}>
@@ -50,16 +52,16 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", color: "var(--jantt-accent)", fontWeight: 600 }}>
             <ShieldCheck size={16} aria-hidden="true" />
-            <span>You were invited as an editor</span>
+            <span>{t("editorlogin.badge")}</span>
           </div>
           <p style={{ margin: "0 0 8px 0" }}>
-            You can view this plan right now without an account. To edit it and sync changes with your team,
-            <strong> sign in with GitHub</strong>.
+            {t("editorlogin.bodyBefore")}<strong>{t("editorlogin.bodyStrong")}</strong>
+            {t("editorlogin.bodyAfter")}
           </p>
           <p style={{ margin: 0, color: "var(--jantt-text-muted)", fontSize: "12.5px" }}>
             {allowFork && onMakeLocalCopy
-              ? "Prefer not to sign in? Make a private copy on this device instead; the shared room stays unchanged."
-              : "Until you sign in, the plan stays read-only."}
+              ? t("editorlogin.forkHint")
+              : t("editorlogin.readOnlyHint")}
           </p>
         </div>
 
@@ -83,7 +85,7 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
             ) : (
               <LogIn size={16} aria-hidden="true" />
             )}
-            <span>{isSigningIn ? "Signing In with GitHub..." : "Sign In with GitHub to Edit"}</span>
+            <span>{isSigningIn ? t("editorlogin.signingIn") : t("editorlogin.signIn")}</span>
           </button>
 
           {allowFork && onMakeLocalCopy && (
@@ -97,7 +99,7 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
               }}
             >
               <Copy size={15} aria-hidden="true" />
-              <span>Make a Private Local Copy</span>
+              <span>{t("editorlogin.makeCopy")}</span>
             </button>
           )}
 
@@ -107,7 +109,7 @@ export const EditorLoginModal: React.FC<EditorLoginModalProps> = ({
             style={{ width: "100%", background: "transparent", color: "var(--jantt-text-muted)", fontWeight: 500 }}
             onClick={close}
           >
-            Keep Viewing Read-Only
+            {t("editorlogin.keepViewing")}
           </button>
         </div>
       </div>

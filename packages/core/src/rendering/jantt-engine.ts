@@ -1,3 +1,4 @@
+import { getTimelineLocaleOptions } from "../timeline-locales";
 import {
   JanttData,
   JanttOptions,
@@ -113,6 +114,16 @@ export class JanttRendererEngine {
   /** True while dragging a timeline header column/handle: defers host viewport broadcasts until release. */
   private isColumnDragging = false;
 
+  private get labels() {
+    const { labels, locale } = this.currentOptions;
+    const preset = getTimelineLocaleOptions(locale).labels;
+    return preset && labels ? { ...preset, ...labels } : labels ?? preset;
+  }
+
+  private get toolbarTranslation() {
+    return this.currentOptions.translateToolbar ?? getTimelineLocaleOptions(this.currentOptions.locale).translateToolbar;
+  }
+
   constructor(container: HTMLElement, initialData: JanttData, options: JanttOptions = {}) {
     this.container = container;
     this.currentOptions = { ...options };
@@ -158,6 +169,7 @@ export class JanttRendererEngine {
     this.root = document.createElement("div");
     this.root.className = `jantt-container ${this.currentOptions.themeClassName || ""} ${this.currentOptions.className || ""}`.trim();
     this.container.appendChild(this.root);
+    if (this.labels?.locale) this.root.lang = this.labels.locale;
 
     this.applyThemeStyles();
 
@@ -398,8 +410,12 @@ export class JanttRendererEngine {
       customContainer = this.currentOptions.sidebarContainer;
     }
 
+    const translateSidebar = this.currentOptions.translateTaskSidebar;
+    const presetSidebar = getTimelineLocaleOptions(this.currentOptions.locale).translateTaskSidebar;
     let inst: ReturnType<typeof createTaskSidebar>;
     inst = createTaskSidebar({
+      locale: this.labels?.locale,
+      translate: translateSidebar ? key => translateSidebar(key) ?? presetSidebar?.(key) : presetSidebar,
       task,
       allTasks: this.currentData.tasks,
       categories: this.currentData.categories || {},
@@ -439,7 +455,7 @@ export class JanttRendererEngine {
   private handleAddTask = () => {
     if (this.currentOptions.readOnly) return;
     const run = this.editRun();
-    const { nextData, newTask } = TaskScheduleCoordinator.createTask(this.currentData, run);
+    const { nextData, newTask } = TaskScheduleCoordinator.createTask(this.currentData, run, this.labels?.newTaskLabel);
     this.applyEdit(nextData, run);
     this.openTaskSidebar(newTask);
     this.currentOptions.onTaskAdd?.(newTask);
@@ -520,6 +536,7 @@ export class JanttRendererEngine {
   private buildToolbarProps(taskCount: number, criticalCount: number, rowHeight: number): ToolbarProps {
     return {
       meta: this.currentData.meta,
+      translate: this.toolbarTranslation,
       taskCount,
       currentScale: this.state.currentScale,
       currentRouting: this.state.currentRouting,
@@ -682,7 +699,11 @@ export class JanttRendererEngine {
       this.state.customRowHeight,
       this.currentOptions.readOnly
     );
-    const layoutResult = layout(layoutData, { ...layoutOptions, rowHeight: effectiveRowHeight });
+    const layoutResult = layout(
+      layoutData,
+      { ...layoutOptions, rowHeight: effectiveRowHeight },
+      this.labels
+    );
 
     const { tasks: taskLayouts, dependencies, header, viewport, canvasWidth, canvasHeight } = layoutResult;
     const newStartDate = layoutResult.viewport.startDate;
@@ -751,6 +772,7 @@ export class JanttRendererEngine {
 
     // 7a. Timeline Header
     const timelineHeader = renderTimelineHeader(header, {
+      labels: this.labels,
       selectedDate: this.state.selectedDateFilter,
       dayWidth: this.state.currentDayWidth,
       showToday: viewport.showToday,
@@ -814,6 +836,7 @@ export class JanttRendererEngine {
           showCritical: this.state.showCritical,
           people: this.currentData.people,
           teams: this.currentData.teams,
+          labels: this.labels,
           onTaskClick: (task: Task) => {
             if (this.currentOptions.mobileDoubleTapToOpen) {
               const now = Date.now();
@@ -861,7 +884,8 @@ export class JanttRendererEngine {
       onLinkDelete: this.currentOptions.readOnly ? undefined : this.handleLinkDelete,
       taskLabels: this.currentOptions.readOnly
         ? undefined
-        : new Map(taskLayouts.map((t) => [t.task.id, t.displayLabel]))
+        : new Map(taskLayouts.map((t) => [t.task.id, t.displayLabel])),
+      labels: this.labels
     });
     this.previewWireSvg = pWire;
     gridContainer.appendChild(svg);
@@ -879,7 +903,8 @@ export class JanttRendererEngine {
         people: this.currentData.people,
         teams: this.currentData.teams,
         controller: this.controller,
-        tooltip: this.tooltip
+        tooltip: this.tooltip,
+        labels: this.labels
       },
       gridContainer
     );
@@ -966,7 +991,16 @@ export class JanttRendererEngine {
         if (this.destroyed) return;
         if (newOpts) {
           // Options first: the resolve below reports its warnings to the latest onError
+          const previousToolbarTranslation = this.toolbarTranslation;
           this.currentOptions = { ...this.currentOptions, ...newOpts };
+          const lang = this.labels?.locale;
+          if (lang) this.root.lang = lang;
+          else this.root.removeAttribute("lang");
+          if (this.toolbarTranslation !== previousToolbarTranslation) {
+            const toolbar = this.root.querySelector<HTMLElement>(".jantt-toolbar") as (HTMLElement & { __cleanup?: () => void }) | null;
+            toolbar?.__cleanup?.();
+            toolbar?.remove();
+          }
         }
         this.currentData = { ...newData, tasks: this.resolveTasks(newData) };
         if (newOpts) {

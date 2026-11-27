@@ -1,8 +1,9 @@
-import { Task, Category, TaskScheduleMetrics } from "../types";
-import { diffDays, formatHumanDate, isValidISODate, taskDurationDays } from "../date-math";
+import { Task, Category, TaskScheduleMetrics, TimelineLabels } from "../types";
+import { diffDays, isValidISODate, taskDurationDays } from "../date-math";
 import { escapeHtml, getTaskDisplayName, sanitizeCssColor } from "../utils";
 import { DEFAULT_CATEGORY } from "../constants";
 import { applyThemeVariables } from "../themes/manager";
+import { createTimelineDateFormatter, DEFAULT_TIMELINE_LABELS, formatTimelineLabel } from "../timeline-labels";
 
 export interface TooltipOptions {
   theme?: Record<string, string>;
@@ -10,7 +11,7 @@ export interface TooltipOptions {
 }
 
 export interface TooltipController {
-  show: (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics) => void;
+  show: (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics, labels?: TimelineLabels) => void;
   hide: () => void;
   updateTheme: (theme?: Record<string, string>, themeClassName?: string) => void;
 }
@@ -23,9 +24,9 @@ function formatDependsOn(dependsOn: Task["dependsOn"]): string {
     .join(", ");
 }
 
-function formatCost(value: unknown): string | null {
+function formatCost(value: unknown, locale?: string): string | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return `$${value.toLocaleString()}`;
+  return `$${value.toLocaleString(locale)}`;
 }
 
 /**
@@ -50,7 +51,8 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
     activeCard = null;
   };
 
-  const show = (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics) => {
+  const show = (task: Task, category: Category, e: MouseEvent, metrics?: TaskScheduleMetrics, labels = DEFAULT_TIMELINE_LABELS) => {
+    const formatDate = createTimelineDateFormatter(labels.locale);
     hide();
     // Same rules as the layout/grid: only flagged tasks are milestones, durations are inclusive.
     const isMilestone = task.milestone === true;
@@ -63,22 +65,24 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
     applyThemeVariables(card, currentTheme);
 
     const title = escapeHtml(getTaskDisplayName(task));
-    const catLabel = escapeHtml(category.label || task.category || "General");
+    const catLabel = escapeHtml(category.label || task.category || labels.tooltipGeneral);
     const catColor = sanitizeCssColor(category.color, DEFAULT_CATEGORY.color);
-    const cost = formatCost(task.estimatedCost);
+    const cost = formatCost(task.estimatedCost, labels.locale);
     const dependsOnText = task.dependsOn ? formatDependsOn(task.dependsOn) : "";
 
     let baselineHtml = "";
     if (task.baseline && isValidISODate(task.baseline.start) && isValidISODate(task.baseline.end)) {
       const variance = diffDays(task.baseline.end, task.end);
       const varianceText =
-        variance > 0 ? `+${variance}d slip` : variance < 0 ? `${variance}d ahead` : "on plan";
+        variance > 0 ? formatTimelineLabel(labels.tooltipSlip, { days: variance })
+          : variance < 0 ? formatTimelineLabel(labels.tooltipAhead, { days: labels.locale ? Math.abs(variance) : variance })
+          : labels.tooltipOnPlan;
       const varianceColor = variance > 0 ? "#F59E0B" : variance < 0 ? "#10B981" : "var(--jantt-text-muted)";
       baselineHtml = `
         <div class="jantt-hover-stat-row">
-          <span class="jantt-hover-stat-label">Baseline Plan</span>
+          <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipBaseline)}</span>
           <span class="jantt-hover-stat-value">
-            ${escapeHtml(formatHumanDate(task.baseline.start))} → ${escapeHtml(formatHumanDate(task.baseline.end))}
+            ${escapeHtml(formatDate(task.baseline.start))} → ${escapeHtml(formatDate(task.baseline.end))}
             <span class="jantt-hover-duration-tag" style="color: ${varianceColor};">(${escapeHtml(varianceText)})</span>
           </span>
         </div>`;
@@ -89,16 +93,21 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
     if (metrics) {
       if (metrics.isCritical) {
         bufferColor = "var(--jantt-critical, #EF4444)";
-        bufferText = "Critical Path (0d buffer)";
+        bufferText = labels.tooltipCritical;
       } else if (metrics.totalFloat < 0) {
         bufferColor = "#EF4444";
-        bufferText = `Behind by ${Math.abs(metrics.totalFloat)}d (negative float)`;
+        bufferText = formatTimelineLabel(labels.tooltipBehind, { days: Math.abs(metrics.totalFloat) });
       } else {
         if (metrics.isNearCritical) bufferColor = "#F59E0B";
-        bufferText = `${metrics.totalFloat}d buffer (Free: ${metrics.freeFloat}d)`;
+        bufferText = formatTimelineLabel(labels.tooltipBuffer, { total: metrics.totalFloat, free: metrics.freeFloat });
       }
     }
 
+    const priority = task.priority === "low" ? labels.priorityLow
+      : task.priority === "medium" ? labels.priorityMedium
+      : task.priority === "high" ? labels.priorityHigh
+      : task.priority === "urgent" ? labels.priorityUrgent
+      : task.priority;
     const priorityColor =
       task.priority === "urgent" ? "#E11D48" : task.priority === "high" ? "#D97706" : "var(--jantt-accent)";
     card.style.setProperty("--jantt-hover-cat", catColor);
@@ -112,9 +121,9 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
             <span class="jantt-hover-dot" style="background: var(--jantt-hover-cat);"></span>
             ${catLabel}
           </span>
-          ${isMilestone ? '<span class="jantt-hover-type-pill is-milestone">Milestone</span>' : ""}
-          ${task.locked ? '<span class="jantt-hover-type-pill is-locked">Locked</span>' : ""}
-          ${task.urgent ? '<span class="jantt-hover-type-pill is-urgent">Urgent</span>' : ""}
+          ${isMilestone ? `<span class="jantt-hover-type-pill is-milestone">${escapeHtml(labels.milestone)}</span>` : ""}
+          ${task.locked ? `<span class="jantt-hover-type-pill is-locked">${escapeHtml(labels.locked)}</span>` : ""}
+          ${task.urgent ? `<span class="jantt-hover-type-pill is-urgent">${escapeHtml(labels.urgent)}</span>` : ""}
         </div>
         <span class="jantt-hover-id-badge">#${escapeHtml(task.id)}</span>
       </div>
@@ -123,10 +132,10 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
 
       <div class="jantt-hover-card-body">
         <div class="jantt-hover-stat-row">
-          <span class="jantt-hover-stat-label">Timeline</span>
+          <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipTimeline)}</span>
           <span class="jantt-hover-stat-value">
-            ${escapeHtml(formatHumanDate(task.start))} → ${escapeHtml(formatHumanDate(task.end))}
-            <span class="jantt-hover-duration-tag">(${escapeHtml(duration)}d)</span>
+            ${escapeHtml(formatDate(task.start))} → ${escapeHtml(formatDate(task.end))}
+            <span class="jantt-hover-duration-tag">(${escapeHtml(formatTimelineLabel(labels.duration, { days: duration }))})</span>
           </span>
         </div>
 
@@ -137,7 +146,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
             ? `
         <div class="jantt-hover-progress-section">
           <div class="jantt-hover-progress-labels">
-            <span class="jantt-hover-stat-label">Progress</span>
+            <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipProgress)}</span>
             <span class="jantt-hover-progress-val">${escapeHtml(progressPercent)}%</span>
           </div>
           <div class="jantt-hover-progress-track">
@@ -152,7 +161,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
           task.assignee
             ? `
         <div class="jantt-hover-stat-row">
-          <span class="jantt-hover-stat-label">Assignee / Owner</span>
+          <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipAssignee)}</span>
           <span class="jantt-hover-stat-value" style="font-weight: 600; color: var(--jantt-text);">
             ${escapeHtml(task.assignee)}
           </span>
@@ -165,9 +174,9 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
           task.priority
             ? `
         <div class="jantt-hover-stat-row">
-          <span class="jantt-hover-stat-label">Priority Level</span>
+          <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipPriority)}</span>
           <span class="jantt-hover-stat-value" style="font-weight: 700; text-transform: uppercase; font-size: 11px; color: var(--jantt-hover-priority);">
-            ${escapeHtml(task.priority)}
+            ${escapeHtml(priority)}
           </span>
         </div>
         `
@@ -178,7 +187,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
           cost !== null
             ? `
         <div class="jantt-hover-stat-row">
-          <span class="jantt-hover-stat-label">Planned Budget</span>
+          <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipBudget)}</span>
           <span class="jantt-hover-stat-value" style="font-family: var(--jantt-font-mono); font-weight: 600;">
             ${escapeHtml(cost)}
           </span>
@@ -191,7 +200,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
           dependsOnText
             ? `
         <div class="jantt-hover-stat-row">
-          <span class="jantt-hover-stat-label">Depends On</span>
+          <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipDependsOn)}</span>
           <span class="jantt-hover-stat-value" style="font-family: var(--jantt-font-mono); color: var(--jantt-accent); font-weight: 600;">
             ${escapeHtml(dependsOnText)}
           </span>
@@ -204,7 +213,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
           metrics
             ? `
         <div class="jantt-hover-stat-row">
-          <span class="jantt-hover-stat-label">Schedule Buffer</span>
+          <span class="jantt-hover-stat-label">${escapeHtml(labels.tooltipScheduleBuffer)}</span>
           <span class="jantt-hover-stat-value" style="font-weight: 600; color: var(--jantt-hover-buffer);">
             ${escapeHtml(bufferText)}
           </span>
@@ -225,7 +234,7 @@ export function createTooltipController(initialOptions: TooltipOptions = {}): To
       </div>
 
       <div class="jantt-hover-card-footer">
-        <span>Click to open details sidebar</span>
+        <span>${escapeHtml(labels.tooltipOpen)}</span>
       </div>
     `;
 

@@ -16,8 +16,47 @@ import { diffDays } from "./date-math";
 import { getTaskDependencyRelations, DependencyRelation } from "./dependencies";
 import { WorkingCalendar, CalendarPreset, diffWorkingDays } from "./calendar";
 import { isTaskDone } from "./utils";
+import { formatTimelineLabel } from "./timeline-labels";
+
+export type ScheduleHealthMessageKey =
+  "noTasks" |
+  "selfDependency" |
+  "missingDependency" |
+  "repairLink" |
+  "missingBoth" |
+  "missingPredecessor" |
+  "missingSuccessor" |
+  "missingLogic" |
+  "repairLogic" |
+  "negativeFloat" |
+  "repairNegativeFloat" |
+  "highFloat" |
+  "repairHighFloat" |
+  "notStarted" |
+  "notFinished" |
+  "finished" |
+  "inProgress" |
+  "outOfSequence" |
+  "repairSequence" |
+  "checkLogic" |
+  "checkLeads" |
+  "checkLags" |
+  "checkNonFs" |
+  "checkLocked" |
+  "checkHighFloat" |
+  "checkNegativeFloat" |
+  "checkHighDuration" |
+  "checkSequence" |
+  "checkLinks" |
+  "finding" |
+  "summaryPass" |
+  "summaryMinor" |
+  "summaryNeedsAttention" |
+  "summarySerious";
 
 export interface ScheduleHealthOptions {
+  /** Translates report text. Return undefined for the standard English wording. */
+  translate?: (key: ScheduleHealthMessageKey) => string | undefined;
   /**
    * Working calendar used to express float and duration in working days (DCMA thresholds are
    * working days). Without one, calendar days are converted at 5/7.
@@ -131,6 +170,10 @@ export function auditScheduleIntegrity(
   criticalResult: CriticalPathResult,
   options?: ScheduleHealthOptions
 ): ScheduleHealthReport {
+  const text = (key: ScheduleHealthMessageKey, fallback: string, values?: Record<string, string | number>) => {
+    const template = options?.translate?.(key) ?? fallback;
+    return values ? formatTimelineLabel(template, values) : template;
+  };
   const issues: ScheduleHealthIssue[] = [];
 
   const liveTasks = (Array.isArray(tasks) ? tasks : []).filter((t) => t && !t._deleted);
@@ -139,7 +182,7 @@ export function auditScheduleIntegrity(
     return {
       healthScore: 100,
       grade: "A",
-      summary: "No tasks to audit",
+      summary: text("noTasks", "No tasks to audit"),
       issues: [],
       missingLogicCount: 0,
       negativeFloatCount: 0,
@@ -183,9 +226,9 @@ export function auditScheduleIntegrity(
           taskId: t.id,
           taskName: nameOf(t),
           message: rel.id === t.id
-            ? `Task "${nameOf(t)}" depends on itself.`
-            : `Task "${nameOf(t)}" depends on "${rel.id}", which does not exist or was deleted.`,
-          recommendation: "Remove the dangling link or point it at the intended predecessor."
+            ? text("selfDependency", "Task \"{task}\" depends on itself.", { task: nameOf(t) })
+            : text("missingDependency", "Task \"{task}\" depends on \"{predecessor}\", which does not exist or was deleted.", { task: nameOf(t), predecessor: rel.id }),
+          recommendation: text("repairLink", "Remove the dangling link or point it at the intended predecessor.")
         });
         continue;
       }
@@ -232,15 +275,15 @@ export function auditScheduleIntegrity(
       if (missingPredecessor || missingSuccessor) {
         missingLogicCount++;
         const missing = missingPredecessor && missingSuccessor
-          ? "has no predecessor and no successor"
-          : missingPredecessor ? "has no predecessor" : "has no successor";
+          ? text("missingBoth", "has no predecessor and no successor")
+          : missingPredecessor ? text("missingPredecessor", "has no predecessor") : text("missingSuccessor", "has no successor");
         issues.push({
           type: "missing-logic",
           severity: "medium",
           taskId: t.id,
           taskName: nameOf(t),
-          message: `Task "${nameOf(t)}" ${missing} (open end in the schedule network).`,
-          recommendation: "Link this task to its prerequisites and to the work it enables to establish schedule logic."
+          message: text("missingLogic", "Task \"{task}\" {missing} (open end in the schedule network).", { task: nameOf(t), missing }),
+          recommendation: text("repairLogic", "Link this task to its prerequisites and to the work it enables to establish schedule logic.")
         });
       }
 
@@ -259,8 +302,8 @@ export function auditScheduleIntegrity(
             severity: "high",
             taskId: t.id,
             taskName: nameOf(t),
-            message: `Task "${nameOf(t)}" has negative float (${tf} days) and breaches the target completion date.`,
-            recommendation: "Fast-track or compress durations along this driving chain to recover the contractual schedule."
+            message: text("negativeFloat", "Task \"{task}\" has negative float ({days} days) and breaches the target completion date.", { task: nameOf(t), days: tf }),
+            recommendation: text("repairNegativeFloat", "Fast-track or compress durations along this driving chain to recover the contractual schedule.")
           });
         } else if (tf > DCMA_WORKING_DAY_LIMIT) {
           // Task-level calendars already produce working-day totalFloat from CPM; avoid
@@ -276,8 +319,8 @@ export function auditScheduleIntegrity(
               severity: "low",
               taskId: t.id,
               taskName: nameOf(t),
-              message: `Task "${nameOf(t)}" has excessive float (${Math.round(workingFloat)} working days).`,
-              recommendation: "Verify whether downstream successor dependencies are missing."
+              message: text("highFloat", "Task \"{task}\" has excessive float ({days} working days).", { task: nameOf(t), days: Math.round(workingFloat) }),
+              recommendation: text("repairHighFloat", "Verify whether downstream successor dependencies are missing.")
             });
           }
         }
@@ -302,14 +345,14 @@ export function auditScheduleIntegrity(
           !isDependencySatisfied(rel, prereq, "start") || (isDone && !isDependencySatisfied(rel, prereq, "finish"));
         if (!violated) continue;
         outOfSequenceCount++;
-        const requirement = rel.type === "SS" || rel.type === "SF" || rel.lagDays < 0 ? "has not started" : "is not finished";
+        const requirement = rel.type === "SS" || rel.type === "SF" || rel.lagDays < 0 ? text("notStarted", "has not started") : text("notFinished", "is not finished");
         issues.push({
           type: "out-of-sequence",
           severity: "medium",
           taskId: t.id,
           taskName: nameOf(t),
-          message: `Task "${nameOf(t)}" is ${isDone ? "finished" : "in progress"} while predecessor "${nameOf(prereq)}" ${requirement} (${rel.type} link).`,
-          recommendation: "Review dependency relationships to ensure actual execution matches schedule logic."
+          message: text("outOfSequence", "Task \"{task}\" is {status} while predecessor \"{predecessor}\" {requirement} ({relation} link).", { task: nameOf(t), status: isDone ? text("finished", "finished") : text("inProgress", "in progress"), predecessor: nameOf(prereq), requirement, relation: rel.type }),
+          recommendation: text("repairSequence", "Review dependency relationships to ensure actual execution matches schedule logic.")
         });
         break;
       }
@@ -317,16 +360,16 @@ export function auditScheduleIntegrity(
   }
 
   const checks: ScheduleHealthCheck[] = [
-    buildCheck("logic", 1, "Missing logic", incompleteCount, missingLogicCount, 0.05, 40),
-    buildCheck("leads", 2, "Leads (negative lag)", relationshipCount, leadCount, 0, 10),
-    buildCheck("lags", 3, "Lags", relationshipCount, lagCount, 0.05, 5),
-    buildCheck("relationship-types", 4, "Non-FS relationships", relationshipCount, nonFsCount, 0.1, 5),
-    buildCheck("hard-constraints", 5, "Hard constraints (locked)", incompleteCount, lockedCount, 0.05, 5),
-    buildCheck("high-float", 6, "High float (> 44 working days)", floatEligible, highFloatCount, 0.05, 10),
-    buildCheck("negative-float", 7, "Negative float", floatEligible, negativeFloatCount, 0, 40),
-    buildCheck("high-duration", 8, "High duration (> 44 working days)", durationEligible, highDurationCount, 0.05, 10),
-    buildCheck("out-of-sequence", undefined, "Out-of-sequence progress", startedCount, outOfSequenceCount, 0, 10),
-    buildCheck("broken-links", undefined, "Broken dependency links", referenceCount, brokenChainCount, 0, 20)
+    buildCheck("logic", 1, text("checkLogic", "Missing logic"), incompleteCount, missingLogicCount, 0.05, 40),
+    buildCheck("leads", 2, text("checkLeads", "Leads (negative lag)"), relationshipCount, leadCount, 0, 10),
+    buildCheck("lags", 3, text("checkLags", "Lags"), relationshipCount, lagCount, 0.05, 5),
+    buildCheck("relationship-types", 4, text("checkNonFs", "Non-FS relationships"), relationshipCount, nonFsCount, 0.1, 5),
+    buildCheck("hard-constraints", 5, text("checkLocked", "Hard constraints (locked)"), incompleteCount, lockedCount, 0.05, 5),
+    buildCheck("high-float", 6, text("checkHighFloat", "High float (> 44 working days)"), floatEligible, highFloatCount, 0.05, 10),
+    buildCheck("negative-float", 7, text("checkNegativeFloat", "Negative float"), floatEligible, negativeFloatCount, 0, 40),
+    buildCheck("high-duration", 8, text("checkHighDuration", "High duration (> 44 working days)"), durationEligible, highDurationCount, 0.05, 10),
+    buildCheck("out-of-sequence", undefined, text("checkSequence", "Out-of-sequence progress"), startedCount, outOfSequenceCount, 0, 10),
+    buildCheck("broken-links", undefined, text("checkLinks", "Broken dependency links"), referenceCount, brokenChainCount, 0, 20)
   ];
 
   const totalPenalty = checks.reduce((sum, c) => sum + c.penalty, 0);
@@ -341,17 +384,17 @@ export function auditScheduleIntegrity(
   const failing = checks.filter((c) => !c.passed).sort((a, b) => b.penalty - a.penalty);
   const findings = failing
     .slice(0, 3)
-    .map((c) => `${c.label} (${c.failed} of ${c.eligible})`)
+    .map((c) => text("finding", "{label} ({failed} of {eligible})", { label: c.label, failed: c.failed, eligible: c.eligible }))
     .join(", ");
   let summary: string;
   if (failing.length === 0) {
-    summary = `Schedule health is strong: all ${checks.length} checks pass.`;
+    summary = text("summaryPass", "Schedule health is strong: all {count} checks pass.", { count: checks.length });
   } else if (grade === "A" || grade === "B") {
-    summary = `Schedule is in good shape with minor findings: ${findings}.`;
+    summary = text("summaryMinor", "Schedule is in good shape with minor findings: {findings}.", { findings });
   } else if (grade === "C") {
-    summary = `Schedule needs attention: ${findings}.`;
+    summary = text("summaryNeedsAttention", "Schedule needs attention: {findings}.", { findings });
   } else {
-    summary = `Schedule has significant integrity issues: ${findings}.`;
+    summary = text("summarySerious", "Schedule has significant integrity issues: {findings}.", { findings });
   }
 
   return {

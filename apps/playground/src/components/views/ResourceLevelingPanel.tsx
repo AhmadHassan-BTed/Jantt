@@ -1,7 +1,9 @@
 import React from "react";
 import { AllocationHeatmap } from "./AllocationHeatmap";
 import "./health.css";
-import { createCalendar, detectOverAllocations, hasDependencyCycle, levelResources, resolvePersonById, resolveSchedule, validate, type JanttData, type LevelingResult, type Task } from "@jantt/core";
+import { useI18n } from "../../i18n/I18nProvider";
+import { validationMessage } from "../../i18n/diagnostics";
+import { createCalendar, detectOverAllocations, hasDependencyCycle, levelResources, resolvePersonById, resolveSchedule, validate, type JanttData, type LevelingAdjustment, type LevelingResult, type Task } from "@jantt/core";
 
 interface Props {
   data: JanttData;
@@ -15,11 +17,24 @@ const getProjectFinish = (tasks: Task[]): string => tasks.filter((task) => !task
 const formatPercent = (value: number): string => String(Math.round(value * 10000) / 100);
 
 export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnly, onPromptFork }) => {
+  const { t, locale } = useI18n();
+  const adjustmentReason = ({ reason, reasonDetail, resourceId }: LevelingAdjustment): string => {
+    if (!reasonDetail) return reason;
+    if (reasonDetail.kind === "cascade") {
+      return t("health.leveling.cascadeReason", { task: reasonDetail.deferredTaskId });
+    }
+    return t("health.leveling.overallocationReason", {
+      resource: resourceId, date: reasonDetail.date, tasks: reasonDetail.higherPriorityTasks
+    });
+  };
   const [proposal, setProposal] = React.useState<LevelingResult | null>(null);
   const proposalSource = React.useRef<JanttData | null>(null);
   const [optimization, setOptimization] = React.useState<{ source: JanttData; tasks: Task[]; changed: number } | null>(null);
   const [calculating, setCalculating] = React.useState(false);
-  const [error, setError] = React.useState("");
+  const [error, setError] = React.useState<{
+    key: "health.leveling.cyclicError" | "health.leveling.workerError" | "health.leveling.scheduleError" | "health.leveling.invalidCapacity";
+    detail?: string;
+  } | null>(null);
   const [defaultPercent, setDefaultPercent] = React.useState("");
   const [capacityDraft, setCapacityDraft] = React.useState<Record<string, string>>({});
   const workerRef = React.useRef<Worker | null>(null);
@@ -34,9 +49,9 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
     const validation = validate(data);
     const problem = validation.errors.find((issue) => ["MISSING_TASKS", "INVALID_TASK_OBJECT", "MISSING_TASK_ID", "DUPLICATE_TASK_ID", "INVALID_DATE_FORMAT", "INVALID_DATE_RANGE", "INVALID_DEPENDENCY"].includes(issue.code))
       || validation.warnings?.find((warning) => warning.code === "INVALID_CALENDAR");
-    if (problem) return { conflicts: [], error: problem.message };
+    if (problem) return { conflicts: [], error: validationMessage(problem, false, locale, t) };
     return { conflicts: detectOverAllocations(data.tasks, options), error: "" };
-  }, [data, options]);
+  }, [data, options, locale, t]);
   const resources = React.useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
     for (const task of data.tasks) {
@@ -49,7 +64,7 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
   }, [data]);
   React.useEffect(() => {
     setProposal(null);
-    setError("");
+    setError(null);
     setCalculating(false);
     setDefaultPercent(data.meta?.defaultResourceCapacity === undefined ? "" : formatPercent(data.meta.defaultResourceCapacity));
     setCapacityDraft(Object.fromEntries(resources.map((resource) => {
@@ -63,7 +78,7 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
     if (readOnly) { onPromptFork?.(); return; }
     const values = [defaultPercent, ...Object.values(capacityDraft)];
     if (values.some((value) => value.trim() !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0))) {
-      setError("Resource capacities must be non-negative numbers.");
+      setError({ key: "health.leveling.invalidCapacity" });
       return;
     }
     const capacities = { ...data.meta?.resourceCapacities };
@@ -82,7 +97,7 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
   const acceptResult = (result: LevelingResult) => {
     const diagnostics: string[] = [];
     resolveSchedule(result.tasks, { ...options, diagnostics });
-    if (diagnostics.length) { setError(diagnostics.join(" ")); return; }
+    if (diagnostics.length) { setError({ key: "health.leveling.scheduleError", detail: diagnostics.join(" ") }); return; }
     setProposal(result);
   };
 
@@ -90,14 +105,14 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
     setProposal(null);
     setOptimization(null);
     proposalSource.current = data;
-    setError("");
-    if (hasDependencyCycle(data.tasks)) { setError("Circular dependencies prevent a safe preview."); return; }
+    setError(null);
+    if (hasDependencyCycle(data.tasks)) { setError({ key: "health.leveling.cyclicError" }); return; }
     const diagnostics: string[] = [];
     resolveSchedule(data.tasks, { ...options, diagnostics });
-    if (diagnostics.length) { setError(diagnostics.join(" ")); return; }
+    if (diagnostics.length) { setError({ key: "health.leveling.scheduleError", detail: diagnostics.join(" ") }); return; }
     if (typeof Worker === "undefined") {
       try { acceptResult(levelResources(data.tasks, options)); }
-      catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+      catch (err) { setError({ key: "health.leveling.workerError", detail: err instanceof Error ? err.message : String(err) }); }
       return;
     }
     try {
@@ -106,7 +121,7 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
       setCalculating(true);
       worker.onmessage = (event: MessageEvent<{ result?: LevelingResult; error?: string }>) => {
         if (workerRef.current !== worker) return;
-        if (event.data.error) setError(event.data.error);
+        if (event.data.error) setError({ key: "health.leveling.workerError", detail: event.data.error });
         else if (event.data.result) acceptResult(event.data.result);
         setCalculating(false);
         worker.terminate();
@@ -114,7 +129,7 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
       };
       worker.onerror = (event) => {
         if (workerRef.current !== worker) return;
-        setError(event.message || "Resource leveling could not be completed.");
+        setError({ key: "health.leveling.workerError", detail: event.message });
         setCalculating(false);
         worker.terminate();
         workerRef.current = null;
@@ -124,7 +139,7 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
       workerRef.current?.terminate();
       workerRef.current = null;
       setCalculating(false);
-      setError(err instanceof Error ? err.message : String(err));
+      setError({ key: "health.leveling.workerError", detail: err instanceof Error ? err.message : String(err) });
     }
   };
 
@@ -142,32 +157,32 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
   const afterFinish = currentProposal ? getProjectFinish(currentProposal.tasks) : "";
 
   return (
-    <section className="health-scenarios" aria-label="Resource leveling" style={{ margin: "12px 0", padding: 16, border: "1px solid var(--jantt-border)", borderRadius: 8 }}>
-      <strong>Resource leveling</strong>
+    <section className="health-scenarios" aria-label={t("health.leveling.sectionAria")} style={{ margin: "12px 0", padding: 16, border: "1px solid var(--jantt-border)", borderRadius: 8 }}>
+      <strong>{t("health.leveling.title")}</strong>
       <p style={{ margin: "8px 0" }}>
-        {!allocation.error && <>{allocation.conflicts.length} resource-day overload{allocation.conflicts.length === 1 ? "" : "s"} across the full project. </>}
-        Default resource capacity: {formatPercent(options.defaultCapacity ?? 1)}% per person.
+        {!allocation.error && <>{t(allocation.conflicts.length === 1 ? "health.leveling.overloadOne" : "health.leveling.overloadMany", { count: allocation.conflicts.length })} </>}
+        {t("health.leveling.defaultCapacity", { percent: formatPercent(options.defaultCapacity ?? 1) })}
       </p>
       <AllocationHeatmap conflicts={allocation.conflicts} resources={resources} />
       {allocation.error && <p role="alert">{allocation.error}</p>}
       <details style={{ marginBottom: 12 }}>
-        <summary>Resource capacity settings</summary>
-        <p>Enter percentages; leave an override blank to use the default.</p>
-        <label>Default capacity (%) <input aria-label="Default capacity (%)" type="number" min="0" step="any" placeholder="100" value={defaultPercent} onChange={(event) => setDefaultPercent(event.target.value)} /></label>
+        <summary>{t("health.leveling.capacitySettings")}</summary>
+        <p>{t("health.leveling.capacityHint")}</p>
+        <label>{t("health.leveling.defaultCapacityLabel")} <input aria-label={t("health.leveling.defaultCapacityLabel")} type="number" min="0" step="any" placeholder="100" value={defaultPercent} onChange={(event) => setDefaultPercent(event.target.value)} /></label>
         {resources.map((resource) => <div key={resource.id}>
-          <label>{resource.name} capacity (%) <input aria-label={`${resource.name} capacity (%)`} type="number" min="0" step="any" placeholder={defaultPercent || "100"} value={capacityDraft[resource.id] || ""} onChange={(event) => setCapacityDraft((draft) => ({ ...draft, [resource.id]: event.target.value }))} /></label>
+          <label>{t("health.leveling.resourceCapacityLabel", { name: resource.name })} <input aria-label={t("health.leveling.resourceCapacityLabel", { name: resource.name })} type="number" min="0" step="any" placeholder={defaultPercent || "100"} value={capacityDraft[resource.id] || ""} onChange={(event) => setCapacityDraft((draft) => ({ ...draft, [resource.id]: event.target.value }))} /></label>
         </div>)}
-        <button type="button" className="btn-nav" onClick={saveCapacities}>Save capacities</button>
+        <button type="button" className="btn-nav" onClick={saveCapacities}>{t("health.leveling.saveCapacities")}</button>
       </details>
       <button type="button" className="btn-nav" onClick={preview} disabled={calculating || Boolean(allocation.error)}>
-        {calculating ? "Calculating…" : "Preview leveling"}
+        {calculating ? t("health.leveling.calculating") : t("health.leveling.preview")}
       </button>
       <button type="button" className="btn-nav" disabled={calculating || Boolean(allocation.error)} onClick={() => {
         setProposal(null);
-        setError("");
+        setError(null);
         const diagnostics: string[] = [];
         const scheduled = resolveSchedule(data.tasks.filter(task => !task._deleted), { ...options, diagnostics });
-        if (diagnostics.length) { setOptimization(null); setError(diagnostics.join(" ")); return; }
+        if (diagnostics.length) { setOptimization(null); setError({ key: "health.leveling.scheduleError", detail: diagnostics.join(" ") }); return; }
         const byId = new Map(scheduled.map(task => [task.id, task]));
         let changed = 0;
         const next = data.tasks.map(task => {
@@ -177,45 +192,61 @@ export const ResourceLevelingPanel: React.FC<Props> = ({ data, onCommit, readOnl
           return replacement;
         });
         setOptimization({ source: data, tasks: next, changed });
-      }}>Optimize schedule</button>
+      }}>{t("health.leveling.optimize")}</button>
       {optimization?.source === data && <div className="health-scenario-result" role="status">
-        <strong>Earliest-start scenario</strong>
-        <p>{optimization.changed ? `${optimization.changed} tasks move to the earliest dates their dependencies allow. Forecast finish ${getProjectFinish(optimization.tasks)} (current ${beforeFinish}).` : "The schedule already uses the earliest dates its dependencies allow."}</p>
+        <strong>{t("health.leveling.earliestStart")}</strong>
+        <p>{optimization.changed
+          ? t("health.leveling.optimizeMany", { count: optimization.changed, finish: getProjectFinish(optimization.tasks), current: beforeFinish })
+          : t("health.leveling.optimizeAlready")}</p>
         {optimization.changed > 0 && <button type="button" className="btn-nav" onClick={() => {
           if (readOnly) { onPromptFork?.(); return; }
           onCommit({ ...data, tasks: optimization.tasks });
           setOptimization(null);
-        }}>Apply scenario</button>}
+        }}>{t("health.leveling.applyScenario")}</button>}
       </div>}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <div role="alert">
+          <p>{locale === "en" && error.detail ? error.detail : t(error.key)}</p>
+          {locale !== "en" && error.detail && (
+            <details>
+              <summary>{t("editor.diagnostics.technicalDetails")}</summary>
+              <div>{error.detail}</div>
+            </details>
+          )}
+        </div>
+      )}
       {currentProposal && (
         <div aria-live="polite" style={{ marginTop: 12 }}>
-          <p><strong>{currentProposal.remainingOverallocations.length ? "Overloads remain" : "No overloads remain"}</strong></p>
-          <><p>{currentProposal.adjustments.length} resource adjustment{currentProposal.adjustments.length === 1 ? "" : "s"}; {currentProposal.remainingOverallocations.length} resource-day overload{currentProposal.remainingOverallocations.length === 1 ? "" : "s"} remain. Project finish {currentProposal.daysAdded ? `extends by ${currentProposal.daysAdded} calendar day(s)` : "does not extend"}.</p>
-          <p>Project finish: {beforeFinish || "-"} → {afterFinish || "-"}. {data.meta?.targetDate && <>Target: {data.meta.targetDate}. {afterFinish && (afterFinish > data.meta.targetDate ? "Preview exceeds the target date." : "Preview meets the target date.")}</>}</p></>
+          <p><strong>{t(currentProposal.remainingOverallocations.length ? "health.leveling.overloadsRemain" : "health.leveling.noOverloadsRemain")}</strong></p>
+          <><p>{t("health.leveling.adjustSummary", {
+            adjustments: t(currentProposal.adjustments.length === 1 ? "health.leveling.adjustOne" : "health.leveling.adjustMany", { count: currentProposal.adjustments.length }),
+            overloads: t(currentProposal.remainingOverallocations.length === 1 ? "health.leveling.overloadDayOne" : "health.leveling.overloadDayMany", { count: currentProposal.remainingOverallocations.length }),
+            ending: currentProposal.daysAdded ? t("health.leveling.extendsBy", { days: currentProposal.daysAdded }) : t("health.leveling.doesNotExtend")
+          })}</p>
+          <p>{t("health.leveling.finishLine", { before: beforeFinish || "-", after: afterFinish || "-" })} {data.meta?.targetDate && <>{t("health.leveling.targetLine", { date: data.meta.targetDate })} {afterFinish && (afterFinish > data.meta.targetDate ? t("health.leveling.previewExceeds") : t("health.leveling.previewMeets"))}</>}</p></>
           {changes.length > 0 && (
             <ul>{changes.map(({ original, task }) => {
               const adjustments = currentProposal.adjustments.filter((adjustment) => adjustment.taskId === task.id);
               return <li key={task.id}>{task.label || task.id}: {original.start}–{original.end} → {task.start}–{task.end}
-                {adjustments.length ? <ul>{adjustments.map((adjustment, index) => <li key={index}>Resource: {adjustment.resourceId}. {adjustment.reason} {adjustment.withinFloat ? "Within float at the time of adjustment." : "Outside float at the time of adjustment."}</li>)}</ul> : <> - Schedule change (dependency cascade or initial scheduling).</>}
+                {adjustments.length ? <ul>{adjustments.map((adjustment, index) => <li key={index}>{t("health.leveling.resource", { id: adjustment.resourceId })} {adjustmentReason(adjustment)} {adjustment.withinFloat ? t("health.leveling.withinFloat") : t("health.leveling.outsideFloat")}</li>)}</ul> : <>{" "}{t("health.leveling.scheduleChange")}</>}
               </li>;
             })}</ul>
           )}
           {currentProposal.remainingOverallocations.length > 0 && <div>
-            <strong>Remaining overloads</strong>
+            <strong>{t("health.leveling.remainingOverloads")}</strong>
             <ul>{currentProposal.remainingOverallocations.slice(0, 20).map((item) => {
               const locked = item.tasks.filter((id) => currentProposal.tasks.some((task) => task.id === id && task.locked));
-              return <li key={`${item.resourceId}-${item.date}`}>{item.resourceId}, {item.date}: {formatPercent(item.totalUnits)}% allocated / {formatPercent(item.capacity)}% available ({item.tasks.join(", ")}){locked.length > 0 && <>. Locked tasks: {locked.join(", ")}.</>}{item.reason === "single-task-exceeds-capacity" && <> A task exceeds capacity on its own.</>}</li>;
+              return <li key={`${item.resourceId}-${item.date}`}>{t("health.leveling.overloadItem", { resource: item.resourceId, date: item.date, allocated: formatPercent(item.totalUnits), capacity: formatPercent(item.capacity), tasks: item.tasks.join(", ") })}{locked.length > 0 && <>{" "}{t("health.leveling.lockedTasks", { tasks: locked.join(", ") })}</>}{item.reason === "single-task-exceeds-capacity" && <>{" "}{t("health.leveling.taskExceeds")}</>}</li>;
             })}</ul>
-            {currentProposal.remainingOverallocations.length > 20 && <p>And {currentProposal.remainingOverallocations.length - 20} more resource-days.</p>}
+            {currentProposal.remainingOverallocations.length > 20 && <p>{t("health.leveling.andMore", { count: currentProposal.remainingOverallocations.length - 20 })}</p>}
           </div>}
-          <p>The preview uses a heuristic and does not split tasks. Review remaining conflicts before applying.</p>
+          <p>{t("health.leveling.previewNote")}</p>
           <button type="button" className="btn-nav is-primary" disabled={changes.length === 0} onClick={() => {
             if (proposalSource.current !== data) return;
             if (readOnly) { onPromptFork?.(); return; }
             onCommit({ ...data, tasks: currentProposal.tasks });
             setProposal(null);
-          }}>Apply preview</button>
+          }}>{t("health.leveling.applyPreview")}</button>
         </div>
       )}
     </section>

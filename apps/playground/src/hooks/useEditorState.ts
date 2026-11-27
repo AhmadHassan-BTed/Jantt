@@ -193,7 +193,7 @@ export function useEditorState({
 }: UseEditorStateOptions) {
   const [jsonText, setJsonTextState] = useState(initialJson);
   const [parsedData, setParsedDataState] = useState<JanttData | null>(initialParsed);
-  const [validationResult, setValidationResult] = useState<ValidationResult>(() =>
+  const [validationResult, setValidationResult] = useState<ValidationResult & { syntaxError?: boolean }>(() =>
     validate(initialParsed || {})
   );
   const [copiedJson, setCopiedJson] = useState(false);
@@ -258,6 +258,7 @@ export function useEditorState({
       } catch (err: any) {
         setValidationResult({
           valid: false,
+          syntaxError: true,
           errors: [
             {
               path: "$",

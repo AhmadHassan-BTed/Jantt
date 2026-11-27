@@ -1,4 +1,5 @@
 import type { ProviderAdapter, StreamCallbacks, StreamChatOptions } from "../types";
+import { tGlobal } from "../../../i18n";
 
 export class GeminiProviderAdapter implements ProviderAdapter {
   readonly providerId = "gemini" as const;
@@ -16,7 +17,7 @@ export class GeminiProviderAdapter implements ProviderAdapter {
       try {
         const cleanKey = apiKey.trim();
         if (!cleanKey) {
-          callbacks.onError({ code: "AUTH", message: "Google Gemini API key is missing. Add your API key in Copilot settings." });
+          callbacks.onError({ code: "AUTH", message: tGlobal("services.ai.gemini.keyMissing") });
           return;
         }
 
@@ -74,7 +75,7 @@ export class GeminiProviderAdapter implements ProviderAdapter {
           if (response.status === 401 || response.status === 403) {
             callbacks.onError({
               code: "AUTH",
-              message: `Gemini API authentication failed: ${errorDetail || "Invalid API key."}`
+              message: tGlobal("services.ai.gemini.authFailed", { detail: errorDetail || tGlobal("services.ai.invalidKey") })
             });
             return;
           }
@@ -82,20 +83,20 @@ export class GeminiProviderAdapter implements ProviderAdapter {
           if (response.status === 429) {
             callbacks.onError({
               code: "RATE_LIMIT",
-              message: `Gemini rate limit reached: ${errorDetail || "Too many requests. Please wait a moment."}`
+              message: tGlobal("services.ai.gemini.rateLimit", { detail: errorDetail || tGlobal("services.ai.tooManyRequests") })
             });
             return;
           }
 
           callbacks.onError({
             code: "UNKNOWN",
-            message: `Gemini API error (${response.status}): ${errorDetail || response.statusText}`
+            message: tGlobal("services.ai.gemini.requestFailed", { status: response.status, detail: errorDetail || response.statusText })
           });
           return;
         }
 
         if (!response.body) {
-          callbacks.onError({ code: "NETWORK", message: "Gemini returned an empty response body stream." });
+          callbacks.onError({ code: "NETWORK", message: tGlobal("services.ai.gemini.emptyStream") });
           return;
         }
 
@@ -141,13 +142,13 @@ export class GeminiProviderAdapter implements ProviderAdapter {
         if (errorMsg.includes("Failed to fetch") || errorMsg.includes("NetworkError")) {
           callbacks.onError({
             code: "NETWORK",
-            message: "Network request failed. Please verify your internet connection or check if the API is reachable."
+            message: tGlobal("services.ai.gemini.networkFailed")
           });
           return;
         }
         callbacks.onError({
           code: "UNKNOWN",
-          message: errorMsg || "An unexpected error occurred while communicating with Gemini."
+          message: errorMsg || tGlobal("services.ai.gemini.unexpected")
         });
       }
     })();

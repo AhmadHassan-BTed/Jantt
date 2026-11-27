@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Sparkles, AlertTriangle, AlertCircle, Bot, User } from "lucide-react";
 import type { CopilotMessage, PendingPlanChange } from "../../services/ai/types";
+import { useI18n } from "../../i18n/I18nProvider";
 import { CopilotDiffPreview } from "./CopilotDiffPreview";
 
 interface CopilotMessagesProps {
@@ -22,6 +23,7 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
   onRejectDiff,
   onRevertDiff
 }) => {
+  const { t } = useI18n();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,9 +36,9 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
         <div className="copilot-empty-icon">
           <Sparkles size={28} />
         </div>
-        <h3>Chat with Jantt Copilot</h3>
+        <h3>{t("copilot.emptyTitle")}</h3>
         <p>
-          Ask questions, modify dates, assign team members, and generate or edit tasks in real time.
+          {t("copilot.emptyBody")}
         </p>
       </div>
     );
@@ -68,7 +70,7 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
                     <div className="copilot-validation-warning">
                       <div className="copilot-val-header">
                         <AlertTriangle size={13} />
-                        <span>Plan Validation Errors:</span>
+                        <span>{t("copilot.validationErrors")}</span>
                       </div>
                       <ul>
                         {msg.validationErrors.map((err, i) => (
@@ -82,7 +84,13 @@ export const CopilotMessages: React.FC<CopilotMessagesProps> = ({
                     <CopilotDiffPreview
                       diff={msg.diff}
                       applied={msg.applied}
-                      blockedReason={readOnly ? "This room is view-only." : stale ? "The plan changed. Ask for an updated proposal." : undefined}
+                      blockedReason={
+                        readOnly
+                          ? t("copilot.blockedReadOnly")
+                          : stale
+                          ? t("copilot.blockedStale")
+                          : undefined
+                      }
                       onAccept={pendingDiff?.messageId === msg.id ? onAcceptDiff : undefined}
                       onReject={pendingDiff?.messageId === msg.id ? onRejectDiff : undefined}
                       onRevert={!readOnly && msg.previousPlan ? () => onRevertDiff(msg.id) : undefined}

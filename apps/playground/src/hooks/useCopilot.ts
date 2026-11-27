@@ -47,6 +47,8 @@ import { extractJsonFromResponse } from "../services/ai/json-extractor";
 import { diffPlans, applyHistoryEntry } from "./useUndoRedo";
 import { getPeerId } from "../utils";
 import { computePlanDiff } from "../services/ai/plan-differ";
+import { useI18n } from "../i18n/I18nProvider";
+import { tGlobal } from "../i18n";
 
 export interface UseCopilotOptions {
   parsedData: JanttData | null;
@@ -94,6 +96,7 @@ export function useCopilot({
   showToast,
   isReadOnly, projectId, activeView, inspectedTaskId
 }: UseCopilotOptions): UseCopilotReturn {
+  const { t } = useI18n();
   // Accounts State
   const [accounts, setAccounts] = useState<ProviderAccount[]>(() => getProviderAccounts());
   const configuredAccounts = useMemo(() => accounts.filter(isAccountConfigured), [accounts]);
@@ -371,12 +374,12 @@ export function useCopilot({
   const currentModelLabel = useMemo(() => {
     const activeAcc = accounts.find((a) => a.id === config.activeAccountId);
     const found = availableModels.find((m) => m.id === config.modelId);
-    const modelName = found ? found.label : config.modelId || "Select Model";
+    const modelName = found ? found.label : config.modelId || t("app.copilotSelectModel");
     if (activeAcc && accounts.length > 1) {
       return `${activeAcc.label} • ${modelName}`;
     }
     return modelName;
-  }, [accounts, config.activeAccountId, availableModels, config.modelId]);
+  }, [accounts, config.activeAccountId, availableModels, config.modelId, t]);
 
   // Stop Generation
   const stopGeneration = useCallback(() => {
@@ -387,7 +390,7 @@ export function useCopilot({
     }
     setIsStreaming(false);
     setMessages((prev) =>
-      prev.map((msg) => (msg.isStreaming ? { ...msg, isStreaming: false, content: msg.content + " [Stopped]" } : msg))
+      prev.map((msg) => (msg.isStreaming ? { ...msg, isStreaming: false, content: msg.content + tGlobal("app.copilotStopped") } : msg))
     );
   }, []);
 
@@ -417,7 +420,8 @@ export function useCopilot({
         (activeConfig.customBaseUrl?.includes("localhost") || activeConfig.customBaseUrl?.includes("127.0.0.1"));
 
       if (!activeConfig.apiKey.trim() && !isLocal) {
-        showToast(`Please enter an API key for ${PROVIDER_CATALOG[activeConfig.providerId]?.label || "the AI provider"}.`, true);
+        const providerLabel = PROVIDER_CATALOG[activeConfig.providerId]?.label || tGlobal("app.copilotAiProvider");
+        showToast(tGlobal("app.copilotApiKeyRequired", { provider: providerLabel }), true);
         return;
       }
 
@@ -509,7 +513,7 @@ export function useCopilot({
                     msg.id === assistantMessageId
                       ? {
                           ...msg,
-                          content: extraction.textContent || "Review the proposed changes below.",
+                          content: extraction.textContent || tGlobal("app.copilotReviewChanges"),
                           extractedPlan: extraction.data,
                           previousPlan: beforePlan,
                           diff,
@@ -525,7 +529,7 @@ export function useCopilot({
                     msg.id === assistantMessageId
                       ? {
                           ...msg,
-                          content: extraction.textContent || "The plan was generated with structural schema validation errors.",
+                          content: extraction.textContent || tGlobal("app.copilotSchemaErrors"),
                           validationErrors: errors,
                           isStreaming: false
                         }
@@ -580,13 +584,13 @@ export function useCopilot({
     if (!pendingDiff) return;
 
     if (isReadOnlyRef.current) {
-      showToast("Cannot apply plan in read-only mode.", true);
+      showToast(tGlobal("app.copilotCannotApplyReadOnly"), true);
       return;
     }
 
     try {
       if (parsedDataRef.current !== proposalSource.current) {
-        showToast("The plan changed since this proposal. Request an updated preview.", true);
+        showToast(tGlobal("app.copilotPlanChanged"), true);
         return;
       }
       const committed = commitPlanRef.current(pendingDiff.plan);
@@ -594,10 +598,10 @@ export function useCopilot({
       setMessages((prev) =>
         prev.map((msg) => (msg.id === pendingDiff.messageId ? { ...msg, extractedPlan: committed, applied: true } : msg))
       );
-      showToast(`Applied plan changes: ${pendingDiff.diff.summary}`);
+      showToast(tGlobal("app.copilotApplied", { summary: pendingDiff.diff.summary }));
       setPendingDiff(null);
     } catch (err: unknown) {
-      showToast(`Failed to commit plan: ${err instanceof Error ? err.message : String(err)}`, true);
+      showToast(tGlobal("app.copilotCommitFailed", { error: err instanceof Error ? err.message : String(err) }), true);
     }
   }, [pendingDiff, showToast]);
 
@@ -608,7 +612,7 @@ export function useCopilot({
       prev.map((msg) => (msg.id === pendingDiff.messageId ? { ...msg, applied: false } : msg))
     );
     setPendingDiff(null);
-    showToast("Changes dismissed.");
+    showToast(tGlobal("app.copilotDismissed"));
   }, [pendingDiff, showToast]);
 
   // Revert an applied change
@@ -616,11 +620,11 @@ export function useCopilot({
     (messageId: string) => {
       const targetMsg = messages.find((m) => m.id === messageId);
       if (!targetMsg?.applied || !targetMsg.previousPlan || !targetMsg.extractedPlan || !parsedDataRef.current) {
-        showToast("No restore snapshot available for this change.", true);
+        showToast(tGlobal("app.copilotNoSnapshot"), true);
         return;
       }
       if (isReadOnlyRef.current) {
-        showToast("Cannot revert plan in read-only mode.", true);
+        showToast(tGlobal("app.copilotCannotRevertReadOnly"), true);
         return;
       }
       try {
@@ -628,16 +632,16 @@ export function useCopilot({
         if (!entry) return;
         const reverted = applyHistoryEntry(parsedDataRef.current, entry, "undo", `${new Date().toISOString()}#${getPeerId()}`);
         if (!reverted.applied) {
-          showToast("These fields have changed since the proposal was applied.", true);
+          showToast(tGlobal("app.copilotFieldsChanged"), true);
           return;
         }
         if (!commitPlanRef.current(reverted.data)) return;
         setMessages((prev) =>
           prev.map((msg) => (msg.id === messageId ? { ...msg, applied: false } : msg))
         );
-        showToast(reverted.skipped ? "Reverted proposal edits and kept newer changes." : "Reverted proposal edits.");
+        showToast(reverted.skipped ? tGlobal("app.copilotRevertedKept") : tGlobal("app.copilotReverted"));
       } catch (err: unknown) {
-        showToast(`Failed to revert plan: ${err instanceof Error ? err.message : String(err)}`, true);
+        showToast(tGlobal("app.copilotRevertFailed", { error: err instanceof Error ? err.message : String(err) }), true);
       }
     },
     [messages, showToast]

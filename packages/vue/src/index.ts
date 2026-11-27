@@ -23,6 +23,7 @@ import {
   ViewportOptions,
   JanttOptions,
   renderJantt,
+  normalizeTimelineLocale,
   JanttInstance
 } from "@jantt/core";
 
@@ -102,6 +103,11 @@ export const JanttTimeline = defineComponent({
     viewport: {
       type: Object as PropType<ViewportOptions>,
       default: undefined
+    },
+    /** Interface language. English is the default. */
+    locale: {
+      type: String,
+      default: "en"
     },
     theme: {
       type: Object as PropType<Record<string, string>>,
@@ -204,6 +210,7 @@ export const JanttTimeline = defineComponent({
     const readConfig = (): unknown[] => [
       props.theme ? JSON.stringify(props.theme) : "",
       props.themeClassName,
+      normalizeTimelineLocale(props.locale),
       props.readOnly,
       props.sidebarContainer,
       props.showDateFilterBadge,
@@ -226,6 +233,7 @@ export const JanttTimeline = defineComponent({
     const buildOptions = (): JanttOptions => ({
       theme: props.theme ? toRaw(props.theme) : undefined,
       themeClassName: props.themeClassName,
+      locale: normalizeTimelineLocale(props.locale),
       readOnly: props.readOnly,
       showDateFilterBadge: props.showDateFilterBadge,
       filterTasksByDate: props.filterTasksByDate,
@@ -357,6 +365,7 @@ export const JanttTimeline = defineComponent({
     return () =>
       h("div", {
         ref: containerRef,
+        lang: normalizeTimelineLocale(props.locale),
         class: ["jantt-vue-timeline-container", props.className].filter(Boolean).join(" "),
         style: {
           width: "100%",
@@ -368,4 +377,5 @@ export const JanttTimeline = defineComponent({
   }
 });
 
+export { JanttTimeline as Jantt };
 export default JanttTimeline;

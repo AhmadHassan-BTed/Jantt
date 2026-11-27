@@ -8,6 +8,7 @@ import {
   TaskScheduleCoordinator,
   resolveSchedule
 } from "@jantt/core";
+import { useI18n } from "../i18n/I18nProvider";
 import type { ActiveView } from "../types";
 import { triggerHaptic } from "../services/platform";
 import { commandBus } from "../services/bus";
@@ -63,6 +64,7 @@ export function useTaskDetailSidebar({
   onPromptFork,
   autoCascade
 }: UseTaskDetailSidebarOptions) {
+  const { locale, t } = useI18n();
   const inspectRef = useRef(onInspectTask);
   inspectRef.current = onInspectTask;
   const activeSidebarRef = useRef<ReturnType<typeof createTaskSidebar> | null>(null);
@@ -125,6 +127,8 @@ export function useTaskDetailSidebar({
           : tasks;
 
       const sidebarInstance = createTaskSidebar({
+        locale,
+        translate: key => t(`sidebar.${key}`),
         task,
         allTasks: openedWith.tasks,
         scheduleOptions: TaskScheduleCoordinator.scheduleOptions(openedWith),
@@ -174,7 +178,7 @@ export function useTaskDetailSidebar({
       inspectRef.current?.(task.id);
       setIsTaskDetailOpen(true);
     },
-    [closeSidebar]
+    [closeSidebar, locale, t]
   );
 
   return {

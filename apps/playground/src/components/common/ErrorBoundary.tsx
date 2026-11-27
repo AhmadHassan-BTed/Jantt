@@ -3,6 +3,7 @@ import { AlertTriangle, RotateCcw, Download, LayoutTemplate, FileJson } from "lu
 import { STORAGE_KEYS } from "../../constants";
 import { storageService } from "../../services/storage";
 import { requestOpenJsonEditor } from "./EmptyChartState";
+import { tGlobal } from "../../i18n";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -104,16 +105,22 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       return (
         <div className="empty-chart-state" role="alert">
           <AlertTriangle size={32} color="#F43F5E" aria-hidden="true" />
-          <h3>This view could not be displayed</h3>
-          <p>{error.message || "An unexpected error occurred while drawing this view."}</p>
+          <h3>{tGlobal("error.paneTitle")}</h3>
+          <p>{tGlobal("error.paneBody")}</p>
+          {error.message && (
+            <details>
+              <summary>{tGlobal("editor.diagnostics.technicalDetails")}</summary>
+              <pre className="app-error-detail">{error.message}</pre>
+            </details>
+          )}
           <div className="app-error-actions">
             <button type="button" className="btn btn-primary" onClick={this.handleRetry}>
               <RotateCcw size={14} aria-hidden="true" />
-              <span>Try again</span>
+              <span>{tGlobal("error.retry")}</span>
             </button>
             <button type="button" className="btn btn-secondary" onClick={requestOpenJsonEditor}>
               <FileJson size={14} aria-hidden="true" />
-              <span>Open JSON editor</span>
+              <span>{tGlobal("error.openJson")}</span>
             </button>
           </div>
         </div>
@@ -126,25 +133,25 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       <div className="app-error-boundary" role="alert">
         <div className="app-error-card">
           <AlertTriangle size={36} className="app-error-icon" aria-hidden="true" />
-          <h1>Something went wrong</h1>
-          <p>
-            Jantt hit an unexpected error while drawing this screen. Your saved plans are still in this
-            browser.
-          </p>
-          <pre className="app-error-detail">{error.message || String(error)}</pre>
+          <h1>{tGlobal("error.title")}</h1>
+          <p>{tGlobal("error.body")}</p>
+          <details>
+            <summary>{tGlobal("editor.diagnostics.technicalDetails")}</summary>
+            <pre className="app-error-detail">{error.message || String(error)}</pre>
+          </details>
           <div className="app-error-actions">
             <button type="button" className="btn btn-primary" onClick={this.handleReload}>
               <RotateCcw size={14} aria-hidden="true" />
-              <span>Reload</span>
+              <span>{tGlobal("error.reload")}</span>
             </button>
             <button type="button" className="btn btn-secondary" onClick={this.handleOpenTemplate}>
               <LayoutTemplate size={14} aria-hidden="true" />
-              <span>Open built-in template</span>
+              <span>{tGlobal("error.openTemplate")}</span>
             </button>
             {hasRecoverablePlan && (
               <button type="button" className="btn btn-secondary" onClick={this.handleDownload}>
                 <Download size={14} aria-hidden="true" />
-                <span>Download current plan (JSON)</span>
+                <span>{tGlobal("error.downloadPlan")}</span>
               </button>
             )}
           </div>

@@ -13,6 +13,7 @@ import {
 import type { ModelDefinition, ProviderDefinition, ProviderId, ProviderAccount } from "../../services/ai/types";
 import { getEffectiveModelsForAccount, type ModelDiscoveryResult } from "../../services/ai/model-discovery";
 import { addCustomModel } from "../../services/ai/storage";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface CopilotModelSelectorProps {
   isOpen: boolean;
@@ -51,6 +52,7 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
   onSelectAccountAndModel,
   onOpenSettings
 }) => {
+  const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const [customModelText, setCustomModelText] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -117,8 +119,8 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
             <KeyRound size={20} />
           </div>
           <div className="copilot-empty-models-text">
-            <strong>No AI Providers Configured</strong>
-            <p>Add an API key in Settings to fetch live models from your provider API.</p>
+            <strong>{t("copilot.noProviders")}</strong>
+            <p>{t("copilot.noProvidersBody")}</p>
           </div>
           <button
             type="button"
@@ -129,7 +131,7 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
             }}
           >
             <Plus size={12} />
-            <span>Configure Provider & Key</span>
+            <span>{t("copilot.configureProvider")}</span>
           </button>
         </div>
       ) : (
@@ -140,18 +142,18 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
               <input
                 type="text"
                 className="copilot-model-search-input"
-                placeholder="Filter live models..."
+                placeholder={t("copilot.filterModelsPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Filter models"
+                aria-label={t("copilot.filterModels")}
               />
               {searchQuery && (
                 <button
                   type="button"
                   className="copilot-model-search-clear"
                   onClick={() => setSearchQuery("")}
-                  title="Clear filter"
-                  aria-label="Clear filter"
+                  title={t("copilot.clearFilter")}
+                  aria-label={t("copilot.clearFilter")}
                 >
                   <X size={11} />
                 </button>
@@ -162,8 +164,8 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
               className="copilot-model-refresh-btn"
               onClick={() => void onRefreshAllModels?.(true)}
               disabled={isAnyLoading}
-              title="Fetch latest available models directly from configured APIs"
-              aria-label="Refresh live models"
+              title={t("copilot.refreshAllTitle")}
+              aria-label={t("copilot.refreshLive")}
             >
               <RefreshCw size={12} className={isAnyLoading ? "spin-sync-icon" : ""} />
             </button>
@@ -188,12 +190,14 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
               totalMatchedModels += filteredModels.length;
               const isCurrentAccount = acc.id === (activeAccountId || configuredAccounts[0]?.id);
               const statusText = isLoading
-                ? "Syncing..."
+                ? t("copilot.syncing")
                 : discovery?.source === "live"
-                ? `Live · ${allModels.length}${discovery.latencyMs === undefined ? "" : ` · ${discovery.latencyMs} ms`}`
+                ? discovery.latencyMs === undefined
+                  ? t("copilot.statusLive", { count: allModels.length })
+                  : t("copilot.statusLiveLatency", { count: allModels.length, ms: discovery.latencyMs })
                 : discovery?.source === "cache"
-                ? `Synced · ${allModels.length}`
-                : `Fallback · ${allModels.length}`;
+                ? t("copilot.statusSynced", { count: allModels.length })
+                : t("copilot.statusFallback", { count: allModels.length });
 
               if (query && filteredModels.length === 0) return null;
 
@@ -206,7 +210,7 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
                       className={`copilot-group-status-pill ${
                         discovery?.source === "live" || discovery?.source === "cache" ? "is-live" : ""
                       }`}
-                      title={discovery?.error || `Loaded from ${pDef?.label || acc.providerId}`}
+                      title={discovery?.error || t("copilot.loadedFrom", { provider: pDef?.label || acc.providerId })}
                     >
                       {statusText}
                     </span>
@@ -218,8 +222,8 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
                         void onRefreshModelsForAccount?.(acc.id, true);
                       }}
                       disabled={isLoading}
-                      title={`Refresh live models from ${pDef?.label || acc.providerId}`}
-                      aria-label={`Refresh models for ${acc.label}`}
+                      title={t("copilot.refreshFromTitle", { provider: pDef?.label || acc.providerId })}
+                      aria-label={t("copilot.refreshFor", { label: acc.label })}
                     >
                       <RefreshCw size={10} className={isLoading ? "spin-sync-icon" : ""} />
                     </button>
@@ -263,7 +267,7 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
 
             {query && totalMatchedModels === 0 && (
               <div className="copilot-model-no-matches">
-                No models matching &ldquo;{searchQuery}&rdquo;. Add it manually below if your API supports it.
+                {t("copilot.noMatches", { query: searchQuery })}
               </div>
             )}
           </div>
@@ -275,12 +279,12 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
                   <input
                     type="text"
                     className="copilot-custom-model-field"
-                    placeholder={`Enter model ID for ${activeAccount.label}...`}
+                    placeholder={t("copilot.customModelPlaceholder", { label: activeAccount.label })}
                     value={customModelText}
                     onChange={(e) => setCustomModelText(e.target.value)}
                     autoFocus
                   />
-                  <button type="submit" className="copilot-custom-model-submit" title="Add & Select Model">
+                  <button type="submit" className="copilot-custom-model-submit" title={t("copilot.addModelTitle")}>
                     <CornerDownLeft size={12} />
                   </button>
                 </form>
@@ -291,7 +295,7 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
                   onClick={() => setShowCustomInput(true)}
                 >
                   <Plus size={12} />
-                  <span>Add Custom Model ID...</span>
+                  <span>{t("copilot.addCustomModel")}</span>
                 </button>
               )}
             </div>
@@ -309,7 +313,7 @@ export const CopilotModelSelector: React.FC<CopilotModelSelectorProps> = ({
           }}
         >
           <Settings size={13} />
-          <span>Provider & API Key Settings</span>
+          <span>{t("copilot.providerSettings")}</span>
         </button>
       </div>
     </div>

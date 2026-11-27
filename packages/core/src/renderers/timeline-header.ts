@@ -1,7 +1,10 @@
-import { GridHeader, HeaderDay } from "../types";
+import { GridHeader, HeaderDay, TimelineLabels } from "../types";
 import { clampDayWidth } from "../utils";
+import { formatTimelineLabel, resolveTimelineLabels } from "../timeline-labels";
 
 export interface TimelineHeaderOptions {
+  /** Localized timeline text; omitted fields fall back to English. */
+  labels?: Partial<TimelineLabels>;
   selectedDate?: string | null;
   dayWidth?: number;
   showToday?: boolean;
@@ -158,7 +161,8 @@ function buildTierRow(
   cellClass: string,
   cells: TierCell[],
   withResizeHandles: boolean,
-  cellDays: number
+  cellDays: number,
+  labels: TimelineLabels
 ): HTMLElement {
   const row = document.createElement("div");
   row.className = rowClass;
@@ -176,7 +180,7 @@ function buildTierRow(
     if (withResizeHandles) {
       const handle = document.createElement("div");
       handle.className = "jantt-col-resize-handle";
-      handle.title = "Drag to resize column width / zoom timeline";
+      handle.title = labels.dragResizeColumn;
       cell.appendChild(handle);
     }
     row.appendChild(cell);
@@ -185,7 +189,7 @@ function buildTierRow(
 }
 
 /** Groups header days into calendar quarters (Q1..Q4) for zoomed-out tiers. */
-function computeQuarters(days: HeaderDay[], withYear: boolean): TierCell[] {
+function computeQuarters(days: HeaderDay[], withYear: boolean, labels: TimelineLabels): TierCell[] {
   const quarters: TierCell[] = [];
   let current: TierCell | null = null;
   let currentKey = "";
@@ -195,9 +199,10 @@ function computeQuarters(days: HeaderDay[], withYear: boolean): TierCell[] {
     const key = `${year}-${quarter}`;
     if (key !== currentKey) {
       currentKey = key;
+      const quarterLabel = formatTimelineLabel(labels.quarter, { quarter });
       current = {
-        label: withYear ? `Q${quarter} ${year}` : `Q${quarter}`,
-        title: `Q${quarter} ${year}`,
+        label: withYear ? formatTimelineLabel(labels.quarterYear, { quarter: quarterLabel, year }) : quarterLabel,
+        title: formatTimelineLabel(labels.quarterYear, { quarter: quarterLabel, year }),
         x: d.x,
         width: 0
       };
@@ -208,10 +213,10 @@ function computeQuarters(days: HeaderDay[], withYear: boolean): TierCell[] {
   return quarters;
 }
 
-function monthCells(header: GridHeader, compact: boolean): TierCell[] {
+function monthCells(header: GridHeader, compact: boolean, labels: TimelineLabels): TierCell[] {
   let monthIndex = header.days.length > 0 ? parseInt(header.days[0].dateStr.slice(5, 7), 10) - 1 : 0;
   return header.months.map((m) => {
-    const short = MONTH_SHORT[monthIndex % 12];
+    const short = labels.monthsShort[monthIndex % 12] ?? MONTH_SHORT[monthIndex % 12];
     monthIndex++;
     return { label: compact ? short : m.label, title: m.label, x: m.x, width: m.width };
   });
@@ -235,6 +240,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
   timelineHeader.className = "jantt-timeline-header";
   timelineHeader.style.height = `${header.totalHeight}px`;
 
+  const labels = resolveTimelineLabels(options?.labels);
   const currentDayW = options?.dayWidth || header.days[0]?.width || 36;
   const zoomable = Boolean(options?.onColumnResize);
   const scale = header.scale;
@@ -258,7 +264,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
   if (showDays) {
     // 2. Months tier (active grid granularity is days, so border drags match day-column responsiveness)
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), zoomable, 1)
+      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false, labels), zoomable, 1, labels)
     );
 
     // 3. Days tier (click to filter; roving tabindex keeps the header a single tab stop)
@@ -281,10 +287,10 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       } ${isSelected ? "is-date-selected" : ""}`;
       dCell.style.width = `${d.width}px`;
       dCell.title = isSelected
-        ? `${d.dateStr} (Active filter - click to show all dates)`
+        ? formatTimelineLabel(labels.activeDateTitle, { date: d.dateStr })
         : isBoundary
-        ? `${d.dateStr} (Task boundary date - click to show only tasks on this date)`
-        : `${d.dateStr} (Click to show only tasks on this date)`;
+        ? formatTimelineLabel(labels.boundaryDateTitle, { date: d.dateStr })
+        : formatTimelineLabel(labels.showDateTitle, { date: d.dateStr });
       dCell.setAttribute("data-date", d.dateStr);
       dCell.dataset.zoomCell = "";
       dCell.dataset.cellDays = "1";
@@ -293,7 +299,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
         dCell.style.cursor = "pointer";
         dCell.setAttribute("role", "button");
         dCell.setAttribute("aria-pressed", String(isSelected));
-        dCell.setAttribute("aria-label", isSelected ? `${d.dateStr}, active date filter` : `Show tasks on ${d.dateStr}`);
+        dCell.setAttribute("aria-label", isSelected ? formatTimelineLabel(labels.activeDateFilter, { date: d.dateStr }) : formatTimelineLabel(labels.showTasksOn, { date: d.dateStr }));
         dCell.tabIndex = d.dateStr === focusDate ? 0 : -1;
       }
 
@@ -324,7 +330,7 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       if (zoomable && d.width >= 6) {
         const dResizeHandle = document.createElement("div");
         dResizeHandle.className = "jantt-col-resize-handle";
-        dResizeHandle.title = "Drag to resize column width / zoom timeline";
+        dResizeHandle.title = labels.dragResizeColumn;
         if (d.width < 18) {
           dResizeHandle.style.width = "6px";
           dResizeHandle.style.right = "-3px";
@@ -338,27 +344,28 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
     timelineHeader.appendChild(daysRow);
   } else if (scale === "month") {
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false), false, 30)
+      buildTierRow("jantt-header-months", "jantt-month-cell", monthCells(header, false, labels), false, 30, labels)
     );
     const weeks: TierCell[] = header.weeks.map((w) => ({
       label: w.label,
-      title: `${w.label.replace("Wk", "Week")} (drag to zoom)`,
+      title: w.week === undefined ? w.label : formatTimelineLabel(labels.weekTitle, { week: w.week }),
       x: w.x,
       width: w.width
     }));
-    timelineHeader.appendChild(buildTierRow("jantt-header-days", "jantt-week-cell", weeks, zoomable, 7));
+    timelineHeader.appendChild(buildTierRow("jantt-header-days", "jantt-week-cell", weeks, zoomable, 7, labels));
   } else {
     timelineHeader.appendChild(
       buildTierRow(
         "jantt-header-months",
         "jantt-month-cell",
-        computeQuarters(header.days, !header.spansMultipleYears),
+        computeQuarters(header.days, !header.spansMultipleYears, labels),
         false,
-        90
+        90,
+        labels
       )
     );
     timelineHeader.appendChild(
-      buildTierRow("jantt-header-days", "jantt-month-cell is-compact", monthCells(header, true), zoomable, 30)
+      buildTierRow("jantt-header-days", "jantt-month-cell is-compact", monthCells(header, true, labels), zoomable, 30, labels)
     );
   }
 
@@ -371,8 +378,8 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
       pin.className = "jantt-header-date-pin";
       pin.style.left = `${day.x + day.width / 2}px`;
       pin.textContent = day.dateStr;
-      pin.title = `${day.dateStr} (Active filter - click to show all dates)`;
-      pin.setAttribute("aria-label", `Clear date filter ${day.dateStr}`);
+      pin.title = formatTimelineLabel(labels.activeDateTitle, { date: day.dateStr });
+      pin.setAttribute("aria-label", formatTimelineLabel(labels.clearDateFilter, { date: day.dateStr }));
       if (options.onDateClick) {
         pin.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -481,13 +488,14 @@ export function renderTimelineHeader(header: GridHeader, options?: TimelineHeade
 
     todayMarker.setAttribute("data-today-date", todayDateStr);
     todayMarker.title = todayDateStr
-      ? `Today: ${todayDateStr} (Click to filter tasks active today)`
-      : "Today (Click to filter tasks active today)";
+      ? formatTimelineLabel(labels.todayTitle, { date: todayDateStr })
+      : labels.todayTitleNoDate;
 
     todayMarker.innerHTML = `
-      <span class="jantt-header-today-pill">Today</span>
+      <span class="jantt-header-today-pill"></span>
       <span class="jantt-header-today-arrow"></span>
     `;
+    todayMarker.querySelector(".jantt-header-today-pill")!.textContent = labels.today;
 
     if (options?.onDateClick && todayDateStr) {
       todayMarker.addEventListener("click", (e) => {

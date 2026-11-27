@@ -10,8 +10,8 @@ describe("resource leveling preview", () => {
   let container: HTMLDivElement;
   let root: Root;
   const data: JanttData = { tasks: [
-    { id: "a", start: "2026-11-02", end: "2026-11-03", assignee: "alice" },
-    { id: "b", start: "2026-11-02", end: "2026-11-03", assignee: "alice" }
+    { id: "a", category: "general", start: "2026-11-02", end: "2026-11-03", assignee: "alice" },
+    { id: "b", category: "general", start: "2026-11-02", end: "2026-11-03", assignee: "alice" }
   ] };
   const click = (label: string) => {
     const button = [...container.querySelectorAll("button")].find((item) => item.textContent === label);
@@ -46,7 +46,7 @@ describe("resource leveling preview", () => {
     expect(commit.mock.calls[0][0].tasks.find((task: any) => task.id === "b").start).toBe("2026-11-05");
   });
   it("shows an invalid calendar error without crashing the panel", () => {
-    const invalid: JanttData = { tasks: [{ id: "a", assignee: "alice", start: "2026-11-02", end: "2026-11-03", calendarId: "missing" }] };
+    const invalid: JanttData = { tasks: [{ id: "a", category: "general", assignee: "alice", start: "2026-11-02", end: "2026-11-03", calendarId: "missing" }] };
     act(() => root.render(<ResourceLevelingPanel data={invalid} onCommit={vi.fn()} readOnly={false} />));
     expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/calendarId.*missing/i);
     expect([...container.querySelectorAll("button")].find((button) => button.textContent === "Preview leveling")?.disabled).toBe(true);
@@ -90,7 +90,7 @@ describe("resource leveling preview", () => {
   });
 
   it("shows downstream changes in the preview", () => {
-    const withSuccessor: JanttData = { tasks: [{ ...data.tasks[0], priority: "high" }, data.tasks[1], { id: "c", start: "2026-11-05", end: "2026-11-06", dependsOn: "b" }] };
+    const withSuccessor: JanttData = { tasks: [{ ...data.tasks[0], priority: "high" }, data.tasks[1], { id: "c", category: "general", start: "2026-11-05", end: "2026-11-06", dependsOn: "b" }] };
     act(() => root.render(<ResourceLevelingPanel data={withSuccessor} onCommit={vi.fn()} readOnly={false} />));
     click("Preview leveling");
     expect(container.textContent).toContain("c: 2026-11-05–2026-11-06 → 2026-11-08–2026-11-09");
@@ -107,10 +107,10 @@ describe("resource leveling preview", () => {
 
   it("does not report success or apply an invalid baseline", () => {
     const invalid: JanttData = { tasks: [
-      { id: "a", start: "2026-11-02", end: "2026-11-04" },
-      { id: "b", start: "2026-11-02", end: "2026-11-03", dependsOn: "a", locked: true },
-      { id: "x", start: "2026-11-02", end: "2026-11-03" },
-      { id: "y", start: "2026-11-02", end: "2026-11-03", dependsOn: "x" }
+      { id: "a", category: "general", start: "2026-11-02", end: "2026-11-04" },
+      { id: "b", category: "general", start: "2026-11-02", end: "2026-11-03", dependsOn: "a", locked: true },
+      { id: "x", category: "general", start: "2026-11-02", end: "2026-11-03" },
+      { id: "y", category: "general", start: "2026-11-02", end: "2026-11-03", dependsOn: "x" }
     ], meta: { targetDate: "2026-12-01" } };
     const commit = vi.fn();
     act(() => root.render(<ResourceLevelingPanel data={invalid} onCommit={commit} readOnly={false} />));
@@ -125,8 +125,8 @@ describe("resource leveling preview", () => {
 
   it("shows a clear failure when a cycle produces no date changes", () => {
     const invalid: JanttData = { tasks: [
-      { id: "a", start: "2026-11-02", end: "2026-11-02", dependsOn: "b" },
-      { id: "b", start: "2026-11-02", end: "2026-11-02", dependsOn: "a" }
+      { id: "a", category: "general", start: "2026-11-02", end: "2026-11-02", dependsOn: "b" },
+      { id: "b", category: "general", start: "2026-11-02", end: "2026-11-02", dependsOn: "a" }
     ] };
     act(() => root.render(<ResourceLevelingPanel data={invalid} onCommit={vi.fn()} readOnly={false} />));
     click("Preview leveling");
@@ -137,7 +137,7 @@ describe("resource leveling preview", () => {
   });
 
   it("identifies a task whose own allocation exceeds capacity", () => {
-    const oversized: JanttData = { tasks: [{ id: "a", start: "2026-11-02", end: "2026-11-02", assignee: "alice", allocation: 1.5 }] };
+    const oversized: JanttData = { tasks: [{ id: "a", category: "general", start: "2026-11-02", end: "2026-11-02", assignee: "alice", allocation: 1.5 }] };
     act(() => root.render(<ResourceLevelingPanel data={oversized} onCommit={vi.fn()} readOnly={false} />));
     click("Preview leveling");
     expect(container.textContent).toContain("A task exceeds capacity on its own");
@@ -169,10 +169,10 @@ describe("resource leveling preview", () => {
 
   it("shows locked conflicts alongside changes that can be applied", () => {
     const partial: JanttData = { tasks: [
-      { id: "a", start: "2026-11-02", end: "2026-11-03", assignee: "alice", locked: true },
-      { id: "b", start: "2026-11-02", end: "2026-11-03", assignee: "alice", locked: true },
-      { id: "c", start: "2026-11-02", end: "2026-11-03", assignee: "bob", locked: true },
-      { id: "d", start: "2026-11-02", end: "2026-11-03", assignee: "bob" }
+      { id: "a", category: "general", start: "2026-11-02", end: "2026-11-03", assignee: "alice", locked: true },
+      { id: "b", category: "general", start: "2026-11-02", end: "2026-11-03", assignee: "alice", locked: true },
+      { id: "c", category: "general", start: "2026-11-02", end: "2026-11-03", assignee: "bob", locked: true },
+      { id: "d", category: "general", start: "2026-11-02", end: "2026-11-03", assignee: "bob" }
     ] };
     const commit = vi.fn();
     act(() => root.render(<ResourceLevelingPanel data={partial} onCommit={commit} readOnly={false} />));

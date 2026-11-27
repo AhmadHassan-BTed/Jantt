@@ -1,4 +1,5 @@
 import type { ProviderAdapter, ProviderId, StreamCallbacks, StreamChatOptions } from "../types";
+import { tGlobal } from "../../../i18n";
 
 export class OpenAiCompatibleAdapter implements ProviderAdapter {
   constructor(readonly providerId: ProviderId, readonly defaultEndpoint?: string) {}
@@ -23,7 +24,7 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
         if (!cleanKey && !isLocalEndpoint) {
           callbacks.onError({
             code: "AUTH",
-            message: `${this.providerId.toUpperCase()} API key is missing. Add your API key in Copilot settings.`
+            message: tGlobal("services.ai.openai.keyMissing", { provider: this.providerId.toUpperCase() })
           });
           return;
         }
@@ -40,7 +41,7 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
           else {
             callbacks.onError({
               code: "NETWORK",
-              message: "Base URL is required for custom OpenAI-compatible endpoints."
+              message: tGlobal("services.ai.openai.baseUrlRequired")
             });
             return;
           }
@@ -93,7 +94,7 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
           if (response.status === 401 || response.status === 403) {
             callbacks.onError({
               code: "AUTH",
-              message: `Authentication failed (${response.status}): ${errorDetail || "Invalid API key."}`
+              message: tGlobal("services.ai.openai.authFailed", { status: response.status, detail: errorDetail || tGlobal("services.ai.invalidKey") })
             });
             return;
           }
@@ -101,20 +102,20 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
           if (response.status === 429) {
             callbacks.onError({
               code: "RATE_LIMIT",
-              message: `Rate limit reached: ${errorDetail || "Too many requests. Please try again shortly."}`
+              message: tGlobal("services.ai.openai.rateLimit", { detail: errorDetail || tGlobal("services.ai.tooManyRequests") })
             });
             return;
           }
 
           callbacks.onError({
             code: "UNKNOWN",
-            message: `API request failed with code ${response.status}: ${errorDetail || response.statusText}`
+            message: tGlobal("services.ai.openai.requestFailed", { status: response.status, detail: errorDetail || response.statusText })
           });
           return;
         }
 
         if (!response.body) {
-          callbacks.onError({ code: "NETWORK", message: "Endpoint returned an empty response body stream." });
+          callbacks.onError({ code: "NETWORK", message: tGlobal("services.ai.openai.emptyStream") });
           return;
         }
 
@@ -160,13 +161,13 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
         if (errorMsg.includes("Failed to fetch") || errorMsg.includes("NetworkError")) {
           callbacks.onError({
             code: "NETWORK",
-            message: `Could not connect to endpoint (${options?.baseUrl || "OpenAI"}). Check CORS settings or network reachability.`
+            message: tGlobal("services.ai.openai.connectFailed", { baseUrl: options?.baseUrl || "OpenAI" })
           });
           return;
         }
         callbacks.onError({
           code: "UNKNOWN",
-          message: errorMsg || "An unexpected error occurred while communicating with the OpenAI endpoint."
+          message: errorMsg || tGlobal("services.ai.openai.unexpected")
         });
       }
     })();

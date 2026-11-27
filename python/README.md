@@ -97,6 +97,8 @@ Conversion rules:
 
 ## How the chart is loaded
 
+Pass `locale="zh-CN"` to `jantt.to_html`, `jantt.show`, or `jantt.streamlit` to render the chart in Simplified Chinese. The default is `en`.
+
 The rendered HTML loads the Jantt engine from unpkg (`@jantt/standalone`), pinned to the same version as this package; pass `cdn_version="x.y.z"` to pin another release. The viewer needs network access to unpkg.com. If the engine cannot be loaded within about 10 seconds (offline, blocked by a proxy or content security policy), the chart area shows an error message instead of staying blank.
 
 Plan data is embedded with HTML-safe escaping, so labels and notes from untrusted DataFrames cannot inject markup or scripts into the notebook or Streamlit page.

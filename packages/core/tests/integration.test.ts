@@ -285,6 +285,30 @@ describe("Stress & Boundary Tests", () => {
     sidebar.close();
   });
 
+  it("keeps translated sidebar text and task labels as text while saving canonical status values", () => {
+    const label = '<img src=x>';
+    const onSave = vi.fn();
+    const sidebar = createTaskSidebar({
+      task: { id: "task-i18n", label, category: "general", start: "2026-09-01", end: "2026-09-02" },
+      categories: {},
+      translate: key => key === "dialog" ? "任务详情：{task}" :
+        key === "completed" ? "已完成" : key === "status" ? "<b>状态</b>" : undefined,
+      onSave,
+      onClose: vi.fn()
+    });
+
+    const status = sidebar.element.querySelector<HTMLSelectElement>("#jantt-sidebar-status")!;
+    expect(sidebar.element.closest("[role=dialog]")?.getAttribute("aria-label")).toBe(`任务详情：${label}`);
+    expect(sidebar.element.querySelector(".jantt-sidebar-title")?.textContent).toBe(label);
+    expect(sidebar.element.querySelector(`#${status.getAttribute("aria-labelledby")}`)?.innerHTML).toBe("&lt;b&gt;状态&lt;/b&gt;");
+    expect(status.querySelector('option[value="completed"]')?.textContent).toBe("已完成");
+    status.value = "completed";
+    status.dispatchEvent(new Event("change", { bubbles: true }));
+    sidebar.element.querySelector<HTMLButtonElement>("#jantt-sidebar-save")!.click();
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "task-i18n", label, status: "completed" }));
+  });
+
   it("creates and renders styled hover card controller", () => {
     const tooltip = createTooltipController();
     const task: Task = {

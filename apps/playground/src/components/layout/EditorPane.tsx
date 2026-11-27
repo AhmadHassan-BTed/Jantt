@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import type { JanttData, ValidationResult } from "@jantt/core";
 import { ConfirmDialog } from "../modals/ModalHost";
+import { useI18n } from "../../i18n/I18nProvider";
+import { validationMessage } from "../../i18n/diagnostics";
 
 interface EditorPaneProps {
   isSidebarCollapsed: boolean;
@@ -29,7 +31,7 @@ interface EditorPaneProps {
   isLiveSyncing: boolean;
   jsonText: string;
   parsedData: JanttData | null;
-  validationResult: ValidationResult;
+  validationResult: ValidationResult & { syntaxError?: boolean };
   formatJson: () => void;
   handleResetActiveProject: () => void;
   handleCopyJson: () => void;
@@ -76,6 +78,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   isPendingLoginEditor = false,
   onOpenEditorLogin
 }) => {
+  const { t, locale } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showImportExportMenu, setShowImportExportMenu] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -112,19 +115,19 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
       id="editor-pane"
       className={`editor-pane ${isSidebarCollapsed ? "is-collapsed" : ""} ${isCompact ? "is-compact" : ""} ${isNarrow ? "is-narrow" : ""}`}
       style={{ width: isSidebarCollapsed ? "0px" : `${sidebarWidth}px` }}
-      aria-label="Plan JSON editor"
+      aria-label={t("editor.paneAria")}
       aria-hidden={isSidebarCollapsed || undefined}
       // A collapsed editor must leave the tab order and the accessibility tree entirely.
       {...({ inert: isSidebarCollapsed ? "" : undefined } as Record<string, unknown>)}
     >
       <div className="pane-header">
-        <div className="pane-title" title="JSON plan: the source of truth for every view">
+        <div className="pane-title" title={t("editor.paneTitle")}>
           <FileJson size={15} className="pane-title-icon" aria-hidden="true" />
-          <span className="pane-title-text">JSON Plan</span>
+          <span className="pane-title-text">{t("editor.jsonPlan")}</span>
           {isLiveSyncing && (
-            <span className="sync-pulse-badge" title="Live synced with views">
+            <span className="sync-pulse-badge" title={t("editor.liveSyncedTitle")}>
               <Zap size={11} />
-              <span className="pane-btn-label">Live Synced</span>
+              <span className="pane-btn-label">{t("editor.liveSynced")}</span>
             </span>
           )}
         </div>
@@ -151,13 +154,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               type="button"
               className={`btn-nav pane-action-btn ${showImportExportMenu ? "is-open" : ""}`}
               onClick={() => setShowImportExportMenu((prev) => !prev)}
-              title="Import or export plan data"
-              aria-label="Import or export plan data"
+              title={t("editor.importExportTitle")}
+              aria-label={t("editor.importExportTitle")}
               aria-haspopup="menu"
               aria-expanded={showImportExportMenu}
             >
               <ArrowDownUp size={13} style={{ color: "#38BDF8" }} aria-hidden="true" />
-              <span className="pane-btn-label">Import / Export</span>
+              <span className="pane-btn-label">{t("editor.importExport")}</span>
               <ChevronDown
                 size={11}
                 style={{
@@ -173,7 +176,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               <div
                 className="editor-import-export-popup"
                 role="menu"
-                aria-label="Import or export"
+                aria-label={t("editor.importExportAria")}
               >
                 {/* 1. Import JSON Plan */}
                 {handleImportJsonFile && (
@@ -187,7 +190,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                     }}
                   >
                     <Upload size={13} style={{ color: "#38BDF8", flexShrink: 0 }} aria-hidden="true" />
-                    <span>Import plan file (.json, .xml, .xer, .csv)</span>
+                    <span>{t("editor.importFile")}</span>
                   </button>
                 )}
 
@@ -205,7 +208,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                     }}
                   >
                     <FileJson size={13} style={{ color: "#34D399", flexShrink: 0 }} aria-hidden="true" />
-                    <span>Export as JSON (.json)</span>
+                    <span>{t("editor.exportJson")}</span>
                   </button>
                 )}
 
@@ -221,7 +224,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                     }}
                   >
                     <FileSpreadsheet size={13} style={{ color: "#FBBF24", flexShrink: 0 }} aria-hidden="true" />
-                    <span>Export as CSV (.csv)</span>
+                    <span>{t("editor.exportCsv")}</span>
                   </button>
                 )}
               </div>
@@ -232,37 +235,37 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             type="button"
             className="btn-nav pane-action-btn"
             onClick={formatJson}
-            title="Format JSON"
-            aria-label="Format JSON"
+            title={t("editor.formatJson")}
+            aria-label={t("editor.formatJson")}
             disabled={isViewer}
           >
             <AlignLeft size={13} aria-hidden="true" />
-            <span className="pane-btn-label">Format</span>
+            <span className="pane-btn-label">{t("editor.format")}</span>
           </button>
           <button
             type="button"
             className="btn-nav pane-action-btn"
             onClick={() => setConfirmReset(true)}
-            title="Discard unsaved editor changes and reload the last saved version of this plan"
-            aria-label="Reset editor changes"
+            title={t("editor.resetTitle")}
+            aria-label={t("editor.resetAria")}
             disabled={isViewer}
           >
             <RotateCcw size={13} aria-hidden="true" />
-            <span className="pane-btn-label">Reset</span>
+            <span className="pane-btn-label">{t("common.reset")}</span>
           </button>
           <button
             type="button"
             className="btn-nav pane-action-btn"
             onClick={handleCopyJson}
-            title={copiedJson ? "Copied JSON" : "Copy JSON"}
-            aria-label={copiedJson ? "Copied JSON" : "Copy JSON"}
+            title={copiedJson ? t("editor.copiedJson") : t("editor.copyJson")}
+            aria-label={copiedJson ? t("editor.copiedJson") : t("editor.copyJson")}
           >
             {copiedJson ? (
               <Check size={13} style={{ color: "#10B981" }} aria-hidden="true" />
             ) : (
               <Copy size={13} aria-hidden="true" />
             )}
-            <span className="pane-btn-label">{copiedJson ? "Copied" : "Copy"}</span>
+            <span className="pane-btn-label">{copiedJson ? t("editor.copied") : t("editor.copy")}</span>
           </button>
         </div>
 
@@ -270,15 +273,15 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           type="button"
           className="btn-nav pane-collapse-btn"
           onClick={() => setIsSidebarCollapsed(true)}
-          title={isMobile ? "Close JSON Editor" : "Collapse JSON Sidebar"}
-          aria-label={isMobile ? "Close JSON editor" : "Collapse JSON sidebar"}
+          title={isMobile ? t("editor.closeEditorTitle") : t("editor.collapseSidebarTitle")}
+          aria-label={isMobile ? t("editor.closeEditorAria") : t("editor.collapseSidebarAria")}
           aria-controls="editor-pane"
           aria-expanded="true"
         >
           {isMobile ? (
             <>
               <X size={13} aria-hidden="true" />
-              <span>Close</span>
+              <span>{t("common.close")}</span>
             </>
           ) : (
             <ChevronLeft size={14} aria-hidden="true" />
@@ -304,9 +307,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             {isPendingLoginEditor ? <KeyRound size={13} style={{ flexShrink: 0 }} /> : <Eye size={13} style={{ flexShrink: 0 }} />}
             <span>
               {isPendingLoginEditor ? (
-                <><strong>Editor Invitation:</strong> Sign in with GitHub to edit & live-sync changes.</>
+                <>
+                  <strong>{t("editor.invitationTitle")}</strong> {t("editor.invitationBody")}
+                </>
               ) : (
-                <><strong>Read-Only Mode:</strong> Changes cannot be saved to the cloud room.</>
+                <>
+                  <strong>{t("editor.readOnlyTitle")}</strong> {t("editor.readOnlyBody")}
+                </>
               )}
             </span>
           </div>
@@ -328,10 +335,10 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 cursor: "pointer",
                 whiteSpace: "nowrap"
               }}
-              title="Log in with GitHub to activate your editor permissions and edit live"
+              title={t("editor.signInToEditTitle")}
             >
               <LogIn size={11} />
-              <span>Sign in to Edit</span>
+              <span>{t("editor.signInToEdit")}</span>
             </button>
           ) : onPromptFork ? (
             <button
@@ -351,10 +358,10 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 cursor: "pointer",
                 whiteSpace: "nowrap"
               }}
-              title="Create a local copy to edit this plan without affecting the cloud room"
+              title={t("editor.makeLocalCopyTitle")}
             >
               <Copy size={11} />
-              <span>Make Local Copy</span>
+              <span>{t("editor.makeLocalCopy")}</span>
             </button>
           ) : null}
         </div>
@@ -366,7 +373,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           className={`code-textarea ${isLiveSyncing ? "is-live-glowing" : ""}`}
           value={jsonText}
           readOnly={isViewer}
-          aria-label="Plan JSON"
+          aria-label={t("editor.planJsonAria")}
           aria-invalid={!validationResult.valid}
           aria-describedby="diagnostics-panel"
           onChange={(e) => {
@@ -399,7 +406,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             }
           }}
           spellCheck={false}
-          placeholder="Paste or write your Jantt JSON plan here..."
+          placeholder={t("editor.placeholder")}
         />
       </div>
 
@@ -409,12 +416,12 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           {validationResult.valid ? (
             <>
               <CheckCircle2 size={16} className="diag-valid" />
-              <span className="diag-valid">Valid Jantt Plan ({parsedData?.tasks?.length || 0} tasks)</span>
+              <span className="diag-valid">{t("editor.validPlan", { count: parsedData?.tasks?.length || 0 })}</span>
             </>
           ) : (
             <>
               <AlertTriangle size={16} className="diag-invalid" />
-              <span className="diag-invalid">{validationResult.errors.length} Schema Issue(s) Found</span>
+              <span className="diag-invalid">{t("editor.schemaIssues", { count: validationResult.errors.length })}</span>
             </>
           )}
         </div>
@@ -424,13 +431,18 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             {validationResult.errors.map((err, idx) => (
               <div key={idx} className="error-card">
                 <div className="error-msg">
-                  <strong>{err.path}:</strong> {err.message}
+                  <strong>{err.path}:</strong> {validationMessage(err, validationResult.syntaxError, locale, t)}
                 </div>
-                {err.suggestion && (
+                {locale === "en" ? err.suggestion && (
                   <div className="error-suggestion" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <Info size={14} style={{ flexShrink: 0 }} />
                     <span>{err.suggestion}</span>
                   </div>
+                ) : (
+                  <details>
+                    <summary>{t("editor.diagnostics.technicalDetails")}</summary>
+                    <div lang="en">{err.message}{err.suggestion && ` ${err.suggestion}`}</div>
+                  </details>
                 )}
               </div>
             ))}
@@ -440,10 +452,10 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
 
       {confirmReset && (
         <ConfirmDialog
-          title="Reset to the last saved version?"
+          title={t("editor.resetConfirmTitle")}
           tone="danger"
-          confirmLabel="Discard unsaved edits"
-          message="The editor reloads the last saved version of this plan. Edits that have not been saved yet are lost."
+          confirmLabel={t("editor.discardEdits")}
+          message={t("editor.resetConfirmMessage")}
           onConfirm={() => {
             setConfirmReset(false);
             handleResetActiveProject();

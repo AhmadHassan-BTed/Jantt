@@ -527,6 +527,21 @@ describe("Renderer hardening (escaping, read-only links, stacking, themes)", () 
     cleanup();
   });
 
+  it("renders custom dependency and today labels as literal text", () => {
+    const label = "<em>Localized label</em>";
+    const { container, cleanup } = mount(linkedPlan(), {
+      labels: { today: label, removeLink: label },
+      viewport: { showTodayTag: true, currentTime: new Date("2026-09-03T12:00:00Z") }
+    });
+    container.querySelector(".jantt-dep-hit")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const chip = container.querySelector<HTMLButtonElement>(".jantt-link-remove-chip")!;
+    const pill = container.querySelector(".jantt-header-today-pill")!;
+    expect(chip.querySelector("span")?.textContent).toBe(label);
+    expect(pill.textContent).toBe(label);
+    chip.click();
+    cleanup();
+  });
+
   it("keeps bars, links and the today line inside the isolated canvas below the sticky header", () => {
     const { container, cleanup } = mount(linkedPlan(), { viewport: { showCriticalPath: true, currentTime: new Date("2026-09-03T12:00:00Z") } });
     const area = container.querySelector(".jantt-timeline-area")!;
@@ -583,6 +598,21 @@ describe("Renderer hardening (escaping, read-only links, stacking, themes)", () 
     expect(container.querySelector(".jantt-add-task-btn")).toBeNull();
     chart.update(chart.getData(), { readOnly: false });
     expect(container.querySelector(".jantt-add-task-btn")).not.toBeNull();
+    cleanup();
+  });
+
+  it("initializes chart settings and renders the translated fit label as text", () => {
+    const fitLabel = "<em>Fit</em>";
+    const { container, cleanup } = mount(linkedPlan(), {
+      viewport: { dayWidth: 28, rowHeight: 46, rowHeightMode: "fit" },
+      autoCascade: true,
+      translateToolbar: (key) => key === "fit" ? fitLabel : undefined
+    });
+    container.querySelector<HTMLButtonElement>(".jantt-settings-btn")!.click();
+    expect(container.querySelector<HTMLInputElement>(".jantt-zoom-slider")?.value).toBe("28");
+    expect(container.querySelector<HTMLInputElement>(".jantt-rowheight-slider")?.disabled).toBe(true);
+    expect(container.querySelector(".jantt-rowheight-label")?.textContent).toBe(fitLabel);
+    expect(container.querySelector('[data-switch="auto-cascade"]')?.getAttribute("aria-checked")).toBe("true");
     cleanup();
   });
 

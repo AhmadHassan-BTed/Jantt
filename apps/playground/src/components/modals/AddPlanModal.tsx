@@ -11,6 +11,7 @@ import {
   Github,
   Loader2
 } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader } from "./ModalHost";
 
 /**
@@ -87,23 +88,17 @@ const noteStyle: React.CSSProperties = {
   color: "#F59E0B"
 };
 
-const TEMPLATE_OPTIONS: { value: TemplateType; title: string; description: string; icon: React.ReactNode }[] = [
+const TEMPLATE_OPTIONS: { value: TemplateType; icon: React.ReactNode }[] = [
   {
     value: "blank",
-    title: "Blank plan",
-    description: "Starts almost empty: one sample task and category.",
     icon: <FilePlus size={15} color="var(--jantt-accent)" />
   },
   {
     value: "master",
-    title: "Full feature sample",
-    description: "Categories, milestones, multi-dependencies, baselines and custom fields to explore.",
     icon: <Zap size={15} color="var(--jantt-accent)" />
   },
   {
     value: "clone",
-    title: "Duplicate the open plan",
-    description: "Copies every task, category and link of the plan that is open right now.",
     icon: <Copy size={15} color="var(--jantt-accent)" />
   }
 ];
@@ -128,6 +123,7 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
   onLogin,
   onRequireVerification
 }) => {
+  const { t } = useI18n();
   const [destination, setDestination] = useState<PlanDestination>(initialDestination);
   const [initialValues] = useState(() => ({ title: newPlanTitle, template: newPlanTemplateType }));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -165,12 +161,12 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
       if (created === false) {
         setSubmitError(
           destination === "new_room"
-            ? "The cloud room was not created. Try again, or keep the plan on this device."
-            : "The plan was not created. Try again."
+            ? t("plan.error.roomNotCreated")
+            : t("plan.error.notCreated")
         );
       }
     } catch (err) {
-      setSubmitError(`The plan was not created: ${err instanceof Error ? err.message : String(err)}`);
+      setSubmitError(t("plan.error.notCreatedDetail", { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -179,17 +175,17 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
 
   const submitLabel = needsLogin
     ? isSigningIn
-      ? "Signing in with GitHub..."
-      : "Sign in with GitHub to create room"
+      ? t("plan.signingInGithub")
+      : t("plan.signInToCreateRoom")
     : needsVerification
-    ? "Verify GitHub to create room"
+    ? t("plan.verifyToCreateRoom")
     : isSubmitting
     ? destination === "new_room"
-      ? "Creating room..."
-      : "Creating..."
+      ? t("plan.creatingRoom")
+      : t("plan.creating")
     : destination === "new_room"
-    ? "Create cloud room"
-    : "Create plan";
+    ? t("plan.createCloudRoom")
+    : t("plan.create");
   const submitIcon = needsLogin ? (
     isSigningIn ? <Loader2 size={14} className="spin-sync-icon" /> : <Github size={14} />
   ) : needsVerification ? (
@@ -209,14 +205,14 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
       >
         <ModalHeader
           icon={<FolderPlus size={18} />}
-          title="New plan"
-          subtitle="Choose a name, where to keep it and what to start from."
+          title={t("plan.new")}
+          subtitle={t("plan.add.subtitle")}
         />
 
         <div className="prompt-modal-body" style={{ gap: "16px", padding: "18px 20px" }}>
           <div>
             <label htmlFor="add-plan-title" style={sectionLabelStyle}>
-              Plan name
+              {t("plan.add.nameLabel")}
             </label>
             <input
               id="add-plan-title"
@@ -235,19 +231,19 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
               value={newPlanTitle}
               onChange={(e) => setNewPlanTitle(e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
-              placeholder="e.g. Q4 Software Release Roadmap"
+              placeholder={t("plan.add.namePlaceholder")}
               maxLength={120}
               required
               aria-invalid={title.length === 0}
               data-autofocus
             />
             {title.length === 0 && (
-              <div style={{ marginTop: "6px", fontSize: "11px", color: "#F59E0B" }}>Enter a name for the plan.</div>
+              <div style={{ marginTop: "6px", fontSize: "11px", color: "#F59E0B" }}>{t("plan.add.nameRequired")}</div>
             )}
           </div>
 
           <fieldset style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
-            <legend style={sectionLabelStyle}>Keep it in</legend>
+            <legend style={sectionLabelStyle}>{t("plan.add.keepIn")}</legend>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <label style={optionCardStyle(destination === "local")}>
                 <input
@@ -262,12 +258,12 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "2px" }}>
                     <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--jantt-text)" }}>
                       <HardDrive size={15} color="var(--jantt-accent)" />
-                      This device
+                      {t("plan.list.device")}
                     </strong>
-                    <span style={badgeStyle("rgba(100, 116, 139, 0.2)", "var(--jantt-text-muted)")}>Private &amp; offline</span>
+                    <span style={badgeStyle("rgba(100, 116, 139, 0.2)", "var(--jantt-text-muted)")}>{t("plan.add.privateOffline")}</span>
                   </div>
                   <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)", lineHeight: 1.4 }}>
-                    Saved in this browser only. Works offline; nobody else can see it.
+                    {t("plan.add.localDesc")}
                   </span>
                 </div>
               </label>
@@ -285,23 +281,23 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "2px" }}>
                     <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--jantt-text)" }}>
                       <Cloud size={15} color="#38BDF8" />
-                      New cloud room
+                      {t("plan.add.newCloudRoom")}
                     </strong>
-                    <span style={badgeStyle("rgba(56, 189, 248, 0.2)", "var(--jantt-accent, #38BDF8)")}>Live sync</span>
+                    <span style={badgeStyle("rgba(56, 189, 248, 0.2)", "var(--jantt-accent, #38BDF8)")}>{t("plan.add.liveSync")}</span>
                   </div>
                   <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)", lineHeight: 1.4 }}>
-                    A room you own in "My cloud". Invite teammates and edit together in real time.
+                    {t("plan.add.cloudDesc")}
                   </span>
                   {!isLoggedIn && (
                     <div style={noteStyle}>
                       <Github size={12} />
-                      <span>Requires signing in with GitHub.</span>
+                      <span>{t("plan.add.requiresSignIn")}</span>
                     </div>
                   )}
                   {isLoggedIn && !isGitHubVerified && (
                     <div style={noteStyle}>
                       <ShieldCheck size={12} />
-                      <span>Requires a one-time GitHub follow &amp; star verification.</span>
+                      <span>{t("plan.add.requiresVerification")}</span>
                     </div>
                   )}
                 </div>
@@ -310,7 +306,7 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
           </fieldset>
 
           <fieldset style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
-            <legend style={sectionLabelStyle}>Start from</legend>
+            <legend style={sectionLabelStyle}>{t("plan.add.startFrom")}</legend>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {TEMPLATE_OPTIONS.map((option) => (
                 <label key={option.value} style={{ ...optionCardStyle(newPlanTemplateType === option.value), gap: "10px" }}>
@@ -325,9 +321,9 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
                   <div>
                     <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--jantt-text)" }}>
                       {option.icon}
-                      {option.title}
+                      {t(`plan.template.${option.value}.title`)}
                     </strong>
-                    <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)" }}>{option.description}</span>
+                    <span style={{ fontSize: "12px", color: "var(--jantt-text-muted)" }}>{t(`plan.template.${option.value}.desc`)}</span>
                   </div>
                 </label>
               ))}
@@ -354,7 +350,7 @@ const AddPlanDialog: React.FC<AddPlanModalProps> = ({
 
         <div className="prompt-modal-footer" style={{ flexWrap: "wrap", flexShrink: 0 }}>
           <button type="button" className="btn-nav" onClick={close}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="submit"

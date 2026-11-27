@@ -5,8 +5,83 @@ import { getDependsOnItems, getTaskDependencyRelations, parseDependencyRelation,
 import { escapeHtml, syncTaskProgressAndStatus } from "./utils";
 import { sanitizeCssColor } from "./layout";
 import { constrainedStart, dependencyItemFor } from "./controller/contracts";
+import { formatTimelineLabel } from "./timeline-labels";
+
+const SIDEBAR_LABELS = {
+  locked: "Locked",
+  readOnly: "Read-Only",
+  urgent: "Urgent",
+  milestone: "Milestone",
+  readOnlyHint: "You are in Read-Only Viewer mode. Task attributes cannot be modified.",
+  name: "Task Name / Label",
+  category: "Category",
+  start: "Start Date",
+  end: "End Date",
+  duration: "Calculated Span:",
+  assignee: "Assignee / Owner",
+  priority: "Priority",
+  wbs: "WBS Code",
+  cost: "Estimated Budget / Cost ($)",
+  status: "Status",
+  progress: "Progress",
+  notes: "Notes & Description",
+  attributes: "Custom Attributes",
+  deleteTask: "Delete Task",
+  save: "Save Changes",
+  independent: "None (Independent Task)",
+  addPrerequisite: "+ Add Prerequisite Dependency...",
+  noAttributes: "No custom attributes defined.",
+  add: "+ Add",
+  unsaved: "You have unsaved changes. Save your changes or discard them.",
+  discard: "Discard",
+  closeTitle: "Close Sidebar (Esc)",
+  closeDetails: "Close task details",
+  assigneeExample: "e.g. Sarah Chen",
+  wbsExample: "e.g. 1.2",
+  notesPlaceholder: "Add task notes or updates...",
+  dependencyKind: "Dependency type and lag",
+  removeDependency: "Remove dependency",
+  removeAttribute: "Remove attribute",
+  newAttributeName: "New attribute name",
+  attributeNameExample: "Attribute name (e.g. depth)",
+  newAttributeValue: "New attribute value",
+  attributeValueExample: "Value (e.g. 45m)",
+  dialog: "Task details: {task}",
+  general: "General",
+  none: "(none)",
+  noPriority: "None",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgentPriority: "Urgent (Critical)",
+  notStarted: "Not Started",
+  inProgress: "In Progress",
+  submitted: "Submitted",
+  completed: "Completed",
+  blocked: "Blocked",
+  oneDay: "{days} day",
+  manyDays: "{days} days",
+  prerequisites: "Prerequisite Dependencies",
+  close: "Close",
+  cancel: "Cancel",
+  removeDependencyOn: "Remove dependency on {task}",
+  ends: "Ends: {date}",
+  conflict: "Dependency Timing Conflict:",
+  conflictDetail: "Starts on {start}, but its prerequisites allow {allowed} at the earliest.",
+  alignStart: "Align Start Date to {date}",
+  removeAttributeNamed: "Remove attribute {name}",
+  confirmDelete: "Are you sure you want to delete task \"{task}\"?",
+  readOnlyError: "This chart is read-only; task changes are not saved.",
+  lockedError: "Task \"{id}\" is locked; unlock it before changing its schedule."
+};
+
+export type TaskSidebarLabelKey = keyof typeof SIDEBAR_LABELS;
+type TaskSidebarText = (key: TaskSidebarLabelKey, values?: Record<string, string | number>) => string;
 
 export interface TaskSidebarOptions {
+  /** Translates task details UI. Return undefined to use the English message for a key. */
+  translate?: (key: TaskSidebarLabelKey) => string | undefined;
+  locale?: string;
   task: Task;
   allTasks?: Task[];
   categories: CategoriesMap;
@@ -47,19 +122,19 @@ export interface TaskSidebarInstance {
 
 /** Fields a locked task protects from edits. */
 const SCHEDULE_FIELDS = ["start", "end", "dependsOn", "milestone"] as const;
-const STATUS_OPTIONS: ReadonlyArray<[string, string]> = [
-  ["not-started", "Not Started"],
-  ["in-progress", "In Progress"],
-  ["submitted", "Submitted"],
-  ["completed", "Completed"],
-  ["blocked", "Blocked"]
+const STATUS_OPTIONS: ReadonlyArray<[string, TaskSidebarLabelKey]> = [
+  ["not-started", "notStarted"],
+  ["in-progress", "inProgress"],
+  ["submitted", "submitted"],
+  ["completed", "completed"],
+  ["blocked", "blocked"]
 ];
-const PRIORITY_OPTIONS: ReadonlyArray<[string, string]> = [
-  ["", "None"],
-  ["low", "Low"],
-  ["medium", "Medium"],
-  ["high", "High"],
-  ["urgent", "Urgent (Critical)"]
+const PRIORITY_OPTIONS: ReadonlyArray<[string, TaskSidebarLabelKey]> = [
+  ["", "noPriority"],
+  ["low", "low"],
+  ["medium", "medium"],
+  ["high", "high"],
+  ["urgent", "urgentPriority"]
 ];
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const CLOSE_ANIMATION_MS = 180;
@@ -86,6 +161,11 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
     customRenderer
   } = options;
 
+  const text: TaskSidebarText = (key, values) => {
+    const template = options.translate?.(key) ?? SIDEBAR_LABELS[key];
+    return values ? formatTimelineLabel(template, values) : template;
+  };
+
   let currentTask: Task = {
     ...task,
     fields: task.fields ? { ...task.fields } : {}
@@ -102,7 +182,8 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
     ? `jantt-sidebar-embedded-wrap ${themeClassName || ""}`
     : `jantt-sidebar-backdrop ${themeClassName || ""}`;
   backdrop.setAttribute("role", "dialog");
-  backdrop.setAttribute("aria-label", `Task details: ${task.label || task.name || task.id}`);
+  if (options.locale) backdrop.lang = options.locale;
+  backdrop.setAttribute("aria-label", text("dialog", { task: task.label || task.name || task.id }));
   if (!isCustomContainer) backdrop.setAttribute("aria-modal", "true");
 
   const sidebarEl = document.createElement("aside");
@@ -195,11 +276,11 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
     customRenderer(currentTask, sidebarEl, {
       updateTask: (patch) => {
         if (readOnly) {
-          onError?.(new Error("This chart is read-only; task changes are not saved."));
+          onError?.(new Error(text("readOnlyError")));
           return;
         }
         if (currentTask.locked && patch.locked !== false && SCHEDULE_FIELDS.some((key) => key in patch)) {
-          onError?.(new Error(`Task "${currentTask.id}" is locked; unlock it before changing its schedule.`));
+          onError?.(new Error(text("lockedError", { id: currentTask.id })));
           return;
         }
         currentTask = { ...currentTask, ...patch };
@@ -213,6 +294,8 @@ export function createTaskSidebar(options: TaskSidebarOptions): TaskSidebarInsta
     form = renderDefaultSidebarContent(sidebarEl, {
       task: currentTask,
       original: task,
+      text,
+      locale: options.locale,
       allTasks,
       categories,
       readOnly,
@@ -351,6 +434,8 @@ interface SidebarForm {
 }
 
 interface SidebarContentProps {
+  text: TaskSidebarText;
+  locale?: string;
   task: Task;
   original: Task;
   allTasks: Task[];
@@ -414,10 +499,12 @@ function formatDependencyKind(item: DependencyItem, knownIds: TaskIdLookup): str
  * Only fields the user actually changed are written back on save.
  */
 function renderDefaultSidebarContent(container: HTMLElement, props: SidebarContentProps): SidebarForm {
-  const { task, original, allTasks, categories, readOnly, uid, scheduleOptions, onSave, onDelete, onClose } = props;
+  const { task, original, allTasks, categories, readOnly, uid, scheduleOptions, onSave, onDelete, onClose, text, locale } = props;
+  const html: TaskSidebarText = (key, values) => escapeHtml(text(key, values));
+  const number = new Intl.NumberFormat(locale);
   const hasCategory = typeof task.category === "string" && Object.prototype.hasOwnProperty.call(categories, task.category);
   const cat: Category | undefined = hasCategory ? categories[task.category] : undefined;
-  const catLabel = String(cat?.label || task.category || "General");
+  const catLabel = String(cat?.label || task.category || text("general"));
   const catColor = sanitizeCssColor(cat?.color, "#38BDF8");
   const editLocked = readOnly || Boolean(task.locked);
   const disabledIf = (flag: boolean) => (flag ? "disabled" : "");
@@ -469,11 +556,12 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
   };
 
   const categoryOptions: Array<[string, string]> = Object.entries(categories).map(([key, c]) => [key, String(c?.label || key)]);
-  const statusOptions: Array<[string, string]> = initial.status ? [...STATUS_OPTIONS] : [["", "(none)"], ...STATUS_OPTIONS];
+  const statusOptions: Array<[string, string]> = STATUS_OPTIONS.map(([key, label]) => [key, text(label)]);
+  if (!initial.status) statusOptions.unshift(["", text("none")]);
   const durationText = (s: string, e: string) => {
     // Same rule as the chart: flagged or same-day tasks are milestones (0 days).
     const days = taskDurationDays(s, e, Boolean(task.milestone) || diffDays(s, e) === 0);
-    return `${days} day${days === 1 ? "" : "s"}`;
+    return text(days === 1 ? "oneDay" : "manyDays", { days: number.format(days) });
   };
 
   container.innerHTML = `
@@ -488,14 +576,14 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
             ${escapeHtml(catLabel)}
           </span>
           <span class="jantt-hover-id-badge">#${escapeHtml(task.id)}</span>
-          ${task.locked ? '<span class="jantt-hover-type-pill is-locked">Locked</span>' : ""}
-          ${readOnly ? '<span class="jantt-hover-type-pill is-locked" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4);">Read-Only</span>' : ""}
-          ${task.urgent ? '<span class="jantt-hover-type-pill is-urgent">Urgent</span>' : ""}
-          ${task.milestone ? '<span class="jantt-hover-type-pill is-milestone">Milestone</span>' : ""}
+          ${task.locked ? `<span class="jantt-hover-type-pill is-locked">${html("locked")}</span>` : ""}
+          ${readOnly ? `<span class="jantt-hover-type-pill is-locked" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4);">${html("readOnly")}</span>` : ""}
+          ${task.urgent ? `<span class="jantt-hover-type-pill is-urgent">${html("urgent")}</span>` : ""}
+          ${task.milestone ? `<span class="jantt-hover-type-pill is-milestone">${html("milestone")}</span>` : ""}
         </div>
         <h2 class="jantt-sidebar-title" id="${labelId("title")}">${escapeHtml(initial.label)}</h2>
       </div>
-      <button type="button" class="jantt-sidebar-close-btn" title="Close Sidebar (Esc)" aria-label="Close task details" style="display: flex; align-items: center; justify-content: center;">
+      <button type="button" class="jantt-sidebar-close-btn" title="${html("closeTitle")}" aria-label="${html("closeDetails")}" style="display: flex; align-items: center; justify-content: center;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
@@ -504,20 +592,20 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
     <div class="jantt-sidebar-body">
       ${
         readOnly
-          ? '<div style="margin-bottom: 14px; padding: 10px 12px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 11.5px; color: #f59e0b; display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span>You are in Read-Only Viewer mode. Task attributes cannot be modified.</span></div>'
+          ? `<div style="margin-bottom: 14px; padding: 10px 12px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 11.5px; color: #f59e0b; display: flex; align-items: center; gap: 8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span>${html("readOnlyHint")}</span></div>`
           : ""
       }
       <!-- Title & Label Field -->
       <div class="jantt-form-group">
-        <label class="jantt-form-label" id="${labelId("label-l")}">Task Name / Label</label>
+        <label class="jantt-form-label" id="${labelId("label-l")}">${html("name")}</label>
         <input type="text" id="jantt-sidebar-label" aria-labelledby="${labelId("label-l")}" class="jantt-input" value="${escapeHtml(initial.label)}" ${disabledIf(editLocked)} />
       </div>
 
       <!-- Category Selector -->
       <div class="jantt-form-group">
-        <label class="jantt-form-label" id="${labelId("category-l")}">Category</label>
+        <label class="jantt-form-label" id="${labelId("category-l")}">${html("category")}</label>
         <select id="jantt-sidebar-category" aria-labelledby="${labelId("category-l")}" class="jantt-select" ${disabledIf(editLocked)}>
-          ${renderOptions(initial.category ? categoryOptions : [["", "(none)"], ...categoryOptions], initial.category)}
+          ${renderOptions(initial.category ? categoryOptions : [["", text("none")], ...categoryOptions], initial.category)}
         </select>
       </div>
 
@@ -525,16 +613,16 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <div class="jantt-sidebar-card">
         <div class="jantt-form-grid-2">
           <div class="jantt-form-group">
-            <label class="jantt-form-label" id="${labelId("start-l")}">Start Date</label>
+            <label class="jantt-form-label" id="${labelId("start-l")}">${html("start")}</label>
             <input type="date" id="jantt-sidebar-start" aria-labelledby="${labelId("start-l")}" class="jantt-input" value="${escapeHtml(task.start)}" ${disabledIf(editLocked)} />
           </div>
           <div class="jantt-form-group">
-            <label class="jantt-form-label" id="${labelId("end-l")}">End Date</label>
+            <label class="jantt-form-label" id="${labelId("end-l")}">${html("end")}</label>
             <input type="date" id="jantt-sidebar-end" aria-labelledby="${labelId("end-l")}" class="jantt-input" value="${escapeHtml(task.end)}" ${disabledIf(editLocked)} />
           </div>
         </div>
         <div class="jantt-sidebar-stat-footer">
-          <span style="font-size: 11px; color: var(--jantt-text-muted);">Calculated Span:</span>
+          <span style="font-size: 11px; color: var(--jantt-text-muted);">${html("duration")}</span>
           <span id="jantt-sidebar-duration" style="font-family: var(--jantt-font-mono); font-weight: 700; color: var(--jantt-accent);">
             ${escapeHtml(durationText(task.start, task.end))}
           </span>
@@ -544,7 +632,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <!-- Multi-Dependency Management Section -->
       <div class="jantt-form-group">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <label class="jantt-form-label" id="${labelId("deps-l")}" style="margin: 0;">Prerequisite Dependencies (<span id="jantt-sidebar-dep-count">${depItems.length}</span>)</label>
+          <label class="jantt-form-label" id="${labelId("deps-l")}" style="margin: 0;">${html("prerequisites")} (<span id="jantt-sidebar-dep-count">${number.format(depItems.length)}</span>)</label>
         </div>
         <div id="jantt-sidebar-deps-container" style="display: flex; flex-direction: column; gap: 8px;">
           <!-- Active Dependency Chips -->
@@ -556,7 +644,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
               ? `
           <div style="display: flex; gap: 6px; align-items: center;">
             <select id="jantt-sidebar-add-dep-select" aria-labelledby="${labelId("deps-l")}" class="jantt-select" style="font-size: 12px;">
-              <option value="">+ Add Prerequisite Dependency...</option>
+              <option value="">${html("addPrerequisite")}</option>
             </select>
           </div>
           `
@@ -571,14 +659,14 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <!-- Assignee & Priority -->
       <div class="jantt-form-grid-2">
         <div class="jantt-form-group">
-          <label class="jantt-form-label" id="${labelId("assignee-l")}">Assignee / Owner</label>
-          <input type="text" id="jantt-sidebar-assignee" aria-labelledby="${labelId("assignee-l")}" class="jantt-input" placeholder="e.g. Sarah Chen" value="${escapeHtml(task.assignee || "")}" ${disabledIf(editLocked)} />
+          <label class="jantt-form-label" id="${labelId("assignee-l")}">${html("assignee")}</label>
+          <input type="text" id="jantt-sidebar-assignee" aria-labelledby="${labelId("assignee-l")}" class="jantt-input" placeholder="${html("assigneeExample")}" value="${escapeHtml(task.assignee || "")}" ${disabledIf(editLocked)} />
         </div>
 
         <div class="jantt-form-group">
-          <label class="jantt-form-label" id="${labelId("priority-l")}">Priority</label>
+          <label class="jantt-form-label" id="${labelId("priority-l")}">${html("priority")}</label>
           <select id="jantt-sidebar-priority" aria-labelledby="${labelId("priority-l")}" class="jantt-select" ${disabledIf(editLocked)}>
-            ${renderOptions(PRIORITY_OPTIONS, initial.priority)}
+            ${renderOptions(PRIORITY_OPTIONS.map(([key, label]) => [key, text(label)]), initial.priority)}
           </select>
         </div>
       </div>
@@ -586,12 +674,12 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <!-- WBS & Estimated Cost -->
       <div class="jantt-form-grid-2">
         <div class="jantt-form-group">
-          <label class="jantt-form-label" id="${labelId("wbs-l")}">WBS Code</label>
-          <input type="text" id="jantt-sidebar-wbs" aria-labelledby="${labelId("wbs-l")}" class="jantt-input" placeholder="e.g. 1.2" value="${escapeHtml(task.wbs || "")}" ${disabledIf(editLocked)} />
+          <label class="jantt-form-label" id="${labelId("wbs-l")}">${html("wbs")}</label>
+          <input type="text" id="jantt-sidebar-wbs" aria-labelledby="${labelId("wbs-l")}" class="jantt-input" placeholder="${html("wbsExample")}" value="${escapeHtml(task.wbs || "")}" ${disabledIf(editLocked)} />
         </div>
 
         <div class="jantt-form-group">
-          <label class="jantt-form-label" id="${labelId("cost-l")}">Estimated Budget / Cost ($)</label>
+          <label class="jantt-form-label" id="${labelId("cost-l")}">${html("cost")}</label>
           <input type="number" id="jantt-sidebar-cost" aria-labelledby="${labelId("cost-l")}" class="jantt-input" placeholder="0" value="${escapeHtml(initial.cost)}" ${disabledIf(editLocked)} />
         </div>
       </div>
@@ -599,7 +687,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <!-- Status & Progress -->
       <div class="jantt-form-grid-2">
         <div class="jantt-form-group">
-          <label class="jantt-form-label" id="${labelId("status-l")}">Status</label>
+          <label class="jantt-form-label" id="${labelId("status-l")}">${html("status")}</label>
           <select id="jantt-sidebar-status" aria-labelledby="${labelId("status-l")}" class="jantt-select" ${disabledIf(readOnly)}>
             ${renderOptions(statusOptions, initial.status)}
           </select>
@@ -607,7 +695,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
 
         <div class="jantt-form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label class="jantt-form-label" id="${labelId("progress-l")}" style="margin: 0;">Progress</label>
+            <label class="jantt-form-label" id="${labelId("progress-l")}" style="margin: 0;">${html("progress")}</label>
             <span id="jantt-sidebar-prog-val" style="font-family: var(--jantt-font-mono); font-size: 11px; font-weight: 700; color: var(--jantt-accent);">${initial.progress}%</span>
           </div>
           <input type="range" id="jantt-sidebar-prog-input" aria-labelledby="${labelId("progress-l")}" min="0" max="100" value="${initial.progress}" class="jantt-slider" ${disabledIf(readOnly)} />
@@ -616,13 +704,13 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
 
       <!-- Notes Field -->
       <div class="jantt-form-group">
-        <label class="jantt-form-label" id="${labelId("notes-l")}">Notes & Description</label>
-        <textarea id="jantt-sidebar-notes" aria-labelledby="${labelId("notes-l")}" class="jantt-textarea" rows="3" placeholder="Add task notes or updates..." ${disabledIf(readOnly)}>${escapeHtml(task.notes || "")}</textarea>
+        <label class="jantt-form-label" id="${labelId("notes-l")}">${html("notes")}</label>
+        <textarea id="jantt-sidebar-notes" aria-labelledby="${labelId("notes-l")}" class="jantt-textarea" rows="3" placeholder="${html("notesPlaceholder")}" ${disabledIf(readOnly)}>${escapeHtml(task.notes || "")}</textarea>
       </div>
 
       <!-- Custom Fields Bag -->
       <div class="jantt-form-group">
-        <label class="jantt-form-label">Custom Attributes</label>
+        <label class="jantt-form-label">${html("attributes")}</label>
         <div id="jantt-sidebar-fields" class="jantt-sidebar-fields-container"></div>
       </div>
     </div>
@@ -632,14 +720,14 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <div id="jantt-sidebar-unsaved" role="alert" style="display: none; width: 100%; margin-bottom: 8px; font-size: 11.5px; color: #f59e0b; align-items: center; gap: 8px;"></div>
       ${
         onDelete && !editLocked
-          ? '<button type="button" class="jantt-btn jantt-btn-danger" id="jantt-sidebar-delete">Delete Task</button>'
+          ? `<button type="button" class="jantt-btn jantt-btn-danger" id="jantt-sidebar-delete">${html("deleteTask")}</button>`
           : ""
       }
       <div style="display: flex; gap: 8px; margin-left: auto;">
-        <button type="button" class="jantt-btn jantt-btn-secondary" id="jantt-sidebar-cancel">${readOnly ? "Close" : "Cancel"}</button>
+        <button type="button" class="jantt-btn jantt-btn-secondary" id="jantt-sidebar-cancel">${html(readOnly ? "close" : "cancel")}</button>
         ${
           !readOnly
-            ? '<button type="button" class="jantt-btn jantt-btn-primary" id="jantt-sidebar-save">Save Changes</button>'
+            ? `<button type="button" class="jantt-btn jantt-btn-primary" id="jantt-sidebar-save">${html("save")}</button>`
             : ""
         }
       </div>
@@ -677,12 +765,12 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
   const resolveProbe = (tasks: Task[]) => resolveSchedule(tasks, { ...scheduleOptions, autoCascade: true });
 
   const renderDeps = () => {
-    if (depCount) depCount.textContent = String(depItems.length);
+    if (depCount) depCount.textContent = number.format(depItems.length);
 
     if (chipsContainer) {
       if (depItems.length === 0) {
         chipsContainer.innerHTML =
-          '<span style="font-size: 12px; color: var(--jantt-text-muted); font-style: italic;">None (Independent Task)</span>';
+          `<span style="font-size: 12px; color: var(--jantt-text-muted); font-style: italic;">${html("independent")}</span>`;
       } else {
         chipsContainer.innerHTML = depItems
           .map((item, index) => {
@@ -693,10 +781,10 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
             return `
             <span class="jantt-badge" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 11.5px; background: var(--jantt-surface-solid); border: 1px solid var(--jantt-border);">
               <span>${escapeHtml(pLabel)} (#${escapeHtml(depId)})</span>
-              ${kind ? `<span style="font-family: var(--jantt-font-mono); font-size: 10.5px; color: var(--jantt-accent);" title="Dependency type and lag">${escapeHtml(kind)}</span>` : ""}
+              ${kind ? `<span style="font-family: var(--jantt-font-mono); font-size: 10.5px; color: var(--jantt-accent);" title="${html("dependencyKind")}">${escapeHtml(kind)}</span>` : ""}
               ${
                 !editLocked
-                  ? `<button type="button" data-remove-dep-index="${index}" aria-label="Remove dependency on ${escapeHtml(pLabel)}" style="background: none; border: none; color: var(--jantt-text-dim); cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;" title="Remove dependency"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>`
+                  ? `<button type="button" data-remove-dep-index="${index}" aria-label="${html("removeDependencyOn", { task: pLabel })}" style="background: none; border: none; color: var(--jantt-text-dim); cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;" title="${html("removeDependency")}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>`
                   : ""
               }
             </span>
@@ -721,11 +809,11 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       const linked = new Set(depItems.map((item) => parseDependencyRelation(item, knownIds)?.id));
       const available = liveTasks.filter((t) => t.id !== task.id && !linked.has(t.id) && !successors.has(t.id));
       addSelect.innerHTML =
-        '<option value="">+ Add Prerequisite Dependency...</option>' +
+        `<option value="">${html("addPrerequisite")}</option>` +
         available
           .map((t) => {
             const tLabel = escapeHtml(t.label || t.name || t.id);
-            return `<option value="${escapeHtml(t.id)}">${tLabel} (#${escapeHtml(t.id)}) [Ends: ${escapeHtml(t.end)}]</option>`;
+            return `<option value="${escapeHtml(t.id)}">${tLabel} (#${escapeHtml(t.id)}) [${html("ends", { date: t.end })}]</option>`;
           })
           .join("");
     }
@@ -759,14 +847,14 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       <div style="background: rgba(244, 63, 94, 0.12); border-left: 3px solid #F43F5E; padding: 8px 12px; border-radius: 6px; font-size: 11.5px; margin-top: 4px;">
         <div style="color: #F43F5E; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
           <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #F43F5E;"></span>
-          Dependency Timing Conflict:
+          ${html("conflict")}
         </div>
         <div style="color: var(--jantt-text-muted);">
-          Starts on <strong>${escapeHtml(curStart)}</strong>, but its prerequisites allow <strong>${escapeHtml(allowed)}</strong> at the earliest.
+          ${html("conflictDetail", { start: curStart, allowed })}
         </div>
         ${
           !editLocked
-            ? `<button type="button" id="jantt-sidebar-align-btn" class="jantt-btn jantt-btn-secondary" style="padding: 3px 8px; font-size: 11px; margin-top: 6px;">Align Start Date to ${escapeHtml(allowed)}</button>`
+            ? `<button type="button" id="jantt-sidebar-align-btn" class="jantt-btn jantt-btn-secondary" style="padding: 3px 8px; font-size: 11px; margin-top: 6px;">${html("alignStart", { date: allowed })}</button>`
             : ""
         }
       </div>
@@ -854,32 +942,32 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
     if (!fieldsContainer) return;
 
     const entries = Object.entries(fieldDraft);
-    let html = "";
+    let markup = "";
     if (entries.length === 0) {
-      html += '<div style="font-size: 12px; color: var(--jantt-text-dim); font-style: italic;">No custom attributes defined.</div>';
+      markup += `<div style="font-size: 12px; color: var(--jantt-text-dim); font-style: italic;">${html("noAttributes")}</div>`;
     } else {
       entries.forEach(([key, val]) => {
-        html += `
+        markup += `
           <div class="jantt-sidebar-field-row" style="display: flex; align-items: center; gap: 8px;">
             <span class="jantt-sidebar-field-key" style="font-family: var(--jantt-font-mono); font-size: 11.5px; font-weight: 600; color: var(--jantt-text-muted); min-width: 90px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(key)}:</span>
             <input type="text" data-field-val-key="${escapeHtml(key)}" aria-label="${escapeHtml(key)}" value="${escapeHtml(val)}" class="jantt-input jantt-input-sm" style="flex-grow: 1;" ${disabledIf(editLocked)} />
-            ${!editLocked ? `<button type="button" data-del-field-key="${escapeHtml(key)}" aria-label="Remove attribute ${escapeHtml(key)}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px; display: inline-flex; align-items: center; justify-content: center;" title="Remove attribute"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ""}
+            ${!editLocked ? `<button type="button" data-del-field-key="${escapeHtml(key)}" aria-label="${html("removeAttributeNamed", { name: key })}" class="jantt-btn jantt-btn-secondary" style="padding: 2px 6px; font-size: 11px; height: 26px; display: inline-flex; align-items: center; justify-content: center;" title="${html("removeAttribute")}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ""}
           </div>
         `;
       });
     }
 
     if (!editLocked) {
-      html += `
+      markup += `
         <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--jantt-border-subtle);">
-          <input type="text" id="jantt-new-field-key" aria-label="New attribute name" class="jantt-input jantt-input-sm" placeholder="Attribute name (e.g. depth)" style="width: 130px; font-size: 11.5px;" />
-          <input type="text" id="jantt-new-field-val" aria-label="New attribute value" class="jantt-input jantt-input-sm" placeholder="Value (e.g. 45m)" style="flex-grow: 1; font-size: 11.5px;" />
-          <button type="button" id="jantt-add-field-btn" class="jantt-btn jantt-btn-secondary" style="font-size: 11.5px; white-space: nowrap; height: 28px;">+ Add</button>
+          <input type="text" id="jantt-new-field-key" aria-label="${html("newAttributeName")}" class="jantt-input jantt-input-sm" placeholder="${html("attributeNameExample")}" style="width: 130px; font-size: 11.5px;" />
+          <input type="text" id="jantt-new-field-val" aria-label="${html("newAttributeValue")}" class="jantt-input jantt-input-sm" placeholder="${html("attributeValueExample")}" style="flex-grow: 1; font-size: 11.5px;" />
+          <button type="button" id="jantt-add-field-btn" class="jantt-btn jantt-btn-secondary" style="font-size: 11.5px; white-space: nowrap; height: 28px;">${html("add")}</button>
         </div>
       `;
     }
 
-    fieldsContainer.innerHTML = html;
+    fieldsContainer.innerHTML = markup;
 
     fieldsContainer.querySelectorAll<HTMLButtonElement>("[data-del-field-key]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -976,7 +1064,7 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
 
   // Delete Task Handler
   q("#jantt-sidebar-delete")?.addEventListener("click", () => {
-    if (confirm(`Are you sure you want to delete task "${task.label || task.id}"?`)) {
+    if (confirm(text("confirmDelete", { task: task.label || task.id }))) {
       onDelete?.();
     }
   });
@@ -995,8 +1083,8 @@ function renderDefaultSidebarContent(container: HTMLElement, props: SidebarConte
       }
       unsavedNotice.style.display = "flex";
       unsavedNotice.innerHTML =
-        '<span>You have unsaved changes. Save your changes or discard them.</span>' +
-        '<button type="button" class="jantt-btn jantt-btn-secondary" id="jantt-sidebar-discard" style="padding: 3px 8px; font-size: 11px; margin-left: auto;">Discard</button>';
+        `<span>${html("unsaved")}</span>` +
+        `<button type="button" class="jantt-btn jantt-btn-secondary" id="jantt-sidebar-discard" style="padding: 3px 8px; font-size: 11px; margin-left: auto;">${html("discard")}</button>`;
       const discardBtn = unsavedNotice.querySelector<HTMLButtonElement>("#jantt-sidebar-discard");
       discardBtn?.addEventListener("click", () => discard());
       discardBtn?.focus();

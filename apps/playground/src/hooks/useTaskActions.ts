@@ -19,6 +19,7 @@ import type {
 } from "../types";
 import { PRIORITY_ORDER, STORAGE_KEYS } from "../constants";
 import { generateId, isAutoCascadeEnabled } from "../utils";
+import { useI18n } from "../i18n/I18nProvider";
 import { storageService } from "../services/storage";
 
 interface UseTaskActionsOptions {
@@ -59,6 +60,7 @@ export function useTaskActions({
   compact = false,
   autoCascade
 }: UseTaskActionsOptions) {
+  const { t } = useI18n();
   const [tasksViewMode, setTasksViewMode] = useState<"cards" | "todo">(() => {
     const saved = storageService.getItem<{ tasksViewMode?: string }>(STORAGE_KEYS.TASKS_VIEW_STATE);
     return saved?.tasksViewMode === "cards" || saved?.tasksViewMode === "todo" ? saved.tasksViewMode : compact ? "todo" : "cards";
@@ -195,7 +197,7 @@ export function useTaskActions({
     const newTask: Task = {
       id: generateId("task"),
       wbs: `${nextIdx}.0`,
-      label: draft?.title.trim() || `New Task ${nextIdx}`,
+      label: draft?.title.trim() || t("timeline.newTaskLabel", { number: nextIdx }),
       category: defaultCat,
       start: draft?.start || lastEnd,
       end: draft?.milestone ? draft.start : addDays(draft?.start || lastEnd, 7),
@@ -222,7 +224,7 @@ export function useTaskActions({
       setJsonText(JSON.stringify(updated, null, 2));
       setValidationResult(validate(updated));
     }
-  }, [parsedData, autoCascade, setParsedData, setJsonText, setValidationResult, handleChartCommit]);
+  }, [parsedData, autoCascade, setParsedData, setJsonText, setValidationResult, handleChartCommit, t]);
 
   const handleAddNewTask = useCallback(() => createTask(), [createTask]);
 

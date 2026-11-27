@@ -1,5 +1,6 @@
 import React from "react";
 import { Eye, Copy, ShieldAlert } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader } from "./ModalHost";
 
 interface ReadOnlyForkModalProps {
@@ -13,10 +14,11 @@ interface ReadOnlyForkModalProps {
 export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
   show,
   setShow,
-  roomTitle = "Shared Plan",
+  roomTitle,
   allowFork = true,
   onMakeLocalCopy
 }) => {
+  const { t } = useI18n();
   if (!show) return null;
 
   const close = () => setShow(false);
@@ -25,8 +27,8 @@ export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
     <Modal onClose={close} maxWidth={480} ariaDescribedBy="readonly-fork-desc">
       <ModalHeader
         icon={<Eye size={18} />}
-        title="This Room Is View-Only for You"
-        subtitle={<span style={{ overflowWrap: "anywhere" }}>{roomTitle}</span>}
+        title={t("fork.title")}
+        subtitle={<span style={{ overflowWrap: "anywhere" }}>{roomTitle ?? t("fork.defaultTitle")}</span>}
       />
 
       <div className="prompt-modal-body" style={{ gap: "16px" }}>
@@ -44,13 +46,13 @@ export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", color: "#F59E0B", fontWeight: 600 }}>
             <ShieldAlert size={16} aria-hidden="true" />
-            <span>Your changes can&apos;t be saved here</span>
+            <span>{t("fork.badge")}</span>
           </div>
           <p style={{ margin: "0 0 8px 0" }}>
-            You have <strong>view-only</strong> access to this cloud room, so edits are not saved to the shared plan.
+            {t("fork.bodyBefore")}<strong>{t("fork.bodyStrong")}</strong>{t("fork.bodyAfter")}
           </p>
           <p style={{ margin: 0, color: "var(--jantt-text-muted)", fontSize: "12.5px" }}>
-            {allowFork ? "Create a private local copy to edit on this device, or ask the owner for editor access." : "Ask the room owner for editor access."}
+            {allowFork ? t("fork.forkHint") : t("fork.noForkHint")}
           </p>
         </div>
 
@@ -66,11 +68,11 @@ export const ReadOnlyForkModal: React.FC<ReadOnlyForkModalProps> = ({
             }}
           >
             <Copy size={16} aria-hidden="true" />
-            <span>Make a Private Local Copy</span>
+            <span>{t("fork.makeCopy")}</span>
           </button>}
 
           <button type="button" className="btn btn-secondary" style={{ width: "100%" }} onClick={close}>
-            Keep Viewing Read-Only
+            {t("fork.keepViewing")}
           </button>
         </div>
       </div>

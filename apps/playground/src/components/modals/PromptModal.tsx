@@ -7,6 +7,7 @@ import {
   Check,
   AlertTriangle
 } from "lucide-react";
+import { useI18n } from "../../i18n/I18nProvider";
 import { Modal, ModalHeader } from "./ModalHost";
 import { JanttIcon } from "../common/JanttLogo";
 import masterTemplateFixture from "../../../../../examples/master-template.json";
@@ -147,10 +148,10 @@ type PromptTab = "prompt" | "cheatsheet" | "ideology";
 type CopyTarget = "prompt" | "cheatsheet";
 type CopyFeedback = { target: CopyTarget; ok: boolean } | null;
 
-const PROMPT_TABS: { id: PromptTab; label: string; icon: React.ReactNode }[] = [
-  { id: "prompt", label: "LLM System Prompt", icon: <Sparkles size={13} /> },
-  { id: "cheatsheet", label: "JSON Template", icon: <FileJson size={13} /> },
-  { id: "ideology", label: "Why JSON-First", icon: <Zap size={13} /> }
+const PROMPT_TABS: { id: PromptTab; icon: React.ReactNode }[] = [
+  { id: "prompt", icon: <Sparkles size={13} /> },
+  { id: "cheatsheet", icon: <FileJson size={13} /> },
+  { id: "ideology", icon: <Zap size={13} /> }
 ];
 
 const COPY_SOURCES: Record<CopyTarget, string> = {
@@ -191,6 +192,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
   showPromptModal,
   setShowPromptModal
 }) => {
+  const { t } = useI18n();
   const [promptModalTab, setPromptModalTab] = useState<PromptTab>("prompt");
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback>(null);
   const feedbackTimerRef = useRef<number | null>(null);
@@ -223,17 +225,17 @@ export const PromptModal: React.FC<PromptModalProps> = ({
 
   const copyTarget: CopyTarget = promptModalTab === "cheatsheet" ? "cheatsheet" : "prompt";
   const feedback = copyFeedback?.target === copyTarget ? copyFeedback : null;
-  const copyLabel = copyTarget === "cheatsheet" ? "Copy JSON Template" : "Copy System Prompt";
+  const copyLabel = copyTarget === "cheatsheet" ? t("prompt.copyTemplate") : t("prompt.copyPrompt");
 
   return (
     <Modal onClose={close} maxWidth={760}>
-      <ModalHeader icon={<JanttIcon size={20} variant="gradient" />} title="Generate Plans with AI" />
+      <ModalHeader icon={<JanttIcon size={20} variant="gradient" />} title={t("prompt.title")} />
 
       {/* Modal Segmented Tab Bar */}
       <div
         className="prompt-modal-tabs"
         role="tablist"
-        aria-label="AI prompt sections"
+        aria-label={t("prompt.tabsAria")}
         onKeyDown={handleTabKeyDown}
         style={{ overflowX: "auto" }}
       >
@@ -253,7 +255,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
               style={{ flexShrink: 0 }}
             >
               {tab.icon}
-              <span>{tab.label}</span>
+              <span>{t(`prompt.tab.${tab.id}`)}</span>
             </button>
           );
         })}
@@ -268,15 +270,14 @@ export const PromptModal: React.FC<PromptModalProps> = ({
         {promptModalTab === "prompt" && (
           <>
             <p className="prompt-modal-desc">
-              Give this prompt to ChatGPT, Claude, Gemini, Cursor or your own agent, then paste the JSON it returns into
-              the editor. Jantt validates it and points out broken dates, unknown categories and dependency cycles.
+              {t("prompt.promptDesc")}
             </p>
             <textarea
               className="prompt-modal-textarea"
               readOnly
               value={LLM_PROMPT_SNIPPET}
               rows={15}
-              aria-label="LLM system prompt"
+              aria-label={t("prompt.promptAria")}
             />
           </>
         )}
@@ -284,14 +285,14 @@ export const PromptModal: React.FC<PromptModalProps> = ({
         {promptModalTab === "cheatsheet" && (
           <>
             <p className="prompt-modal-desc">
-              A complete example plan using the supported fields. Give it to an LLM or code pipeline as a reference template.
+              {t("prompt.cheatsheetDesc")}
             </p>
             <textarea
               className="prompt-modal-textarea"
               readOnly
               value={RAW_CHEATSHEET_JSON}
               rows={15}
-              aria-label="Example Jantt JSON template"
+              aria-label={t("prompt.cheatsheetAria")}
             />
           </>
         )}
@@ -300,52 +301,53 @@ export const PromptModal: React.FC<PromptModalProps> = ({
           <div className="ideology-wrap">
             <div className="ideology-hero">
               <h4 style={{ margin: "0 0 6px 0", fontSize: "15px", color: "var(--jantt-accent)" }}>
-                Stop Asking AI to Write Fragile Timeline Code
+                {t("prompt.ideology.title")}
               </h4>
               <p style={{ margin: 0, fontSize: "12.5px", lineHeight: 1.5, color: "var(--jantt-text-muted)" }}>
-                Having LLMs generate hundreds of lines of React JSX, SVG coordinate math, and canvas listeners produces brittle, hallucination-prone results. With Jantt, the AI outputs <strong>pure declarative JSON</strong>, and Jantt delivers deterministic, interactive execution.
+                {t("prompt.ideology.bodyBefore")}<strong>{t("prompt.ideology.bodyStrong")}</strong>
+                {t("prompt.ideology.bodyAfter")}
               </p>
             </div>
 
             <div className="ideology-steps-grid">
               <div className="ideology-step-card">
-                <div className="step-badge">Step 1</div>
-                <h5>Feed the Prompt to an LLM</h5>
-                <p>Give the AI the compact schema contract (WBS, dates, dependencies, milestones, budget).</p>
+                <div className="step-badge">{t("prompt.stepLabel", { number: 1 })}</div>
+                <h5>{t("prompt.step1.title")}</h5>
+                <p>{t("prompt.step1.body")}</p>
               </div>
               <div className="ideology-step-card">
-                <div className="step-badge">Step 2</div>
-                <h5>AI Outputs Plain JSON</h5>
-                <p>Far fewer tokens than UI code, and every field can be checked by the validator.</p>
+                <div className="step-badge">{t("prompt.stepLabel", { number: 2 })}</div>
+                <h5>{t("prompt.step2.title")}</h5>
+                <p>{t("prompt.step2.body")}</p>
               </div>
               <div className="ideology-step-card">
-                <div className="step-badge">Step 3</div>
-                <h5>Instant Interactive Suite</h5>
-                <p>Jantt resolves dependency schedules, routes links, and renders Gantt, Kanban &amp; Analytics.</p>
+                <div className="step-badge">{t("prompt.stepLabel", { number: 3 })}</div>
+                <h5>{t("prompt.step3.title")}</h5>
+                <p>{t("prompt.step3.body")}</p>
               </div>
               <div className="ideology-step-card">
-                <div className="step-badge">Step 4</div>
-                <h5>Round-Trip Editing</h5>
-                <p>Humans drag and adjust visually. Jantt keeps clean JSON in the browser, ready to export back to the AI agent.</p>
+                <div className="step-badge">{t("prompt.stepLabel", { number: 4 })}</div>
+                <h5>{t("prompt.step4.title")}</h5>
+                <p>{t("prompt.step4.body")}</p>
               </div>
             </div>
 
             <div className="ideology-metrics-row">
               <div className="ideology-metric-box">
                 <span className="metric-val">JSON</span>
-                <span className="metric-lbl">Output Instead of UI Code</span>
+                <span className="metric-lbl">{t("prompt.metric.output")}</span>
               </div>
               <div className="ideology-metric-box">
                 <span className="metric-val">1</span>
-                <span className="metric-lbl">Small Runtime Dependency (fflate)</span>
+                <span className="metric-lbl">{t("prompt.metric.runtime")}</span>
               </div>
               <div className="ideology-metric-box">
                 <span className="metric-val">4</span>
-                <span className="metric-lbl">Dependency Types (FS/SS/FF/SF)</span>
+                <span className="metric-lbl">{t("prompt.metric.depTypes")}</span>
               </div>
               <div className="ideology-metric-box">
-                <span className="metric-val">2-Way</span>
-                <span className="metric-lbl">Visual &amp; JSON Editing</span>
+                <span className="metric-val">{t("prompt.metric.twoWay")}</span>
+                <span className="metric-lbl">{t("prompt.metric.visualJson")}</span>
               </div>
             </div>
           </div>
@@ -367,19 +369,19 @@ export const PromptModal: React.FC<PromptModalProps> = ({
           {feedback && !feedback.ok ? (
             <>
               <AlertTriangle size={13} />
-              Copy failed. Select the text and press Ctrl+C (Cmd+C on Mac).
+              {t("prompt.copyFailed")}
             </>
           ) : (
-            "Schema: https://jantt.dev/schema/v1.json"
+            t("prompt.schema", { url: "https://jantt.dev/schema/v1.json" })
           )}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginLeft: "auto" }}>
           <button type="button" className="btn-nav" onClick={close}>
-            Close
+            {t("common.close")}
           </button>
           <button type="button" className="btn-nav btn-nav-primary" onClick={() => handleCopy(copyTarget)}>
             {feedback?.ok ? <Check size={14} /> : <Copy size={14} />}
-            {feedback?.ok ? "Copied" : copyLabel}
+            {feedback?.ok ? t("prompt.copied") : copyLabel}
           </button>
         </div>
       </div>

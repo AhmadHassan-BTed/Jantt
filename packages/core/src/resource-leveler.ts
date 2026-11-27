@@ -46,6 +46,9 @@ export interface LevelingAdjustment {
   newEnd: string;
   delayDays: number;
   reason: string;
+  reasonDetail?:
+    | { kind: "overallocation"; date: string; higherPriorityTasks: string }
+    | { kind: "cascade"; deferredTaskId: string };
   withinFloat: boolean;
 }
 
@@ -508,6 +511,7 @@ export function levelResources(
     deferred.start = slot.start;
     deferred.end = slot.end;
 
+    const higherPriorityTasks = yieldsTo.map((t) => `'${t.id}' (${t.label || t.name || t.id})`).join(", ");
     adjustments.push({
       taskId: deferred.id,
       resourceId: deferral.resourceId,
@@ -516,7 +520,8 @@ export function levelResources(
       newStart: slot.start,
       newEnd: slot.end,
       delayDays: shiftAmount,
-      reason: `Deferred to resolve over-allocation of '${deferral.resourceId}' on ${deferral.conflictDate}; yields to higher-precedence ${yieldsTo.map((t) => `'${t.id}' (${t.label || t.name || t.id})`).join(", ")}`,
+      reason: `Deferred to resolve over-allocation of '${deferral.resourceId}' on ${deferral.conflictDate}; yields to higher-precedence ${higherPriorityTasks}`,
+      reasonDetail: { kind: "overallocation", date: deferral.conflictDate, higherPriorityTasks },
       withinFloat: shiftAmount <= (cpm.metrics.get(deferred.id)?.totalFloat ?? 0)
     });
 
@@ -536,6 +541,7 @@ export function levelResources(
         newEnd: t.end,
         delayDays: delay,
         reason: `Dependency cascade after deferring '${deferred.id}'`,
+        reasonDetail: { kind: "cascade", deferredTaskId: deferred.id },
         withinFloat: delay <= (cpm.metrics.get(t.id)?.totalFloat ?? 0)
       });
     }

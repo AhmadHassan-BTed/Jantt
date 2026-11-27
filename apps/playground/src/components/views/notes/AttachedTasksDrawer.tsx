@@ -3,6 +3,7 @@ import { Paperclip, PlusCircle, CheckSquare, X } from "lucide-react";
 import { sanitizeCssColor, type Task, type Team } from "@jantt/core";
 import { getTaskTitle, toText } from "./note-markdown";
 import { usePopoverDismiss } from "./useNoteMentionEngine";
+import { useI18n } from "../../../i18n/I18nProvider";
 
 /** Upper bound on rendered picker rows; refine with search for larger plans. */
 const MAX_PICKER_RESULTS = 50;
@@ -24,6 +25,7 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
   onUnlinkTask,
   isViewer = false
 }) => {
+  const { t } = useI18n();
   const [showAttachPicker, setShowAttachPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -57,7 +59,7 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
       <div className="note-attached-header">
         <span className="note-attached-title">
           <Paperclip size={13} />
-          <span>Attached Tasks ({attachedTasks.length})</span>
+          <span>{t("notes.attachedTasks", { count: attachedTasks.length })}</span>
         </span>
         {!isViewer && (
           <div className="note-attach-picker-anchor" ref={anchorRef}>
@@ -68,19 +70,19 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
               onClick={() => (showAttachPicker ? closePicker() : setShowAttachPicker(true))}
               aria-haspopup="dialog"
               aria-expanded={showAttachPicker}
-              title="Attach a roadmap task to this note"
+              title={t("notes.attachTitle")}
             >
               <PlusCircle size={13} />
-              <span>Attach Task</span>
+              <span>{t("notes.attachTask")}</span>
             </button>
 
             {showAttachPicker && (
-              <div className="note-attach-picker-dropdown" role="dialog" aria-label="Attach a task">
+              <div className="note-attach-picker-dropdown" role="dialog" aria-label={t("notes.attachDialog")}>
                 <input
                   type="text"
                   className="note-picker-input"
-                  placeholder="Search tasks to attach..."
-                  aria-label="Search tasks to attach"
+                  placeholder={t("notes.attachSearchPlaceholder")}
+                  aria-label={t("notes.attachSearchAria")}
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
                   autoFocus
@@ -88,7 +90,7 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
                 <div className="note-picker-list">
                   {candidateTasks.length === 0 ? (
                     <div className="note-picker-empty">
-                      {liveTasks.length === attachedTasks.length ? "All tasks are already attached" : "No matching tasks found"}
+                      {liveTasks.length === attachedTasks.length ? t("notes.allAttached") : t("notes.noMatchingTasks")}
                     </div>
                   ) : (
                     candidateTasks.map((t) => (
@@ -112,7 +114,7 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
                   )}
                   {candidateTotal > candidateTasks.length && (
                     <div className="note-picker-empty">
-                      Showing {candidateTasks.length} of {candidateTotal}. Type to narrow the list.
+                      {t("notes.showingResults", { shown: candidateTasks.length, total: candidateTotal })}
                     </div>
                   )}
                 </div>
@@ -125,7 +127,7 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
       <div className="note-attached-pills-list">
         {attachedTasks.length === 0 ? (
           <span className="note-attached-none">
-            {isViewer ? "No tasks are attached to this note." : "No tasks attached yet. Use Attach Task to link roadmap tasks to this note."}
+            {isViewer ? t("notes.noneAttachedViewer") : t("notes.noneAttached")}
           </span>
         ) : (
           attachedTasks.map((task) => {
@@ -153,8 +155,8 @@ export const AttachedTasksDrawer: React.FC<AttachedTasksDrawerProps> = ({
                     type="button"
                     className="note-chip-remove"
                     onClick={() => onUnlinkTask(task.id)}
-                    aria-label={`Unlink task ${task.id} from this note`}
-                    title="Unlink task from this note"
+                    aria-label={t("notes.unlinkAria", { id: task.id })}
+                    title={t("notes.unlink")}
                   >
                     <X size={11} />
                   </button>

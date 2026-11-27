@@ -1,4 +1,3 @@
-import { closeTopModal, useTopModalId } from "./components/modals/ModalHost";
 import { QuickCapture } from "./components/modals/QuickCapture";
 import React, { useMemo, useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import { RefreshCw, WifiOff, X } from "lucide-react";
@@ -48,6 +47,7 @@ import { registerLaunchQueueHandler, syncThemeColorMeta } from "./services/platf
 import { exportMsProjectXml, exportPrimaveraXer, exportExecutiveReportHtml } from "@jantt/interop";
 import { OPEN_JSON_EDITOR_EVENT } from "./components/common/EmptyChartState";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { useI18n } from "./i18n/I18nProvider";
 
 // View & Layout & Modal Components (Domain-Driven Architecture)
 import {
@@ -56,6 +56,8 @@ import {
   EditorPane,
   ViewRouter,
   ModalHost,
+  closeTopModal,
+  useTopModalId,
   Toast,
   MobileNavbar,
   MobileBottomNav,
@@ -103,6 +105,7 @@ function isDialogOpen(): boolean {
 type PendingConfirm = Omit<ConfirmDialogProps, "onCancel">;
 
 export function App() {
+  const { t } = useI18n();
   const mobile = useMobileDetection();
   const [init] = useState(() => loadInitialState(mobile.isMobile));
   const platform = useAppPlatform(mobile.isMobile);
@@ -331,7 +334,7 @@ export function App() {
   const flushPendingSave = useCallback(() => commandBus.emit("FLUSH_SAVE", undefined), []);
   const applySavedUpdate = () => {
     if (autoSave.prepareReload()) platform.applyUpdate();
-    else toast.showToast("Update deferred. Save your changes or correct the JSON before refreshing.", true);
+    else toast.showToast(t("app.updateDeferred"), true);
   };
 
   /**
@@ -344,9 +347,9 @@ export function App() {
     (mutate: (projects: SavedProject[]) => SavedProject[]) => {
       const stored = updateStoredProjects(mutate);
       setCustomProjects((prev) => mutate(prev));
-      if (!stored) showToast("Browser storage is full: the plan list could not be saved durably.", true);
+      if (!stored) showToast(t("app.storageFullShort"), true);
     },
-    [setCustomProjects, showToast]
+    [setCustomProjects, showToast, t]
   );
 
   // Firebase Realtime Database cloud room sync (the active room, its presence and deep links)
@@ -386,15 +389,15 @@ export function App() {
     sharedRooms.find((r) => r.roomId === roomSync.activeRoomId)?.title ||
     project.customProjects.find((p) => p.roomId === roomSync.activeRoomId)?.name ||
     editor.parsedData?.meta?.title ||
-    "Shared Plan";
+    t("app.sharedPlanName");
   const activePlanName = roomSync.activeRoomId ? activeRoomTitle : project.currentProjectName;
   const roomRoleLabel = !roomSync.activeRoomId
     ? undefined
     : isPendingLoginEditor
-    ? "Editor invite"
+    ? t("app.roleEditorInvite")
     : roomSync.activeRoomRole === "collaborator"
-    ? "Editor"
-    : "Viewer";
+    ? t("app.roleEditor")
+    : t("app.roleViewer");
 
   // Undo history belongs to one plan: never replay plan A's snapshot into plan B or a room.
   const { clearHistory } = undoRedo;
@@ -429,7 +432,7 @@ export function App() {
   const { activeProject, handleForkToLocalPlan, handleCreateLocalCopyFromData } = project;
   const handleForkToLocalCopy = useCallback(() => {
     if (!roomSync.allowViewerForks && isReadOnly) {
-      toast.showToast("The room owner has disabled local copies.", true);
+      toast.showToast(t("app.roomCopiesDisabled"), true);
       return;
     }
     if (activeProject) {
@@ -442,7 +445,7 @@ export function App() {
     }
     setShowReadOnlyForkModal(false);
     setShowEditorLoginModal(false);
-  }, [activeProject, handleForkToLocalPlan, handleCreateLocalCopyFromData, editor.parsedData, activeRoomTitle, roomSync.allowViewerForks, isReadOnly, toast.showToast]);
+  }, [activeProject, handleForkToLocalPlan, handleCreateLocalCopyFromData, editor.parsedData, activeRoomTitle, roomSync.allowViewerForks, isReadOnly, toast.showToast, t]);
 
   // Handlers for Cloud Rooms & User Hub
   /**
@@ -466,7 +469,7 @@ export function App() {
       }
       if (ENABLE_GITHUB_VERIFICATION_GATE && !isGitHubVerified) {
         auth.setShowVerificationModal(true);
-        toast.showToast("Support the creator by following & starring repos to collaborate in cloud rooms.", true);
+        toast.showToast(t("app.verificationRequiredCollab"), true);
         return null;
       }
       const roomId = await roomSync.createRoomFromActive(title, data);
@@ -475,7 +478,7 @@ export function App() {
       }
       return roomId;
     },
-    [auth, isGitHubVerified, roomSync, toast]
+    [auth, isGitHubVerified, roomSync, toast, t]
   );
   onCreateCloudRoomRef.current = handleCreateCloudRoomFromData;
 
@@ -513,12 +516,12 @@ export function App() {
       try {
         await deleteRoom(roomId, auth.userProfile.uid);
         dropRoomFromLocalPlans(roomId);
-        toast.showToast("Room permanently deleted and removed from all collaborators.");
+        toast.showToast(t("app.roomDeleted"));
       } catch (err: any) {
-        toast.showToast(`Failed to delete room: ${err?.message || String(err)}`, true);
+        toast.showToast(t("app.roomDeleteFailed", { error: err?.message || String(err) }), true);
       }
     },
-    [auth.userProfile, dropRoomFromLocalPlans, toast]
+    [auth.userProfile, dropRoomFromLocalPlans, toast, t]
   );
 
   const handleLeaveCloudRoom = useCallback(
@@ -527,12 +530,12 @@ export function App() {
       try {
         await leaveRoom(roomId, auth.userProfile.uid);
         dropRoomFromLocalPlans(roomId);
-        toast.showToast("Left room successfully.");
+        toast.showToast(t("app.roomLeft"));
       } catch (err: any) {
-        toast.showToast(`Failed to leave room: ${err?.message || String(err)}`, true);
+        toast.showToast(t("app.roomLeaveFailed", { error: err?.message || String(err) }), true);
       }
     },
-    [auth.userProfile, dropRoomFromLocalPlans, toast]
+    [auth.userProfile, dropRoomFromLocalPlans, toast, t]
   );
 
   const handleOpenShareRoom = useCallback((roomId: string) => {
@@ -546,25 +549,25 @@ export function App() {
 
   const handleStartCloudRoom = useCallback(() => {
     if (!editor.parsedData) {
-      toast.showToast("Fix the plan JSON before starting a cloud room.", true);
+      toast.showToast(t("app.fixJsonBeforeRoom"), true);
       return;
     }
     void handleCreateCloudRoomFromData(project.currentProjectName, editor.parsedData);
-  }, [editor.parsedData, handleCreateCloudRoomFromData, project.currentProjectName, toast]);
+  }, [editor.parsedData, handleCreateCloudRoomFromData, project.currentProjectName, toast, t]);
 
   const handleDeleteActiveRoom = useCallback(() => {
     const roomId = roomSync.activeRoomId;
     if (!roomId) return;
     setPendingConfirm({
-      title: "Delete cloud room for everyone?",
+      title: t("app.deleteRoomTitle"),
       tone: "danger",
-      confirmLabel: "Delete room permanently",
+      confirmLabel: t("app.deleteRoomConfirm"),
       confirmPhrase: activeRoomTitle,
       message: (
         <>
-          This permanently deletes room <strong>&ldquo;{activeRoomTitle}&rdquo;</strong> (#{roomId}) and all of its
-          data. Every collaborator loses access immediately. This cannot be undone. Make a local copy first if you
-          want to keep the plan.
+          {t("app.deleteRoomBodyBefore")}
+          <strong>&ldquo;{activeRoomTitle}&rdquo;</strong>
+          {t("app.deleteRoomBodyAfter", { id: roomId })}
         </>
       ),
       onConfirm: () => {
@@ -572,20 +575,21 @@ export function App() {
         void handleDeleteCloudRoom(roomId);
       }
     });
-  }, [roomSync.activeRoomId, activeRoomTitle, handleDeleteCloudRoom]);
+  }, [roomSync.activeRoomId, activeRoomTitle, handleDeleteCloudRoom, t]);
 
   const { handleDeleteProject } = project;
   const handleDeleteActivePlan = useCallback(() => {
     const projectId = project.activeProjectId;
     if (projectId === "default") return;
     setPendingConfirm({
-      title: "Delete plan from this device?",
+      title: t("app.deletePlanTitle"),
       tone: "danger",
-      confirmLabel: "Delete plan",
+      confirmLabel: t("app.deletePlanConfirm"),
       message: (
         <>
-          This permanently deletes <strong>&ldquo;{project.currentProjectName}&rdquo;</strong> and its version history
-          from this browser. This cannot be undone. Export it first if you may need it again.
+          {t("app.deletePlanBodyBefore")}
+          <strong>&ldquo;{project.currentProjectName}&rdquo;</strong>
+          {t("app.deletePlanBodyAfter")}
         </>
       ),
       onConfirm: () => {
@@ -593,7 +597,7 @@ export function App() {
         handleDeleteProject(projectId, { confirm: false });
       }
     });
-  }, [project.activeProjectId, project.currentProjectName, handleDeleteProject]);
+  }, [project.activeProjectId, project.currentProjectName, handleDeleteProject, t]);
 
   // 1-Click Snapshot Restoration with Audit Trail
   const handleRestoreSnapshot = useCallback(
@@ -603,7 +607,7 @@ export function App() {
         return;
       }
       // The plan being replaced stays recoverable (the vault skips an identical latest snapshot).
-      if (editor.parsedData) vault.captureSnapshot(project.activeProjectId, editor.parsedData, "Pre-Restore Backup");
+      if (editor.parsedData) vault.captureSnapshot(project.activeProjectId, editor.parsedData, t("app.snapshotPreRestore"));
       editor.setParsedData(snapshotData);
       people.setPeople(snapshotData.people || []);
       people.setTeams(snapshotData.teams || []);
@@ -614,9 +618,9 @@ export function App() {
       }
       vault.captureSnapshot(project.activeProjectId, snapshotData, reason);
       dynamicSync.broadcastLocalChange(project.activeProjectId, snapshotData);
-      toast.showToast(`Restored snapshot: ${reason}!`);
+      toast.showToast(t("app.snapshotRestored", { reason }));
     },
-    [editor, people, project, vault, dynamicSync, toast]
+    [editor, people, project, vault, dynamicSync, toast, t]
   );
 
   // Share links opened in an already-running app (same-document hash / history navigation).
@@ -637,13 +641,13 @@ export function App() {
 
       const imported = importSharedPlan(project.customProjects, share.payload, share.name);
       if (!imported) {
-        toast.showToast("This share link is invalid, damaged or too large to open.", true);
+        toast.showToast(t("app.shareLinkInvalid"), true);
         return;
       }
 
       if (!imported.isNew) {
         if (imported.project.id !== project.activeProjectId) project.handleSelectProject(imported.project.id);
-        toast.showToast(`Opened "${imported.project.name}" (imported from this link earlier).`);
+        toast.showToast(t("app.shareLinkAlreadyImported", { name: imported.project.name }));
         return;
       }
 
@@ -658,7 +662,7 @@ export function App() {
       people.setTeams(decoded.teams || []);
       editor.setJsonText(JSON.stringify(decoded, null, 2));
       editor.setValidationResult(validate(decoded));
-      toast.showToast(`Opened shared plan "${sharedProj.name}" as a new local plan.`);
+      toast.showToast(t("app.shareLinkImported", { name: sharedProj.name }));
     } catch (err) {
       console.error("Failed to open shared plan from URL:", err);
     }
@@ -976,13 +980,13 @@ export function App() {
   // The interop exporters drop tombstoned tasks themselves; file names match the Share dialog's.
   const runExport = (label: string, extension: string, mimeType: string, build: (data: JanttData) => string) => {
     if (!editor.parsedData) {
-      toast.showToast("Fix the plan JSON before exporting.", true);
+      toast.showToast(t("app.fixJsonBeforeExport"), true);
       return;
     }
     try {
       downloadTextFile(buildExportFilename(project.currentProjectName, extension), build(editor.parsedData), mimeType);
     } catch (err) {
-      toast.showToast(`${label} export failed: ${err instanceof Error ? err.message : String(err)}`, true);
+      toast.showToast(t("app.exportFailed", { format: label, error: err instanceof Error ? err.message : String(err) }), true);
     }
   };
 
@@ -997,9 +1001,9 @@ export function App() {
     );
 
   const handleExportExecutiveReport = () =>
-    runExport("Executive report", "html", "text/html;charset=utf-8", (data) =>
+    runExport(t("app.executiveReportLabel"), "html", "text/html;charset=utf-8", (data) =>
       exportExecutiveReportHtml(data.tasks || [], {
-        title: project.currentProjectName || "Executive Project Status & Schedule Health Report",
+        title: project.currentProjectName || t("app.executiveReportTitle"),
         // Internal plan ids mean nothing to report readers; rooms have a shareable id.
         projectCode: roomSync.activeRoomId || undefined,
         theme: viewport.activeTheme?.mode === "dark" ? "dark" : "corporate",
@@ -1062,8 +1066,15 @@ export function App() {
   useEffect(() => { setCaptureExpanded(false); setCapture(null); }, [viewport.activeView, project.activeProjectId, isReadOnly]);
 
   const remotePresence = useMemo(() => roomSync.onlineUsers.filter(user => user.uid !== auth.currentUser?.uid), [roomSync.onlineUsers, auth.currentUser?.uid]);
-  const roomConnection = !platform.isOnline || roomSync.syncStatus === "offline" ? "Offline" :
-    { idle: "Connecting", syncing: "Syncing", "in-sync": "Connected", merged: "Connected", conflict: "Conflict", error: "Sync error" }[roomSync.syncStatus];
+  const roomConnection = !platform.isOnline || roomSync.syncStatus === "offline" ? t("common.offline") :
+    {
+      idle: t("platform.connecting"),
+      syncing: t("platform.syncing"),
+      "in-sync": t("platform.connected"),
+      merged: t("platform.connected"),
+      conflict: t("platform.conflict"),
+      error: t("platform.syncError")
+    }[roomSync.syncStatus];
   const topModalId = useTopModalId();
   const isAnyOverlayOpen =
     Boolean(topModalId) ||
@@ -1188,7 +1199,7 @@ export function App() {
           onOpenEditorLogin={() => setShowEditorLoginModal(true)}
           onPromptFork={() => setShowReadOnlyForkModal(true)}
           cloudPanel={renderCloudPanel}
-          cloudStatusLabel={roomSync.activeRoomId ? `${roomConnection} · ${roomRoleLabel}` : "Local plan"}
+          cloudStatusLabel={roomSync.activeRoomId ? `${roomConnection} · ${roomRoleLabel}` : t("app.localPlan")}
           roomConnection={roomConnection}
           onUndo={undoRedo.canUndo && !isReadOnly ? undoRedo.undo : undefined}
           onRedo={undoRedo.canRedo && !isReadOnly ? undoRedo.redo : undefined}
@@ -1205,7 +1216,7 @@ export function App() {
           isStandalone={platform.isStandalone}
           onInstall={platform.promptInstall}
           onApplyUpdate={applySavedUpdate}
-          appModeLabel={platform.isTwa ? "Android App" : platform.isStandalone ? "Standalone App" : "Web"}
+          appModeLabel={platform.isTwa ? t("platform.appModeAndroid") : platform.isStandalone ? t("platform.appModeStandalone") : t("platform.appModeWeb")}
         />
       ) : (
         <Navbar
@@ -1269,22 +1280,22 @@ export function App() {
           {!platform.isOnline && (
             <div className="jantt-platform-pill is-offline">
               <WifiOff size={13} aria-hidden="true" />
-              <span>{autoSave.saveError ? "Offline · Save failed" : autoSave.saveStatus === "saved"
-                ? "Offline · Saved on this device" : "Offline · Changes pending"}</span>
+              <span>{autoSave.saveError ? t("platform.offlineSaveFailed") : autoSave.saveStatus === "saved"
+                ? t("platform.offlineSaved") : t("platform.offlinePending")}</span>
             </div>
           )}
           {platform.updateAvailable && !isUpdateDismissed && (
             <div className="jantt-platform-pill is-update">
               <RefreshCw size={13} aria-hidden="true" />
-              <span>New version ready</span>
+              <span>{t("platform.updateReady")}</span>
               <button type="button" className="jantt-platform-pill-action" onClick={applySavedUpdate}>
-                Refresh
+                {t("platform.refresh")}
               </button>
               <button
                 type="button"
                 className="jantt-platform-pill-close"
                 onClick={() => setIsUpdateDismissed(true)}
-                aria-label="Dismiss update notice"
+                aria-label={t("platform.dismissUpdate")}
               >
                 <X size={12} aria-hidden="true" />
               </button>
@@ -1321,10 +1332,10 @@ export function App() {
           <div
             className={`workspace-splitter ${sidebar.isResizing ? "is-resizing" : ""}`}
             onPointerDown={sidebar.startResizing}
-            title="Drag left/right to adjust JSON sidebar width"
+            title={t("platform.resizeSidebarTitle")}
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize JSON editor"
+            aria-label={t("platform.resizeSidebarAria")}
             aria-valuenow={sidebar.sidebarWidth}
           >
             <div className="splitter-handle" />
