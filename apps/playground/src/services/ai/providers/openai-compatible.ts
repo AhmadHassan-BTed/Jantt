@@ -36,6 +36,7 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
           else if (this.providerId === "openrouter") baseUrl = "https://openrouter.ai/api/v1";
           else if (this.providerId === "mistral") baseUrl = "https://api.mistral.ai/v1";
           else if (this.providerId === "xai") baseUrl = "https://api.x.ai/v1";
+          else if (this.providerId === "opendesign-go") baseUrl = "https://amr-link.open-design.ai/v1";
           else if (this.providerId === "ollama") baseUrl = "http://localhost:11434/v1";
           else {
             callbacks.onError({
@@ -68,7 +69,13 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
         }
 
         const requestBody = {
-          model: model || (this.providerId === "openai" ? "gpt-4o" : "llama-3.3-70b-versatile"),
+          model:
+            model ||
+            (this.providerId === "openai"
+              ? "gpt-4o"
+              : this.providerId === "opendesign-go"
+              ? "deepseek-v4.1-flash"
+              : "llama-3.3-70b-versatile"),
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
           temperature: options?.temperature ?? 0.2,
           stream: true

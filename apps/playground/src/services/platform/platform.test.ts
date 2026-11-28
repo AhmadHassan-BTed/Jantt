@@ -104,6 +104,7 @@ describe("service worker policy", () => {
       "https://openrouter.ai/api/v1/chat/completions",
       "https://api.mistral.ai/v1/chat/completions",
       "https://api.x.ai/v1/chat/completions",
+      "https://amr-link.open-design.ai/v1/chat/completions",
       "http://localhost:11434/api/generate",
       "http://127.0.0.1:11434/api/generate",
       "https://example.firebaseio.com/.json"

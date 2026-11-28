@@ -338,6 +338,51 @@ export const PROVIDER_CATALOG: Record<ProviderId, ProviderDefinition> = {
       }
     ]
   },
+  "opendesign-go": {
+    id: "opendesign-go",
+    label: "OpenDesign Go",
+    description: "OpenAI-compatible multi-model gateway via OpenDesign Go",
+    defaultBaseUrl: "https://amr-link.open-design.ai/v1",
+    supportsCustomBaseUrl: true,
+    models: [
+      {
+        id: "deepseek-v4.1-flash",
+        label: "DeepSeek V4.1 Flash",
+        contextWindow: 128000,
+        outputLimit: 8192,
+        supportsStreaming: true,
+        recommended: true
+      },
+      {
+        id: "deepseek-v4-pro",
+        label: "DeepSeek V4 Pro",
+        contextWindow: 128000,
+        outputLimit: 8192,
+        supportsStreaming: true
+      },
+      {
+        id: "glm-5.3-flash",
+        label: "GLM 5.3 Flash",
+        contextWindow: 128000,
+        outputLimit: 8192,
+        supportsStreaming: true
+      },
+      {
+        id: "kimi-k2.7-code",
+        label: "Kimi K2.7 Code",
+        contextWindow: 128000,
+        outputLimit: 8192,
+        supportsStreaming: true
+      },
+      {
+        id: "minimax-m3.1-flash",
+        label: "MiniMax M3.1 Flash",
+        contextWindow: 128000,
+        outputLimit: 8192,
+        supportsStreaming: true
+      }
+    ]
+  },
   ollama: {
     id: "ollama",
     label: "Local Ollama",
@@ -425,6 +470,7 @@ const adapters: Record<ProviderId, ProviderAdapter> = {
   openrouter: new OpenAiCompatibleAdapter("openrouter", "https://openrouter.ai/api/v1"),
   mistral: new OpenAiCompatibleAdapter("mistral", "https://api.mistral.ai/v1"),
   xai: new OpenAiCompatibleAdapter("xai", "https://api.x.ai/v1"),
+  "opendesign-go": new OpenAiCompatibleAdapter("opendesign-go", "https://amr-link.open-design.ai/v1"),
   ollama: new OpenAiCompatibleAdapter("ollama", "http://localhost:11434/v1"),
   "openai-compatible": new OpenAiCompatibleAdapter("openai-compatible")
 };

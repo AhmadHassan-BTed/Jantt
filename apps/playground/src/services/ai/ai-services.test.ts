@@ -283,6 +283,7 @@ describe("AI Copilot - provider-registry", () => {
     expect(ids).toContain("gemini");
     expect(ids).toContain("openai");
     expect(ids).toContain("anthropic");
+    expect(ids).toContain("opendesign-go");
     expect(ids).toContain("openai-compatible");
   });
 
@@ -293,10 +294,13 @@ describe("AI Copilot - provider-registry", () => {
 
     const openaiModels = getModelsForProvider("openai");
     expect(openaiModels.some((m) => m.id === "gpt-4o")).toBe(true);
+
+    const opendesignGoModels = getModelsForProvider("opendesign-go");
+    expect(opendesignGoModels.some((m) => m.id === "deepseek-v4.1-flash")).toBe(true);
   });
 
   it("returns valid adapters for every provider", () => {
-    for (const p of ["gemini", "openai", "anthropic", "openai-compatible"] as const) {
+    for (const p of ["gemini", "openai", "anthropic", "opendesign-go", "openai-compatible"] as const) {
       const adapter = getProviderAdapter(p);
       expect(adapter).toBeDefined();
       expect(typeof adapter.streamChat).toBe("function");
@@ -421,5 +425,38 @@ describe("AI Copilot - dynamic model-discovery", () => {
     expect(fallback.source).toBe("fallback");
     expect(fallback.error).toContain("Invalid key");
     expect(fallback.models.length).toBeGreaterThan(0);
+  });
+
+  it("discovers live OpenDesign Go models from the default OpenAI-compatible endpoint", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        data: [
+          { id: "deepseek-v4.1-flash" },
+          { id: "glm-5.3-flash" }
+        ]
+      })
+    } as Response);
+
+    const account = {
+      id: "acc_test_od_go",
+      providerId: "opendesign-go" as const,
+      label: "OpenDesign Go Test",
+      apiKey: "sk-od-test",
+      createdAt: Date.now()
+    };
+
+    const live = await fetchLiveModelsForAccount(account, { force: true });
+    expect(live.source).toBe("live");
+    expect(live.models.map((m) => m.id)).toEqual(["deepseek-v4.1-flash", "glm-5.3-flash"]);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://amr-link.open-design.ai/v1/models",
+      expect.objectContaining({
+        method: "GET",
+        headers: { Authorization: "Bearer sk-od-test" }
+      })
+    );
   });
 });
