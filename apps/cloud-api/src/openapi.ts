@@ -3,9 +3,9 @@ export function buildOpenApiSpec(serverOrigin: string): Record<string, unknown> 
     openapi: "3.1.0",
     info: {
       title: "Jantt Cloud Agent API",
-      version: "1.1.0",
+      version: "1.2.0",
       description:
-        "Account-scoped REST API and Remote MCP endpoint for inspecting, creating, and editing Firebase-synced Jantt Cloud plans in real time."
+        "Account-scoped REST API and Remote MCP endpoint for discovering Jantt syntax guides/schemas, dry-run validating Jantt JSON, and inspecting, creating, or editing Firebase-synced Jantt Cloud plans in real time."
     },
     servers: [{ url: serverOrigin }],
     components: {
@@ -20,6 +20,84 @@ export function buildOpenApiSpec(serverOrigin: string): Record<string, unknown> 
     },
     security: [{ ApiKeyAuth: [] }],
     paths: {
+      "/v1/help": {
+        get: {
+          operationId: "getHelp",
+          summary: "Public API help index, authentication guide, entrance validation rules, and endpoint directory",
+          security: [],
+          parameters: [
+            { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"] } }
+          ],
+          responses: { "200": { description: "JSON help manifest or Markdown quickstart" } }
+        }
+      },
+      "/v1/cheatsheet": {
+        get: {
+          operationId: "getCheatsheet",
+          summary: "Public Jantt JSON cheatsheet, dependency syntax, working calendars, and validation gotchas",
+          security: [],
+          parameters: [
+            { name: "format", in: "query", schema: { type: "string", enum: ["markdown", "json"] } }
+          ],
+          responses: { "200": { description: "Markdown cheatsheet or JSON envelope" } }
+        }
+      },
+      "/v1/prompt": {
+        get: {
+          operationId: "getSystemPrompt",
+          summary: "Public AI agent system prompt & strict instructions for creating or modifying Jantt Cloud plans",
+          security: [],
+          parameters: [
+            { name: "mode", in: "query", schema: { type: "string", enum: ["all", "create", "modify"] } },
+            { name: "format", in: "query", schema: { type: "string", enum: ["markdown", "json"] } }
+          ],
+          responses: { "200": { description: "Markdown system prompt or JSON envelope" } }
+        }
+      },
+      "/v1/schema": {
+        get: {
+          operationId: "getJsonSchema",
+          summary: "Public official Jantt JSON Schema (v1)",
+          security: [],
+          responses: { "200": { description: "JSON Schema document (application/schema+json)" } }
+        }
+      },
+      "/v1/template": {
+        get: {
+          operationId: "getTemplate",
+          summary: "Public valid Jantt JSON starter or full master template",
+          security: [],
+          parameters: [
+            { name: "kind", in: "query", schema: { type: "string", enum: ["starter", "master"] } }
+          ],
+          responses: { "200": { description: "Valid JanttData JSON template" } }
+        }
+      },
+      "/v1/validate": {
+        post: {
+          operationId: "validatePlan",
+          summary: "Public dry-run validator checking Jantt JSON syntax, dates, categories, DAG cycles, and scalar types",
+          security: [],
+          parameters: [
+            { name: "strict", in: "query", schema: { type: "boolean" } }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    plan: { type: "object", description: "JanttData object (or pass the JanttData object at root)" },
+                    strict: { type: "boolean", description: "Treat non-blocking warnings as errors too" }
+                  }
+                }
+              }
+            }
+          },
+          responses: { "200": { description: "Validation report with valid, strictValid, errors, warnings, and summary" } }
+        }
+      },
       "/v1/plans": {
         get: {
           operationId: "listPlans",

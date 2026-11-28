@@ -13,6 +13,16 @@ import {
   type AuthDeps
 } from "./auth";
 import { getServiceAccountAccessToken } from "./crypto";
+import {
+  getAgentSystemPrompt,
+  getHelpMarkdown,
+  getHelpPayload,
+  getJanttCheatsheet,
+  getJanttSchema,
+  getMasterTemplate,
+  getStarterTemplate,
+  type PromptMode
+} from "./guides";
 import { handleMcpPayload } from "./mcp";
 import { buildOpenApiSpec } from "./openapi";
 import {
@@ -28,7 +38,8 @@ import {
   listPlanTasks,
   patchAccountPlan,
   replaceAccountPlan,
-  updatePlanTask
+  updatePlanTask,
+  validatePlanPayload
 } from "./plans";
 import { FirebaseRtdbClient, type RtdbClient } from "./rtdb";
 import { HttpError, type Env, type ExecutionContextLike, type FetchLike } from "./types";
@@ -80,13 +91,36 @@ function buildCorsHeaders(request: Request, env: Env, isUiRoute: boolean): Recor
   };
 }
 
-function jsonResponse(status: number, body: unknown, corsHeaders: Record<string, string>): Response {
+function jsonResponse(
+  status: number,
+  body: unknown,
+  corsHeaders: Record<string, string>,
+  extraHeaders: Record<string, string> = {}
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       ...corsHeaders,
       ...BASE_SECURITY_HEADERS,
-      "Content-Type": "application/json; charset=utf-8"
+      "Content-Type": "application/json; charset=utf-8",
+      ...extraHeaders
+    }
+  });
+}
+
+function markdownResponse(
+  status: number,
+  markdown: string,
+  corsHeaders: Record<string, string>,
+  extraHeaders: Record<string, string> = {}
+): Response {
+  return new Response(markdown, {
+    status,
+    headers: {
+      ...corsHeaders,
+      ...BASE_SECURITY_HEADERS,
+      "Content-Type": "text/markdown; charset=utf-8",
+      ...extraHeaders
     }
   });
 }
@@ -99,6 +133,27 @@ function emptyResponse(status: number, corsHeaders: Record<string, string>): Res
       ...BASE_SECURITY_HEADERS
     }
   });
+}
+
+function wantsJsonFormat(request: Request, url: URL): boolean {
+  const fmt = (url.searchParams.get("format") || "").trim().toLowerCase();
+  if (fmt === "json") return true;
+  if (fmt === "markdown" || fmt === "md" || fmt === "text") return false;
+  const accept = (request.headers.get("Accept") || "").toLowerCase();
+  return accept.includes("application/json") && !accept.includes("text/markdown");
+}
+
+function wantsMarkdownFormat(request: Request, url: URL): boolean {
+  const fmt = (url.searchParams.get("format") || "").trim().toLowerCase();
+  if (fmt === "markdown" || fmt === "md" || fmt === "text") return true;
+  if (fmt === "json") return false;
+  const accept = (request.headers.get("Accept") || "").toLowerCase();
+  return accept.includes("text/markdown");
+}
+
+function parsePromptModeParam(raw: string | null): PromptMode {
+  if (raw === "create" || raw === "modify") return raw;
+  return "all";
 }
 
 /** Reads and parses a JSON body with a strict streaming byte cap (prevents memory exhaustion). */
@@ -212,15 +267,23 @@ export function createCloudApiHandler(deps: HandlerDeps = {}) {
         }
       }
 
-      // Public metadata & health endpoints
+      // ------------------------------------------------------------------
+      // 0. Public Discovery, Guides, Schema, Templates & Dry-Run Validator
+      // ------------------------------------------------------------------
       if (request.method === "GET" && (pathname === "/" || pathname === "/health")) {
         return jsonResponse(
           200,
           {
             service: "jantt-cloud-api",
-            version: "1.1.0",
+            version: "1.2.0",
             status: "ok",
             endpoints: {
+              help: `${url.origin}/v1/help`,
+              cheatsheet: `${url.origin}/v1/cheatsheet`,
+              prompt: `${url.origin}/v1/prompt`,
+              schema: `${url.origin}/v1/schema`,
+              template: `${url.origin}/v1/template`,
+              validate: `${url.origin}/v1/validate`,
               openapi: `${url.origin}/v1/openapi.json`,
               plans: `${url.origin}/v1/plans`,
               mcp: `${url.origin}/v1/mcp`
@@ -232,6 +295,65 @@ export function createCloudApiHandler(deps: HandlerDeps = {}) {
 
       if (request.method === "GET" && pathname === "/v1/openapi.json") {
         return jsonResponse(200, buildOpenApiSpec(url.origin), cors);
+      }
+
+      if (request.method === "GET" && pathname === "/v1/help") {
+        if (wantsMarkdownFormat(request, url)) {
+          return markdownResponse(200, getHelpMarkdown(url.origin), cors, { "Cache-Control": "public, max-age=300" });
+        }
+        return jsonResponse(200, getHelpPayload(url.origin), cors, { "Cache-Control": "public, max-age=300" });
+      }
+
+      if (request.method === "GET" && pathname === "/v1/cheatsheet") {
+        const content = getJanttCheatsheet(url.origin);
+        if (wantsJsonFormat(request, url)) {
+          return jsonResponse(
+            200,
+            { format: "markdown", title: "Jantt JSON Cheatsheet & Gotchas", content },
+            cors,
+            { "Cache-Control": "public, max-age=300" }
+          );
+        }
+        return markdownResponse(200, content, cors, { "Cache-Control": "public, max-age=300" });
+      }
+
+      if (request.method === "GET" && pathname === "/v1/prompt") {
+        const mode = parsePromptModeParam(url.searchParams.get("mode"));
+        const content = getAgentSystemPrompt(url.origin, mode);
+        if (wantsJsonFormat(request, url)) {
+          return jsonResponse(
+            200,
+            { format: "markdown", mode, title: "Jantt Cloud Editing System Prompt", content },
+            cors,
+            { "Cache-Control": "public, max-age=300" }
+          );
+        }
+        return markdownResponse(200, content, cors, { "Cache-Control": "public, max-age=300" });
+      }
+
+      if (request.method === "GET" && pathname === "/v1/schema") {
+        return jsonResponse(200, getJanttSchema(), cors, {
+          "Content-Type": "application/schema+json; charset=utf-8",
+          "Cache-Control": "public, max-age=300"
+        });
+      }
+
+      if (request.method === "GET" && pathname === "/v1/template") {
+        const kind = (url.searchParams.get("kind") || "starter").trim().toLowerCase();
+        const template = kind === "master" ? getMasterTemplate() : getStarterTemplate();
+        return jsonResponse(200, template, cors, { "Cache-Control": "public, max-age=300" });
+      }
+
+      if (pathname === "/v1/validate") {
+        if (request.method !== "POST") {
+          throw new HttpError(405, "METHOD_NOT_ALLOWED", `Method ${request.method} not allowed.`);
+        }
+        const body = await readCappedJson(request);
+        const strictFromQuery = url.searchParams.get("strict") === "true";
+        const strictFromBody =
+          Boolean(body && typeof body === "object" && !Array.isArray(body) && (body as { strict?: unknown }).strict === true);
+        const report = validatePlanPayload(body, { strict: strictFromQuery || strictFromBody });
+        return jsonResponse(200, report, cors);
       }
 
       const rtdb = getRtdb(env);
@@ -319,7 +441,7 @@ export function createCloudApiHandler(deps: HandlerDeps = {}) {
         }
         const account = await authenticateApiKey(request, env, rtdb, ctx, nowMs);
         const payload = await readCappedJson(request);
-        const result = await handleMcpPayload(payload, account, rtdb, nowMs);
+        const result = await handleMcpPayload(payload, account, rtdb, nowMs, url.origin);
         if (result.body === null) {
           return emptyResponse(result.status, cors);
         }
@@ -336,7 +458,8 @@ export function createCloudApiHandler(deps: HandlerDeps = {}) {
         }
         if (request.method === "POST") {
           const body = asObjectBody(await readCappedJson(request));
-          const created = await createAccountPlan(account.uid, body, rtdb, nowMs);
+          const strict = url.searchParams.get("strict") === "true" || body.strict === true;
+          const created = await createAccountPlan(account.uid, { ...body, strict }, rtdb, nowMs);
           return jsonResponse(201, created, cors);
         }
         throw new HttpError(405, "METHOD_NOT_ALLOWED", `Method ${request.method} not allowed.`);
@@ -352,11 +475,13 @@ export function createCloudApiHandler(deps: HandlerDeps = {}) {
         }
         if (request.method === "PUT") {
           const body = asObjectBody(await readCappedJson(request));
-          return jsonResponse(200, await replaceAccountPlan(account.uid, roomId, body, rtdb, nowMs), cors);
+          const strict = url.searchParams.get("strict") === "true" || body.strict === true;
+          return jsonResponse(200, await replaceAccountPlan(account.uid, roomId, { ...body, strict }, rtdb, nowMs), cors);
         }
         if (request.method === "PATCH") {
           const body = asObjectBody(await readCappedJson(request));
-          return jsonResponse(200, await patchAccountPlan(account.uid, roomId, body, rtdb, nowMs), cors);
+          const strict = url.searchParams.get("strict") === "true" || body.strict === true;
+          return jsonResponse(200, await patchAccountPlan(account.uid, roomId, { ...body, strict }, rtdb, nowMs), cors);
         }
         if (request.method === "DELETE") {
           return jsonResponse(200, await deleteAccountPlan(account.uid, roomId, rtdb), cors);
@@ -496,4 +621,3 @@ export default {
     return defaultHandler(request, env, ctx);
   }
 };
-

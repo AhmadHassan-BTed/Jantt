@@ -786,6 +786,7 @@ Jantt/
 - [Scheduling & CPM Algorithms](./docs/algorithms.md)
 - [System Architecture](./docs/architecture.md)
 - [API Reference](./docs/api-reference.md)
+- [Cloud Agent API & Remote MCP Guide](./docs/cloud-agent-api.md)
 - [Security & Privacy](./docs/security.md)
 - [Roadmap](./ROADMAP.md) · [Changelog](./CHANGELOG.md)
 

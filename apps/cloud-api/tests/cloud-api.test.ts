@@ -465,13 +465,13 @@ describe("Jantt Cloud API Worker", () => {
     });
     expect(notif.status).toBe(202);
 
-    // tools/list returns all 11 cloud tools
+    // tools/list returns all 13 cloud tools
     const listTools = await call("POST", "/v1/mcp", {
       token: apiKey,
       body: { jsonrpc: "2.0", id: 2, method: "tools/list" }
     });
     expect(listTools.status).toBe(200);
-    expect(listTools.json.result.tools).toHaveLength(11);
+    expect(listTools.json.result.tools).toHaveLength(13);
 
     // Create a cloud plan via MCP
     const create = await call("POST", "/v1/mcp", {
@@ -633,5 +633,192 @@ describe("Jantt Cloud API Worker", () => {
     expect(patched.json.task.wbs).toBe("1.2");
     expect(patched.json.task.phase).toBe("Launch");
     expect(patched.json.task.dependsOn).toBeUndefined();
+  });
+
+  it("serves public help, cheatsheet, system prompt, JSON schema, templates, and enforces dry-run & strict entrance checks", async () => {
+    const helpJson = await call("GET", "/v1/help");
+    expect(helpJson.status).toBe(200);
+    expect(helpJson.json.guidesAndDiscovery.cheatsheet).toContain("/v1/cheatsheet");
+    expect(helpJson.json.mcpCapabilities.tools).toHaveLength(13);
+
+    const helpMd = await call("GET", "/v1/help?format=markdown");
+    expect(helpMd.status).toBe(200);
+    expect(helpMd.text).toContain("Jantt Cloud Agent API");
+
+    const csMd = await call("GET", "/v1/cheatsheet");
+    expect(csMd.status).toBe(200);
+    expect(csMd.headers.get("Content-Type")).toContain("text/markdown");
+    expect(csMd.text).toContain("Jantt JSON Cheatsheet");
+
+    const csJson = await call("GET", "/v1/cheatsheet?format=json");
+    expect(csJson.status).toBe(200);
+    expect(csJson.json.content).toContain("progress");
+
+    const promptModify = await call("GET", "/v1/prompt?mode=modify");
+    expect(promptModify.status).toBe(200);
+    expect(promptModify.text).toContain("MODIFYING AN EXISTING CLOUD PLAN");
+    expect(promptModify.text).toContain("[FORBIDDEN]");
+
+    const promptCreate = await call("GET", "/v1/prompt?mode=create&format=json");
+    expect(promptCreate.status).toBe(200);
+    expect(promptCreate.json.mode).toBe("create");
+    expect(promptCreate.json.content).toContain("CREATING A NEW CLOUD PLAN");
+
+    const schema = await call("GET", "/v1/schema");
+    expect(schema.status).toBe(200);
+    expect(schema.headers.get("Content-Type")).toContain("application/schema+json");
+    expect(schema.json.properties?.tasks).toBeDefined();
+
+    const starter = await call("GET", "/v1/template");
+    expect(starter.status).toBe(200);
+    expect(Array.isArray(starter.json.tasks)).toBe(true);
+
+    const master = await call("GET", "/v1/template?kind=master");
+    expect(master.status).toBe(200);
+    expect(master.json.tasks.length).toBeGreaterThan(starter.json.tasks.length);
+
+    // Dry-run validate valid starter template -> valid + strictValid
+    const valOk = await call("POST", "/v1/validate", { body: { plan: starter.json } });
+    expect(valOk.status).toBe(200);
+    expect(valOk.json.valid).toBe(true);
+    expect(valOk.json.strictValid).toBe(true);
+
+    // Dry-run validate rejects bad scalar syntax (milestone string, bad color, non-numeric cost)
+    const valBadSyntax = await call("POST", "/v1/validate", {
+      body: {
+        plan: {
+          categories: { dev: { label: "Dev", color: "#38BDF8" } },
+          tasks: [
+            {
+              id: "bad-1",
+              label: 12345,
+              category: "dev",
+              start: "2026-12-01",
+              end: "2026-12-02",
+              milestone: "yes",
+              estimatedCost: "five hundred",
+              color: "javascript:alert(1)"
+            }
+          ]
+        }
+      }
+    });
+    expect(valBadSyntax.status).toBe(200);
+    expect(valBadSyntax.json.valid).toBe(false);
+    expect(valBadSyntax.json.errors.length).toBeGreaterThanOrEqual(4);
+
+    // Soft warning (milestone spanning 2 days) allowed when strict=false, blocked when strict=true
+    const milestoneWarnPlan = {
+      categories: { dev: { label: "Dev", color: "#38BDF8" } },
+      tasks: [{ id: "m1", label: "Gate", category: "dev", start: "2026-12-01", end: "2026-12-03", milestone: true }]
+    };
+    const valSoft = await call("POST", "/v1/validate", { body: { plan: milestoneWarnPlan } });
+    expect(valSoft.json.valid).toBe(true);
+    expect(valSoft.json.strictValid).toBe(false);
+    expect(valSoft.json.warnings.some((w: any) => w.code === "MILESTONE_HAS_DURATION")).toBe(true);
+
+    const valStrict = await call("POST", "/v1/validate?strict=true", { body: { plan: milestoneWarnPlan } });
+    expect(valStrict.json.valid).toBe(false);
+
+    // Entrance gate on live writes also blocks malformed scalar types on POST /plans & POST /tasks
+    const keyRes = await call("POST", "/v1/keys", { token: "fb-admin", body: { label: "Strict Gate Key" } });
+    const apiKey: string = keyRes.json.apiKey;
+
+    const badCreate = await call("POST", "/v1/plans", {
+      token: apiKey,
+      body: {
+        title: "Bad Plan",
+        plan: {
+          categories: { dev: { label: "Dev", color: "not-a-color" } },
+          tasks: [{ id: "t1", label: "Ok", category: "dev", start: "2026-12-01", end: "2026-12-02" }]
+        }
+      }
+    });
+    expect(badCreate.status).toBe(400);
+    expect(badCreate.json.error.code).toBe("PLAN_VALIDATION_FAILED");
+
+    const goodRoom = await call("POST", "/v1/plans", { token: apiKey, body: { title: "Good Room" } });
+    expect(goodRoom.status).toBe(201);
+
+    const badTask = await call("POST", `/v1/plans/${goodRoom.json.roomId}/tasks`, {
+      token: apiKey,
+      body: {
+        id: "t-bad",
+        label: 999,
+        category: "general",
+        start: "2026-12-01",
+        end: "2026-12-02",
+        milestone: "yes",
+        color: "not-a-css-color"
+      }
+    });
+    expect(badTask.status).toBe(400);
+    expect(badTask.json.error.code).toBe("INVALID_TASK");
+  });
+
+  it("exposes MCP guide tool, validate tool, resources, prompts, and initialize instructions", async () => {
+    const keyRes = await call("POST", "/v1/keys", { token: "fb-admin", body: { label: "MCP Guides Agent" } });
+    const apiKey: string = keyRes.json.apiKey;
+
+    const init = await call("POST", "/v1/mcp", {
+      token: apiKey,
+      body: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } }
+    });
+    expect(init.status).toBe(200);
+    expect(init.json.result.capabilities.resources).toBeDefined();
+    expect(init.json.result.capabilities.prompts).toBeDefined();
+    expect(init.json.result.instructions).toContain("jantt://cheatsheet");
+
+    const resList = await call("POST", "/v1/mcp", {
+      token: apiKey,
+      body: { jsonrpc: "2.0", id: 2, method: "resources/list" }
+    });
+    expect(resList.json.result.resources).toHaveLength(5);
+
+    const resRead = await call("POST", "/v1/mcp", {
+      token: apiKey,
+      body: { jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri: "jantt://system-prompt" } }
+    });
+    expect(resRead.json.result.contents[0].text).toContain("STRICT SYNTAX & NEGATIVE CONSTRAINTS");
+
+    const promptList = await call("POST", "/v1/mcp", {
+      token: apiKey,
+      body: { jsonrpc: "2.0", id: 4, method: "prompts/list" }
+    });
+    expect(promptList.json.result.prompts).toHaveLength(2);
+
+    const promptGet = await call("POST", "/v1/mcp", {
+      token: apiKey,
+      body: { jsonrpc: "2.0", id: 5, method: "prompts/get", params: { name: "jantt_modify_plan", arguments: { roomId: "room_123" } } }
+    });
+    expect(promptGet.json.result.messages[0].content.text).toContain("room_123");
+
+    const guideTool = await call("POST", "/v1/mcp", {
+      token: apiKey,
+      body: { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "jantt_cloud_get_guide", arguments: { topic: "cheatsheet" } } }
+    });
+    expect(guideTool.json.result.isError).toBeUndefined();
+    expect(guideTool.json.result.content[0].text).toContain("Jantt JSON Cheatsheet");
+
+    const validateTool = await call("POST", "/v1/mcp", {
+      token: apiKey,
+      body: {
+        jsonrpc: "2.0",
+        id: 7,
+        method: "tools/call",
+        params: {
+          name: "jantt_cloud_validate_plan",
+          arguments: {
+            plan: {
+              categories: { general: { label: "General", color: "#38BDF8" } },
+              tasks: [{ id: "t1", label: "Valid", category: "general", start: "2026-12-01", end: "2026-12-02" }]
+            },
+            strict: true
+          }
+        }
+      }
+    });
+    expect(validateTool.json.result.isError).toBeUndefined();
+    expect(JSON.parse(validateTool.json.result.content[0].text).strictValid).toBe(true);
   });
 });

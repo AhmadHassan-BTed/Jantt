@@ -2,9 +2,12 @@
 
 Cloudflare Worker that exposes Firebase-synced **Jantt Cloud Plans** to AI agents (Claude, Cursor, Antigravity, ChatGPT Custom Actions, scripts) via:
 
-1. **Account-Scoped REST API (`/v1/plans/*`)** — list, inspect, audit, create, update, reschedule, and delete cloud plans and tasks with real-time browser sync.
-2. **Remote Streamable HTTP MCP Endpoint (`/v1/mcp`)** — 11 cloud-native MCP tools over JSON-RPC 2.0 using `Authorization: Bearer jnt_live_...`.
-3. **Admin Entitlement & API Key Management (`/v1/account/access`, `/v1/keys`, `/v1/admin/*`)** — authenticated with GitHub Firebase ID tokens from the GitHub Pages Playground UI.
+1. **Account-Scoped REST API (`/v1/plans/*`)** — list, inspect, audit, create, update, reschedule, and delete cloud plans and tasks with real-time browser sync and `@jantt/core` entrance validation.
+2. **Remote Streamable HTTP MCP Endpoint (`/v1/mcp`)** — 13 cloud-native MCP tools, 5 built-in MCP resources (`jantt://cheatsheet`, `jantt://system-prompt`, `jantt://schema`, starter/master templates), and 2 MCP prompts (`jantt_modify_plan`, `jantt_create_plan`) over JSON-RPC 2.0 using `Authorization: Bearer jnt_live_...`.
+3. **Public Guides, Schema & Dry-Run Validator** — `/v1/help`, `/v1/cheatsheet`, `/v1/prompt`, `/v1/schema`, `/v1/template`, `/v1/openapi.json`, and `POST /v1/validate`.
+4. **Admin Entitlement & API Key Management (`/v1/account/access`, `/v1/keys`, `/v1/admin/*`)** — authenticated with GitHub Firebase ID tokens from the GitHub Pages Playground UI.
+
+See the full production documentation in [docs/cloud-agent-api.md](../../docs/cloud-agent-api.md).
 
 Runs on the **Cloudflare Workers free tier** (100,000 requests/day) and connects to Firebase Realtime Database over REST using a **Firebase Service Account** (works on Firebase's free Spark plan — no Blaze billing required).
 

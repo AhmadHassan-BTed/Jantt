@@ -39,7 +39,7 @@ export interface AgentApiModalProps {
 }
 
 type ModalTab = "agent" | "admin";
-type SnippetTab = "mcp" | "curl" | "openapi";
+type SnippetTab = "mcp" | "curl" | "openapi" | "guides";
 
 const sectionStyle: React.CSSProperties = {
   display: "flex",
@@ -614,12 +614,13 @@ curl -X DELETE \\
                           <Terminal size={15} aria-hidden="true" />
                           <span>Connect an AI Agent</span>
                         </div>
-                        <div style={{ display: "flex", gap: "6px" }}>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                           {(
                             [
                               ["mcp", "Remote MCP"],
                               ["curl", "REST / cURL"],
-                              ["openapi", "OpenAPI Spec"]
+                              ["openapi", "OpenAPI Spec"],
+                              ["guides", "Guides & Schema"]
                             ] as const
                           ).map(([id, label]) => (
                             <button
@@ -687,6 +688,64 @@ curl -X DELETE \\
                               <span>Copy</span>
                             </button>
                           </div>
+                        </div>
+                      )}
+
+                      {snippetTab === "guides" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                          <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--jantt-text-muted)" }}>
+                            Public AI reference endpoints (no API key needed) for Jantt JSON syntax, editing prompts,
+                            schema validation, and starter templates:
+                          </p>
+                          {(
+                            [
+                              ["guide-cheatsheet", "Cheatsheet & Gotchas", `${effectiveEndpoint}/v1/cheatsheet`],
+                              ["guide-prompt", "AI Editing System Prompt", `${effectiveEndpoint}/v1/prompt`],
+                              ["guide-schema", "Official JSON Schema v1", `${effectiveEndpoint}/v1/schema`],
+                              ["guide-template", "Starter JSON Template", `${effectiveEndpoint}/v1/template`],
+                              ["guide-validate", "Dry-Run Validator (POST)", `${effectiveEndpoint}/v1/validate`],
+                              ["guide-help", "Full Help Index", `${effectiveEndpoint}/v1/help`]
+                            ] as const
+                          ).map(([copyId, label, urlValue]) => (
+                            <div
+                              key={copyId}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "8px",
+                                padding: "6px 9px",
+                                borderRadius: "8px",
+                                background: "var(--jantt-bg, rgba(15, 23, 42, 0.45))",
+                                border: "1px solid var(--jantt-border, rgba(255, 255, 255, 0.08))"
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, fontSize: "0.78rem" }}>{label}</div>
+                                <div
+                                  style={{
+                                    fontSize: "0.72rem",
+                                    color: "var(--jantt-text-muted)",
+                                    fontFamily: "var(--jantt-font-mono, monospace)",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                >
+                                  {urlValue}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{ padding: "4px 8px", fontSize: "0.74rem", flexShrink: 0 }}
+                                onClick={() => handleCopy(copyId, urlValue, label)}
+                              >
+                                {copiedId === copyId ? <Check size={12} /> : <Copy size={12} />}
+                                <span>Copy</span>
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

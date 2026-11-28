@@ -36,11 +36,91 @@ const ROOM_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const TRUSTED_AVATAR_PREFIX = "https://avatars.githubusercontent.com/";
 const MAX_TITLE_LENGTH = 200;
 const MAX_NAME_LENGTH = 256;
+const MAX_PLAN_TASKS = 5000;
 const MAX_CAS_RETRIES = 8;
 const MAX_META_CAS_RETRIES = 4;
 
+/** Validation warning codes that represent malformed types/syntax rather than soft schedule advice. */
+const BLOCKING_SYNTAX_WARNING_CODES = new Set<ValidationError["code"]>([
+  "SCHEMA_MISMATCH",
+  "INVALID_COLOR",
+  "INVALID_CALENDAR"
+]);
+
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function blockingWarningsOf(warnings: ValidationError[] | undefined, strict: boolean): ValidationError[] {
+  if (!Array.isArray(warnings) || warnings.length === 0) return [];
+  return strict ? warnings : warnings.filter((w) => BLOCKING_SYNTAX_WARNING_CODES.has(w.code));
+}
+
+export interface PlanValidationReport {
+  valid: boolean;
+  strictValid: boolean;
+  summary: {
+    taskCount: number;
+    errorCount: number;
+    warningCount: number;
+  };
+  errors: ValidationError[];
+  warnings: ValidationError[];
+}
+
+/** Public dry-run entrance validation for Jantt JSON payloads (never writes to Firebase). */
+export function validatePlanPayload(rawInput: unknown, options: { strict?: boolean } = {}): PlanValidationReport {
+  const rawPlan =
+    rawInput && typeof rawInput === "object" && !Array.isArray(rawInput) && "plan" in rawInput && (rawInput as { plan?: unknown }).plan !== undefined
+      ? (rawInput as { plan: unknown }).plan
+      : rawInput;
+
+  if (!rawPlan || typeof rawPlan !== "object" || Array.isArray(rawPlan)) {
+    const err: ValidationError = {
+      path: "$",
+      code: "SCHEMA_MISMATCH",
+      message: "Expected a Jantt plan JSON object containing at least a 'tasks' array.",
+      suggestion: "Send a JanttData object (or wrap it as { \"plan\": { ... } })."
+    };
+    return {
+      valid: false,
+      strictValid: false,
+      summary: { taskCount: 0, errorCount: 1, warningCount: 0 },
+      errors: [err],
+      warnings: []
+    };
+  }
+
+  const sanitized = sanitizePlanForJson(rawPlan as JanttData);
+  const result = validate(sanitized);
+  const errors: ValidationError[] = [...result.errors];
+  const warnings: ValidationError[] = [...(result.warnings || [])];
+  const liveTasks = liveTasksOf(sanitized);
+
+  if (liveTasks.length > MAX_PLAN_TASKS) {
+    errors.push({
+      path: "tasks",
+      code: "SCHEMA_MISMATCH",
+      message: `Plan has ${liveTasks.length} live tasks, exceeding the maximum of ${MAX_PLAN_TASKS} tasks per cloud plan.`,
+      suggestion: `Split the plan into smaller cloud rooms with at most ${MAX_PLAN_TASKS} tasks each.`
+    });
+  }
+
+  const syntaxBlockers = blockingWarningsOf(warnings, Boolean(options.strict));
+  const combinedErrors = [...errors, ...syntaxBlockers];
+  const remainingWarnings = warnings.filter((w) => !syntaxBlockers.includes(w));
+
+  return {
+    valid: combinedErrors.length === 0,
+    strictValid: errors.length === 0 && warnings.length === 0,
+    summary: {
+      taskCount: liveTasks.length,
+      errorCount: combinedErrors.length,
+      warningCount: remainingWarnings.length
+    },
+    errors: combinedErrors,
+    warnings: remainingWarnings
+  };
 }
 
 export function isValidRoomId(value: unknown): value is string {
@@ -329,7 +409,7 @@ export async function getAccountPlan(
 
 export async function createAccountPlan(
   uid: string,
-  input: { title?: unknown; plan?: unknown },
+  input: { title?: unknown; plan?: unknown; strict?: unknown },
   rtdb: RtdbClient,
   nowMs: number = Date.now()
 ) {
@@ -352,13 +432,13 @@ export async function createAccountPlan(
   }
 
   const sanitized = sanitizePlanForJson(initialPlan);
-  const validation = validate(sanitized);
-  if (!validation.valid) {
+  const report = validatePlanPayload(sanitized, { strict: input.strict === true });
+  if (!report.valid) {
     throw new HttpError(
       400,
       "PLAN_VALIDATION_FAILED",
-      `Plan validation failed: ${formatValidationErrors(validation.errors)}`,
-      validation.errors
+      `Plan validation failed: ${formatValidationErrors(report.errors)}`,
+      report.errors
     );
   }
 
@@ -438,7 +518,8 @@ async function mutatePlanWithCas<TResult>(
     mention: string;
     now: string;
   }) => CasMutationOutcome<TResult>,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  casOptions: { strict?: boolean; checkPlanSyntaxWarnings?: boolean } = {}
 ): Promise<{ revision: number; meta: Omit<RoomMetadata, "secretKey">; plan: JanttData; result: TResult }> {
   const roomId = assertRoomId(rawRoomId);
   const [{ meta, role }, user] = await Promise.all([
@@ -461,13 +542,26 @@ async function mutatePlanWithCas<TResult>(
 
     const outcome = mutator({ remote, meta: currentMeta, role, mention, now });
     const sanitizedNext = sanitizePlanForJson(outcome.nextPlan);
-    const validation = validate(sanitizedNext);
-    if (!validation.valid) {
+    const liveCount = liveTasksOf(sanitizedNext).length;
+    if (liveCount > MAX_PLAN_TASKS) {
       throw new HttpError(
         400,
         "PLAN_VALIDATION_FAILED",
-        `Plan update is invalid: ${formatValidationErrors(validation.errors)}`,
-        validation.errors
+        `Plan has ${liveCount} live tasks, exceeding the maximum of ${MAX_PLAN_TASKS} tasks per cloud plan.`
+      );
+    }
+    const validation = validate(sanitizedNext);
+    const extraBlockers =
+      casOptions.strict || casOptions.checkPlanSyntaxWarnings
+        ? blockingWarningsOf(validation.warnings, Boolean(casOptions.strict))
+        : [];
+    const allErrors = [...validation.errors, ...extraBlockers];
+    if (allErrors.length > 0) {
+      throw new HttpError(
+        400,
+        "PLAN_VALIDATION_FAILED",
+        `Plan update is invalid: ${formatValidationErrors(allErrors)}`,
+        allErrors
       );
     }
 
@@ -558,7 +652,7 @@ async function mutatePlanWithCas<TResult>(
 export async function replaceAccountPlan(
   uid: string,
   rawRoomId: string,
-  input: { plan?: unknown; title?: unknown; expectedRevision?: unknown },
+  input: { plan?: unknown; title?: unknown; expectedRevision?: unknown; strict?: unknown },
   rtdb: RtdbClient,
   nowMs: number = Date.now()
 ) {
@@ -591,7 +685,8 @@ export async function replaceAccountPlan(
           : incoming.meta?.title?.trim() || undefined;
       return { nextPlan, nextTitle, result: null };
     },
-    nowMs
+    nowMs,
+    { strict: input.strict === true, checkPlanSyntaxWarnings: true }
   );
 
   return {
@@ -644,7 +739,8 @@ export async function patchAccountPlan(
       }
       return { nextPlan, nextTitle, result: null };
     },
-    nowMs
+    nowMs,
+    { strict: patch.strict === true, checkPlanSyntaxWarnings: true }
   );
 
   return {
@@ -775,7 +871,11 @@ export async function addPlanTask(
       const activeBefore = liveTasksOf(remote);
       const tombstones = tombstonesOf(remote);
       const candidateActive = [...activeBefore, newTask];
-      const errors = validate({ ...remote, tasks: candidateActive }).errors.filter((e) => e.taskId === newTask.id);
+      const taskValidation = validate({ ...remote, tasks: candidateActive });
+      const errors = [
+        ...taskValidation.errors.filter((e) => e.taskId === newTask.id),
+        ...blockingWarningsOf(taskValidation.warnings, false).filter((w) => w.taskId === newTask.id)
+      ];
       if (
         !errors.some((e) => e.code === "CIRCULAR_DEPENDENCY") &&
         hasDependencyCycle(candidateActive) &&
@@ -906,7 +1006,11 @@ export async function updatePlanTask(
       updatedTask.updatedBy = mention;
 
       const candidateActive = activeBefore.map((t) => (t.id === cleanId ? (updatedTask as unknown as Task) : t));
-      const errors = validate({ ...remote, tasks: candidateActive }).errors.filter((e) => e.taskId === cleanId);
+      const taskValidation = validate({ ...remote, tasks: candidateActive });
+      const errors = [
+        ...taskValidation.errors.filter((e) => e.taskId === cleanId),
+        ...blockingWarningsOf(taskValidation.warnings, false).filter((w) => w.taskId === cleanId)
+      ];
       if (
         !errors.some((e) => e.code === "CIRCULAR_DEPENDENCY") &&
         hasDependencyCycle(candidateActive) &&
