@@ -44,6 +44,7 @@ type SnippetTab = "mcp" | "curl" | "openapi" | "guides";
 const sectionStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
+  flexShrink: 0,
   gap: "10px",
   padding: "12px 14px",
   borderRadius: "10px",
@@ -335,7 +336,19 @@ curl -X DELETE \\
         icon={<Bot size={18} aria-hidden="true" />}
       />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "14px", padding: "16px 20px 20px" }}>
+      <div
+        className="prompt-modal-body"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px",
+          padding: "16px 20px 24px",
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflowY: "auto",
+          overscrollBehavior: "contain"
+        }}
+      >
         {!currentUserUid ? (
           <div style={{ ...sectionStyle, alignItems: "flex-start" }}>
             <div style={{ fontWeight: 600 }}>Sign in to manage Cloud Agent API access</div>
