@@ -6,6 +6,7 @@ import {
   KeyRound,
   Loader2,
   Lock,
+  MessageCircle,
   Plus,
   RefreshCw,
   Search,
@@ -17,6 +18,7 @@ import {
   UserCheck,
   UserX
 } from "lucide-react";
+import { APP_DISTRIBUTION_LINKS } from "../../constants";
 import type {
   AdminUserAccessSummary,
   ApiAccessTier,
@@ -352,9 +354,10 @@ curl -X DELETE \\
         {!currentUserUid ? (
           <div style={{ ...sectionStyle, alignItems: "flex-start" }}>
             <div style={{ fontWeight: 600 }}>Sign in to manage Cloud Agent API access</div>
-            <p style={{ margin: 0, fontSize: "0.84rem", color: "var(--jantt-text-muted)" }}>
+            <p style={{ margin: 0, fontSize: "0.84rem", color: "var(--jantt-text-muted)", lineHeight: 1.5 }}>
               API keys are tied to your GitHub-authenticated Jantt account and expose only the cloud plans you own or
-              have been shared on.
+              have been shared on. Cloud Agent API &amp; Remote MCP access is <strong>$1/month</strong> — sign in with
+              GitHub to activate your account via WhatsApp and generate personal keys.
             </p>
             {onLogin && (
               <button type="button" className="btn btn-primary" onClick={onLogin}>
@@ -484,12 +487,71 @@ curl -X DELETE \\
                     </div>
                   </div>
 
-                  {!apiAccess.enabled && (
-                    <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--jantt-text-muted)", lineHeight: 1.5 }}>
-                      Access to the Cloud Agent API is granted per account by the Jantt administrator. Copy your UID
-                      above and share it with the admin to unlock your personal API key and Remote MCP endpoint.
-                    </p>
-                  )}
+                  {!apiAccess.enabled && (() => {
+                    const userHandle = userProfile?.username ? `@${userProfile.username}` : "(not set)";
+                    const waRequestHref = `${APP_DISTRIBUTION_LINKS.WHATSAPP_URL}?text=${encodeURIComponent(
+                      `Hi Ahmad, I want to activate Jantt Cloud Agent API & Remote MCP ($1/month).\nUsername: ${userHandle}\nUID: ${currentUserUid}\n\n(Attaching my payment screenshot / requesting payment details)`
+                    )}`;
+                    return (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "10px",
+                          padding: "10px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(56, 189, 248, 0.28)",
+                          background: "rgba(56, 189, 248, 0.08)"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 700, fontSize: "0.86rem", color: "var(--jantt-text)" }}>
+                            Unlock Cloud Agent API &amp; Remote MCP
+                          </span>
+                          <span
+                            style={{
+                              padding: "2px 10px",
+                              borderRadius: "999px",
+                              fontSize: "11.5px",
+                              fontWeight: 700,
+                              background: "rgba(34, 197, 94, 0.18)",
+                              color: "#4ADE80"
+                            }}
+                          >
+                            $1/month
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--jantt-text-muted)", lineHeight: 1.55 }}>
+                          Cloud Agent API &amp; Remote MCP access costs <strong>$1/month</strong>. To activate your
+                          account, send a <strong>screenshot of your payment</strong> along with your Jantt username (
+                          <code>{userHandle}</code>) on WhatsApp. Once confirmed, your personal API key generator and
+                          Remote MCP endpoint unlock immediately.
+                        </p>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                          <a
+                            className="btn-nav jantt-promo-wa-btn"
+                            href={waRequestHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ textDecoration: "none" }}
+                          >
+                            <MessageCircle size={14} aria-hidden="true" />
+                            <span>Send Screenshot &amp; Username on WhatsApp</span>
+                          </a>
+                          {userProfile?.username && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => handleCopy("username", `@${userProfile.username}`, "Username")}
+                            >
+                              {copiedId === "username" ? <Check size={13} /> : <Copy size={13} />}
+                              <span>Copy @{userProfile.username}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Unlocked Controls */}

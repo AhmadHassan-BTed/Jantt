@@ -44,10 +44,10 @@ AI Agents (Claude / Cursor / ChatGPT / scripts)   │ Service Account OAuth2 + E
 
 ## 2. Quickstart (2 Minutes)
 
-### Step 1 — Unlock Access & Generate an API Key
+### Step 1 — Unlock Access ($1/month) & Generate an API Key
 1. Open the [Jantt Playground](https://ahmadhassan-bted.github.io/Jantt/) and sign in with **GitHub**.
 2. Click **Agent API** in the header (or the Cloud bar).
-3. If your account is locked, click **Copy UID** and share it with the Jantt admin. (Admins can grant access directly in the **Admin Access Control** tab.)
+3. If your account is locked, Cloud Agent API & Remote MCP access is **$1/month**. Send a **screenshot of your payment** along with your Jantt **@username** on [WhatsApp](https://wa.me/923225522383) (there is a pre-filled WhatsApp button right inside the modal). Once verified, the admin enables your account immediately.
 4. Once enabled, enter a label (e.g. `Claude Desktop` or `Cursor`) and click **Generate API Key**. Copy the `jnt_live_...` key immediately—it is displayed once.
 
 ### Step 2 — Connect an AI Agent

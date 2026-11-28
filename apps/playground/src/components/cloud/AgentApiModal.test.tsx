@@ -99,11 +99,17 @@ afterEach(async () => {
 });
 
 describe("AgentApiModal", () => {
-  it("shows locked state with copyable Firebase UID for non-approved users and hides admin tab", async () => {
+  it("shows locked state with $1/month WhatsApp payment instructions and copyable UID for non-approved users", async () => {
     await renderModal({ apiAccess: makeApiAccess({ enabled: false, isAdmin: false }) });
 
     expect(document.body.textContent).toContain("Cloud Agent API Locked");
+    expect(document.body.textContent).toContain("$1/month");
+    expect(document.body.textContent).toContain("payment");
+    expect(document.body.textContent).toContain("@bob");
     expect(document.body.textContent).toContain("uid-bob");
+    const waLink = document.querySelector<HTMLAnchorElement>('a[href^="https://wa.me/"]');
+    expect(waLink).toBeTruthy();
+    expect(decodeURIComponent(waLink!.href)).toContain("@bob");
     expect(findButton(/admin access control/i)).toBeUndefined();
     expect(findButton(/generate api key/i)).toBeUndefined();
   });
