@@ -42,7 +42,11 @@ export class FirebaseRtdbClient implements RtdbClient {
   private readonly getAccessToken: () => Promise<string>;
   private readonly fetchFn: FetchLike;
 
-  constructor(databaseUrl: string, getAccessToken: () => Promise<string>, fetchFn: FetchLike = fetch) {
+  constructor(
+    databaseUrl: string,
+    getAccessToken: () => Promise<string>,
+    fetchFn: FetchLike = (input, init) => fetch(input, init)
+  ) {
     this.databaseUrl = databaseUrl.replace(/\/+$/, "");
     this.getAccessToken = getAccessToken;
     this.fetchFn = fetchFn;
@@ -64,7 +68,8 @@ export class FirebaseRtdbClient implements RtdbClient {
       serialized = JSON.stringify(options.body);
     }
 
-    const response = await this.fetchFn(buildRtdbUrl(this.databaseUrl, path), {
+    const doFetch = this.fetchFn;
+    const response = await doFetch(buildRtdbUrl(this.databaseUrl, path), {
       method,
       headers,
       body: serialized

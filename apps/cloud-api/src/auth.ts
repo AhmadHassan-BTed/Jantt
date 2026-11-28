@@ -112,7 +112,12 @@ export async function authenticateFirebaseUser(
   const projectId = env.FIREBASE_PROJECT_ID || "jantt-cloud";
   const verified = deps.verifyIdToken
     ? await deps.verifyIdToken(token, projectId)
-    : await verifyFirebaseIdToken(token, projectId, deps.fetchFn ?? fetch, deps.nowMs?.() ?? Date.now());
+    : await verifyFirebaseIdToken(
+        token,
+        projectId,
+        deps.fetchFn ?? ((input, init) => fetch(input, init)),
+        deps.nowMs?.() ?? Date.now()
+      );
 
   const access = await resolveAccessState(rtdb, verified.uid, env);
   return {

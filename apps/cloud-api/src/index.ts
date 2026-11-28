@@ -164,7 +164,7 @@ export function createCloudApiHandler(deps: HandlerDeps = {}) {
   const getRtdb = (env: Env): RtdbClient => {
     if (deps.createRtdb) return deps.createRtdb(env);
     const dbUrl = env.FIREBASE_DATABASE_URL || "https://jantt-cloud-default-rtdb.firebaseio.com";
-    const fetchFn = deps.fetchFn ?? fetch;
+    const fetchFn: FetchLike = deps.fetchFn ?? ((input, init) => fetch(input, init));
     return new FirebaseRtdbClient(
       dbUrl,
       () => getServiceAccountAccessToken(env, fetchFn, deps.nowMs?.() ?? Date.now()),

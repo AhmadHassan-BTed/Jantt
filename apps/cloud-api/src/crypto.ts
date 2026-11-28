@@ -138,10 +138,12 @@ interface CachedAccessToken {
 
 const accessTokenCache = new Map<string, CachedAccessToken>();
 
+const defaultFetch: FetchLike = (input, init) => fetch(input, init);
+
 /** Exchanges the Firebase Service Account key for a short-lived Google OAuth2 RTDB access token. */
 export async function getServiceAccountAccessToken(
   env: Env,
-  fetchFn: FetchLike = fetch,
+  fetchFn: FetchLike = defaultFetch,
   nowMs: number = Date.now()
 ): Promise<string> {
   const creds = resolveServiceAccount(env);
@@ -264,7 +266,7 @@ interface FirebaseJwtPayload {
 export async function verifyFirebaseIdToken(
   token: string,
   projectId: string,
-  fetchFn: FetchLike = fetch,
+  fetchFn: FetchLike = defaultFetch,
   nowMs: number = Date.now()
 ): Promise<VerifiedFirebaseToken> {
   const parts = token.split(".");
