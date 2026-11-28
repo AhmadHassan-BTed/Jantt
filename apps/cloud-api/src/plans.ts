@@ -36,7 +36,12 @@ const ROOM_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const TRUSTED_AVATAR_PREFIX = "https://avatars.githubusercontent.com/";
 const MAX_TITLE_LENGTH = 200;
 const MAX_NAME_LENGTH = 256;
-const MAX_CAS_RETRIES = 4;
+const MAX_CAS_RETRIES = 8;
+const MAX_META_CAS_RETRIES = 4;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function isValidRoomId(value: unknown): value is string {
   return typeof value === "string" && ROOM_ID_PATTERN.test(value);
@@ -89,6 +94,16 @@ function stripDeletedItems(plan: JanttData): JanttData {
 function gapDaysOf(plan: JanttData): number {
   const gap = plan.meta?.defaultGapDays;
   return typeof gap === "number" && Number.isFinite(gap) ? gap : DEFAULT_GAP_DAYS;
+}
+
+function resolveScheduleOptionsOf(plan: JanttData) {
+  return {
+    defaultGapDays: gapDaysOf(plan),
+    calendar: plan.meta?.calendar,
+    useWorkingDays: plan.meta?.useWorkingDays,
+    calendars: plan.calendars,
+    people: plan.people
+  };
 }
 
 function workingCalendarOf(plan: JanttData): WorkingCalendar | CalendarPreset | undefined {
@@ -434,10 +449,17 @@ async function mutatePlanWithCas<TResult>(
   const now = new Date(nowMs).toISOString();
 
   for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
-    const { value: rawRemote, etag } = await rtdb.getWithEtag<JanttData>(`rooms/${roomId}/data`);
+    if (attempt > 0) {
+      await sleepMs(15 + Math.floor(Math.random() * 45));
+    }
+    const [{ value: rawRemote, etag }, latestMeta] = await Promise.all([
+      rtdb.getWithEtag<JanttData>(`rooms/${roomId}/data`),
+      attempt === 0 ? Promise.resolve(meta) : rtdb.get<RoomMetadata>(`rooms/${roomId}/meta`)
+    ]);
+    const currentMeta = latestMeta ? stripLegacySecret(latestMeta) : meta;
     const remote: JanttData = rawRemote ? sanitizePlanForJson(decodePlanFromRtdb(rawRemote)) : { tasks: [] };
 
-    const outcome = mutator({ remote, meta, role, mention, now });
+    const outcome = mutator({ remote, meta: currentMeta, role, mention, now });
     const sanitizedNext = sanitizePlanForJson(outcome.nextPlan);
     const validation = validate(sanitizedNext);
     if (!validation.valid) {
@@ -455,49 +477,75 @@ async function mutatePlanWithCas<TResult>(
       continue;
     }
 
-    const freshMeta = (await rtdb.get<RoomMetadata>(`rooms/${roomId}/meta`)) || meta;
-    const nextRevision = (typeof freshMeta.revision === "number" ? freshMeta.revision : 1) + 1;
-    const nextTitle = outcome.nextTitle ? clip(outcome.nextTitle.trim(), MAX_TITLE_LENGTH) : freshMeta.title;
-    const liveTaskCount = liveTasksOf(sanitizedNext).length;
-    const liveNoteCount = Array.isArray(sanitizedNext.notes)
-      ? sanitizedNext.notes.filter((n) => n && !n._deleted).length
-      : 0;
-    const contentHash = calculatePlanHash(sanitizedNext);
+    let committedMeta: Omit<RoomMetadata, "secretKey"> | null = null;
+    for (let metaAttempt = 0; metaAttempt < MAX_META_CAS_RETRIES; metaAttempt++) {
+      const { value: rawMeta, etag: metaEtag } = await rtdb.getWithEtag<RoomMetadata>(`rooms/${roomId}/meta`);
+      const freshMeta = stripLegacySecret(rawMeta || currentMeta);
+      let planForMeta = sanitizedNext;
+      if (metaAttempt > 0) {
+        const latestData = await rtdb.get<JanttData>(`rooms/${roomId}/data`);
+        if (latestData) {
+          planForMeta = sanitizePlanForJson(decodePlanFromRtdb(latestData));
+        }
+      }
+      const nextRevision = (typeof freshMeta.revision === "number" ? freshMeta.revision : 1) + 1;
+      const nextTitle = outcome.nextTitle ? clip(outcome.nextTitle.trim(), MAX_TITLE_LENGTH) : freshMeta.title;
+      const liveTaskCount = liveTasksOf(planForMeta).length;
+      const liveNoteCount = Array.isArray(planForMeta.notes)
+        ? planForMeta.notes.filter((n) => n && !n._deleted).length
+        : 0;
+      const contentHash = calculatePlanHash(planForMeta);
 
-    const metaPatch: Record<string, unknown> = {
-      revision: nextRevision,
-      contentHash,
-      updatedAt: now,
-      taskCount: liveTaskCount,
-      noteCount: liveNoteCount
-    };
-    if (nextTitle && nextTitle !== freshMeta.title) {
-      metaPatch.title = nextTitle;
-    }
-    await rtdb.patch(`rooms/${roomId}/meta`, metaPatch);
-
-    const ownerPointer = await rtdb.get<UserRoomPointer>(`user_rooms/${freshMeta.ownerUid}/owned/${roomId}`);
-    if (ownerPointer) {
-      await rtdb.patch(`user_rooms/${freshMeta.ownerUid}/owned/${roomId}`, {
+      const candidateMeta: Omit<RoomMetadata, "secretKey"> = {
+        ...freshMeta,
         title: nextTitle,
+        revision: nextRevision,
+        contentHash,
         updatedAt: now,
         taskCount: liveTaskCount,
         noteCount: liveNoteCount
+      };
+
+      const metaPut = await rtdb.put(`rooms/${roomId}/meta`, candidateMeta, metaEtag);
+      if (metaPut.ok) {
+        committedMeta = candidateMeta;
+        break;
+      }
+      if (metaPut.status !== 412) break;
+    }
+
+    const updatedMeta: Omit<RoomMetadata, "secretKey"> = committedMeta ?? {
+      ...currentMeta,
+      title: outcome.nextTitle ? clip(outcome.nextTitle.trim(), MAX_TITLE_LENGTH) : currentMeta.title,
+      revision: (typeof currentMeta.revision === "number" ? currentMeta.revision : 1) + 1,
+      contentHash: calculatePlanHash(sanitizedNext),
+      updatedAt: now,
+      taskCount: liveTasksOf(sanitizedNext).length,
+      noteCount: Array.isArray(sanitizedNext.notes) ? sanitizedNext.notes.filter((n) => n && !n._deleted).length : 0
+    };
+    if (!committedMeta) {
+      await rtdb.patch(`rooms/${roomId}/meta`, {
+        revision: updatedMeta.revision,
+        contentHash: updatedMeta.contentHash,
+        updatedAt: updatedMeta.updatedAt,
+        taskCount: updatedMeta.taskCount,
+        noteCount: updatedMeta.noteCount,
+        ...(updatedMeta.title !== currentMeta.title ? { title: updatedMeta.title } : {})
       });
     }
 
-    const updatedMeta: Omit<RoomMetadata, "secretKey"> = {
-      ...stripLegacySecret(freshMeta),
-      title: nextTitle,
-      revision: nextRevision,
-      contentHash,
-      updatedAt: now,
-      taskCount: liveTaskCount,
-      noteCount: liveNoteCount
-    };
+    const ownerPointer = await rtdb.get<UserRoomPointer>(`user_rooms/${updatedMeta.ownerUid}/owned/${roomId}`);
+    if (ownerPointer) {
+      await rtdb.patch(`user_rooms/${updatedMeta.ownerUid}/owned/${roomId}`, {
+        title: updatedMeta.title,
+        updatedAt: updatedMeta.updatedAt,
+        taskCount: updatedMeta.taskCount,
+        noteCount: updatedMeta.noteCount
+      });
+    }
 
     return {
-      revision: nextRevision,
+      revision: updatedMeta.revision,
       meta: updatedMeta,
       plan: stripDeletedItems(sanitizedNext),
       result: outcome.result
@@ -691,26 +739,35 @@ export async function addPlanTask(
     throw new HttpError(400, "INVALID_TASK", "task.id must be a non-empty string.");
   }
 
+  const cleanTaskId = rawTask.id.trim();
+
   const committed = await mutatePlanWithCas(
     uid,
     rawRoomId,
     rtdb,
     ({ remote, mention, now }) => {
       const allTasks = Array.isArray(remote.tasks) ? remote.tasks : [];
-      const existing = allTasks.find((t) => t && t.id === rawTask.id);
+      const existing = allTasks.find((t) => t && t.id === cleanTaskId);
       if (existing) {
         throw new HttpError(
           409,
           "TASK_ALREADY_EXISTS",
           existing._deleted
-            ? `Task id '${rawTask.id}' belongs to a deleted task tombstone kept for sync. Choose a new unique id.`
-            : `Task id '${rawTask.id}' already exists in this plan. Use PATCH to update it.`
+            ? `Task id '${cleanTaskId}' belongs to a deleted task tombstone kept for sync. Choose a new unique id.`
+            : `Task id '${cleanTaskId}' already exists in this plan. Use PATCH to update it.`
         );
       }
 
+      const {
+        resolveCascade: _ignoreResolveCascade,
+        _deleted: _ignoreDeleted,
+        deletedAt: _ignoreDeletedAt,
+        ...cleanTaskInput
+      } = rawTask as Task & { resolveCascade?: unknown };
+
       const newTask: Task = {
-        ...rawTask,
-        id: rawTask.id.trim(),
+        ...cleanTaskInput,
+        id: cleanTaskId,
         updatedAt: now,
         updatedBy: mention
       };
@@ -742,7 +799,9 @@ export async function addPlanTask(
       }
 
       const resolvedActive =
-        options.resolveCascade === false ? candidateActive : resolveSchedule(candidateActive, gapDaysOf(remote));
+        options.resolveCascade === false
+          ? candidateActive
+          : resolveSchedule(candidateActive, resolveScheduleOptionsOf(remote));
       const placed = resolvedActive.find((t) => t.id === newTask.id) ?? newTask;
 
       return {
@@ -772,11 +831,20 @@ const PATCHABLE_TASK_FIELDS = [
   "end",
   "progress",
   "dependsOn",
+  "gapDays",
+  "minGapDays",
   "assignee",
+  "teamId",
+  "calendar",
+  "calendarId",
+  "wbs",
+  "phase",
   "status",
   "priority",
+  "urgent",
   "milestone",
   "locked",
+  "pert",
   "estimatedCost",
   "actualCost",
   "color",
@@ -821,7 +889,15 @@ export async function updatePlanTask(
           } else {
             updatedTask[field] = patch[field];
           }
-          if (field === "start" || field === "end" || field === "dependsOn") {
+          if (
+            field === "start" ||
+            field === "end" ||
+            field === "dependsOn" ||
+            field === "gapDays" ||
+            field === "minGapDays" ||
+            field === "calendar" ||
+            field === "calendarId"
+          ) {
             scheduleChanged = true;
           }
         }
@@ -854,7 +930,9 @@ export async function updatePlanTask(
       }
 
       const shouldResolve = options.resolveCascade !== false && scheduleChanged;
-      const resolvedActive = shouldResolve ? resolveSchedule(candidateActive, gapDaysOf(remote)) : candidateActive;
+      const resolvedActive = shouldResolve
+        ? resolveSchedule(candidateActive, resolveScheduleOptionsOf(remote))
+        : candidateActive;
       const applied = resolvedActive.find((t) => t.id === cleanId) ?? (updatedTask as unknown as Task);
 
       return {

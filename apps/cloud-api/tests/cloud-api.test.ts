@@ -555,4 +555,83 @@ describe("Jantt Cloud API Worker", () => {
     expect(badCall.json.result.isError).toBe(true);
     expect(badCall.json.result.content[0].text).toContain("nonexistent");
   });
+
+  it("strips control/tombstone fields on flat POST /tasks, honors working calendars, and cleans typed dependsOn formats", async () => {
+    const keyRes = await call("POST", "/v1/keys", { token: "fb-admin", body: { label: "Calendar & Edge Agent" } });
+    const apiKey: string = keyRes.json.apiKey;
+
+    // Working-calendar plan: 2026-12-04 is Friday; next working day is Monday 2026-12-07
+    const created = await call("POST", "/v1/plans", {
+      token: apiKey,
+      body: {
+        title: "Working Calendar Plan",
+        plan: {
+          meta: { title: "Working Calendar Plan", useWorkingDays: true, calendar: "standard", defaultGapDays: 1 },
+          categories: { dev: { label: "Dev", color: "#38BDF8" } },
+          tasks: [{ id: "w1", label: "Friday Work", category: "dev", start: "2026-12-03", end: "2026-12-04" }]
+        }
+      }
+    });
+    expect(created.status).toBe(201);
+    const roomId: string = created.json.roomId;
+
+    // 1. Working-calendar cascade skips Saturday & Sunday
+    const w2 = await call("POST", `/v1/plans/${roomId}/tasks`, {
+      token: apiKey,
+      body: { id: "w2", label: "Monday Follow-up", category: "dev", start: "2026-12-04", end: "2026-12-05", dependsOn: "w1" }
+    });
+    expect(w2.status).toBe(201);
+    expect(w2.json.task.start).toBe("2026-12-07");
+
+    // 2. Flat POST /tasks with resolveCascade: false and _deleted: true must NOT leak onto stored Task
+    const flat = await call("POST", `/v1/plans/${roomId}/tasks`, {
+      token: apiKey,
+      body: {
+        id: "w3",
+        label: "Manual Uncascaded",
+        category: "dev",
+        start: "2026-12-04",
+        end: "2026-12-05",
+        dependsOn: "w1",
+        resolveCascade: false,
+        _deleted: true
+      }
+    });
+    expect(flat.status).toBe(201);
+    expect(flat.json.task.start).toBe("2026-12-04");
+    expect("resolveCascade" in flat.json.task).toBe(false);
+    expect("_deleted" in flat.json.task).toBe(false);
+
+    // 3. Multi-format dependsOn cleanup on delete + PATCH extended Task fields & null clearing
+    const multi = await call("POST", `/v1/plans/${roomId}/tasks`, {
+      token: apiKey,
+      body: {
+        id: "w4",
+        label: "Typed Deps",
+        category: "dev",
+        start: "2026-12-10",
+        end: "2026-12-12",
+        dependsOn: ["w1:SS+2d", { id: "w1", type: "FS", lag: 1 }, "w3"]
+      }
+    });
+    expect(multi.status).toBe(201);
+
+    const del = await call("DELETE", `/v1/plans/${roomId}/tasks/w1`, { token: apiKey });
+    expect(del.status).toBe(200);
+
+    const listAfterDel = await call("GET", `/v1/plans/${roomId}/tasks`, { token: apiKey });
+    const w4After = listAfterDel.json.tasks.find((t: any) => t.id === "w4");
+    expect(w4After.dependsOn).toEqual(["w3"]);
+
+    const patched = await call("PATCH", `/v1/plans/${roomId}/tasks/w4`, {
+      token: apiKey,
+      body: { gapDays: 2, urgent: true, wbs: "1.2", phase: "Launch", dependsOn: null }
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.json.task.gapDays).toBe(2);
+    expect(patched.json.task.urgent).toBe(true);
+    expect(patched.json.task.wbs).toBe("1.2");
+    expect(patched.json.task.phase).toBe("Launch");
+    expect(patched.json.task.dependsOn).toBeUndefined();
+  });
 });

@@ -298,6 +298,20 @@ curl -X DELETE \\
     setBusyUid(targetUid);
     try {
       const res = await apiAccess.revokeUserAccess(targetUid, true);
+      const nowIso = new Date().toISOString();
+      setSearchResults((prev) =>
+        prev.map((u) =>
+          u.uid === targetUid
+            ? {
+                ...u,
+                activeKeyCount: 0,
+                entitlement: u.entitlement
+                  ? { ...u.entitlement, enabled: false, updatedAt: nowIso }
+                  : null
+              }
+            : u
+        )
+      );
       showToast?.(
         res.revokedKeysCount > 0
           ? `Revoked access and ${res.revokedKeysCount} active API key(s).`
