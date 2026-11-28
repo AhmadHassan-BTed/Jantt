@@ -176,6 +176,39 @@
         },
         "$other": { ".validate": false }
       }
+    },
+    "api_entitlements": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false,
+        "uid": { ".validate": "newData.val() === $uid" },
+        "enabled": { ".validate": "newData.isBoolean()" },
+        "tier": { ".validate": "newData.val() === 'admin' || newData.val() === 'granted' || newData.val() === 'paid'" },
+        "grantedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "grantedBy": { ".validate": "newData.isString() && newData.val().length <= 128" },
+        "updatedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "note": { ".validate": "newData.isString() && newData.val().length <= 500" },
+        "$other": { ".validate": false }
+      }
+    },
+    "user_api_keys": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false,
+        "$keyId": {
+          "keyId": { ".validate": "newData.val() === $keyId" },
+          "label": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
+          "prefix": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 32" },
+          "createdAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "lastUsedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "revokedAt": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+    "api_keys": {
+      ".read": false,
+      ".write": false
     }
   }
 }

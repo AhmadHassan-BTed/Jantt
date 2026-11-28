@@ -21,3 +21,6 @@ export * from "./presenceService";
 
 // Collaborative Cloud Room Services & Transactions
 export * from "./roomService";
+
+// Cloud Agent API Entitlements, API Keys & Admin Access Controls
+export * from "./apiAccessService";

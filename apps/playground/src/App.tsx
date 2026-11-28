@@ -36,6 +36,7 @@ import { useSnapshotVault } from "./hooks/useSnapshotVault";
 import { useDynamicSync } from "./hooks/useDynamicSync";
 import { useRoomSync } from "./hooks/useRoomSync";
 import { useAuth } from "./hooks/useAuth";
+import { useApiAccess } from "./hooks/useApiAccess";
 import { listenToUserRooms, deleteRoom, leaveRoom } from "./firebase/roomService";
 import { ENABLE_GITHUB_VERIFICATION_GATE, type UserRoomPointer } from "./firebase";
 import { commandBus } from "./services";
@@ -170,6 +171,8 @@ export function App() {
 
   // Firebase Authentication & Cloud User Identity
   const auth = useAuth();
+  const [showAgentApiModal, setShowAgentApiModal] = useState(false);
+  const apiAccess = useApiAccess(auth.currentUser?.uid || null, showAgentApiModal);
   const [ownedRooms, setOwnedRooms] = useState<UserRoomPointer[]>([]);
   const [sharedRooms, setSharedRooms] = useState<UserRoomPointer[]>([]);
   const [shareModalRoomId, setShareModalRoomId] = useState<string | null>(null);
@@ -1144,6 +1147,8 @@ export function App() {
       onOpenShareRoom={handleOpenShareRoom}
       onOpenRoomModal={() => roomSync.setShowRoomModal(true)}
       onOpenUserHub={() => setShowPlanManagerModal(true)}
+      onOpenAgentApi={() => setShowAgentApiModal(true)}
+      isAgentApiEnabled={apiAccess.enabled}
       isPendingLoginEditor={isPendingLoginEditor}
       onOpenEditorLogin={() => setShowEditorLoginModal(true)}
       onPromptFork={() => setShowReadOnlyForkModal(true)}
@@ -1194,6 +1199,7 @@ export function App() {
     showWebAccessModal ||
     showRateAppModal ||
     showShareRoomModal ||
+    showAgentApiModal ||
     pendingConfirm !== null ||
     project.showAddPlanModal ||
     people.showPeopleModal ||
@@ -1227,6 +1233,7 @@ export function App() {
     { id: "people", isOpen: people.showPeopleModal, close: () => people.setShowPeopleModal(false) },
     { id: "share", isOpen: sharing.showShareModal, close: () => sharing.setShowShareModal(false) },
     { id: "share-room", isOpen: showShareRoomModal, close: () => setShowShareRoomModal(false) },
+    { id: "agent-api", isOpen: showAgentApiModal, close: () => setShowAgentApiModal(false) },
     { id: "auto-save", isOpen: autoSave.showAutoSaveModal, close: () => autoSave.setShowAutoSaveModal(false) },
     {
       id: "version-history",
@@ -1349,6 +1356,8 @@ export function App() {
           isLoadingAuth={auth.isLoadingAuth}
           isSigningIn={auth.isSigningIn}
           onOpenUserHub={() => setShowPlanManagerModal(true)}
+          onOpenAgentApi={() => setShowAgentApiModal(true)}
+          isAgentApiEnabled={apiAccess.enabled}
           isGitHubVerified={isGitHubVerified}
           onOpenVerificationModal={onOpenVerificationModal}
           onLogin={auth.loginWithGitHub}
@@ -1555,6 +1564,9 @@ export function App() {
         showShareRoomModal={showShareRoomModal}
         setShowShareRoomModal={setShowShareRoomModal}
         shareModalRoomId={shareModalRoomId}
+        showAgentApiModal={showAgentApiModal}
+        setShowAgentApiModal={setShowAgentApiModal}
+        apiAccess={apiAccess}
       />
 
       <ReadOnlyForkModal

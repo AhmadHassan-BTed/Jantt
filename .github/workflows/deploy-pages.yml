@@ -55,6 +55,8 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+          # Deployed @jantt/cloud-api Cloudflare Worker URL for Agent API & Remote MCP.
+          VITE_CLOUD_API_URL: ${{ vars.CLOUD_API_URL }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v6

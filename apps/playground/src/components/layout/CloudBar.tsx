@@ -18,7 +18,8 @@ import {
   BookmarkPlus,
   GitFork,
   Loader2,
-  RotateCcw
+  RotateCcw,
+  Bot
 } from "lucide-react";
 import type { RoomPresence } from "../../firebase/types";
 import type { RoomSyncStatus } from "../../hooks/useRoomSync";
@@ -38,6 +39,10 @@ export interface CloudBarProps {
   onOpenRoomModal?: () => void;
   /** Opens the user's rooms (plan manager / hub). */
   onOpenUserHub?: () => void;
+  /** Opens the Cloud Agent API & Remote MCP modal (for signed-in accounts). */
+  onOpenAgentApi?: () => void;
+  /** True when the signed-in user has active Cloud Agent API access. */
+  isAgentApiEnabled?: boolean;
   /** Time of the last confirmed sync, shown next to the status. */
   lastSyncTime?: Date;
   /** Shown as "Retry" while the status is an error or offline. */
@@ -141,6 +146,8 @@ export const CloudBar: React.FC<CloudBarProps> = ({
   onOpenShareRoom,
   onOpenRoomModal,
   onOpenUserHub,
+  onOpenAgentApi,
+  isAgentApiEnabled = false,
   lastSyncTime,
   onRetrySync,
   isPendingLoginEditor = false,
@@ -246,6 +253,13 @@ export const CloudBar: React.FC<CloudBarProps> = ({
           <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenUserHub)}>
             <FolderKanban size={15} aria-hidden="true" />
             <span>My rooms</span>
+          </button>
+        )}
+
+        {onOpenAgentApi && isSignedIn !== false && (
+          <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenAgentApi)}>
+            <Bot size={15} aria-hidden="true" />
+            <span>{isAgentApiEnabled ? "Cloud Agent API (Active)" : "Cloud Agent API"}</span>
           </button>
         )}
       </section>
@@ -493,6 +507,13 @@ export const CloudBar: React.FC<CloudBarProps> = ({
           <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenUserHub)}>
             <FolderKanban size={15} aria-hidden="true" />
             <span>My rooms</span>
+          </button>
+        )}
+
+        {onOpenAgentApi && isSignedIn !== false && (
+          <button type="button" className="btn btn-secondary" style={actionButtonStyle} onClick={run(onOpenAgentApi)}>
+            <Bot size={15} aria-hidden="true" />
+            <span>{isAgentApiEnabled ? "Cloud Agent API (Active)" : "Cloud Agent API"}</span>
           </button>
         )}
 

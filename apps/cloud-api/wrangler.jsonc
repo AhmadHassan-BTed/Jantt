@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "jantt-cloud-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-12-01",
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "vars": {
+    "FIREBASE_PROJECT_ID": "jantt-cloud",
+    "FIREBASE_DATABASE_URL": "https://jantt-cloud-default-rtdb.firebaseio.com",
+    "ALLOWED_ORIGINS": "https://ahmadhassan-bted.github.io",
+    "ALLOW_DEV_ORIGINS": "false",
+    "MAX_KEYS_PER_USER": "10"
+  }
+  // Secrets (never commit; set with `npx wrangler secret put <NAME>`):
+  // - FIREBASE_SERVICE_ACCOUNT_JSON : full JSON key from Firebase Console -> Project Settings -> Service Accounts
+  // - ADMIN_UIDS                    : comma-separated Firebase UIDs granted free unlimited admin access
+  //
+  // Optional per-key/per-IP rate limiting binding:
+  // "ratelimits": [
+  //   {
+  //     "name": "RATE_LIMITER",
+  //     "namespace_id": "2001",
+  //     "simple": { "limit": 120, "period": 60 }
+  //   }
+  // ]
+}
+

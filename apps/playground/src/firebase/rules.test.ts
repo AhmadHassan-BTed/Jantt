@@ -6,12 +6,14 @@ import {
   toPublicProfile,
   validateRoomMetadata,
   validateUsername,
+  type ApiEntitlement,
   type PublicProfile,
   type RoomMember,
   type RoomMemberRole,
   type RoomMetadata,
   type RoomPresence,
   type RoomTeam,
+  type UserApiKeyMetadata,
   type UserProfile,
   type UserRoomPointer
 } from "./dtos";
@@ -928,6 +930,61 @@ function documentedRulePaths(): string[] {
   return [...section.matchAll(/^\| `\/([^`]+)` \|/gm)].map((match) => match[1].replace(/\{[^}]+\}/g, "{*}"));
 }
 
+function apiEntitlement(p: Persona): Required<ApiEntitlement> {
+  return {
+    uid: p.uid,
+    enabled: true,
+    tier: "granted",
+    grantedAt: NOW,
+    grantedBy: alice.uid,
+    updatedAt: NOW,
+    note: "Approved for agent access"
+  };
+}
+
+function userApiKeyMeta(): Required<UserApiKeyMetadata> {
+  return {
+    keyId: "key_0123456789ab",
+    label: "Claude Desktop",
+    prefix: "jnt_live_abcd1234...",
+    createdAt: NOW,
+    lastUsedAt: NOW,
+    revokedAt: NOW
+  };
+}
+
+describe("Cloud Agent API entitlements and keys", () => {
+  it("allows a signed-in user to read only their own entitlement and key metadata", () => {
+    db.seed(`api_entitlements/${alice.uid}`, apiEntitlement(alice));
+    db.seed(`user_api_keys/${alice.uid}/key_0123456789ab`, userApiKeyMeta());
+    db.seed("api_keys/hashes/deadbeef", { uid: alice.uid, keyId: "key_0123456789ab", prefix: "jnt_live_abcd1234...", createdAt: NOW });
+
+    expect(db.read(alice.auth, `api_entitlements/${alice.uid}`)).toBe(true);
+    expect(db.read(bob.auth, `api_entitlements/${alice.uid}`)).toBe(false);
+    expect(db.read(null, `api_entitlements/${alice.uid}`)).toBe(false);
+    expect(db.read(alice.auth, "api_entitlements")).toBe(false);
+
+    expect(db.read(alice.auth, `user_api_keys/${alice.uid}`)).toBe(true);
+    expect(db.read(alice.auth, `user_api_keys/${alice.uid}/key_0123456789ab`)).toBe(true);
+    expect(db.read(bob.auth, `user_api_keys/${alice.uid}`)).toBe(false);
+    expect(db.read(null, `user_api_keys/${alice.uid}`)).toBe(false);
+
+    expect(db.read(alice.auth, "api_keys")).toBe(false);
+    expect(db.read(alice.auth, "api_keys/hashes/deadbeef")).toBe(false);
+    expect(db.read(null, "api_keys/hashes/deadbeef")).toBe(false);
+  });
+
+  it("denies all client writes to api_entitlements, user_api_keys, and api_keys", () => {
+    expect(db.set(mallory.auth, `api_entitlements/${mallory.uid}`, apiEntitlement(mallory))).toBe(false);
+    expect(db.set(mallory.auth, `api_entitlements/${mallory.uid}/enabled`, true)).toBe(false);
+    expect(db.set(mallory.auth, `api_entitlements/${mallory.uid}/tier`, "admin")).toBe(false);
+    expect(db.set(alice.auth, `api_entitlements/${bob.uid}`, apiEntitlement(bob))).toBe(false);
+
+    expect(db.set(alice.auth, `user_api_keys/${alice.uid}/key_0123456789ab`, userApiKeyMeta())).toBe(false);
+    expect(db.set(mallory.auth, `api_keys/hashes/forged`, { uid: mallory.uid, keyId: "key_forged" })).toBe(false);
+  });
+});
+
 describe("lockstep", () => {
   it("rules accept exactly the DTO fields of every fixed-shape record", () => {
     const shapes: [string, object][] = [
@@ -938,7 +995,9 @@ describe("lockstep", () => {
       ["rooms/{roomId}/meta", roomMeta()],
       ["rooms/{roomId}/members/{uid}", teamMember(dave)],
       ["rooms/{roomId}/teams/{teamId}", TEAM],
-      ["rooms/{roomId}/presence/{uid}", presence(carol)]
+      ["rooms/{roomId}/presence/{uid}", presence(carol)],
+      ["api_entitlements/{uid}", apiEntitlement(alice)],
+      ["user_api_keys/{uid}/{keyId}", userApiKeyMeta()]
     ];
     for (const [path, dto] of shapes) {
       expect(ruleFields(path), path).toEqual(Object.keys(dto).sort());

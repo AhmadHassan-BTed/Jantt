@@ -515,6 +515,8 @@ interface NavbarProps {
   /** A GitHub sign-in popup is open: the sign-in button is disabled until it settles. */
   isSigningIn?: boolean;
   onOpenUserHub?: () => void;
+  onOpenAgentApi?: () => void;
+  isAgentApiEnabled?: boolean;
   isGitHubVerified?: boolean;
   onOpenVerificationModal?: () => void;
   onLogin?: () => void;
@@ -584,6 +586,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   isLoadingAuth = false,
   isSigningIn = false,
   onOpenUserHub,
+  onOpenAgentApi,
+  isAgentApiEnabled = false,
   isGitHubVerified = false,
   onOpenVerificationModal,
   onLogin,
@@ -974,6 +978,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
               <span className="nav-account-name nav-label">{userProfile ? accountName : "Signing in..."}</span>
             </button>
+
+            {onOpenAgentApi && userProfile && (
+              <button
+                type="button"
+                className={`nav-verify-badge ${isAgentApiEnabled ? "is-verified" : ""}`}
+                onClick={onOpenAgentApi}
+                title={
+                  isAgentApiEnabled
+                    ? "Cloud Agent API active: manage API keys, Remote MCP, and cloud endpoints."
+                    : "Cloud Agent API: view your UID or manage agent endpoint access."
+                }
+                aria-label="Cloud Agent API"
+              >
+                <KeyRound size={11} aria-hidden="true" />
+                <span className="nav-label">Agent API</span>
+              </button>
+            )}
 
             {onOpenVerificationModal && userProfile && (
               <button

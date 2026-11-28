@@ -33,6 +33,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
+.dev.vars
+**/.dev.vars
 application-ops-plan/
 **/application-ops-plan/
 god-plan-scheduler.jsx

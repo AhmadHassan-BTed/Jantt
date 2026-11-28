@@ -1,0 +1,26 @@
+{
+  "name": "@jantt/cloud-api",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Cloudflare Worker exposing Jantt Firebase Cloud Plans via account-scoped REST API and Remote MCP endpoints",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jantt/core": "^1.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}
+

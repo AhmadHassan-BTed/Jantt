@@ -34,6 +34,7 @@ import type { useSharing } from "../../hooks/useSharing";
 import type { useSidebarResize } from "../../hooks/useSidebarResize";
 import type { useAutoSave } from "../../hooks/useAutoSave";
 import type { useSnapshotVault } from "../../hooks/useSnapshotVault";
+import type { UseApiAccessReturn } from "../../hooks/useApiAccess";
 
 /* ==========================================================================
    Shared dialog shell
@@ -541,6 +542,7 @@ const loadCloudRoom = () => import("../cloud/CloudRoomModal");
 const loadShareRoom = () => import("../cloud/ShareRoomModal");
 const loadUsernameOnboarding = () => import("../cloud/UsernameOnboardingModal");
 const loadGitHubVerification = () => import("../cloud/GitHubVerificationModal");
+const loadAgentApi = () => import("../cloud/AgentApiModal");
 
 const PlanManagerModal = lazy(() => loadPlanManager().then((m) => ({ default: m.PlanManagerModal })));
 const ShareModal = lazy(() => loadShare().then((m) => ({ default: m.ShareModal })));
@@ -548,6 +550,7 @@ const CloudRoomModal = lazy(() => loadCloudRoom().then((m) => ({ default: m.Clou
 const ShareRoomModal = lazy(() => loadShareRoom().then((m) => ({ default: m.ShareRoomModal })));
 const UsernameOnboardingModal = lazy(() => loadUsernameOnboarding().then((m) => ({ default: m.UsernameOnboardingModal })));
 const GitHubVerificationModal = lazy(() => loadGitHubVerification().then((m) => ({ default: m.GitHubVerificationModal })));
+const AgentApiModal = lazy(() => loadAgentApi().then((m) => ({ default: m.AgentApiModal })));
 
 const PREFETCHED_DIALOGS = [loadPlanManager, loadShare, loadCloudRoom, loadShareRoom];
 const PREFETCH_FALLBACK_DELAY_MS = 3000;
@@ -633,6 +636,10 @@ export interface ModalHostProps {
   showShareRoomModal: boolean;
   setShowShareRoomModal: (show: boolean) => void;
   shareModalRoomId: string | null;
+
+  showAgentApiModal: boolean;
+  setShowAgentApiModal: (show: boolean) => void;
+  apiAccess: UseApiAccessReturn;
 }
 
 export const ModalHost: React.FC<ModalHostProps> = ({
@@ -661,7 +668,10 @@ export const ModalHost: React.FC<ModalHostProps> = ({
   handleRestoreSnapshot,
   showShareRoomModal,
   setShowShareRoomModal,
-  shareModalRoomId
+  shareModalRoomId,
+  showAgentApiModal,
+  setShowAgentApiModal,
+  apiAccess
 }) => {
   // App mounts one import input for every layout; dialogs only open its picker.
   const openImportPicker = () => project.fileInputRef.current?.click();
@@ -923,6 +933,20 @@ export const ModalHost: React.FC<ModalHostProps> = ({
           // Teams, people and counts come from the shared room itself (it may not be the open plan).
           activeView={viewport.activeView}
           selectedThemeId={viewport.selectedThemeId}
+        />
+      </DialogSlot>
+
+      <DialogSlot open={showAgentApiModal} onFailure={dialogFailed(() => setShowAgentApiModal(false))}>
+        <AgentApiModal
+          show={showAgentApiModal}
+          setShow={setShowAgentApiModal}
+          currentUserUid={auth.currentUser?.uid || null}
+          userProfile={auth.userProfile}
+          ownedRooms={ownedRooms}
+          sharedRooms={sharedRooms}
+          apiAccess={apiAccess}
+          onLogin={auth.loginWithGitHub}
+          showToast={toast.showToast}
         />
       </DialogSlot>
 

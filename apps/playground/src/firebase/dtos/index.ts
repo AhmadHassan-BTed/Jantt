@@ -7,3 +7,4 @@ export * from "./UserDto";
 export * from "./RoomDto";
 export * from "./PresenceDto";
 export * from "./RtdbCodec";
+export * from "./ApiAccessDto";
