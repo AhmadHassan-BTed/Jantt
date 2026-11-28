@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Bot,
   Check,
@@ -125,7 +125,6 @@ export const AgentApiModal: React.FC<AgentApiModalProps> = ({
   onLogin,
   showToast
 }) => {
-  const baseId = useId();
   const [activeTab, setActiveTab] = useState<ModalTab>("agent");
   const [snippetTab, setSnippetTab] = useState<SnippetTab>("mcp");
   const [keyLabel, setKeyLabel] = useState("");
@@ -315,17 +314,11 @@ curl -X DELETE \\
   const revokedKeys = apiAccess.keys.filter((k) => Boolean(k.revokedAt));
 
   return (
-    <Modal
-      open={show}
-      onClose={() => setShow(false)}
-      labelledBy={`${baseId}-title`}
-      maxWidth="700px"
-    >
+    <Modal onClose={() => setShow(false)} maxWidth={700}>
       <ModalHeader
         title="Cloud Agent API & Remote MCP"
-        titleId={`${baseId}-title`}
-        icon={<Bot size={18} style={{ color: "var(--jantt-accent, #38BDF8)" }} aria-hidden="true" />}
-        onClose={() => setShow(false)}
+        subtitle="Account-scoped endpoints for accessing and editing your cloud plans from AI agents."
+        icon={<Bot size={18} aria-hidden="true" />}
       />
 
       <div style={{ display: "flex", flexDirection: "column", gap: "14px", padding: "16px 20px 20px" }}>
